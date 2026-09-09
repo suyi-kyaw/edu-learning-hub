@@ -1,139 +1,66 @@
-
-/* =========================================================
-   LINGUAPATH LEARNING HUB
-   Main JavaScript
-   ========================================================= */
-
-
-/* ==================== TEXT TO SPEECH ==================== */
-
-/*
-  Uses the browser's built-in Speech Synthesis API.
-
-  This is useful for the demo.
-  For a production language-learning platform,
-  replace this with professionally recorded native audio.
-*/
-
-function speak(text) {
-
-  if (!("speechSynthesis" in window)) {
-    alert("Your browser does not support text-to-speech.");
-    return;
-  }
-
-  // Stop any speech currently playing.
-  window.speechSynthesis.cancel();
-
-  const utterance =
-    new SpeechSynthesisUtterance(text);
-
-  const voices =
-    window.speechSynthesis.getVoices();
-
-  // Try to find a Chinese voice.
-  const chineseVoice =
-    voices.find(
-      voice =>
-        voice.lang
-          .toLowerCase()
-          .startsWith("zh")
-    );
-
-  if (chineseVoice) {
-    utterance.voice = chineseVoice;
-  }
-
-  utterance.lang = "zh-CN";
-
-  // Slightly slower pronunciation
-  // is useful for a learning demo.
-  utterance.rate = 0.75;
-
-  utterance.pitch = 1;
-
-  window.speechSynthesis.speak(
-    utterance
-  );
-}
-
-
-/* ==================== HERO AUDIO ==================== */
-
-const heroAudioButton =
-  document.getElementById(
-    "heroAudioButton"
-  );
-
-if (heroAudioButton) {
-
-  heroAudioButton.addEventListener(
-    "click",
-    () => {
-      speak("学");
-    }
-  );
-
-}
-
-
-/* ==================== GREETING AUDIO ==================== */
-
-const greetingAudioButton =
-  document.getElementById(
-    "greetingAudioButton"
-  );
-
-if (greetingAudioButton) {
-
-  greetingAudioButton.addEventListener(
-    "click",
-    () => {
-      speak("你好");
-    }
-  );
-
-}
-
-
 /* ==================== TONE DATA ==================== */
 
 const toneData = {
   1: {
+    syllable: "mā",
+    character: "妈",
+    meaning: "mother",
     text: "Tone 1 — high and flat",
     path: "M20 30 L480 30",
-    audio: "assets/audio/tones/ma-tone-1.mp3"
+    audio: "./assets/audio/tones/ma-tone-1.mp3"
   },
 
   2: {
+    syllable: "má",
+    character: "麻",
+    meaning: "hemp / numb",
     text: "Tone 2 — rising",
     path: "M20 70 C170 70 320 65 480 20",
-    audio: "assets/audio/tones/ma-tone-2.mp3"
+    audio: "./assets/audio/tones/ma-tone-2.mp3"
   },
 
   3: {
+    syllable: "mǎ",
+    character: "马",
+    meaning: "horse",
     text: "Tone 3 — dipping",
     path: "M20 35 C130 85 230 85 300 70 C370 55 420 30 480 25",
-    audio: "assets/audio/tones/ma-tone-3.mp3"
+    audio: "./assets/audio/tones/ma-tone-3.mp3"
   },
 
   4: {
+    syllable: "mà",
+    character: "骂",
+    meaning: "scold",
     text: "Tone 4 — falling",
     path: "M20 20 C180 25 330 65 480 85",
-    audio: "assets/audio/tones/ma-tone-4.mp3"
+    audio: "./assets/audio/tones/ma-tone-4.mp3"
   }
 };
 
 
-/* ==================== TONE AUDIO PLAYER ==================== */
+/* ==================== TONE ELEMENTS ==================== */
+
+const toneButtons =
+  document.querySelectorAll(".tone-button");
+
+const tonePath =
+  document.getElementById("tonePath");
+
+const toneDescription =
+  document.getElementById("toneDescription");
 
 let currentToneAudio = null;
+
+
+/* ==================== PLAY TONE ==================== */
 
 function playTone(number, button) {
 
   const data = toneData[number];
 
   if (!data) {
+    console.error("Tone data not found:", number);
     return;
   }
 
@@ -144,44 +71,73 @@ function playTone(number, button) {
   });
 
 
-  /* Activate selected tone */
+  /* Activate selected button */
   button.classList.add("active");
 
 
   /* Update tone curve */
   if (tonePath) {
-    tonePath.setAttribute(
-      "d",
-      data.path
-    );
+    tonePath.setAttribute("d", data.path);
   }
 
 
   /* Update description */
   if (toneDescription) {
-    toneDescription.textContent =
-      data.text;
+    toneDescription.innerHTML =
+      `<strong>${data.syllable}</strong> — ${data.character} — ${data.meaning}<br>
+       ${data.text}`;
   }
 
 
-  /* Stop previous audio */
+  /* Stop previous tone */
   if (currentToneAudio) {
     currentToneAudio.pause();
     currentToneAudio.currentTime = 0;
+    currentToneAudio = null;
   }
 
 
-  /* Play the actual native recording */
-  currentToneAudio =
-    new Audio(data.audio);
+  /* Create audio */
+  currentToneAudio = new Audio();
+
+  currentToneAudio.preload = "auto";
+  currentToneAudio.src = data.audio;
 
 
+  /* Error handling */
+  currentToneAudio.addEventListener("error", () => {
+
+    console.error(
+      "Could not load audio file:",
+      data.audio
+    );
+
+    alert(
+      `Audio file could not be loaded:\n${data.audio}\n\n` +
+      `Please check that the MP3 exists in the correct folder ` +
+      `and that the filename is exactly correct.`
+    );
+
+  });
+
+
+  /* Play */
   currentToneAudio.play()
+    .then(() => {
+
+      console.log(
+        `Playing ${data.syllable}:`,
+        data.audio
+      );
+
+    })
     .catch(error => {
+
       console.error(
-        "Unable to play tone audio:",
+        "Audio playback failed:",
         error
       );
+
     });
 
 }
@@ -189,283 +145,24 @@ function playTone(number, button) {
 
 /* ==================== TONE BUTTONS ==================== */
 
-const toneButtons =
-  document.querySelectorAll(
-    ".tone-button"
-  );
-
-const tonePath =
-  document.getElementById(
-    "tonePath"
-  );
-
-const toneDescription =
-  document.getElementById(
-    "toneDescription"
-  );
-
-
 toneButtons.forEach(button => {
 
-  button.addEventListener(
-    "click",
-    () => {
+  button.addEventListener("click", () => {
 
-      const toneNumber =
-        Number(button.dataset.tone);
+    const toneNumber =
+      Number(button.dataset.tone);
 
-      playTone(
-        toneNumber,
-        button
-      );
+    playTone(
+      toneNumber,
+      button
+    );
 
-    }
-  );
+  });
 
 });
 
 
-/* ==================== QUIZ ==================== */
-
-const quizOptions =
-  document.querySelectorAll(
-    ".quiz-option"
-  );
-
-const quizFeedback =
-  document.getElementById(
-    "quizFeedback"
-  );
-
-
-quizOptions.forEach(option => {
-
-  option.addEventListener(
-    "click",
-    () => {
-
-      const isCorrect =
-        option.dataset.correct === "true";
-
-
-      // Reset previous selections.
-      quizOptions.forEach(item => {
-
-        item.classList.remove(
-          "correct",
-          "wrong"
-        );
-
-      });
-
-
-      if (isCorrect) {
-
-        option.classList.add(
-          "correct"
-        );
-
-        if (quizFeedback) {
-
-          quizFeedback.innerHTML =
-            "✓ <strong>Correct!</strong> 妈 (mā) uses the first tone: a high, flat pitch.";
-
-        }
-
-        speak("妈");
-
-      } else {
-
-        option.classList.add(
-          "wrong"
-        );
-
-        if (quizFeedback) {
-
-          quizFeedback.innerHTML =
-            "✕ <strong>Not quite.</strong> 妈 (mā) uses the first tone, which stays high and flat.";
-
-        }
-
-      }
-
-    }
-  );
-
-});
-
-
-/* ==================== DIALOGUE ==================== */
-
-let dialogueTimer = null;
-
-
-const speakerOne =
-  document.getElementById(
-    "speaker1"
-  );
-
-const speakerTwo =
-  document.getElementById(
-    "speaker2"
-  );
-
-const playDialogueButton =
-  document.getElementById(
-    "playDialogueButton"
-  );
-
-const stopDialogueButton =
-  document.getElementById(
-    "stopDialogueButton"
-  );
-
-
-/*
-  Start the sample dialogue.
-*/
-function playDialogue() {
-
-  stopDialogue();
-
-
-  // Highlight Speaker A.
-  if (speakerOne) {
-    speakerOne.classList.add(
-      "active"
-    );
-  }
-
-  if (speakerTwo) {
-    speakerTwo.classList.remove(
-      "active"
-    );
-  }
-
-
-  // Play Speaker A.
-  speak(
-    "你好！你好吗？"
-  );
-
-
-  /*
-    Move the highlight to Speaker B
-    after the first line.
-  */
-  dialogueTimer =
-    setTimeout(() => {
-
-      if (speakerOne) {
-        speakerOne.classList.remove(
-          "active"
-        );
-      }
-
-      if (speakerTwo) {
-        speakerTwo.classList.add(
-          "active"
-        );
-      }
-
-      speak(
-        "我很好，谢谢！"
-      );
-
-    }, 2500);
-
-}
-
-
-/*
-  Stop dialogue playback.
-*/
-function stopDialogue() {
-
-  // Clear pending timer.
-  if (dialogueTimer) {
-
-    clearTimeout(
-      dialogueTimer
-    );
-
-    dialogueTimer = null;
-
-  }
-
-
-  // Stop speech.
-  if ("speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
-  }
-
-
-  // Remove highlighting.
-  if (speakerOne) {
-    speakerOne.classList.remove(
-      "active"
-    );
-  }
-
-  if (speakerTwo) {
-    speakerTwo.classList.remove(
-      "active"
-    );
-  }
-
-}
-
-
-/* ==================== DIALOGUE BUTTONS ==================== */
-
-if (playDialogueButton) {
-
-  playDialogueButton.addEventListener(
-    "click",
-    playDialogue
-  );
-
-}
-
-
-if (stopDialogueButton) {
-
-  stopDialogueButton.addEventListener(
-    "click",
-    stopDialogue
-  );
-
-}
-
-
-/* ==================== SPEECH VOICE LOADING ==================== */
-
-/*
-  Some browsers load available voices
-  asynchronously.
-
-  Calling getVoices() after voiceschanged
-  makes Chinese voice detection more reliable.
-*/
-
-if ("speechSynthesis" in window) {
-
-  window.speechSynthesis.onvoiceschanged =
-    () => {
-
-      window.speechSynthesis.getVoices();
-
-    };
-
-}
-
-
-/* ==================== INITIALIZATION ==================== */
-
-/*
-  Make sure the first tone is displayed
-  correctly when the page loads.
-*/
+/* ==================== INITIAL TONE ==================== */
 
 if (tonePath && toneDescription) {
 
@@ -474,7 +171,8 @@ if (tonePath && toneDescription) {
     toneData[1].path
   );
 
-  toneDescription.textContent =
-    toneData[1].text;
+  toneDescription.innerHTML =
+    `<strong>${toneData[1].syllable}</strong> — ${toneData[1].character} — ${toneData[1].meaning}<br>
+     ${toneData[1].text}`;
 
 }
