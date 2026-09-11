@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
 
@@ -18,7 +19,9 @@
   <link rel="stylesheet" href="style.css">
 </head>
 
+
 <body>
+
 
   <!-- ==================== NAVIGATION ==================== -->
 
@@ -56,6 +59,7 @@
   </nav>
 
 
+
   <!-- ==================== STORY HERO ==================== -->
 
   <header class="story-hero">
@@ -66,17 +70,20 @@
         Chinese Story Lesson
       </span>
 
-      <h1>
-        小明的一天
+      <!-- Loaded from Excel -->
+      <h1 id="storyTitle">
+        Loading lesson...
       </h1>
 
-      <p class="story-pinyin">
-        Xiǎomíng de yì tiān
-      </p>
+      <p
+        class="story-pinyin"
+        id="storyPinyin"
+      ></p>
 
-      <p class="story-meaning">
-        Xiaoming's Day
-      </p>
+      <p
+        class="story-meaning"
+        id="storyMeaning"
+      ></p>
 
       <div class="story-meta">
 
@@ -91,6 +98,7 @@
     </div>
 
   </header>
+
 
 
   <!-- ==================== VIDEO ==================== -->
@@ -109,7 +117,7 @@
           Watch the story.
         </h2>
 
-        <p>
+        <p id="storyDescription">
           First, watch the short video and listen to the Chinese
           pronunciation. Try to understand the story from the images
           and context before reading the translation.
@@ -120,27 +128,22 @@
 
       <div class="video-card">
 
-        <!-- Replace this file with your own video -->
         <video
+          id="lessonVideo"
           class="story-video"
           controls
           preload="metadata"
-          poster="assets/images/story-poster.jpg"
         >
-
-          <source
-            src="assets/video/lesson-01.mp4"
-            type="video/mp4"
-          >
 
           Your browser does not support HTML5 video.
 
         </video>
 
+
         <div class="video-caption">
 
-          <strong>
-            小明的一天
+          <strong id="videoTitle">
+            Chinese Story
           </strong>
 
           <span>
@@ -154,6 +157,7 @@
     </div>
 
   </section>
+
 
 
   <!-- ==================== STORY IMAGES ==================== -->
@@ -180,109 +184,23 @@
       </div>
 
 
-      <div class="story-image-grid">
+      <!-- Loaded dynamically from Excel -->
 
+      <div
+        class="story-image-grid"
+        id="storyImageGrid"
+      >
 
-        <!-- IMAGE 1 -->
-
-        <article class="story-image-card">
-
-          <img
-            src="assets/images/story-01.jpg"
-            alt="Xiaoming waking up in the morning"
-          >
-
-          <div class="story-image-content">
-
-            <span class="image-number">
-              01
-            </span>
-
-            <h3>
-              早上
-            </h3>
-
-            <p>
-              zǎoshang
-            </p>
-
-            <span>
-              morning
-            </span>
-
-          </div>
-
-        </article>
-
-
-        <!-- IMAGE 2 -->
-
-        <article class="story-image-card">
-
-          <img
-            src="assets/images/story-02.jpg"
-            alt="Xiaoming eating breakfast"
-          >
-
-          <div class="story-image-content">
-
-            <span class="image-number">
-              02
-            </span>
-
-            <h3>
-              吃饭
-            </h3>
-
-            <p>
-              chī fàn
-            </p>
-
-            <span>
-              eat a meal
-            </span>
-
-          </div>
-
-        </article>
-
-
-        <!-- IMAGE 3 -->
-
-        <article class="story-image-card">
-
-          <img
-            src="assets/images/story-03.jpg"
-            alt="Xiaoming going to school"
-          >
-
-          <div class="story-image-content">
-
-            <span class="image-number">
-              03
-            </span>
-
-            <h3>
-              学校
-            </h3>
-
-            <p>
-              xuéxiào
-            </p>
-
-            <span>
-              school
-            </span>
-
-          </div>
-
-        </article>
+        <p>
+          Loading story images...
+        </p>
 
       </div>
 
     </div>
 
   </section>
+
 
 
   <!-- ==================== STORY READING ==================== -->
@@ -312,188 +230,23 @@
       </div>
 
 
-      <div class="reading-card">
+      <!-- Loaded dynamically from Excel -->
 
+      <div
+        class="reading-card"
+        id="storyContent"
+      >
 
-        <!-- SENTENCE 1 -->
-
-        <article class="reading-line">
-
-          <div class="reading-number">
-            01
-          </div>
-
-          <div class="reading-text">
-
-            <div class="chinese-sentence">
-              早上好！
-            </div>
-
-            <div class="pinyin-sentence">
-              Zǎoshang hǎo!
-            </div>
-
-            <div class="english-sentence">
-              Good morning!
-            </div>
-
-          </div>
-
-          <button
-            class="reading-audio"
-            data-text="早上好！"
-            aria-label="Play sentence"
-          >
-            🔊
-          </button>
-
-        </article>
-
-
-        <!-- SENTENCE 2 -->
-
-        <article class="reading-line">
-
-          <div class="reading-number">
-            02
-          </div>
-
-          <div class="reading-text">
-
-            <div class="chinese-sentence">
-              小明起床了。
-            </div>
-
-            <div class="pinyin-sentence">
-              Xiǎomíng qǐchuáng le.
-            </div>
-
-            <div class="english-sentence">
-              Xiaoming gets up.
-            </div>
-
-          </div>
-
-          <button
-            class="reading-audio"
-            data-text="小明起床了。"
-            aria-label="Play sentence"
-          >
-            🔊
-          </button>
-
-        </article>
-
-
-        <!-- SENTENCE 3 -->
-
-        <article class="reading-line">
-
-          <div class="reading-number">
-            03
-          </div>
-
-          <div class="reading-text">
-
-            <div class="chinese-sentence">
-              他吃早饭。
-            </div>
-
-            <div class="pinyin-sentence">
-              Tā chī zǎofàn.
-            </div>
-
-            <div class="english-sentence">
-              He eats breakfast.
-            </div>
-
-          </div>
-
-          <button
-            class="reading-audio"
-            data-text="他吃早饭。"
-            aria-label="Play sentence"
-          >
-            🔊
-          </button>
-
-        </article>
-
-
-        <!-- SENTENCE 4 -->
-
-        <article class="reading-line">
-
-          <div class="reading-number">
-            04
-          </div>
-
-          <div class="reading-text">
-
-            <div class="chinese-sentence">
-              然后，他去学校。
-            </div>
-
-            <div class="pinyin-sentence">
-              Ránhòu, tā qù xuéxiào.
-            </div>
-
-            <div class="english-sentence">
-              Then, he goes to school.
-            </div>
-
-          </div>
-
-          <button
-            class="reading-audio"
-            data-text="然后，他去学校。"
-            aria-label="Play sentence"
-          >
-            🔊
-          </button>
-
-        </article>
-
-
-        <!-- SENTENCE 5 -->
-
-        <article class="reading-line">
-
-          <div class="reading-number">
-            05
-          </div>
-
-          <div class="reading-text">
-
-            <div class="chinese-sentence">
-              他很开心。
-            </div>
-
-            <div class="pinyin-sentence">
-              Tā hěn kāixīn.
-            </div>
-
-            <div class="english-sentence">
-              He is very happy.
-            </div>
-
-          </div>
-
-          <button
-            class="reading-audio"
-            data-text="他很开心。"
-            aria-label="Play sentence"
-          >
-            🔊
-          </button>
-
-        </article>
+        <p>
+          Loading story...
+        </p>
 
       </div>
 
     </div>
 
   </section>
+
 
 
   <!-- ==================== VOCABULARY ==================== -->
@@ -519,109 +272,23 @@
       </div>
 
 
-      <div class="vocabulary-grid">
+      <!-- Loaded dynamically from Excel -->
 
+      <div
+        class="vocabulary-grid"
+        id="vocabularyContent"
+      >
 
-        <article class="vocabulary-card">
-
-          <div class="vocabulary-character">
-            早上
-          </div>
-
-          <div class="vocabulary-pinyin">
-            zǎoshang
-          </div>
-
-          <div class="vocabulary-meaning">
-            morning
-          </div>
-
-          <button
-            class="vocabulary-audio"
-            data-text="早上"
-          >
-            🔊 Listen
-          </button>
-
-        </article>
-
-
-        <article class="vocabulary-card">
-
-          <div class="vocabulary-character">
-            起床
-          </div>
-
-          <div class="vocabulary-pinyin">
-            qǐchuáng
-          </div>
-
-          <div class="vocabulary-meaning">
-            get up
-          </div>
-
-          <button
-            class="vocabulary-audio"
-            data-text="起床"
-          >
-            🔊 Listen
-          </button>
-
-        </article>
-
-
-        <article class="vocabulary-card">
-
-          <div class="vocabulary-character">
-            学校
-          </div>
-
-          <div class="vocabulary-pinyin">
-            xuéxiào
-          </div>
-
-          <div class="vocabulary-meaning">
-            school
-          </div>
-
-          <button
-            class="vocabulary-audio"
-            data-text="学校"
-          >
-            🔊 Listen
-          </button>
-
-        </article>
-
-
-        <article class="vocabulary-card">
-
-          <div class="vocabulary-character">
-            开心
-          </div>
-
-          <div class="vocabulary-pinyin">
-            kāixīn
-          </div>
-
-          <div class="vocabulary-meaning">
-            happy
-          </div>
-
-          <button
-            class="vocabulary-audio"
-            data-text="开心"
-          >
-            🔊 Listen
-          </button>
-
-        </article>
+        <p>
+          Loading vocabulary...
+        </p>
 
       </div>
 
     </div>
 
   </section>
+
 
 
   <!-- ==================== QUIZ ==================== -->
@@ -630,57 +297,25 @@
 
     <div class="container">
 
-      <div class="story-quiz-card">
+      <div
+        class="story-quiz-card"
+        id="exerciseContent"
+      >
 
         <span class="section-label">
           05 · Check Your Understanding
         </span>
 
         <h2>
-          Where does Xiaoming go?
+          Loading exercise...
         </h2>
-
-        <p>
-          Read the story again if you need help.
-        </p>
-
-
-        <div class="story-quiz-options">
-
-          <button
-            class="story-quiz-option"
-            data-correct="false"
-          >
-            家 — Home
-          </button>
-
-          <button
-            class="story-quiz-option"
-            data-correct="true"
-          >
-            学校 — School
-          </button>
-
-          <button
-            class="story-quiz-option"
-            data-correct="false"
-          >
-            商店 — Shop
-          </button>
-
-        </div>
-
-
-        <div
-          class="story-quiz-feedback"
-          id="storyQuizFeedback"
-        ></div>
 
       </div>
 
     </div>
 
   </section>
+
 
 
   <!-- ==================== FOOTER ==================== -->
@@ -699,161 +334,24 @@
   </footer>
 
 
-  <!-- JavaScript -->
+
+  <!-- ==================== JAVASCRIPT ==================== -->
+
+  <!-- SheetJS: reads the Excel workbook -->
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+
+  <!-- Main site JavaScript -->
 
   <script src="main.js"></script>
 
-  <script>
 
-    /* ==================== STORY AUDIO ==================== */
+  <!-- Story JavaScript -->
 
-    const readingAudioButtons =
-      document.querySelectorAll(
-        ".reading-audio"
-      );
+  <script src="story.js"></script>
 
-    const vocabularyAudioButtons =
-      document.querySelectorAll(
-        ".vocabulary-audio"
-      );
-
-
-    function playStoryAudio(text) {
-
-      if (!("speechSynthesis" in window)) {
-
-        alert(
-          "Your browser does not support text-to-speech."
-        );
-
-        return;
-      }
-
-
-      window.speechSynthesis.cancel();
-
-
-      const utterance =
-        new SpeechSynthesisUtterance(text);
-
-
-      const voices =
-        window.speechSynthesis.getVoices();
-
-
-      const chineseVoice =
-        voices.find(
-          voice =>
-            voice.lang
-              .toLowerCase()
-              .startsWith("zh")
-        );
-
-
-      if (chineseVoice) {
-        utterance.voice = chineseVoice;
-      }
-
-
-      utterance.lang = "zh-CN";
-      utterance.rate = 0.75;
-      utterance.pitch = 1;
-
-
-      window.speechSynthesis.speak(
-        utterance
-      );
-
-    }
-
-
-    readingAudioButtons.forEach(button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          playStoryAudio(
-            button.dataset.text
-          );
-
-        }
-      );
-
-    });
-
-
-    vocabularyAudioButtons.forEach(button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          playStoryAudio(
-            button.dataset.text
-          );
-
-        }
-      );
-
-    });
-
-
-    /* ==================== STORY QUIZ ==================== */
-
-    const storyQuizOptions =
-      document.querySelectorAll(
-        ".story-quiz-option"
-      );
-
-    const storyQuizFeedback =
-      document.getElementById(
-        "storyQuizFeedback"
-      );
-
-
-    storyQuizOptions.forEach(option => {
-
-      option.addEventListener(
-        "click",
-        () => {
-
-          storyQuizOptions.forEach(item => {
-
-            item.classList.remove(
-              "correct",
-              "wrong"
-            );
-
-          });
-
-
-          const correct =
-            option.dataset.correct === "true";
-
-
-          if (correct) {
-
-            option.classList.add("correct");
-
-            storyQuizFeedback.innerHTML =
-              "✓ <strong>Correct!</strong> 小明去学校。";
-
-          } else {
-
-            option.classList.add("wrong");
-
-            storyQuizFeedback.innerHTML =
-              "✕ <strong>Not quite.</strong> Read sentence 04 again: 他去学校。";
-
-          }
-
-        }
-      );
-
-    });
-
-  </script>
 
 </body>
+
 </html>
