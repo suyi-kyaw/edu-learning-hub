@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -17,22 +18,29 @@
   <title>LinguaPath | Chinese Story Lesson</title>
 
   <link rel="stylesheet" href="style.css">
+
 </head>
 
 
 <body>
 
 
-  <!-- ==================== NAVIGATION ==================== -->
+  <!-- =====================================================
+       NAVIGATION
+       ===================================================== -->
 
   <nav class="navbar">
 
     <div class="nav-inner">
 
       <a href="index.html" class="logo">
+
         <span class="logo-mark">文</span>
+
         <span>LinguaPath</span>
+
       </a>
+
 
       <div class="nav-links">
 
@@ -50,7 +58,11 @@
 
       </div>
 
-      <a href="index.html" class="nav-button">
+
+      <a
+        href="index.html"
+        class="nav-button"
+      >
         Learning Hub
       </a>
 
@@ -60,7 +72,9 @@
 
 
 
-  <!-- ==================== STORY HERO ==================== -->
+  <!-- =====================================================
+       STORY HERO
+       ===================================================== -->
 
   <header class="story-hero">
 
@@ -70,28 +84,39 @@
         Chinese Story Lesson
       </span>
 
+
       <!-- Loaded from Excel -->
+
       <h1 id="storyTitle">
         Loading lesson...
       </h1>
+
 
       <p
         class="story-pinyin"
         id="storyPinyin"
       ></p>
 
+
       <p
         class="story-meaning"
         id="storyMeaning"
       ></p>
 
+
       <div class="story-meta">
 
-        <span>🇨🇳 Beginner Chinese</span>
+        <span>
+          🇨🇳 Beginner Chinese
+        </span>
 
-        <span>🎧 Native Audio</span>
+        <span>
+          🎧 Native Audio
+        </span>
 
-        <span>📖 Reading Practice</span>
+        <span>
+          📖 Reading Practice
+        </span>
 
       </div>
 
@@ -101,11 +126,14 @@
 
 
 
-  <!-- ==================== VIDEO ==================== -->
+  <!-- =====================================================
+       01 · WATCH
+       ===================================================== -->
 
   <section class="story-section">
 
     <div class="container">
+
 
       <div class="section-heading">
 
@@ -113,20 +141,26 @@
           01 · Watch
         </span>
 
+
         <h2>
           Watch the story.
         </h2>
 
+
         <p id="storyDescription">
+
           First, watch the short video and listen to the Chinese
           pronunciation. Try to understand the story from the images
           and context before reading the translation.
+
         </p>
 
       </div>
 
 
+
       <div class="video-card">
+
 
         <video
           id="lessonVideo"
@@ -146,6 +180,7 @@
             Chinese Story
           </strong>
 
+
           <span>
             Listen carefully to the pronunciation and tones.
           </span>
@@ -160,11 +195,14 @@
 
 
 
-  <!-- ==================== STORY IMAGES ==================== -->
+  <!-- =====================================================
+       02 · UNDERSTAND
+       ===================================================== -->
 
   <section class="story-images-section">
 
     <div class="container">
+
 
       <div class="section-heading">
 
@@ -172,9 +210,11 @@
           02 · Understand
         </span>
 
+
         <h2>
           Understand through images.
         </h2>
+
 
         <p>
           Connect the Chinese words with visual situations instead
@@ -184,7 +224,15 @@
       </div>
 
 
-      <!-- Loaded dynamically from Excel -->
+
+      <!--
+
+        STORY.JS INSERTS THE EXCEL DATA HERE.
+
+        Source:
+        Story sheet in data/lessons.xlsx
+
+      -->
 
       <div
         class="story-image-grid"
@@ -203,7 +251,9 @@
 
 
 
-  <!-- ==================== STORY READING ==================== -->
+  <!-- =====================================================
+       03 · READ
+       ===================================================== -->
 
   <section
     class="story-reading"
@@ -212,15 +262,18 @@
 
     <div class="container">
 
+
       <div class="section-heading">
 
         <span class="section-label">
           03 · Read
         </span>
 
+
         <h2>
           Read the story.
         </h2>
+
 
         <p>
           Read each sentence in Chinese. Look at the pinyin when
@@ -230,7 +283,15 @@
       </div>
 
 
-      <!-- Loaded dynamically from Excel -->
+
+      <!--
+
+        STORY.JS INSERTS STORY SENTENCES HERE.
+
+        Source:
+        Story sheet in data/lessons.xlsx
+
+      -->
 
       <div
         class="reading-card"
@@ -249,11 +310,14 @@
 
 
 
-  <!-- ==================== VOCABULARY ==================== -->
+  <!-- =====================================================
+       04 · VOCABULARY
+       ===================================================== -->
 
   <section class="story-vocabulary">
 
     <div class="container">
+
 
       <div class="section-heading">
 
@@ -261,9 +325,11 @@
           04 · Vocabulary
         </span>
 
+
         <h2>
           Key words from the story.
         </h2>
+
 
         <p>
           Learn the most useful words before moving on.
@@ -272,7 +338,15 @@
       </div>
 
 
-      <!-- Loaded dynamically from Excel -->
+
+      <!--
+
+        STORY.JS INSERTS VOCABULARY HERE.
+
+        Source:
+        Vocabulary sheet in data/lessons.xlsx
+
+      -->
 
       <div
         class="vocabulary-grid"
@@ -291,11 +365,23 @@
 
 
 
-  <!-- ==================== QUIZ ==================== -->
+  <!-- =====================================================
+       05 · EXERCISES
+       ===================================================== -->
 
   <section class="story-quiz">
 
     <div class="container">
+
+
+      <!--
+
+        STORY.JS INSERTS EXERCISES HERE.
+
+        Source:
+        Exercises sheet in data/lessons.xlsx
+
+      -->
 
       <div
         class="story-quiz-card"
@@ -306,9 +392,15 @@
           05 · Check Your Understanding
         </span>
 
+
         <h2>
           Loading exercise...
         </h2>
+
+
+        <p>
+          Loading your exercise...
+        </p>
 
       </div>
 
@@ -318,7 +410,9 @@
 
 
 
-  <!-- ==================== FOOTER ==================== -->
+  <!-- =====================================================
+       FOOTER
+       ===================================================== -->
 
   <footer>
 
@@ -335,19 +429,34 @@
 
 
 
-  <!-- ==================== JAVASCRIPT ==================== -->
-
-  <!-- SheetJS: reads the Excel workbook -->
-
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <!-- =====================================================
+       JAVASCRIPT
+       ===================================================== -->
 
 
-  <!-- Main site JavaScript -->
+  <!--
+    SheetJS
+    Used to read data/lessons.xlsx
+  -->
 
-  <script src="main.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"
+  ></script>
 
 
-  <!-- Story JavaScript -->
+  <!--
+    Story application
+
+    This file:
+    - Reads lessons.xlsx
+    - Finds the lesson from ?id=
+    - Loads video
+    - Loads images
+    - Loads story sentences
+    - Loads vocabulary
+    - Loads exercises
+    - Handles pronunciation
+  -->
 
   <script src="story.js"></script>
 
