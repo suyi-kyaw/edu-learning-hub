@@ -12,42 +12,69 @@
 
   <meta
     name="description"
-    content="Interactive Chinese story lesson with video, images, reading, vocabulary, pronunciation, and exercises."
+    content="Interactive Chinese story lesson with video, reading, images, vocabulary, exercises, and pronunciation."
   >
 
-  <title>LinguaPath | Story Lesson</title>
+  <title>
+    LinguaPath | Chinese Story Lesson
+  </title>
+
 
   <!-- Google Fonts -->
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
   <link
-    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&family=Roboto:wght@400;500;600;700&display=swap"
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  >
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Roboto:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   >
+
 
   <link rel="stylesheet" href="style.css">
 
 </head>
 
+
 <body>
 
-  <!-- ================= NAVIGATION ================= -->
+
+  <!-- =========================
+       MAIN NAVIGATION
+  ========================== -->
 
   <nav class="navbar">
 
     <div class="nav-inner">
 
-      <a href="index.html" class="logo">
+      <a
+        href="index.html"
+        class="logo"
+      >
 
-        <span class="logo-mark">文</span>
+        <span class="logo-mark">
+          文
+        </span>
 
         <span class="logo-text">
-          <strong>LinguaPath</strong>
-          <small>Language Learning Hub</small>
+
+          <strong>
+            LinguaPath
+          </strong>
+
+          <small>
+            Language Learning Hub
+          </small>
+
         </span>
 
       </a>
+
 
       <div class="nav-links">
 
@@ -55,17 +82,60 @@
           Methodology
         </a>
 
+        <a href="index.html#journey">
+          Learning Journey
+        </a>
+
         <a href="index.html#demos">
           Demo Lessons
         </a>
 
-        <a href="#story">
-          Story
+        <a href="index.html#learning-hub">
+          Learning Hub
         </a>
 
       </div>
 
-      <a href="index.html#learning-hub" class="nav-button">
+
+      <a
+        href="index.html#learning-hub"
+        class="nav-button"
+      >
+        Start Learning
+      </a>
+
+
+      <button
+        class="mobile-menu-button"
+        id="mobileMenuButton"
+        type="button"
+        aria-label="Open navigation"
+        aria-expanded="false"
+      >
+        ☰
+      </button>
+
+    </div>
+
+
+    <div
+      class="mobile-menu"
+      id="mobileMenu"
+    >
+
+      <a href="index.html#methodology">
+        Methodology
+      </a>
+
+      <a href="index.html#journey">
+        Learning Journey
+      </a>
+
+      <a href="index.html#demos">
+        Demo Lessons
+      </a>
+
+      <a href="index.html#learning-hub">
         Learning Hub
       </a>
 
@@ -74,35 +144,82 @@
   </nav>
 
 
-  <!-- ================= STORY HERO ================= -->
+  <!-- =========================
+       LESSON NAVIGATION
+  ========================== -->
+
+  <div class="lesson-navigation">
+
+    <div class="container lesson-navigation-inner">
+
+      <a href="#watch">
+        01 Watch
+      </a>
+
+      <a href="#understand">
+        02 Understand
+      </a>
+
+      <a href="#reading">
+        03 Story
+      </a>
+
+      <a href="#vocabulary">
+        04 Vocabulary
+      </a>
+
+      <a href="#exercises">
+        05 Exercises
+      </a>
+
+    </div>
+
+  </div>
+
+
+  <!-- =========================
+       STORY HERO
+  ========================== -->
 
   <header class="story-hero">
 
     <div class="container">
 
       <span class="section-label">
-        CHINESE STORY LESSON
+        Chinese Story Lesson
       </span>
+
 
       <h1 id="storyTitle">
         Loading lesson...
       </h1>
+
 
       <p
         class="story-pinyin"
         id="storyPinyin"
       ></p>
 
+
       <p
         class="story-meaning"
         id="storyMeaning"
       ></p>
 
+
       <div class="story-meta">
 
-        <span>🇨🇳 Beginner Chinese</span>
-        <span>🎧 Audio Practice</span>
-        <span>📖 Reading Practice</span>
+        <span>
+          🇨🇳 Beginner Chinese
+        </span>
+
+        <span>
+          🎧 Native Audio
+        </span>
+
+        <span>
+          📖 Reading Practice
+        </span>
 
       </div>
 
@@ -111,9 +228,14 @@
   </header>
 
 
-  <!-- ================= WATCH ================= -->
+  <!-- =========================
+       01 WATCH
+  ========================== -->
 
-  <section class="story-section">
+  <section
+    class="story-section"
+    id="watch"
+  >
 
     <div class="container">
 
@@ -128,8 +250,9 @@
         </h2>
 
         <p id="storyDescription">
-          First, watch the short video and listen
-          carefully to the Chinese pronunciation.
+          First, watch the short video and listen to the
+          Chinese pronunciation. Try to understand the story
+          from the images and context before reading the translation.
         </p>
 
       </div>
@@ -143,8 +266,11 @@
           controls
           preload="metadata"
         >
+
           Your browser does not support HTML5 video.
+
         </video>
+
 
         <div class="video-caption">
 
@@ -153,8 +279,7 @@
           </strong>
 
           <span>
-            Listen carefully to the pronunciation
-            and tones.
+            Listen carefully to the pronunciation and tones.
           </span>
 
         </div>
@@ -166,9 +291,14 @@
   </section>
 
 
-  <!-- ================= IMAGES ================= -->
+  <!-- =========================
+       02 UNDERSTAND
+  ========================== -->
 
-  <section class="story-images-section">
+  <section
+    class="story-images-section"
+    id="understand"
+  >
 
     <div class="container">
 
@@ -183,9 +313,8 @@
         </h2>
 
         <p>
-          Connect Chinese words with visual situations
-          instead of translating every sentence in
-          your head.
+          Connect the Chinese words with visual situations
+          instead of translating every sentence in your head.
         </p>
 
       </div>
@@ -196,9 +325,9 @@
         id="storyImageGrid"
       >
 
-        <div class="loading-message">
+        <p>
           Loading story images...
-        </div>
+        </p>
 
       </div>
 
@@ -207,11 +336,13 @@
   </section>
 
 
-  <!-- ================= READING ================= -->
+  <!-- =========================
+       03 STORY
+  ========================== -->
 
   <section
     class="story-reading"
-    id="story"
+    id="reading"
   >
 
     <div class="container">
@@ -219,7 +350,7 @@
       <div class="section-heading">
 
         <span class="section-label">
-          03 · READ
+          03 · STORY
         </span>
 
         <h2>
@@ -227,8 +358,8 @@
         </h2>
 
         <p>
-          Read each sentence in Chinese. Look at
-          the pinyin when you need help, then listen.
+          Read each sentence in Chinese. Look at the pinyin
+          when you need help, then listen to the sentence.
         </p>
 
       </div>
@@ -239,9 +370,9 @@
         id="storyContent"
       >
 
-        <div class="loading-message">
+        <p>
           Loading story...
-        </div>
+        </p>
 
       </div>
 
@@ -250,9 +381,14 @@
   </section>
 
 
-  <!-- ================= VOCABULARY ================= -->
+  <!-- =========================
+       04 VOCABULARY
+  ========================== -->
 
-  <section class="story-vocabulary">
+  <section
+    class="story-vocabulary"
+    id="vocabulary"
+  >
 
     <div class="container">
 
@@ -267,8 +403,7 @@
         </h2>
 
         <p>
-          Learn the most useful words before
-          moving on.
+          Learn the most useful words before moving on.
         </p>
 
       </div>
@@ -279,9 +414,9 @@
         id="vocabularyContent"
       >
 
-        <div class="loading-message">
+        <p>
           Loading vocabulary...
-        </div>
+        </p>
 
       </div>
 
@@ -290,9 +425,14 @@
   </section>
 
 
-  <!-- ================= EXERCISES ================= -->
+  <!-- =========================
+       05 EXERCISES
+  ========================== -->
 
-  <section class="story-quiz">
+  <section
+    class="story-quiz"
+    id="exercises"
+  >
 
     <div class="container">
 
@@ -302,11 +442,11 @@
       >
 
         <span class="section-label">
-          05 · CHECK YOUR UNDERSTANDING
+          05 · EXERCISES
         </span>
 
         <h2>
-          Loading exercise...
+          Check Your Understanding
         </h2>
 
         <p>
@@ -320,63 +460,33 @@
   </section>
 
 
-  <!-- ================= FOOTER ================= -->
+  <!-- =========================
+       FOOTER
+  ========================== -->
 
   <footer>
 
-    <div class="container footer-inner">
+    <div class="container">
 
-      <div class="footer-brand">
-
-        <a href="index.html" class="logo">
-
-          <span class="logo-mark">
-            文
-          </span>
-
-          <span class="logo-text">
-            <strong>LinguaPath</strong>
-            <small>Language Learning Hub</small>
-          </span>
-
-        </a>
-
-        <p>
-          Learn visually. Listen carefully.
-          Speak confidently.
-        </p>
-
-      </div>
-
-      <div class="footer-links">
-
-        <a href="index.html#methodology">
-          Methodology
-        </a>
-
-        <a href="index.html#learning-hub">
-          Learning Hub
-        </a>
-
-      </div>
-
-    </div>
-
-    <div class="container footer-bottom">
-
-      <span>
+      <p>
         © 2026 LinguaPath Learning Hub.
-      </span>
+        Learn visually. Listen carefully. Speak confidently.
+      </p>
 
     </div>
 
   </footer>
 
 
-  <!-- ================= JAVASCRIPT ================= -->
+  <!-- SheetJS -->
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+
+  <!-- Story JavaScript -->
+
   <script src="story.js"></script>
 
 </body>
+
 </html>

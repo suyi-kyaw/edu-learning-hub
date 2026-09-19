@@ -1,164 +1,198 @@
-"use strict";
+/* =========================================================
+   LinguaPath - Main JavaScript
+   ========================================================= */
 
 
 /* =========================================================
-   CONFIGURATION
-========================================================= */
+   MOBILE NAVIGATION
+   ========================================================= */
 
-const EXCEL_FILE = "data/lessons.xlsx";
+function initializeMobileMenu() {
+
+  const menuButton =
+    document.getElementById("mobileMenuButton");
+
+  const mobileMenu =
+    document.getElementById("mobileMenu");
 
 
-/* =========================================================
-   GLOBAL DATA
-========================================================= */
+  if (!menuButton || !mobileMenu) {
+    return;
+  }
 
-let lessonData = {
-  lessons: [],
-  story: [],
-  vocabulary: [],
-  exercises: []
-};
+
+  menuButton.addEventListener("click", () => {
+
+    const isOpen =
+      mobileMenu.classList.toggle("open");
+
+    menuButton.setAttribute(
+      "aria-expanded",
+      isOpen ? "true" : "false"
+    );
+
+    menuButton.setAttribute(
+      "aria-label",
+      isOpen
+        ? "Close navigation"
+        : "Open navigation"
+    );
+
+  });
+
+
+  mobileMenu
+    .querySelectorAll("a")
+    .forEach(link => {
+
+      link.addEventListener("click", () => {
+
+        mobileMenu.classList.remove("open");
+
+        menuButton.setAttribute(
+          "aria-expanded",
+          "false"
+        );
+
+        menuButton.setAttribute(
+          "aria-label",
+          "Open navigation"
+        );
+
+      });
+
+    });
+
+}
 
 
 /* =========================================================
    TONE DATA
-========================================================= */
+   ========================================================= */
 
 const toneData = {
 
   1: {
+
     syllable: "mā",
+
     character: "妈",
+
     meaning: "mother",
+
     text: "Tone 1 — high and flat",
+
     path: "M20 30 L480 30",
-    audio: "assets/audio/tones/ma-tone-1.mp3"
+
+    audio:
+      "./assets/audio/tones/ma-tone-1.mp3"
+
   },
+
 
   2: {
+
     syllable: "má",
+
     character: "麻",
+
     meaning: "hemp / numb",
+
     text: "Tone 2 — rising",
-    path: "M20 70 C170 70 320 65 480 20",
-    audio: "assets/audio/tones/ma-tone-2.mp3"
+
+    path:
+      "M20 70 C170 70 320 65 480 20",
+
+    audio:
+      "./assets/audio/tones/ma-tone-2.mp3"
+
   },
+
 
   3: {
+
     syllable: "mǎ",
+
     character: "马",
+
     meaning: "horse",
+
     text: "Tone 3 — dipping",
-    path: "M20 35 C130 85 230 85 300 70 C370 55 420 30 480 25",
-    audio: "assets/audio/tones/ma-tone-3.mp3"
+
+    path:
+      "M20 35 C130 85 230 85 300 70 C370 55 420 30 480 25",
+
+    audio:
+      "./assets/audio/tones/ma-tone-3.mp3"
+
   },
 
+
   4: {
+
     syllable: "mà",
+
     character: "骂",
+
     meaning: "scold",
+
     text: "Tone 4 — falling",
-    path: "M20 20 C180 25 330 65 480 85",
-    audio: "assets/audio/tones/ma-tone-4.mp3"
+
+    path:
+      "M20 20 C180 25 330 65 480 85",
+
+    audio:
+      "./assets/audio/tones/ma-tone-4.mp3"
+
   }
 
 };
 
 
 /* =========================================================
-   SPEECH
-========================================================= */
-
-function speakChinese(text) {
-
-  if (!("speechSynthesis" in window)) {
-    return;
-  }
-
-  window.speechSynthesis.cancel();
-
-  const utterance =
-    new SpeechSynthesisUtterance(text);
-
-  utterance.lang = "zh-CN";
-  utterance.rate = 0.8;
-  utterance.pitch = 1;
-
-  window.speechSynthesis.speak(utterance);
-}
-
-
-/* =========================================================
-   AUDIO FILE
-========================================================= */
-
-function playAudio(path, fallbackText = "") {
-
-  if (path) {
-
-    const audio = new Audio(path);
-
-    audio.play().catch(() => {
-
-      if (fallbackText) {
-        speakChinese(fallbackText);
-      }
-
-    });
-
-    return;
-  }
-
-  if (fallbackText) {
-    speakChinese(fallbackText);
-  }
-}
-
-
-/* =========================================================
    TONE DEMO
-========================================================= */
+   ========================================================= */
 
-function setupToneDemo() {
+function initializeToneDemo() {
 
-  const buttons =
+  const toneButtons =
     document.querySelectorAll(".tone-button");
-
-  const character =
-    document.getElementById("toneCharacter");
 
   const syllable =
     document.getElementById("toneSyllable");
 
-  const meaning =
-    document.getElementById("toneMeaning");
+  const character =
+    document.getElementById("toneCharacter");
 
   const description =
     document.getElementById("toneDescription");
 
-  const path =
+  const tonePath =
     document.getElementById("tonePath");
 
-  const playButton =
-    document.getElementById("playToneButton");
+  const audio =
+    document.getElementById("currentToneAudio");
+
+  const audioButton =
+    document.getElementById("toneAudioButton");
 
 
-  if (!buttons.length) {
+  if (!toneButtons.length) {
     return;
   }
 
 
   function selectTone(toneNumber) {
 
-    const data =
+    const tone =
       toneData[toneNumber];
 
-    if (!data) {
+    if (!tone) {
       return;
     }
 
 
-    buttons.forEach(button => {
+    toneButtons.forEach(button => {
 
       button.classList.toggle(
         "active",
@@ -168,54 +202,111 @@ function setupToneDemo() {
     });
 
 
-    if (character) {
-      character.textContent = data.character;
-    }
-
     if (syllable) {
-      syllable.textContent = data.syllable;
+      syllable.textContent =
+        tone.syllable;
     }
 
-    if (meaning) {
-      meaning.textContent = data.meaning;
+
+    if (character) {
+      character.textContent =
+        tone.character;
     }
+
 
     if (description) {
-      description.textContent = data.text;
-    }
-
-    if (path) {
-      path.setAttribute("d", data.path);
+      description.textContent =
+        `${tone.text} · ${tone.meaning}`;
     }
 
 
-    if (playButton) {
+    if (tonePath) {
+      tonePath.setAttribute(
+        "d",
+        tone.path
+      );
+    }
 
-      playButton.onclick = () => {
 
-        playAudio(
-          data.audio,
-          data.syllable
-        );
-
-      };
-
+    if (audio) {
+      audio.src = tone.audio;
+      audio.load();
     }
 
   }
 
 
-  buttons.forEach(button => {
+  toneButtons.forEach(button => {
 
-    button.addEventListener("click", () => {
+    button.addEventListener(
+      "click",
+      () => {
 
-      selectTone(
-        Number(button.dataset.tone)
-      );
+        selectTone(
+          Number(button.dataset.tone)
+        );
 
-    });
+      }
+    );
 
   });
+
+
+  if (audioButton) {
+
+    audioButton.addEventListener(
+      "click",
+      () => {
+
+        const selectedButton =
+          document.querySelector(
+            ".tone-button.active"
+          );
+
+        const toneNumber =
+          selectedButton
+            ? Number(selectedButton.dataset.tone)
+            : 1;
+
+        const tone =
+          toneData[toneNumber];
+
+
+        if (!tone) {
+          return;
+        }
+
+
+        if (
+          tone.audio &&
+          audio
+        ) {
+
+          audio.src =
+            tone.audio;
+
+          audio.play().catch(() => {
+
+            speakText(
+              tone.syllable,
+              "zh-CN"
+            );
+
+          });
+
+        } else {
+
+          speakText(
+            tone.syllable,
+            "zh-CN"
+          );
+
+        }
+
+      }
+    );
+
+  }
 
 
   selectTone(1);
@@ -224,141 +315,211 @@ function setupToneDemo() {
 
 
 /* =========================================================
-   HERO SPEECH
-========================================================= */
+   BROWSER SPEECH
+   ========================================================= */
 
-function setupSpeechButtons() {
+function speakText(
+  text,
+  language = "zh-CN"
+) {
 
-  const heroButton =
-    document.getElementById("heroSpeechButton");
+  if (
+    !("speechSynthesis" in window)
+  ) {
 
-  if (heroButton) {
-
-    heroButton.addEventListener(
-      "click",
-      () => speakChinese("学")
-    );
-
-  }
-
-
-  const greetingButton =
-    document.getElementById(
-      "greetingSpeechButton"
-    );
-
-  if (greetingButton) {
-
-    greetingButton.addEventListener(
-      "click",
-      () => speakChinese("你好")
-    );
-
-  }
-
-}
-
-
-/* =========================================================
-   MOBILE NAVIGATION
-========================================================= */
-
-function setupMobileMenu() {
-
-  const button =
-    document.getElementById(
-      "mobileMenuButton"
-    );
-
-  const menu =
-    document.getElementById(
-      "mobileMenu"
-    );
-
-
-  if (!button || !menu) {
     return;
+
   }
 
 
-  button.addEventListener("click", () => {
-
-    menu.classList.toggle("open");
-
-  });
+  window.speechSynthesis.cancel();
 
 
-  menu.querySelectorAll("a").forEach(link => {
+  const utterance =
+    new SpeechSynthesisUtterance(text);
 
-    link.addEventListener("click", () => {
+  utterance.lang =
+    language;
 
-      menu.classList.remove("open");
+  utterance.rate =
+    0.85;
 
-    });
+  utterance.pitch =
+    1;
 
-  });
+
+  window.speechSynthesis.speak(
+    utterance
+  );
 
 }
 
 
 /* =========================================================
-   EXCEL HELPERS
-========================================================= */
+   SPEECH BUTTONS
+   ========================================================= */
 
-function normalizeKey(value) {
+function initializeSpeechButtons() {
 
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, "");
-
-}
+  const buttons =
+    document.querySelectorAll(
+      ".speech-button"
+    );
 
 
-function getValue(row, ...keys) {
+  buttons.forEach(button => {
 
-  for (const key of keys) {
+    button.addEventListener(
+      "click",
+      () => {
 
-    const normalizedTarget =
-      normalizeKey(key);
+        const text =
+          button.dataset.text;
 
-    for (const actualKey of Object.keys(row)) {
+        if (text) {
 
-      if (
-        normalizeKey(actualKey) ===
-        normalizedTarget
-      ) {
-
-        const value = row[actualKey];
-
-        if (
-          value !== undefined &&
-          value !== null &&
-          String(value).trim() !== ""
-        ) {
-
-          return value;
+          speakText(
+            text,
+            "zh-CN"
+          );
 
         }
 
       }
+    );
 
-    }
+  });
 
-  }
-
-  return "";
 }
 
 
-function readSheet(workbook, sheetName) {
+/* =========================================================
+   MICRO QUIZ
+   ========================================================= */
+
+function initializeMicroQuiz() {
+
+  const options =
+    document.querySelectorAll(
+      ".micro-options button"
+    );
+
+  const feedback =
+    document.getElementById(
+      "microQuizFeedback"
+    );
+
+
+  options.forEach(option => {
+
+    option.addEventListener(
+      "click",
+      () => {
+
+        options.forEach(button => {
+
+          button.classList.remove(
+            "correct",
+            "incorrect"
+          );
+
+        });
+
+
+        const answer =
+          option.dataset.answer;
+
+
+        if (answer === "correct") {
+
+          option.classList.add(
+            "correct"
+          );
+
+          if (feedback) {
+
+            feedback.textContent =
+              "Correct! 妈 (mā) means mother.";
+
+            feedback.className =
+              "quiz-feedback correct-feedback";
+
+          }
+
+        } else {
+
+          option.classList.add(
+            "incorrect"
+          );
+
+          if (feedback) {
+
+            feedback.textContent =
+              "Not quite. 妈 (mā) means mother.";
+
+            feedback.className =
+              "quiz-feedback incorrect-feedback";
+
+          }
+
+        }
+
+      }
+    );
+
+  });
+
+}
+
+
+/* =========================================================
+   EXCEL DATA
+   ========================================================= */
+
+const EXCEL_FILE =
+  "data/lessons.xlsx";
+
+
+let lessonData = {
+
+  lessons: [],
+
+  story: [],
+
+  vocabulary: [],
+
+  exercises: []
+
+};
+
+
+window.lessonData =
+  lessonData;
+
+
+/* =========================================================
+   EXCEL SHEET READER
+   ========================================================= */
+
+function readExcelSheet(
+  workbook,
+  sheetName
+) {
 
   const sheet =
     workbook.Sheets[sheetName];
 
+
   if (!sheet) {
+
+    console.warn(
+      `Sheet "${sheetName}" was not found.`
+    );
+
     return [];
+
   }
+
 
   return XLSX.utils.sheet_to_json(
     sheet,
@@ -372,30 +533,27 @@ function readSheet(workbook, sheetName) {
 
 /* =========================================================
    LOAD EXCEL
-========================================================= */
+   ========================================================= */
 
 async function loadExcelData() {
 
-  const status =
+  const lessonGrid =
     document.getElementById(
-      "lessonStatus"
+      "lessonGrid"
     );
 
 
   try {
 
-    if (typeof XLSX === "undefined") {
+    if (
+      typeof XLSX ===
+      "undefined"
+    ) {
 
       throw new Error(
-        "SheetJS could not be loaded."
+        "SheetJS is not loaded."
       );
 
-    }
-
-
-    if (status) {
-      status.textContent =
-        "Loading lessons...";
     }
 
 
@@ -406,7 +564,7 @@ async function loadExcelData() {
     if (!response.ok) {
 
       throw new Error(
-        `Could not load ${EXCEL_FILE}. HTTP ${response.status}`
+        `Could not load ${EXCEL_FILE}. HTTP status: ${response.status}`
       );
 
     }
@@ -425,44 +583,48 @@ async function loadExcelData() {
       );
 
 
-    lessonData.lessons =
-      readSheet(
-        workbook,
-        "Lessons"
-      );
+    lessonData = {
 
-    lessonData.story =
-      readSheet(
-        workbook,
-        "Story"
-      );
+      lessons:
+        readExcelSheet(
+          workbook,
+          "Lessons"
+        ),
 
-    lessonData.vocabulary =
-      readSheet(
-        workbook,
-        "Vocabulary"
-      );
+      story:
+        readExcelSheet(
+          workbook,
+          "Story"
+        ),
 
-    lessonData.exercises =
-      readSheet(
-        workbook,
-        "Exercises"
-      );
+      vocabulary:
+        readExcelSheet(
+          workbook,
+          "Vocabulary"
+        ),
+
+      exercises:
+        readExcelSheet(
+          workbook,
+          "Exercises"
+        )
+
+    };
 
 
     window.lessonData =
       lessonData;
 
 
-    renderLessons();
+    console.log(
+      "LinguaPath Excel data loaded:",
+      lessonData
+    );
 
 
-    if (status) {
-
-      status.textContent =
-        `${lessonData.lessons.length} lesson${lessonData.lessons.length === 1 ? "" : "s"} available`;
-
-    }
+    renderLessonCards(
+      lessonData.lessons
+    );
 
 
     document.dispatchEvent(
@@ -483,257 +645,336 @@ async function loadExcelData() {
     );
 
 
-    if (status) {
+    if (lessonGrid) {
 
-      status.innerHTML = `
-        <strong>Lesson data could not be loaded.</strong>
-        <span>
-          Make sure <code>data/lessons.xlsx</code>
-          exists and that the website is running
-          through a local web server.
-        </span>
-      `;
+      lessonGrid.innerHTML = `
 
-      status.classList.add("error");
-
-    }
-
-  }
-
-}
-
-
-/* =========================================================
-   RENDER LESSONS
-========================================================= */
-
-function renderLessons() {
-
-  const container =
-    document.getElementById(
-      "lessonGrid"
-    );
-
-
-  if (!container) {
-    return;
-  }
-
-
-  container.innerHTML = "";
-
-
-  if (!lessonData.lessons.length) {
-
-    container.innerHTML = `
-      <div class="empty-state">
-        <h3>No lessons found</h3>
-        <p>
-          Add lesson rows to the
-          <strong>Lessons</strong> sheet
-          in lessons.xlsx.
-        </p>
-      </div>
-    `;
-
-    return;
-  }
-
-
-  lessonData.lessons.forEach(
-    (lesson, index) => {
-
-      const id =
-        getValue(
-          lesson,
-          "id",
-          "lessonId"
-        );
-
-
-      const title =
-        getValue(
-          lesson,
-          "title"
-        ) ||
-        `Lesson ${index + 1}`;
-
-
-      const chineseTitle =
-        getValue(
-          lesson,
-          "chineseTitle",
-          "chinese"
-        );
-
-
-      const pinyin =
-        getValue(
-          lesson,
-          "pinyin"
-        );
-
-
-      const meaning =
-        getValue(
-          lesson,
-          "meaning"
-        );
-
-
-      const level =
-        getValue(
-          lesson,
-          "level"
-        ) ||
-        "Beginner";
-
-
-      const description =
-        getValue(
-          lesson,
-          "description"
-        );
-
-
-      const poster =
-        getValue(
-          lesson,
-          "poster",
-          "image"
-        );
-
-
-      const card =
-        document.createElement("article");
-
-
-      card.className =
-        "lesson-card";
-
-
-      const imageHTML =
-        poster
-          ? `
-            <div class="lesson-card-image">
-              <img
-                src="${escapeHTML(poster)}"
-                alt="${escapeHTML(title)}"
-                loading="lazy"
-              >
-            </div>
-          `
-          : `
-            <div class="lesson-card-placeholder">
-              <span>文</span>
-            </div>
-          `;
-
-
-      card.innerHTML = `
-
-        ${imageHTML}
-
-        <div class="lesson-card-body">
-
-          <div class="lesson-card-meta">
-
-            <span>
-              ${escapeHTML(level)}
-            </span>
-
-            <span>
-              Lesson ${index + 1}
-            </span>
-
-          </div>
-
-          <div class="lesson-chinese">
-            ${escapeHTML(chineseTitle)}
-          </div>
+        <div class="error-card">
 
           <h3>
-            ${escapeHTML(title)}
+            Lesson data could not be loaded.
           </h3>
 
-          ${
-            pinyin
-              ? `
-                <p class="lesson-pinyin">
-                  ${escapeHTML(pinyin)}
-                </p>
-              `
-              : ""
-          }
+          <p>
+            Please make sure
+            <strong>data/lessons.xlsx</strong>
+            exists and is accessible.
+          </p>
 
-          ${
-            meaning
-              ? `
-                <p class="lesson-meaning">
-                  ${escapeHTML(meaning)}
-                </p>
-              `
-              : ""
-          }
-
-          ${
-            description
-              ? `
-                <p class="lesson-description">
-                  ${escapeHTML(description)}
-                </p>
-              `
-              : ""
-          }
-
-          <a
-            class="lesson-button"
-            href="story.html?id=${encodeURIComponent(id)}"
-          >
-            Start lesson
-            <span>→</span>
-          </a>
+          <small>
+            ${escapeHTML(error.message)}
+          </small>
 
         </div>
 
       `;
 
-
-      container.appendChild(card);
-
     }
-  );
+
+  }
 
 }
 
 
 /* =========================================================
-   ESCAPE HTML
-========================================================= */
+   SAFE HTML
+   ========================================================= */
 
 function escapeHTML(value) {
 
   return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
 
 }
 
 
 /* =========================================================
-   START
-========================================================= */
+   FLEXIBLE COLUMN READER
+   ========================================================= */
+
+function getValue(
+  row,
+  ...keys
+) {
+
+  for (const key of keys) {
+
+    if (
+      row[key] !== undefined &&
+      row[key] !== null &&
+      String(row[key]).trim() !== ""
+    ) {
+
+      return row[key];
+
+    }
+
+  }
+
+
+  return "";
+
+}
+
+
+/* =========================================================
+   RENDER LESSON CARDS
+   ========================================================= */
+
+function renderLessonCards(
+  lessons
+) {
+
+  const lessonGrid =
+    document.getElementById(
+      "lessonGrid"
+    );
+
+
+  if (!lessonGrid) {
+    return;
+  }
+
+
+  if (!lessons.length) {
+
+    lessonGrid.innerHTML = `
+
+      <div class="empty-card">
+
+        <h3>
+          No lessons found
+        </h3>
+
+        <p>
+          Add lessons to the Lessons sheet
+          in data/lessons.xlsx.
+        </p>
+
+      </div>
+
+    `;
+
+    return;
+
+  }
+
+
+  lessonGrid.innerHTML =
+    lessons.map(
+      lesson => {
+
+        const id =
+          getValue(
+            lesson,
+            "id",
+            "ID",
+            "lessonId"
+          );
+
+
+        const title =
+          getValue(
+            lesson,
+            "title",
+            "Title"
+          ) ||
+          "Untitled Lesson";
+
+
+        const chineseTitle =
+          getValue(
+            lesson,
+            "chineseTitle",
+            "ChineseTitle",
+            "Chinese Title"
+          );
+
+
+        const pinyin =
+          getValue(
+            lesson,
+            "pinyin",
+            "Pinyin"
+          );
+
+
+        const meaning =
+          getValue(
+            lesson,
+            "meaning",
+            "Meaning"
+          );
+
+
+        const level =
+          getValue(
+            lesson,
+            "level",
+            "Level"
+          ) ||
+          "Beginner";
+
+
+        const description =
+          getValue(
+            lesson,
+            "description",
+            "Description"
+          );
+
+
+        const video =
+          getValue(
+            lesson,
+            "video",
+            "Video"
+          );
+
+
+        const poster =
+          getValue(
+            lesson,
+            "poster",
+            "Poster"
+          );
+
+
+        return `
+
+          <article class="lesson-card">
+
+            ${
+              poster
+                ? `
+                  <div class="lesson-card-image">
+
+                    <img
+                      src="${escapeHTML(poster)}"
+                      alt="${escapeHTML(title)}"
+                      loading="lazy"
+                    >
+
+                  </div>
+                `
+                : `
+                  <div class="lesson-card-placeholder">
+                    文
+                  </div>
+                `
+            }
+
+
+            <div class="lesson-card-content">
+
+              <span class="lesson-level">
+                ${escapeHTML(level)}
+              </span>
+
+
+              <h3>
+                ${escapeHTML(title)}
+              </h3>
+
+
+              ${
+                chineseTitle
+                  ? `
+                    <div class="lesson-chinese-title">
+                      ${escapeHTML(chineseTitle)}
+                    </div>
+                  `
+                  : ""
+              }
+
+
+              ${
+                pinyin
+                  ? `
+                    <div class="lesson-pinyin">
+                      ${escapeHTML(pinyin)}
+                    </div>
+                  `
+                  : ""
+              }
+
+
+              ${
+                meaning
+                  ? `
+                    <div class="lesson-meaning">
+                      ${escapeHTML(meaning)}
+                    </div>
+                  `
+                  : ""
+              }
+
+
+              ${
+                description
+                  ? `
+                    <p>
+                      ${escapeHTML(description)}
+                    </p>
+                  `
+                  : ""
+              }
+
+
+              <a
+                class="primary-button lesson-button"
+                href="story.html?id=${encodeURIComponent(id)}"
+              >
+                Open Lesson
+              </a>
+
+            </div>
+
+          </article>
+
+        `;
+
+      }
+    ).join("");
+
+}
+
+
+/* =========================================================
+   INITIALIZE
+   ========================================================= */
 
 document.addEventListener(
   "DOMContentLoaded",
   () => {
 
-    setupToneDemo();
-    setupSpeechButtons();
-    setupMobileMenu();
+    initializeMobileMenu();
+
+    initializeToneDemo();
+
+    initializeSpeechButtons();
+
+    initializeMicroQuiz();
+
     loadExcelData();
 
   }

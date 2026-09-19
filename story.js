@@ -1,93 +1,105 @@
-"use strict";
+/* =========================================================
+   LinguaPath - Story Lesson JavaScript
+   ========================================================= */
 
 
 /* =========================================================
    CONFIGURATION
-========================================================= */
+   ========================================================= */
 
-const EXCEL_FILE = "data/lessons.xlsx";
-
-
-/* =========================================================
-   GET LESSON ID
-========================================================= */
-
-const urlParams =
-  new URLSearchParams(
-    window.location.search
-  );
-
-
-const lessonId =
-  urlParams.get("id") ||
-  "lesson-01";
+const EXCEL_FILE =
+  "data/lessons.xlsx";
 
 
 /* =========================================================
    HELPERS
-========================================================= */
+   ========================================================= */
 
-function normalizeKey(value) {
+function escapeHTML(value) {
 
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, "");
+  return String(value ?? "")
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
 
 }
 
 
-function getValue(row, ...keys) {
+function getValue(
+  row,
+  ...keys
+) {
 
   for (const key of keys) {
 
-    const target =
-      normalizeKey(key);
+    if (
+      row[key] !== undefined &&
+      row[key] !== null &&
+      String(row[key]).trim() !== ""
+    ) {
 
-
-    for (const actualKey of Object.keys(row)) {
-
-      if (
-        normalizeKey(actualKey) ===
-        target
-      ) {
-
-        const value = row[actualKey];
-
-        if (
-          value !== undefined &&
-          value !== null &&
-          String(value).trim() !== ""
-        ) {
-
-          return value;
-
-        }
-
-      }
+      return row[key];
 
     }
 
   }
+
 
   return "";
 
 }
 
 
-function escapeHTML(value) {
+function filterByLesson(
+  rows,
+  lessonId
+) {
 
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  return rows.filter(
+    row => {
+
+      const rowLessonId =
+        getValue(
+          row,
+          "lessonId",
+          "LessonId",
+          "Lesson ID",
+          "lessonID",
+          "id"
+        );
+
+      return String(
+        rowLessonId
+      ).trim() === String(
+        lessonId
+      ).trim();
+
+    }
+  );
 
 }
 
 
-function sortByOrder(rows) {
+function sortByOrder(
+  rows
+) {
 
   return [...rows].sort(
     (a, b) => {
@@ -97,7 +109,9 @@ function sortByOrder(rows) {
           getValue(
             a,
             "order",
-            "sortOrder"
+            "Order",
+            "sequence",
+            "Sequence"
           )
         ) || 0;
 
@@ -107,7 +121,9 @@ function sortByOrder(rows) {
           getValue(
             b,
             "order",
-            "sortOrder"
+            "Order",
+            "sequence",
+            "Sequence"
           )
         ) || 0;
 
@@ -120,42 +136,98 @@ function sortByOrder(rows) {
 }
 
 
-function filterByLesson(rows) {
+/* =========================================================
+   MOBILE NAVIGATION
+   ========================================================= */
 
-  return rows.filter(row => {
+function initializeMobileMenu() {
 
-    const rowLessonId =
-      getValue(
-        row,
-        "lessonId",
-        "lesson",
-        "id"
-      );
-
-    return (
-      String(rowLessonId).trim() ===
-      String(lessonId).trim()
+  const menuButton =
+    document.getElementById(
+      "mobileMenuButton"
     );
 
-  });
+  const mobileMenu =
+    document.getElementById(
+      "mobileMenu"
+    );
+
+
+  if (!menuButton || !mobileMenu) {
+    return;
+  }
+
+
+  menuButton.addEventListener(
+    "click",
+    () => {
+
+      const isOpen =
+        mobileMenu.classList.toggle(
+          "open"
+        );
+
+
+      menuButton.setAttribute(
+        "aria-expanded",
+        isOpen
+          ? "true"
+          : "false"
+      );
+
+
+      menuButton.setAttribute(
+        "aria-label",
+        isOpen
+          ? "Close navigation"
+          : "Open navigation"
+      );
+
+    }
+  );
+
+
+  mobileMenu
+    .querySelectorAll("a")
+    .forEach(link => {
+
+      link.addEventListener(
+        "click",
+        () => {
+
+          mobileMenu.classList.remove(
+            "open"
+          );
+
+
+          menuButton.setAttribute(
+            "aria-expanded",
+            "false"
+          );
+
+        }
+      );
+
+    });
 
 }
 
 
-function readSheet(workbook, sheetName) {
+/* =========================================================
+   GET LESSON ID
+   ========================================================= */
 
-  const sheet =
-    workbook.Sheets[sheetName];
+function getLessonId() {
 
-  if (!sheet) {
-    return [];
-  }
+  const params =
+    new URLSearchParams(
+      window.location.search
+    );
 
-  return XLSX.utils.sheet_to_json(
-    sheet,
-    {
-      defval: ""
-    }
+
+  return (
+    params.get("id") ||
+    "lesson-01"
   );
 
 }
@@ -163,22 +235,39 @@ function readSheet(workbook, sheetName) {
 
 /* =========================================================
    SPEECH
-========================================================= */
+   ========================================================= */
 
-function speakChinese(text) {
+function speakText(
+  text
+) {
 
-  if (!("speechSynthesis" in window)) {
+  if (
+    !("speechSynthesis" in window)
+  ) {
+
     return;
+
   }
+
 
   window.speechSynthesis.cancel();
 
-  const utterance =
-    new SpeechSynthesisUtterance(text);
 
-  utterance.lang = "zh-CN";
-  utterance.rate = 0.8;
-  utterance.pitch = 1;
+  const utterance =
+    new SpeechSynthesisUtterance(
+      text
+    );
+
+
+  utterance.lang =
+    "zh-CN";
+
+  utterance.rate =
+    0.82;
+
+  utterance.pitch =
+    1;
+
 
   window.speechSynthesis.speak(
     utterance
@@ -187,65 +276,40 @@ function speakChinese(text) {
 }
 
 
+/* =========================================================
+   PLAY AUDIO
+   ========================================================= */
+
 function playAudio(
   audioPath,
-  chineseText
+  text
 ) {
 
   if (audioPath) {
 
     const audio =
-      new Audio(audioPath);
+      new Audio(
+        audioPath
+      );
 
 
-    audio.play().catch(() => {
+    audio.play().catch(
+      () => {
 
-      if (chineseText) {
-        speakChinese(chineseText);
+        speakText(
+          text
+        );
+
       }
-
-    });
+    );
 
     return;
 
   }
 
 
-  if (chineseText) {
-    speakChinese(chineseText);
-  }
-
-}
-
-
-/* =========================================================
-   LOAD WORKBOOK
-========================================================= */
-
-async function loadWorkbook() {
-
-  const response =
-    await fetch(EXCEL_FILE);
-
-
-  if (!response.ok) {
-
-    throw new Error(
-      `Could not load ${EXCEL_FILE}. HTTP ${response.status}`
-    );
-
-  }
-
-
-  const arrayBuffer =
-    await response.arrayBuffer();
-
-
-  return XLSX.read(
-    arrayBuffer,
-    {
-      type: "array"
-    }
+  speakText(
+    text
   );
 
 }
@@ -253,14 +317,17 @@ async function loadWorkbook() {
 
 /* =========================================================
    RENDER LESSON HEADER
-========================================================= */
+   ========================================================= */
 
-function renderLessonHeader(lesson) {
+function renderLessonHeader(
+  lesson
+) {
 
   const title =
     getValue(
       lesson,
-      "title"
+      "title",
+      "Title"
     );
 
 
@@ -268,42 +335,32 @@ function renderLessonHeader(lesson) {
     getValue(
       lesson,
       "chineseTitle",
-      "chinese"
+      "ChineseTitle",
+      "Chinese Title"
     );
 
 
   const pinyin =
     getValue(
       lesson,
-      "pinyin"
+      "pinyin",
+      "Pinyin"
     );
 
 
   const meaning =
     getValue(
       lesson,
-      "meaning"
+      "meaning",
+      "Meaning"
     );
 
 
   const description =
     getValue(
       lesson,
-      "description"
-    );
-
-
-  const video =
-    getValue(
-      lesson,
-      "video"
-    );
-
-
-  const poster =
-    getValue(
-      lesson,
-      "poster"
+      "description",
+      "Description"
     );
 
 
@@ -331,22 +388,12 @@ function renderLessonHeader(lesson) {
     );
 
 
-  const videoElement =
-    document.getElementById(
-      "lessonVideo"
-    );
-
-
-  const videoTitle =
-    document.getElementById(
-      "videoTitle"
-    );
-
-
   if (titleElement) {
 
     titleElement.textContent =
-      chineseTitle || title;
+      chineseTitle ||
+      title ||
+      "Chinese Story";
 
   }
 
@@ -367,10 +414,81 @@ function renderLessonHeader(lesson) {
   }
 
 
-  if (descriptionElement && description) {
+  if (descriptionElement) {
 
     descriptionElement.textContent =
-      description;
+      description ||
+      "Watch the story, understand the images, read the sentences, learn the vocabulary, and complete the exercises.";
+
+  }
+
+
+  document.title =
+    `LinguaPath | ${title || "Chinese Story Lesson"}`;
+
+}
+
+
+/* =========================================================
+   RENDER VIDEO
+   ========================================================= */
+
+function renderVideo(
+  lesson
+) {
+
+  const videoElement =
+    document.getElementById(
+      "lessonVideo"
+    );
+
+
+  const videoTitle =
+    document.getElementById(
+      "videoTitle"
+    );
+
+
+  const video =
+    getValue(
+      lesson,
+      "video",
+      "Video"
+    );
+
+
+  const poster =
+    getValue(
+      lesson,
+      "poster",
+      "Poster"
+    );
+
+
+  const title =
+    getValue(
+      lesson,
+      "title",
+      "Title"
+    );
+
+
+  if (videoElement) {
+
+    if (video) {
+
+      videoElement.src =
+        video;
+
+    }
+
+
+    if (poster) {
+
+      videoElement.poster =
+        poster;
+
+    }
 
   }
 
@@ -379,19 +497,7 @@ function renderLessonHeader(lesson) {
 
     videoTitle.textContent =
       title ||
-      chineseTitle ||
       "Chinese Story";
-
-  }
-
-
-  if (videoElement && video) {
-
-    video.src = video;
-
-    if (poster) {
-      video.poster = poster;
-    }
 
   }
 
@@ -400,9 +506,11 @@ function renderLessonHeader(lesson) {
 
 /* =========================================================
    RENDER STORY IMAGES
-========================================================= */
+   ========================================================= */
 
-function renderStoryImages(rows) {
+function renderStoryImages(
+  storyRows
+) {
 
   const container =
     document.getElementById(
@@ -415,19 +523,35 @@ function renderStoryImages(rows) {
   }
 
 
-  container.innerHTML = "";
+  const rows =
+    storyRows.filter(
+      row =>
+        getValue(
+          row,
+          "image",
+          "Image"
+        )
+    );
 
 
   if (!rows.length) {
 
     container.innerHTML = `
-      <div class="empty-state">
-        <h3>No story images</h3>
+
+      <div class="empty-card">
+
+        <h3>
+          No story images yet
+        </h3>
+
         <p>
-          Add image rows to the Story sheet
-          in lessons.xlsx.
+          Add image paths to the
+          <strong>Story</strong>
+          sheet in lessons.xlsx.
         </p>
+
       </div>
+
     `;
 
     return;
@@ -435,123 +559,89 @@ function renderStoryImages(rows) {
   }
 
 
-  rows.forEach((row, index) => {
+  container.innerHTML =
+    rows.map(
+      (row, index) => {
 
-    const chinese =
-      getValue(
-        row,
-        "chinese",
-        "sentence"
-      );
-
-
-    const pinyin =
-      getValue(
-        row,
-        "pinyin"
-      );
+        const image =
+          getValue(
+            row,
+            "image",
+            "Image"
+          );
 
 
-    const english =
-      getValue(
-        row,
-        "english",
-        "meaning",
-        "translation"
-      );
+        const chinese =
+          getValue(
+            row,
+            "chinese",
+            "Chinese"
+          );
 
 
-    const image =
-      getValue(
-        row,
-        "image",
-        "imageUrl"
-      );
+        const english =
+          getValue(
+            row,
+            "english",
+            "English"
+          );
 
 
-    const card =
-      document.createElement(
-        "article"
-      );
+        return `
+
+          <article class="story-image-card">
+
+            <img
+              src="${escapeHTML(image)}"
+              alt="${escapeHTML(
+                english || chinese || `Story scene ${index + 1}`
+              )}"
+              loading="lazy"
+            >
 
 
-    card.className =
-      "story-image-card";
+            <div class="story-image-content">
+
+              ${
+                chinese
+                  ? `
+                    <h3>
+                      ${escapeHTML(chinese)}
+                    </h3>
+                  `
+                  : ""
+              }
 
 
-    card.innerHTML = `
+              ${
+                english
+                  ? `
+                    <p>
+                      ${escapeHTML(english)}
+                    </p>
+                  `
+                  : ""
+              }
 
-      ${
-        image
-          ? `
-            <div class="story-image">
-              <img
-                src="${escapeHTML(image)}"
-                alt="${escapeHTML(english || chinese)}"
-                loading="lazy"
-              >
             </div>
-          `
-          : `
-            <div class="story-image-placeholder">
-              <span>${index + 1}</span>
-            </div>
-          `
+
+          </article>
+
+        `;
+
       }
-
-      <div class="story-image-content">
-
-        <span class="story-image-number">
-          SCENE ${String(index + 1).padStart(2, "0")}
-        </span>
-
-        ${
-          chinese
-            ? `
-              <h3 class="chinese-sentence">
-                ${escapeHTML(chinese)}
-              </h3>
-            `
-            : ""
-        }
-
-        ${
-          pinyin
-            ? `
-              <p class="pinyin-sentence">
-                ${escapeHTML(pinyin)}
-              </p>
-            `
-            : ""
-        }
-
-        ${
-          english
-            ? `
-              <p class="english-sentence">
-                ${escapeHTML(english)}
-              </p>
-            `
-            : ""
-        }
-
-      </div>
-
-    `;
-
-
-    container.appendChild(card);
-
-  });
+    ).join("");
 
 }
 
 
 /* =========================================================
-   RENDER READING
-========================================================= */
+   RENDER STORY READING
+   ========================================================= */
 
-function renderStory(rows) {
+function renderStoryReading(
+  storyRows
+) {
 
   const container =
     document.getElementById(
@@ -564,18 +654,24 @@ function renderStory(rows) {
   }
 
 
-  container.innerHTML = "";
-
-
-  if (!rows.length) {
+  if (!storyRows.length) {
 
     container.innerHTML = `
-      <div class="empty-state">
-        <h3>No story content</h3>
+
+      <div class="empty-card">
+
+        <h3>
+          No story content yet
+        </h3>
+
         <p>
-          Add sentences to the Story sheet.
+          Add sentences to the
+          <strong>Story</strong>
+          sheet in lessons.xlsx.
         </p>
+
       </div>
+
     `;
 
     return;
@@ -583,134 +679,129 @@ function renderStory(rows) {
   }
 
 
-  rows.forEach((row, index) => {
+  container.innerHTML =
+    storyRows.map(
+      (row, index) => {
 
-    const chinese =
-      getValue(
-        row,
-        "chinese",
-        "sentence"
-      );
-
-
-    const pinyin =
-      getValue(
-        row,
-        "pinyin"
-      );
+        const chinese =
+          getValue(
+            row,
+            "chinese",
+            "Chinese"
+          );
 
 
-    const english =
-      getValue(
-        row,
-        "english",
-        "translation",
-        "meaning"
-      );
+        const pinyin =
+          getValue(
+            row,
+            "pinyin",
+            "Pinyin"
+          );
 
 
-    const audio =
-      getValue(
-        row,
-        "audio",
-        "audioUrl"
-      );
+        const english =
+          getValue(
+            row,
+            "english",
+            "English"
+          );
 
 
-    const item =
-      document.createElement(
-        "article"
-      );
+        const audio =
+          getValue(
+            row,
+            "audio",
+            "Audio"
+          );
 
 
-    item.className =
-      "reading-item";
+        return `
 
+          <article class="reading-item">
 
-    item.innerHTML = `
-
-      <div class="reading-number">
-        ${String(index + 1).padStart(2, "0")}
-      </div>
-
-      <div class="reading-main">
-
-        <div class="reading-chinese-row">
-
-          <div>
-
-            <div class="reading-chinese">
-              ${escapeHTML(chinese)}
+            <div class="reading-number">
+              ${String(index + 1).padStart(2, "0")}
             </div>
 
-            ${
-              pinyin
-                ? `
-                  <div class="reading-pinyin">
-                    ${escapeHTML(pinyin)}
-                  </div>
-                `
-                : ""
-            }
 
-          </div>
+            <div class="reading-content">
 
-          <button
-            class="reading-audio"
-            type="button"
-            aria-label="Listen to sentence"
-          >
-            🔊
-          </button>
-
-        </div>
-
-        ${
-          english
-            ? `
-              <div class="reading-english">
-                ${escapeHTML(english)}
+              <div class="chinese-sentence">
+                ${escapeHTML(chinese)}
               </div>
-            `
-            : ""
-        }
-
-      </div>
-
-    `;
 
 
-    const audioButton =
-      item.querySelector(
-        ".reading-audio"
-      );
+              ${
+                pinyin
+                  ? `
+                    <div class="pinyin-sentence">
+                      ${escapeHTML(pinyin)}
+                    </div>
+                  `
+                  : ""
+              }
 
 
-    audioButton.addEventListener(
-      "click",
-      () => {
+              ${
+                english
+                  ? `
+                    <div class="english-sentence">
+                      ${escapeHTML(english)}
+                    </div>
+                  `
+                  : ""
+              }
 
-        playAudio(
-          audio,
-          chinese
-        );
+
+              <button
+                class="speech-button reading-audio"
+                type="button"
+                data-audio="${escapeHTML(audio)}"
+                data-text="${escapeHTML(chinese)}"
+              >
+                🔊 Listen
+              </button>
+
+            </div>
+
+          </article>
+
+        `;
 
       }
-    );
+    ).join("");
 
 
-    container.appendChild(item);
+  container
+    .querySelectorAll(
+      ".reading-audio"
+    )
+    .forEach(button => {
 
-  });
+      button.addEventListener(
+        "click",
+        () => {
+
+          playAudio(
+            button.dataset.audio,
+            button.dataset.text
+          );
+
+        }
+      );
+
+    });
 
 }
 
 
 /* =========================================================
    RENDER VOCABULARY
-========================================================= */
+   ========================================================= */
 
-function renderVocabulary(rows) {
+function renderVocabulary(
+  vocabularyRows
+) {
 
   const container =
     document.getElementById(
@@ -723,19 +814,24 @@ function renderVocabulary(rows) {
   }
 
 
-  container.innerHTML = "";
-
-
-  if (!rows.length) {
+  if (!vocabularyRows.length) {
 
     container.innerHTML = `
-      <div class="empty-state">
-        <h3>No vocabulary found</h3>
+
+      <div class="empty-card">
+
+        <h3>
+          No vocabulary yet
+        </h3>
+
         <p>
-          Add vocabulary rows to the
-          Vocabulary sheet.
+          Add vocabulary to the
+          <strong>Vocabulary</strong>
+          sheet in lessons.xlsx.
         </p>
+
       </div>
+
     `;
 
     return;
@@ -743,110 +839,132 @@ function renderVocabulary(rows) {
   }
 
 
-  rows.forEach(row => {
+  container.innerHTML =
+    vocabularyRows.map(
+      (row, index) => {
 
-    const character =
-      getValue(
-        row,
-        "character",
-        "chinese",
-        "word"
-      );
-
-
-    const pinyin =
-      getValue(
-        row,
-        "pinyin"
-      );
+        const character =
+          getValue(
+            row,
+            "character",
+            "Character",
+            "word",
+            "Word"
+          );
 
 
-    const meaning =
-      getValue(
-        row,
-        "meaning",
-        "english"
-      );
+        const pinyin =
+          getValue(
+            row,
+            "pinyin",
+            "Pinyin"
+          );
 
 
-    const audio =
-      getValue(
-        row,
-        "audio",
-        "audioUrl"
-      );
+        const meaning =
+          getValue(
+            row,
+            "meaning",
+            "Meaning"
+          );
 
 
-    const card =
-      document.createElement(
-        "article"
-      );
+        const audio =
+          getValue(
+            row,
+            "audio",
+            "Audio"
+          );
 
 
-    card.className =
-      "vocabulary-card";
+        return `
+
+          <article class="vocabulary-card">
+
+            <div class="vocabulary-number">
+              ${String(index + 1).padStart(2, "0")}
+            </div>
 
 
-    card.innerHTML = `
-
-      <div class="vocabulary-top">
-
-        <div class="vocabulary-character">
-          ${escapeHTML(character)}
-        </div>
-
-        <button
-          class="vocabulary-audio"
-          type="button"
-          aria-label="Listen to vocabulary"
-        >
-          🔊
-        </button>
-
-      </div>
-
-      <div class="vocabulary-pinyin">
-        ${escapeHTML(pinyin)}
-      </div>
-
-      <div class="vocabulary-meaning">
-        ${escapeHTML(meaning)}
-      </div>
-
-    `;
+            <div class="vocabulary-character">
+              ${escapeHTML(character)}
+            </div>
 
 
-    const audioButton =
-      card.querySelector(
-        ".vocabulary-audio"
-      );
+            <div class="vocabulary-pinyin">
+              ${escapeHTML(pinyin)}
+            </div>
 
 
-    audioButton.addEventListener(
-      "click",
-      () => {
+            <div class="vocabulary-meaning">
+              ${escapeHTML(meaning)}
+            </div>
 
-        playAudio(
-          audio,
-          character
-        );
+
+            <button
+              class="speech-button vocabulary-audio"
+              type="button"
+              data-audio="${escapeHTML(audio)}"
+              data-text="${escapeHTML(character)}"
+            >
+              🔊 Listen
+            </button>
+
+          </article>
+
+        `;
 
       }
-    );
+    ).join("");
 
 
-    container.appendChild(card);
+  container
+    .querySelectorAll(
+      ".vocabulary-audio"
+    )
+    .forEach(button => {
 
-  });
+      button.addEventListener(
+        "click",
+        () => {
+
+          playAudio(
+            button.dataset.audio,
+            button.dataset.text
+          );
+
+        }
+      );
+
+    });
+
+}
+
+
+/* =========================================================
+   NORMALIZE ANSWER
+   ========================================================= */
+
+function normalizeAnswer(
+  value
+) {
+
+  return String(
+    value ?? ""
+  )
+    .trim()
+    .toLowerCase();
 
 }
 
 
 /* =========================================================
    RENDER EXERCISES
-========================================================= */
+   ========================================================= */
 
-function renderExercises(rows) {
+function renderExercises(
+  exerciseRows
+) {
 
   const container =
     document.getElementById(
@@ -859,22 +977,31 @@ function renderExercises(rows) {
   }
 
 
-  if (!rows.length) {
+  if (!exerciseRows.length) {
 
     container.innerHTML = `
 
       <span class="section-label">
-        05 · CHECK YOUR UNDERSTANDING
+        05 · EXERCISES
       </span>
 
       <h2>
-        No exercises yet.
+        Check Your Understanding
       </h2>
 
-      <p>
-        Add exercises to the Exercises sheet
-        in lessons.xlsx.
-      </p>
+      <div class="empty-card">
+
+        <h3>
+          No exercises yet
+        </h3>
+
+        <p>
+          Add exercises to the
+          <strong>Exercises</strong>
+          sheet in lessons.xlsx.
+        </p>
+
+      </div>
 
     `;
 
@@ -883,320 +1010,331 @@ function renderExercises(rows) {
   }
 
 
-  container.innerHTML = `
+  let html = `
 
     <span class="section-label">
-      05 · CHECK YOUR UNDERSTANDING
+      05 · EXERCISES
     </span>
 
     <h2>
-      Test what you understood.
+      Check Your Understanding
     </h2>
 
-    <p class="quiz-intro">
-      Choose the answer that best matches
-      the story.
+    <p class="exercise-intro">
+      Answer the questions below to check
+      your understanding of the lesson.
     </p>
 
-    <div class="exercise-list"></div>
+    <div class="exercise-list">
 
   `;
 
 
-  const list =
-    container.querySelector(
-      ".exercise-list"
-    );
+  exerciseRows.forEach(
+    (row, index) => {
+
+      const type =
+        normalizeAnswer(
+          getValue(
+            row,
+            "type",
+            "Type"
+          )
+        );
 
 
-  rows.forEach((row, index) => {
+      const question =
+        getValue(
+          row,
+          "question",
+          "Question"
+        );
 
-    const question =
-      getValue(
-        row,
-        "question"
+
+      const answer =
+        getValue(
+          row,
+          "answer",
+          "Answer"
+        );
+
+
+      const options = [
+
+        getValue(
+          row,
+          "optionA",
+          "OptionA",
+          "Option A"
+        ),
+
+        getValue(
+          row,
+          "optionB",
+          "OptionB",
+          "Option B"
+        ),
+
+        getValue(
+          row,
+          "optionC",
+          "OptionC",
+          "Option C"
+        ),
+
+        getValue(
+          row,
+          "optionD",
+          "OptionD",
+          "Option D"
+        )
+
+      ].filter(
+        option =>
+          String(option).trim() !== ""
       );
 
 
-    const answer =
-      getValue(
-        row,
-        "answer",
-        "correctAnswer"
-      );
+      html += `
+
+        <article
+          class="exercise-item"
+          data-answer="${escapeHTML(answer)}"
+        >
+
+          <div class="exercise-number">
+            ${String(index + 1).padStart(2, "0")}
+          </div>
 
 
-    const options = [
+          <div class="exercise-body">
 
-      getValue(
-        row,
-        "optionA"
-      ),
+            <h3>
+              ${escapeHTML(question)}
+            </h3>
 
-      getValue(
-        row,
-        "optionB"
-      ),
-
-      getValue(
-        row,
-        "optionC"
-      ),
-
-      getValue(
-        row,
-        "optionD"
-      )
-
-    ].filter(
-      option =>
-        String(option).trim() !== ""
-    );
+      `;
 
 
-    const item =
-      document.createElement(
-        "div"
-      );
+      if (
+        type === "multiple-choice" ||
+        type === "multiple choice" ||
+        options.length
+      ) {
+
+        html += `
+          <div class="exercise-options">
+        `;
 
 
-    item.className =
-      "exercise-item";
+        options.forEach(
+          option => {
 
-
-    item.innerHTML = `
-
-      <div class="exercise-question">
-
-        <span>
-          Question ${index + 1}
-        </span>
-
-        <h3>
-          ${escapeHTML(question)}
-        </h3>
-
-      </div>
-
-      <div class="exercise-options">
-
-        ${
-          options.map(
-            (option, optionIndex) => `
+            html += `
 
               <button
                 type="button"
                 class="exercise-option"
                 data-value="${escapeHTML(option)}"
               >
-
-                <span>
-                  ${String.fromCharCode(65 + optionIndex)}
-                </span>
-
                 ${escapeHTML(option)}
-
               </button>
 
-            `
-          ).join("")
-        }
-
-      </div>
-
-      <div class="exercise-feedback"></div>
-
-    `;
-
-
-    const optionButtons =
-      item.querySelectorAll(
-        ".exercise-option"
-      );
-
-
-    const feedback =
-      item.querySelector(
-        ".exercise-feedback"
-      );
-
-
-    optionButtons.forEach(button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          optionButtons.forEach(
-            option => {
-              option.classList.remove(
-                "selected",
-                "correct",
-                "incorrect"
-              );
-            }
-          );
-
-
-          const selected =
-            button.dataset.value;
-
-
-          const correct =
-            String(selected).trim() ===
-            String(answer).trim();
-
-
-          button.classList.add(
-            "selected"
-          );
-
-
-          if (correct) {
-
-            button.classList.add(
-              "correct"
-            );
-
-            feedback.textContent =
-              "✓ Correct! Well done.";
-
-            feedback.className =
-              "exercise-feedback correct-feedback";
-
-          } else {
-
-            button.classList.add(
-              "incorrect"
-            );
-
-            feedback.textContent =
-              `Not quite. The answer is: ${answer}`;
-
-            feedback.className =
-              "exercise-feedback incorrect-feedback";
+            `;
 
           }
-
-        }
-      );
-
-    });
+        );
 
 
-    list.appendChild(item);
+        html += `
+          </div>
+        `;
 
-  });
-
-}
-
-
-/* =========================================================
-   ERROR PAGE
-========================================================= */
-
-function renderError(message) {
-
-  const ids = [
-
-    "storyTitle",
-    "storyPinyin",
-    "storyMeaning"
-
-  ];
+      }
 
 
-  const title =
-    document.getElementById(
-      "storyTitle"
-    );
+      html += `
 
+            <div
+              class="exercise-feedback"
+              aria-live="polite"
+            ></div>
 
-  if (title) {
-    title.textContent =
-      "Lesson unavailable";
-  }
+          </div>
 
-
-  ids.slice(1).forEach(id => {
-
-    const element =
-      document.getElementById(id);
-
-    if (element) {
-      element.textContent = "";
-    }
-
-  });
-
-
-  const containers = [
-
-    "storyImageGrid",
-    "storyContent",
-    "vocabularyContent"
-
-  ];
-
-
-  containers.forEach(id => {
-
-    const element =
-      document.getElementById(id);
-
-    if (element) {
-
-      element.innerHTML = `
-
-        <div class="empty-state error-state">
-
-          <h3>
-            We couldn't load this lesson.
-          </h3>
-
-          <p>
-            ${escapeHTML(message)}
-          </p>
-
-          <a
-            href="index.html#learning-hub"
-            class="button button-primary"
-          >
-            Back to Learning Hub
-          </a>
-
-        </div>
+        </article>
 
       `;
 
     }
+  );
 
-  });
+
+  html += `
+    </div>
+  `;
 
 
-  const exercise =
-    document.getElementById(
-      "exerciseContent"
+  container.innerHTML =
+    html;
+
+
+  initializeExercises();
+
+}
+
+
+/* =========================================================
+   EXERCISE INTERACTION
+   ========================================================= */
+
+function initializeExercises() {
+
+  const exercises =
+    document.querySelectorAll(
+      ".exercise-item"
     );
 
 
-  if (exercise) {
+  exercises.forEach(
+    exercise => {
 
-    exercise.innerHTML = `
+      const answer =
+        normalizeAnswer(
+          exercise.dataset.answer
+        );
 
-      <span class="section-label">
-        LESSON ERROR
-      </span>
 
-      <h2>
-        Lesson could not be loaded.
-      </h2>
+      const options =
+        exercise.querySelectorAll(
+          ".exercise-option"
+        );
 
-      <p>
-        ${escapeHTML(message)}
-      </p>
 
-    `;
+      const feedback =
+        exercise.querySelector(
+          ".exercise-feedback"
+        );
+
+
+      options.forEach(
+        option => {
+
+          option.addEventListener(
+            "click",
+            () => {
+
+              options.forEach(
+                button => {
+
+                  button.classList.remove(
+                    "correct",
+                    "incorrect"
+                  );
+
+                }
+              );
+
+
+              const selected =
+                normalizeAnswer(
+                  option.dataset.value
+                );
+
+
+              const isCorrect =
+                selected === answer;
+
+
+              option.classList.add(
+                isCorrect
+                  ? "correct"
+                  : "incorrect"
+              );
+
+
+              if (feedback) {
+
+                if (isCorrect) {
+
+                  feedback.textContent =
+                    "✓ Correct!";
+
+                  feedback.className =
+                    "exercise-feedback correct-feedback";
+
+                } else {
+
+                  feedback.textContent =
+                    "Not quite. Try again.";
+
+                  feedback.className =
+                    "exercise-feedback incorrect-feedback";
+
+                }
+
+              }
+
+            }
+          );
+
+        }
+      );
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   UPDATE LESSON NAVIGATION
+   ========================================================= */
+
+function updateLessonNavigation(
+  story,
+  vocabulary,
+  exercises
+) {
+
+  const storyLink =
+    document.querySelector(
+      '.lesson-navigation a[href="#reading"]'
+    );
+
+
+  const vocabularyLink =
+    document.querySelector(
+      '.lesson-navigation a[href="#vocabulary"]'
+    );
+
+
+  const exerciseLink =
+    document.querySelector(
+      '.lesson-navigation a[href="#exercises"]'
+    );
+
+
+  if (storyLink) {
+
+    storyLink.textContent =
+      `03 Story (${story.length})`;
+
+  }
+
+
+  if (vocabularyLink) {
+
+    vocabularyLink.textContent =
+      `04 Vocabulary (${vocabulary.length})`;
+
+  }
+
+
+  if (exerciseLink) {
+
+    exerciseLink.textContent =
+      `05 Exercises (${exercises.length})`;
 
   }
 
@@ -1204,24 +1342,55 @@ function renderError(message) {
 
 
 /* =========================================================
-   MAIN INITIALIZATION
-========================================================= */
+   LOAD STORY DATA
+   ========================================================= */
 
-async function initializeStoryPage() {
+async function loadStoryLesson() {
+
+  const lessonId =
+    getLessonId();
+
 
   try {
 
-    if (typeof XLSX === "undefined") {
+    if (
+      typeof XLSX ===
+      "undefined"
+    ) {
 
       throw new Error(
-        "SheetJS could not be loaded."
+        "SheetJS is not loaded."
       );
 
     }
 
 
+    const response =
+      await fetch(
+        EXCEL_FILE
+      );
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        `Could not load ${EXCEL_FILE}. HTTP status: ${response.status}`
+      );
+
+    }
+
+
+    const arrayBuffer =
+      await response.arrayBuffer();
+
+
     const workbook =
-      await loadWorkbook();
+      XLSX.read(
+        arrayBuffer,
+        {
+          type: "array"
+        }
+      );
 
 
     const lessons =
@@ -1232,42 +1401,58 @@ async function initializeStoryPage() {
 
 
     const storyRows =
-      readSheet(
-        workbook,
-        "Story"
+      sortByOrder(
+        filterByLesson(
+          readSheet(
+            workbook,
+            "Story"
+          ),
+          lessonId
+        )
       );
 
 
     const vocabularyRows =
-      readSheet(
-        workbook,
-        "Vocabulary"
+      sortByOrder(
+        filterByLesson(
+          readSheet(
+            workbook,
+            "Vocabulary"
+          ),
+          lessonId
+        )
       );
 
 
     const exerciseRows =
-      readSheet(
-        workbook,
-        "Exercises"
+      sortByOrder(
+        filterByLesson(
+          readSheet(
+            workbook,
+            "Exercises"
+          ),
+          lessonId
+        )
       );
 
 
     const lesson =
-      lessons.find(row => {
+      lessons.find(
+        row => {
 
-        const id =
-          getValue(
-            row,
-            "id",
-            "lessonId"
-          );
+          const id =
+            getValue(
+              row,
+              "id",
+              "ID",
+              "lessonId"
+            );
 
-        return (
-          String(id).trim() ===
-          String(lessonId).trim()
-        );
+          return String(id).trim() ===
+            String(lessonId).trim();
 
-      });
+        }
+      );
 
 
     if (!lesson) {
@@ -1279,74 +1464,65 @@ async function initializeStoryPage() {
     }
 
 
-    const story =
-      sortByOrder(
-        filterByLesson(
-          storyRows
-        )
-      );
-
-
-    const vocabulary =
-      sortByOrder(
-        filterByLesson(
-          vocabularyRows
-        )
-      );
-
-
-    const exercises =
-      sortByOrder(
-        filterByLesson(
-          exerciseRows
-        )
-      );
-
-
     renderLessonHeader(
       lesson
     );
 
 
-    renderStoryImages(
-      story
+    renderVideo(
+      lesson
     );
 
 
-    renderStory(
-      story
+    renderStoryImages(
+      storyRows
+    );
+
+
+    renderStoryReading(
+      storyRows
     );
 
 
     renderVocabulary(
-      vocabulary
+      vocabularyRows
     );
 
 
     renderExercises(
-      exercises
+      exerciseRows
     );
 
 
-    document.title =
-      `LinguaPath | ${
-        getValue(
-          lesson,
-          "title"
-        ) || "Story Lesson"
-      }`;
+    updateLessonNavigation(
+      storyRows,
+      vocabularyRows,
+      exerciseRows
+    );
+
+
+    console.log(
+      "Story lesson loaded:",
+      {
+        lessonId,
+        lesson,
+        story: storyRows,
+        vocabulary: vocabularyRows,
+        exercises: exerciseRows
+      }
+    );
 
 
   } catch (error) {
 
     console.error(
-      "Story loading error:",
+      "Story lesson loading error:",
       error
     );
 
 
-    renderError(
-      error.message
+    showPageError(
+      error
     );
 
   }
@@ -1355,21 +1531,114 @@ async function initializeStoryPage() {
 
 
 /* =========================================================
-   START
-========================================================= */
+   READ SHEET
+   ========================================================= */
 
-if (
-  document.readyState ===
-  "loading"
+function readSheet(
+  workbook,
+  sheetName
 ) {
 
-  document.addEventListener(
-    "DOMContentLoaded",
-    initializeStoryPage
+  const sheet =
+    workbook.Sheets[
+      sheetName
+    ];
+
+
+  if (!sheet) {
+
+    console.warn(
+      `Sheet "${sheetName}" was not found.`
+    );
+
+    return [];
+
+  }
+
+
+  return XLSX.utils.sheet_to_json(
+    sheet,
+    {
+      defval: ""
+    }
   );
 
-} else {
+}
 
-  initializeStoryPage();
+
+/* =========================================================
+   ERROR DISPLAY
+   ========================================================= */
+
+function showPageError(
+  error
+) {
+
+  const containers = [
+
+    document.getElementById(
+      "storyContent"
+    ),
+
+    document.getElementById(
+      "vocabularyContent"
+    ),
+
+    document.getElementById(
+      "exerciseContent"
+    )
+
+  ];
+
+
+  containers.forEach(
+    container => {
+
+      if (!container) {
+        return;
+      }
+
+
+      container.innerHTML = `
+
+        <div class="error-card">
+
+          <h3>
+            Lesson data could not be loaded.
+          </h3>
+
+          <p>
+            Please check that
+            <strong>data/lessons.xlsx</strong>
+            exists and that the page is being opened
+            through a local web server.
+          </p>
+
+          <small>
+            ${escapeHTML(error.message)}
+          </small>
+
+        </div>
+
+      `;
+
+    }
+  );
 
 }
+
+
+/* =========================================================
+   START
+   ========================================================= */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  () => {
+
+    initializeMobileMenu();
+
+    loadStoryLesson();
+
+  }
+);

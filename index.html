@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
 
@@ -11,17 +10,17 @@
 
   <meta
     name="description"
-    content="LinguaPath is an interactive Chinese learning platform combining visual learning, listening, pinyin, tones, stories, and conversation."
+    content="LinguaPath — an interactive language learning hub combining visual learning, pronunciation, stories, vocabulary, and practice."
   >
 
-  <title>LinguaPath | Learn Chinese Naturally</title>
+  <title>LinguaPath | Language Learning Hub</title>
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
   <link
-    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&family=Roboto:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Roboto:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   >
 
@@ -30,177 +29,190 @@
 
 <body>
 
-  <!-- ================= NAVIGATION ================= -->
+  <!-- =========================
+       NAVIGATION
+  ========================== -->
 
   <nav class="navbar">
+
     <div class="nav-inner">
 
       <a href="index.html" class="logo">
+
         <span class="logo-mark">文</span>
 
         <span class="logo-text">
           <strong>LinguaPath</strong>
           <small>Language Learning Hub</small>
         </span>
+
       </a>
 
       <div class="nav-links">
-        <a href="#methodology">Methodology</a>
-        <a href="#journey">Learning Journey</a>
-        <a href="#demos">Demo Lessons</a>
-        <a href="#roadmap">Roadmap</a>
+
+        <a href="index.html#methodology">
+          Methodology
+        </a>
+
+        <a href="index.html#journey">
+          Learning Journey
+        </a>
+
+        <a href="index.html#demos">
+          Demo Lessons
+        </a>
+
+        <a href="index.html#learning-hub">
+          Learning Hub
+        </a>
+
       </div>
 
-      <a href="#learning-hub" class="nav-button">
-        Learning Hub
+      <a
+        href="index.html#learning-hub"
+        class="nav-button"
+      >
+        Start Learning
       </a>
 
       <button
         class="mobile-menu-button"
         id="mobileMenuButton"
+        type="button"
         aria-label="Open navigation"
+        aria-expanded="false"
       >
         ☰
       </button>
 
     </div>
 
-    <div class="mobile-menu" id="mobileMenu">
-      <a href="#methodology">Methodology</a>
-      <a href="#journey">Learning Journey</a>
-      <a href="#demos">Demo Lessons</a>
-      <a href="#roadmap">Roadmap</a>
-      <a href="#learning-hub">Learning Hub</a>
+    <div
+      class="mobile-menu"
+      id="mobileMenu"
+    >
+
+      <a href="index.html#methodology">
+        Methodology
+      </a>
+
+      <a href="index.html#journey">
+        Learning Journey
+      </a>
+
+      <a href="index.html#demos">
+        Demo Lessons
+      </a>
+
+      <a href="index.html#learning-hub">
+        Learning Hub
+      </a>
+
     </div>
+
   </nav>
 
 
-  <!-- ================= HERO ================= -->
+  <!-- =========================
+       HERO
+  ========================== -->
 
   <header class="hero">
-
-    <div class="hero-background-character">
-      学
-    </div>
 
     <div class="container hero-grid">
 
       <div class="hero-content">
 
-        <span class="eyebrow">
-          INTERACTIVE LANGUAGE LEARNING
+        <span class="section-label">
+          Language Learning Hub
         </span>
 
         <h1>
-          Learn Chinese
-          <span>through context.</span>
+          Learn languages
+          <span>through connection.</span>
         </h1>
 
         <p class="hero-description">
-          Build real language intuition through visual stories,
-          pronunciation, pinyin, tones, vocabulary, and
-          practical conversation.
+          LinguaPath combines visual association, pronunciation,
+          contextual stories, vocabulary, and active practice
+          into one simple learning journey.
         </p>
 
         <div class="hero-actions">
 
-          <a href="#learning-hub" class="button button-primary">
-            Start Learning
-            <span>→</span>
+          <a
+            href="#learning-hub"
+            class="primary-button"
+          >
+            Explore Lessons
           </a>
 
-          <a href="#methodology" class="button button-secondary">
-            Explore the Method
+          <a
+            href="#methodology"
+            class="secondary-button"
+          >
+            How It Works
           </a>
-
-        </div>
-
-        <div class="hero-trust">
-
-          <div>
-            <strong>01</strong>
-            <span>Listen</span>
-          </div>
-
-          <div>
-            <strong>02</strong>
-            <span>Understand</span>
-          </div>
-
-          <div>
-            <strong>03</strong>
-            <span>Speak</span>
-          </div>
 
         </div>
 
       </div>
 
 
-      <div class="hero-learning-card">
-
-        <div class="learning-card-top">
-          <span>Today's character</span>
-
-          <button
-            class="speech-button"
-            id="heroSpeechButton"
-            type="button"
-            aria-label="Listen to 学"
-          >
-            🔊
-          </button>
-        </div>
+      <div class="hero-character-card">
 
         <div class="hero-character">
           学
         </div>
 
-        <div class="character-details">
-          <div>
-            <span>Pinyin</span>
-            <strong>xué</strong>
-          </div>
-
-          <div>
-            <span>Meaning</span>
-            <strong>to learn</strong>
-          </div>
+        <div class="hero-character-pinyin">
+          xué
         </div>
 
-        <div class="tone-mini">
-          <span>Listen · Repeat · Remember</span>
-          <div class="tone-line">
-            <span></span>
-          </div>
+        <div class="hero-character-meaning">
+          to learn
         </div>
+
+        <button
+          class="speech-button hero-speech"
+          data-text="学，xué"
+          type="button"
+        >
+          🔊 Listen
+        </button>
 
       </div>
 
     </div>
+
   </header>
 
 
-  <!-- ================= METHOD ================= -->
+  <!-- =========================
+       METHODOLOGY
+  ========================== -->
 
-  <section class="section methodology" id="methodology">
+  <section
+    class="section"
+    id="methodology"
+  >
 
     <div class="container">
 
-      <div class="section-heading centered">
+      <div class="section-heading">
 
         <span class="section-label">
-          THE LINGUAPATH METHOD
+          Our Method
         </span>
 
         <h2>
-          Learn language as a connected system.
+          Learning built around connection.
         </h2>
 
         <p>
-          Instead of memorizing isolated translations,
-          connect sound, visual meaning, pronunciation,
-          and context.
+          Instead of memorizing isolated words, LinguaPath
+          connects sounds, characters, images, meanings,
+          and real situations.
         </p>
 
       </div>
@@ -210,69 +222,54 @@
 
         <article class="method-card">
 
-          <div class="method-number">01</div>
-
-          <div class="method-icon">
-            ◉
+          <div class="method-number">
+            01
           </div>
 
-          <h3>Visual & Auditory Association</h3>
+          <h3>
+            Visual & Auditory Association
+          </h3>
 
           <p>
-            Connect Chinese words with images and sounds
-            so vocabulary becomes easier to recognize
-            and remember.
+            Connect new language with visual situations
+            and authentic pronunciation.
           </p>
-
-          <span class="method-tag">
-            SEE + HEAR
-          </span>
-
-        </article>
-
-
-        <article class="method-card featured">
-
-          <div class="method-number">02</div>
-
-          <div class="method-icon">
-            ǎ
-          </div>
-
-          <h3>Pinyin & Tone Foundation</h3>
-
-          <p>
-            Build pronunciation confidence by learning
-            pinyin and Mandarin tones before moving into
-            more complex conversation.
-          </p>
-
-          <span class="method-tag">
-            SOUND + TONE
-          </span>
 
         </article>
 
 
         <article class="method-card">
 
-          <div class="method-number">03</div>
-
-          <div class="method-icon">
-            文
+          <div class="method-number">
+            02
           </div>
 
-          <h3>Contextual Conversation</h3>
+          <h3>
+            Pinyin & Tone Foundation
+          </h3>
 
           <p>
-            Practice language inside short stories,
-            dialogues, and everyday situations instead
-            of disconnected word lists.
+            Build pronunciation confidence by understanding
+            sounds and tones from the beginning.
           </p>
 
-          <span class="method-tag">
-            CONTEXT + USE
-          </span>
+        </article>
+
+
+        <article class="method-card">
+
+          <div class="method-number">
+            03
+          </div>
+
+          <h3>
+            Contextual Conversation
+          </h3>
+
+          <p>
+            Move from individual words to useful sentences
+            and everyday communication.
+          </p>
 
         </article>
 
@@ -283,258 +280,13 @@
   </section>
 
 
-  <!-- ================= JOURNEY ================= -->
-
-  <section class="section journey" id="journey">
-
-    <div class="container">
-
-      <div class="journey-layout">
-
-        <div class="journey-intro">
-
-          <span class="section-label">
-            STUDENT JOURNEY
-          </span>
-
-          <h2>
-            A simple path from
-            recognition to communication.
-          </h2>
-
-          <p>
-            Each lesson follows a repeatable learning
-            cycle designed to gradually turn new language
-            into active knowledge.
-          </p>
-
-        </div>
-
-
-        <div class="journey-steps">
-
-          <article class="journey-step">
-
-            <span class="journey-step-number">
-              01
-            </span>
-
-            <div>
-              <h3>Listen & Repeat</h3>
-
-              <p>
-                Hear natural pronunciation and practice
-                the sound before worrying about grammar.
-              </p>
-            </div>
-
-          </article>
-
-
-          <article class="journey-step">
-
-            <span class="journey-step-number">
-              02
-            </span>
-
-            <div>
-              <h3>Read & Recognize</h3>
-
-              <p>
-                Connect Chinese characters with pinyin,
-                meaning, and visual context.
-              </p>
-            </div>
-
-          </article>
-
-
-          <article class="journey-step">
-
-            <span class="journey-step-number">
-              03
-            </span>
-
-            <div>
-              <h3>Practice & Self-Check</h3>
-
-              <p>
-                Complete short exercises to check whether
-                you understood the lesson.
-              </p>
-            </div>
-
-          </article>
-
-        </div>
-
-      </div>
-
-    </div>
-
-  </section>
-
-
-  <!-- ================= TONE DEMO ================= -->
-
-  <section class="section tone-section" id="demos">
-
-    <div class="container">
-
-      <div class="section-heading">
-
-        <span class="section-label">
-          DEMO LESSON · 01
-        </span>
-
-        <h2>
-          Start with the four Mandarin tones.
-        </h2>
-
-        <p>
-          The same syllable can have different meanings
-          depending on its tone. Select a tone to hear
-          and visualize the difference.
-        </p>
-
-      </div>
-
-
-      <div class="tone-demo">
-
-        <div class="tone-controls">
-
-          <button class="tone-button active" data-tone="1">
-            <span>1</span>
-            <strong>mā</strong>
-          </button>
-
-          <button class="tone-button" data-tone="2">
-            <span>2</span>
-            <strong>má</strong>
-          </button>
-
-          <button class="tone-button" data-tone="3">
-            <span>3</span>
-            <strong>mǎ</strong>
-          </button>
-
-          <button class="tone-button" data-tone="4">
-            <span>4</span>
-            <strong>mà</strong>
-          </button>
-
-        </div>
-
-
-        <div class="tone-visual">
-
-          <div class="tone-character" id="toneCharacter">
-            妈
-          </div>
-
-          <div class="tone-info">
-
-            <div class="tone-syllable" id="toneSyllable">
-              mā
-            </div>
-
-            <h3 id="toneMeaning">
-              mother
-            </h3>
-
-            <p id="toneDescription">
-              Tone 1 — high and flat
-            </p>
-
-          </div>
-
-          <button
-            class="button button-dark"
-            id="playToneButton"
-            type="button"
-          >
-            🔊 Play pronunciation
-          </button>
-
-        </div>
-
-
-        <div class="tone-wave">
-
-          <svg
-            viewBox="0 0 500 110"
-            preserveAspectRatio="none"
-            aria-label="Tone visualization"
-          >
-            <path
-              id="tonePath"
-              d="M20 30 L480 30"
-            ></path>
-          </svg>
-
-        </div>
-
-      </div>
-
-    </div>
-
-  </section>
-
-
-  <!-- ================= GREETING ================= -->
-
-  <section class="section greeting-section">
-
-    <div class="container">
-
-      <div class="greeting-card">
-
-        <div class="greeting-character">
-          你好
-        </div>
-
-        <div class="greeting-content">
-
-          <span class="section-label">
-            DEMO LESSON · 02
-          </span>
-
-          <h2>
-            Start with a real greeting.
-          </h2>
-
-          <p class="pinyin-large">
-            Nǐ hǎo
-          </p>
-
-          <p>
-            Hello. A simple phrase, but an important
-            first step toward using Chinese in context.
-          </p>
-
-          <button
-            class="button button-light"
-            id="greetingSpeechButton"
-            type="button"
-          >
-            🔊 Listen
-          </button>
-
-        </div>
-
-      </div>
-
-    </div>
-
-  </section>
-
-
-  <!-- ================= LEARNING HUB ================= -->
+  <!-- =========================
+       LEARNING JOURNEY
+  ========================== -->
 
   <section
-    class="section learning-hub"
-    id="learning-hub"
+    class="section section-light"
+    id="journey"
   >
 
     <div class="container">
@@ -542,35 +294,70 @@
       <div class="section-heading">
 
         <span class="section-label">
-          LEARNING HUB
+          Student Journey
         </span>
 
         <h2>
-          Choose your next lesson.
+          A simple path from listening to speaking.
         </h2>
 
-        <p>
-          Lessons are loaded directly from your
-          <code>lessons.xlsx</code> workbook.
-        </p>
-
       </div>
 
 
-      <div
-        class="lesson-status"
-        id="lessonStatus"
-      >
-        Loading lessons...
-      </div>
+      <div class="journey-grid">
+
+        <article class="journey-card">
+
+          <span class="journey-number">
+            01
+          </span>
+
+          <h3>
+            Listen & Repeat
+          </h3>
+
+          <p>
+            Hear the pronunciation and repeat the sound
+            before worrying about memorization.
+          </p>
+
+        </article>
 
 
-      <div
-        class="lesson-grid"
-        id="lessonGrid"
-      >
+        <article class="journey-card">
 
-        <!-- Lessons are inserted by main.js -->
+          <span class="journey-number">
+            02
+          </span>
+
+          <h3>
+            Read & Recognize
+          </h3>
+
+          <p>
+            Connect the sound with pinyin, characters,
+            images, and meaning.
+          </p>
+
+        </article>
+
+
+        <article class="journey-card">
+
+          <span class="journey-number">
+            03
+          </span>
+
+          <h3>
+            Practice & Self-Check
+          </h3>
+
+          <p>
+            Use exercises and short quizzes to check
+            understanding.
+          </p>
+
+        </article>
 
       </div>
 
@@ -579,109 +366,381 @@
   </section>
 
 
-  <!-- ================= ROADMAP ================= -->
+  <!-- =========================
+       DEMO LESSONS
+  ========================== -->
 
-  <section class="section roadmap" id="roadmap">
+  <section
+    class="section"
+    id="demos"
+  >
 
     <div class="container">
 
-      <div class="section-heading centered">
+      <div class="section-heading">
 
         <span class="section-label">
-          ROADMAP
+          Demo Lessons
         </span>
 
         <h2>
-          One learning system. More subjects ahead.
+          Start with the building blocks.
+        </h2>
+
+      </div>
+
+
+      <!-- Tone lesson -->
+
+      <article class="demo-card tone-demo">
+
+        <div class="demo-card-header">
+
+          <div>
+
+            <span class="demo-label">
+              Pronunciation
+            </span>
+
+            <h3>
+              The Four Tones
+            </h3>
+
+            <p>
+              See and hear how Mandarin tones change.
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <div class="tone-buttons">
+
+          <button
+            class="tone-button active"
+            data-tone="1"
+            type="button"
+          >
+            mā
+          </button>
+
+          <button
+            class="tone-button"
+            data-tone="2"
+            type="button"
+          >
+            má
+          </button>
+
+          <button
+            class="tone-button"
+            data-tone="3"
+            type="button"
+          >
+            mǎ
+          </button>
+
+          <button
+            class="tone-button"
+            data-tone="4"
+            type="button"
+          >
+            mà
+          </button>
+
+        </div>
+
+
+        <div class="tone-display">
+
+          <div class="tone-word">
+
+            <span id="toneSyllable">
+              mā
+            </span>
+
+            <small id="toneCharacter">
+              妈
+            </small>
+
+          </div>
+
+
+          <div class="tone-graph">
+
+            <svg
+              viewBox="0 0 500 110"
+              preserveAspectRatio="none"
+            >
+
+              <path
+                id="tonePath"
+                d="M20 30 L480 30"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="5"
+                stroke-linecap="round"
+              />
+
+            </svg>
+
+          </div>
+
+
+          <div
+            class="tone-description"
+            id="toneDescription"
+          >
+            Tone 1 — high and flat
+          </div>
+
+        </div>
+
+
+        <button
+          id="toneAudioButton"
+          class="primary-button"
+          type="button"
+        >
+          🔊 Listen
+        </button>
+
+        <audio
+          id="currentToneAudio"
+          preload="none"
+        ></audio>
+
+      </article>
+
+
+      <!-- Greeting -->
+
+      <article class="demo-card greeting-demo">
+
+        <div class="demo-card-header">
+
+          <div>
+
+            <span class="demo-label">
+              Everyday Chinese
+            </span>
+
+            <h3>
+              Practical Greeting
+            </h3>
+
+          </div>
+
+        </div>
+
+
+        <div class="language-example">
+
+          <div class="chinese-large">
+            你好
+          </div>
+
+          <div class="pinyin-large">
+            Nǐ hǎo
+          </div>
+
+          <div class="meaning-large">
+            Hello
+          </div>
+
+          <button
+            class="speech-button"
+            data-text="你好。Nǐ hǎo."
+            type="button"
+          >
+            🔊 Listen
+          </button>
+
+        </div>
+
+      </article>
+
+
+      <!-- Dialogue -->
+
+      <article class="demo-card dialogue-demo">
+
+        <div class="demo-card-header">
+
+          <div>
+
+            <span class="demo-label">
+              Conversation
+            </span>
+
+            <h3>
+              Mini Dialogue
+            </h3>
+
+          </div>
+
+        </div>
+
+
+        <div class="dialogue">
+
+          <div class="dialogue-line">
+
+            <span class="dialogue-speaker">
+              A
+            </span>
+
+            <div>
+
+              <strong>
+                你好！你好吗？
+              </strong>
+
+              <small>
+                Nǐ hǎo! Nǐ hǎo ma?
+              </small>
+
+              <em>
+                Hello! How are you?
+              </em>
+
+            </div>
+
+          </div>
+
+
+          <div class="dialogue-line">
+
+            <span class="dialogue-speaker">
+              B
+            </span>
+
+            <div>
+
+              <strong>
+                我很好，谢谢！
+              </strong>
+
+              <small>
+                Wǒ hěn hǎo, xièxie!
+              </small>
+
+              <em>
+                I'm very well, thank you!
+              </em>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </article>
+
+
+      <!-- Vocabulary quiz -->
+
+      <article class="demo-card vocabulary-demo">
+
+        <div class="demo-card-header">
+
+          <div>
+
+            <span class="demo-label">
+              Quick Check
+            </span>
+
+            <h3>
+              Micro Vocabulary Quiz
+            </h3>
+
+          </div>
+
+        </div>
+
+
+        <div class="micro-quiz">
+
+          <p>
+            What does <strong>妈 (mā)</strong> mean?
+          </p>
+
+          <div class="micro-options">
+
+            <button
+              type="button"
+              data-answer="wrong"
+            >
+              teacher
+            </button>
+
+            <button
+              type="button"
+              data-answer="correct"
+            >
+              mother
+            </button>
+
+            <button
+              type="button"
+              data-answer="wrong"
+            >
+              horse
+            </button>
+
+          </div>
+
+          <div
+            class="quiz-feedback"
+            id="microQuizFeedback"
+          ></div>
+
+        </div>
+
+      </article>
+
+    </div>
+
+  </section>
+
+
+  <!-- =========================
+       LEARNING HUB
+  ========================== -->
+
+  <section
+    class="section section-dark"
+    id="learning-hub"
+  >
+
+    <div class="container">
+
+      <div class="section-heading section-heading-light">
+
+        <span class="section-label">
+          Learning Hub
+        </span>
+
+        <h2>
+          Explore your lessons.
         </h2>
 
         <p>
-          LinguaPath begins with Chinese and is designed
-          to expand into other foundational subjects.
+          Your lessons, stories, vocabulary, and exercises
+          are loaded from the LinguaPath Excel workbook.
         </p>
 
       </div>
 
 
-      <div class="roadmap-grid">
+      <div
+        id="lessonGrid"
+        class="lesson-grid"
+      >
 
-        <div class="roadmap-card active">
-
-          <span class="roadmap-status">
-            CURRENT
-          </span>
-
-          <div class="roadmap-icon">
-            文
-          </div>
-
-          <h3>Chinese</h3>
-
-          <p>
-            Pinyin, tones, vocabulary, stories,
-            conversation, and pronunciation.
-          </p>
-
-        </div>
-
-
-        <div class="roadmap-card">
-
-          <span class="roadmap-status">
-            PLANNED
-          </span>
-
-          <div class="roadmap-icon">
-            A
-          </div>
-
-          <h3>English</h3>
-
-          <p>
-            Vocabulary, reading, listening,
-            communication, and practical usage.
-          </p>
-
-        </div>
-
-
-        <div class="roadmap-card">
-
-          <span class="roadmap-status">
-            PLANNED
-          </span>
-
-          <div class="roadmap-icon">
-            ∑
-          </div>
-
-          <h3>Mathematics</h3>
-
-          <p>
-            Visual concepts, problem solving,
-            reasoning, and practice.
-          </p>
-
-        </div>
-
-
-        <div class="roadmap-card">
-
-          <span class="roadmap-status">
-            PLANNED
-          </span>
-
-          <div class="roadmap-icon">
-            ◇
-          </div>
-
-          <h3>Logic</h3>
-
-          <p>
-            Structured thinking, patterns,
-            reasoning, and decision making.
-          </p>
-
+        <div class="loading-card">
+          Loading lessons...
         </div>
 
       </div>
@@ -691,61 +750,30 @@
   </section>
 
 
-  <!-- ================= FOOTER ================= -->
+  <!-- =========================
+       FOOTER
+  ========================== -->
 
   <footer>
 
-    <div class="container footer-inner">
+    <div class="container">
 
-      <div class="footer-brand">
-
-        <a href="index.html" class="logo">
-          <span class="logo-mark">文</span>
-
-          <span class="logo-text">
-            <strong>LinguaPath</strong>
-            <small>Language Learning Hub</small>
-          </span>
-        </a>
-
-        <p>
-          Learn visually. Listen carefully.
-          Speak confidently.
-        </p>
-
-      </div>
-
-
-      <div class="footer-links">
-
-        <a href="#methodology">Methodology</a>
-        <a href="#demos">Demo Lessons</a>
-        <a href="#learning-hub">Learning Hub</a>
-        <a href="#roadmap">Roadmap</a>
-
-      </div>
-
-    </div>
-
-
-    <div class="container footer-bottom">
-
-      <span>
+      <p>
         © 2026 LinguaPath Learning Hub.
-      </span>
-
-      <span>
-        Built for intentional learning.
-      </span>
+        Learn visually. Listen carefully. Speak confidently.
+      </p>
 
     </div>
 
   </footer>
 
 
-  <!-- ================= JAVASCRIPT ================= -->
+  <!-- SheetJS -->
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+  <!-- Main JavaScript -->
+
   <script src="main.js"></script>
 
 </body>
