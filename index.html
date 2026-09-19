@@ -390,87 +390,172 @@
       </div>
 
 
-      <!-- Tone lesson -->
+      <!-- Demo Grid Wrapper (2x2 Layout Container) -->
+      <div class="demos-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
 
-      <article class="demo-card tone-demo">
+        <!-- 1. Pronunciation (Tone lesson) -->
+        <article class="demo-card tone-demo">
 
-        <div class="demo-card-header">
+          <div class="demo-card-header">
 
-          <div>
+            <div>
 
-            <span class="demo-label">
-              Pronunciation
-            </span>
-
-            <h3>
-              The Four Tones
-            </h3>
-
-            <p>
-              See and hear how Mandarin tones change.
-            </p>
-
-          </div>
-
-        </div>
-
-
-        <div class="tone-buttons">
-
-          <button
-            class="tone-button active"
-            data-tone="1"
-            type="button"
-          >
-            mā
-          </button>
-
-          <button
-            class="tone-button"
-            data-tone="2"
-            type="button"
-          >
-            má
-          </button>
-
-          <button
-            class="tone-button"
-            data-tone="3"
-            type="button"
-          >
-            mǎ
-          </button>
-
-          <button
-            class="tone-button"
-            data-tone="4"
-            type="button"
-          >
-            mà
-          </button>
-
-        </div>
-
-
-        <div class="tone-display">
-
-          <div class="tone-word-wrapper" style="display: flex; align-items: center; justify-content: left; gap: 1rem;">
-
-            <div class="tone-word">
-
-              <span id="toneSyllable">
-                mā
+              <span class="demo-label">
+                Pronunciation
               </span>
 
-              <small id="toneCharacter">
-                妈
-              </small>
+              <h3>
+                The Four Tones
+              </h3>
+
+              <p>
+                See and hear how Mandarin tones change.
+              </p>
 
             </div>
 
+          </div>
+
+
+          <div class="tone-buttons">
+
             <button
-              id="toneAudioButton"
-              class="primary-button"
+              class="tone-button active"
+              data-tone="1"
+              type="button"
+            >
+              mā
+            </button>
+
+            <button
+              class="tone-button"
+              data-tone="2"
+              type="button"
+            >
+              má
+            </button>
+
+            <button
+              class="tone-button"
+              data-tone="3"
+              type="button"
+            >
+              mǎ
+            </button>
+
+            <button
+              class="tone-button"
+              data-tone="4"
+              type="button"
+            >
+              mà
+            </button>
+
+          </div>
+
+
+          <div class="tone-display">
+
+            <div class="tone-word-wrapper" style="display: flex; align-items: center; justify-content: left; gap: 1rem;">
+
+              <div class="tone-word">
+
+                <span id="toneSyllable">
+                  mā
+                </span>
+
+                <small id="toneCharacter">
+                  妈
+                </small>
+
+              </div>
+
+              <button
+                id="toneAudioButton"
+                class="primary-button"
+                type="button"
+              >
+                🔊 Listen
+              </button>
+
+            </div>
+
+
+            <div class="tone-graph">
+
+              <svg
+                viewBox="0 0 500 110"
+                preserveAspectRatio="none"
+              >
+
+                <path
+                  id="tonePath"
+                  d="M20 30 L480 30"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="5"
+                  stroke-linecap="round"
+                />
+
+              </svg>
+
+            </div>
+
+
+            <div
+              class="tone-description"
+              id="toneDescription"
+            >
+              Tone 1 — high and flat
+            </div>
+
+          </div>
+
+          <audio
+            id="currentToneAudio"
+            preload="none"
+          ></audio>
+
+        </article>
+
+
+        <!-- 2. Everyday Chinese (Greeting) -->
+        <article class="demo-card greeting-demo">
+
+          <div class="demo-card-header">
+
+            <div>
+
+              <span class="demo-label">
+                Everyday Chinese
+              </span>
+
+              <h3>
+                Practical Greeting
+              </h3>
+
+            </div>
+
+          </div>
+
+
+          <div class="language-example">
+
+            <div class="chinese-large">
+              你好
+            </div>
+
+            <div class="pinyin-large">
+              Nǐ hǎo
+            </div>
+
+            <div class="meaning-large">
+              Hello
+            </div>
+
+            <button
+              class="speech-button"
+              data-text="你好。Nǐ hǎo."
               type="button"
             >
               🔊 Listen
@@ -478,230 +563,146 @@
 
           </div>
 
-
-          <div class="tone-graph">
-
-            <svg
-              viewBox="0 0 500 110"
-              preserveAspectRatio="none"
-            >
-
-              <path
-                id="tonePath"
-                d="M20 30 L480 30"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="5"
-                stroke-linecap="round"
-              />
-
-            </svg>
-
-          </div>
+        </article>
 
 
-          <div
-            class="tone-description"
-            id="toneDescription"
-          >
-            Tone 1 — high and flat
-          </div>
+        <!-- 3. Conversation (Dialogue) -->
+        <article class="demo-card dialogue-demo">
 
-        </div>
-
-        <audio
-          id="currentToneAudio"
-          preload="none"
-        ></audio>
-
-      </article>
-
-
-      <!-- Greeting -->
-
-      <article class="demo-card greeting-demo">
-
-        <div class="demo-card-header">
-
-          <div>
-
-            <span class="demo-label">
-              Everyday Chinese
-            </span>
-
-            <h3>
-              Practical Greeting
-            </h3>
-
-          </div>
-
-        </div>
-
-
-        <div class="language-example">
-
-          <div class="chinese-large">
-            你好
-          </div>
-
-          <div class="pinyin-large">
-            Nǐ hǎo
-          </div>
-
-          <div class="meaning-large">
-            Hello
-          </div>
-
-          <button
-            class="speech-button"
-            data-text="你好。Nǐ hǎo."
-            type="button"
-          >
-            🔊 Listen
-          </button>
-
-        </div>
-
-      </article>
-
-
-      <!-- Dialogue -->
-
-      <article class="demo-card dialogue-demo">
-
-        <div class="demo-card-header">
-
-          <div>
-
-            <span class="demo-label">
-              Conversation
-            </span>
-
-            <h3>
-              Mini Dialogue
-            </h3>
-
-          </div>
-
-        </div>
-
-
-        <div class="dialogue">
-
-          <div class="dialogue-line">
-
-            <span class="dialogue-speaker">
-              A
-            </span>
+          <div class="demo-card-header">
 
             <div>
 
-              <strong>
-                你好！你好吗？
-              </strong>
+              <span class="demo-label">
+                Conversation
+              </span>
 
-              <small>
-                Nǐ hǎo! Nǐ hǎo ma?
-              </small>
-
-              <em>
-                Hello! How are you?
-              </em>
+              <h3>
+                Mini Dialogue
+              </h3>
 
             </div>
 
           </div>
 
 
-          <div class="dialogue-line">
+          <div class="dialogue">
 
-            <span class="dialogue-speaker">
-              B
-            </span>
+            <div class="dialogue-line">
 
-            <div>
+              <span class="dialogue-speaker">
+                A
+              </span>
 
-              <strong>
-                我很好，谢谢！
-              </strong>
+              <div>
 
-              <small>
-                Wǒ hěn hǎo, xièxie!
-              </small>
+                <strong>
+                  你好！你好吗？
+                </strong>
 
-              <em>
-                I'm very well, thank you!
-              </em>
+                <small>
+                  Nǐ hǎo! Nǐ hǎo ma?
+                </small>
+
+                <em>
+                  Hello! How are you?
+                </em>
+
+              </div>
+
+            </div>
+
+
+            <div class="dialogue-line">
+
+              <span class="dialogue-speaker">
+                B
+              </span>
+
+              <div>
+
+                <strong>
+                  我很好，谢谢！
+                </strong>
+
+                <small>
+                  Wǒ hěn hǎo, xièxie!
+                </small>
+
+                <em>
+                  I'm very well, thank you!
+                </em>
+
+              </div>
 
             </div>
 
           </div>
 
-        </div>
-
-      </article>
+        </article>
 
 
-      <!-- Vocabulary quiz -->
+        <!-- 4. Quick Check (Vocabulary quiz) -->
+        <article class="demo-card vocabulary-demo">
 
-      <article class="demo-card vocabulary-demo">
+          <div class="demo-card-header">
 
-        <div class="demo-card-header">
+            <div>
 
-          <div>
+              <span class="demo-label">
+                Quick Check
+              </span>
 
-            <span class="demo-label">
-              Quick Check
-            </span>
+              <h3>
+                Micro Vocabulary Quiz
+              </h3>
 
-            <h3>
-              Micro Vocabulary Quiz
-            </h3>
-
-          </div>
-
-        </div>
-
-
-        <div class="micro-quiz">
-
-          <p>
-            What does <strong>妈 (mā)</strong> mean?
-          </p>
-
-          <div class="micro-options">
-
-            <button
-              type="button"
-              data-answer="wrong"
-            >
-              teacher
-            </button>
-
-            <button
-              type="button"
-              data-answer="correct"
-            >
-              mother
-            </button>
-
-            <button
-              type="button"
-              data-answer="wrong"
-            >
-              horse
-            </button>
+            </div>
 
           </div>
 
-          <div
-            class="quiz-feedback"
-            id="microQuizFeedback"
-          ></div>
 
-        </div>
+          <div class="micro-quiz">
 
-      </article>
+            <p>
+              What does <strong>妈 (mā)</strong> mean?
+            </p>
+
+            <div class="micro-options">
+
+              <button
+                type="button"
+                data-answer="wrong"
+              >
+                teacher
+              </button>
+
+              <button
+                type="button"
+                data-answer="correct"
+              >
+                mother
+              </button>
+
+              <button
+                type="button"
+                data-answer="wrong"
+              >
+                horse
+              </button>
+
+            </div>
+
+            <div
+              class="quiz-feedback"
+              id="microQuizFeedback"
+            ></div>
+
+          </div>
+
+        </article>
+
+      </div>
 
     </div>
 
