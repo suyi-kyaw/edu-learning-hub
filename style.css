@@ -24,7 +24,7 @@
   --white: #ffffff;
 
   --background: #ffffff;
-  --background-soft: #f8fafc;
+  --background-soft: #f0f7ff; /* Light blue section background */
 
   --border: #e2e8f0;
 
@@ -689,7 +689,7 @@ a {
 
 
 /* =========================================================
-   GENERAL SECTIONS
+   GENERAL SECTIONS & BACKGROUND ALTERNATIONS
    ========================================================= */
 
 .section {
@@ -700,10 +700,19 @@ a {
 }
 
 
+/* White Background Section */
+.section-white {
+
+  background: var(--white);
+
+}
+
+
+/* Light Blue Background Section */
+.section-blue,
 .section-light {
 
-  background:
-    var(--background-soft);
+  background: var(--background-soft);
 
 }
 
@@ -983,7 +992,7 @@ a {
 
   color: var(--text);
 
-  background: var(--background-soft);
+  background: var(--white);
 
   border:
     1px solid var(--border);
@@ -1016,7 +1025,9 @@ a {
   padding: 30px;
 
   background:
-    var(--background-soft);
+    var(--white);
+
+  border: 1px solid var(--border);
 
   border-radius: 12px;
 
@@ -1093,7 +1104,9 @@ a {
   text-align: center;
 
   background:
-    var(--background-soft);
+    var(--white);
+
+  border: 1px solid var(--border);
 
   border-radius: 12px;
 
@@ -1149,7 +1162,9 @@ a {
   padding: 20px;
 
   background:
-    var(--background-soft);
+    var(--white);
+
+  border: 1px solid var(--border);
 
   border-radius: 10px;
 
@@ -2071,7 +2086,7 @@ a {
 .story-quiz {
 
   background:
-    #f1f5f9;
+    var(--background-soft);
 
 }
 
@@ -2194,6 +2209,10 @@ a {
 
   transition: all .2s ease;
 
+  width: 100%;
+
+  cursor: pointer;
+
 }
 
 
@@ -2203,6 +2222,8 @@ a {
 
   border-color:
     var(--blue);
+
+  background: var(--blue-light);
 
 }
 
