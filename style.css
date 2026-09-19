@@ -1350,10 +1350,10 @@ a {
   overflow: hidden;
 
   background:
-    var(--navy-soft);
+    #f0f7ff;
 
   border:
-    1px solid #fff;
+    1px solid #263248;
 
   border-radius: 14px;
 
