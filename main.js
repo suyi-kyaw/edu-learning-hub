@@ -1,32 +1,16 @@
-/* =========================================================
-   LINGUAPATH - MAIN.JS
-   =========================================================
-   
-   This file handles:
-   1. Excel lesson data loading
-   2. Pinyin tone buttons
-   3. Tone curves
-   4. Native tone MP3 playback
-   5. Chinese speech synthesis
-   ========================================================= */
+"use strict";
 
 
 /* =========================================================
-   EXCEL DATA
-   ========================================================= */
+   CONFIGURATION
+========================================================= */
 
-const EXCEL_FILE = "./data/lessons.xlsx";
+const EXCEL_FILE = "data/lessons.xlsx";
 
-/*
-   All lesson data loaded from Excel will be stored here.
 
-   Expected Excel sheets:
-
-   Lessons
-   Story
-   Vocabulary
-   Exercises
-*/
+/* =========================================================
+   GLOBAL DATA
+========================================================= */
 
 let lessonData = {
   lessons: [],
@@ -37,31 +21,383 @@ let lessonData = {
 
 
 /* =========================================================
-   LOAD EXCEL DATA
-   ========================================================= */
+   TONE DATA
+========================================================= */
 
-async function loadExcelData() {
+const toneData = {
 
-  try {
+  1: {
+    syllable: "mā",
+    character: "妈",
+    meaning: "mother",
+    text: "Tone 1 — high and flat",
+    path: "M20 30 L480 30",
+    audio: "assets/audio/tones/ma-tone-1.mp3"
+  },
 
-    /* Check that SheetJS is available */
+  2: {
+    syllable: "má",
+    character: "麻",
+    meaning: "hemp / numb",
+    text: "Tone 2 — rising",
+    path: "M20 70 C170 70 320 65 480 20",
+    audio: "assets/audio/tones/ma-tone-2.mp3"
+  },
 
-    if (typeof XLSX === "undefined") {
+  3: {
+    syllable: "mǎ",
+    character: "马",
+    meaning: "horse",
+    text: "Tone 3 — dipping",
+    path: "M20 35 C130 85 230 85 300 70 C370 55 420 30 480 25",
+    audio: "assets/audio/tones/ma-tone-3.mp3"
+  },
 
-      console.error(
-        "SheetJS is not loaded. " +
-        "Make sure this is included before main.js:"
-      );
+  4: {
+    syllable: "mà",
+    character: "骂",
+    meaning: "scold",
+    text: "Tone 4 — falling",
+    path: "M20 20 C180 25 330 65 480 85",
+    audio: "assets/audio/tones/ma-tone-4.mp3"
+  }
 
-      console.error(
-        '<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>'
-      );
+};
 
-      return null;
+
+/* =========================================================
+   SPEECH
+========================================================= */
+
+function speakChinese(text) {
+
+  if (!("speechSynthesis" in window)) {
+    return;
+  }
+
+  window.speechSynthesis.cancel();
+
+  const utterance =
+    new SpeechSynthesisUtterance(text);
+
+  utterance.lang = "zh-CN";
+  utterance.rate = 0.8;
+  utterance.pitch = 1;
+
+  window.speechSynthesis.speak(utterance);
+}
+
+
+/* =========================================================
+   AUDIO FILE
+========================================================= */
+
+function playAudio(path, fallbackText = "") {
+
+  if (path) {
+
+    const audio = new Audio(path);
+
+    audio.play().catch(() => {
+
+      if (fallbackText) {
+        speakChinese(fallbackText);
+      }
+
+    });
+
+    return;
+  }
+
+  if (fallbackText) {
+    speakChinese(fallbackText);
+  }
+}
+
+
+/* =========================================================
+   TONE DEMO
+========================================================= */
+
+function setupToneDemo() {
+
+  const buttons =
+    document.querySelectorAll(".tone-button");
+
+  const character =
+    document.getElementById("toneCharacter");
+
+  const syllable =
+    document.getElementById("toneSyllable");
+
+  const meaning =
+    document.getElementById("toneMeaning");
+
+  const description =
+    document.getElementById("toneDescription");
+
+  const path =
+    document.getElementById("tonePath");
+
+  const playButton =
+    document.getElementById("playToneButton");
+
+
+  if (!buttons.length) {
+    return;
+  }
+
+
+  function selectTone(toneNumber) {
+
+    const data =
+      toneData[toneNumber];
+
+    if (!data) {
+      return;
     }
 
 
-    /* Download Excel file */
+    buttons.forEach(button => {
+
+      button.classList.toggle(
+        "active",
+        button.dataset.tone === String(toneNumber)
+      );
+
+    });
+
+
+    if (character) {
+      character.textContent = data.character;
+    }
+
+    if (syllable) {
+      syllable.textContent = data.syllable;
+    }
+
+    if (meaning) {
+      meaning.textContent = data.meaning;
+    }
+
+    if (description) {
+      description.textContent = data.text;
+    }
+
+    if (path) {
+      path.setAttribute("d", data.path);
+    }
+
+
+    if (playButton) {
+
+      playButton.onclick = () => {
+
+        playAudio(
+          data.audio,
+          data.syllable
+        );
+
+      };
+
+    }
+
+  }
+
+
+  buttons.forEach(button => {
+
+    button.addEventListener("click", () => {
+
+      selectTone(
+        Number(button.dataset.tone)
+      );
+
+    });
+
+  });
+
+
+  selectTone(1);
+
+}
+
+
+/* =========================================================
+   HERO SPEECH
+========================================================= */
+
+function setupSpeechButtons() {
+
+  const heroButton =
+    document.getElementById("heroSpeechButton");
+
+  if (heroButton) {
+
+    heroButton.addEventListener(
+      "click",
+      () => speakChinese("学")
+    );
+
+  }
+
+
+  const greetingButton =
+    document.getElementById(
+      "greetingSpeechButton"
+    );
+
+  if (greetingButton) {
+
+    greetingButton.addEventListener(
+      "click",
+      () => speakChinese("你好")
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   MOBILE NAVIGATION
+========================================================= */
+
+function setupMobileMenu() {
+
+  const button =
+    document.getElementById(
+      "mobileMenuButton"
+    );
+
+  const menu =
+    document.getElementById(
+      "mobileMenu"
+    );
+
+
+  if (!button || !menu) {
+    return;
+  }
+
+
+  button.addEventListener("click", () => {
+
+    menu.classList.toggle("open");
+
+  });
+
+
+  menu.querySelectorAll("a").forEach(link => {
+
+    link.addEventListener("click", () => {
+
+      menu.classList.remove("open");
+
+    });
+
+  });
+
+}
+
+
+/* =========================================================
+   EXCEL HELPERS
+========================================================= */
+
+function normalizeKey(value) {
+
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+}
+
+
+function getValue(row, ...keys) {
+
+  for (const key of keys) {
+
+    const normalizedTarget =
+      normalizeKey(key);
+
+    for (const actualKey of Object.keys(row)) {
+
+      if (
+        normalizeKey(actualKey) ===
+        normalizedTarget
+      ) {
+
+        const value = row[actualKey];
+
+        if (
+          value !== undefined &&
+          value !== null &&
+          String(value).trim() !== ""
+        ) {
+
+          return value;
+
+        }
+
+      }
+
+    }
+
+  }
+
+  return "";
+}
+
+
+function readSheet(workbook, sheetName) {
+
+  const sheet =
+    workbook.Sheets[sheetName];
+
+  if (!sheet) {
+    return [];
+  }
+
+  return XLSX.utils.sheet_to_json(
+    sheet,
+    {
+      defval: ""
+    }
+  );
+
+}
+
+
+/* =========================================================
+   LOAD EXCEL
+========================================================= */
+
+async function loadExcelData() {
+
+  const status =
+    document.getElementById(
+      "lessonStatus"
+    );
+
+
+  try {
+
+    if (typeof XLSX === "undefined") {
+
+      throw new Error(
+        "SheetJS could not be loaded."
+      );
+
+    }
+
+
+    if (status) {
+      status.textContent =
+        "Loading lessons...";
+    }
+
 
     const response =
       await fetch(EXCEL_FILE);
@@ -70,109 +406,64 @@ async function loadExcelData() {
     if (!response.ok) {
 
       throw new Error(
-        `Could not load ${EXCEL_FILE}. ` +
-        `HTTP status: ${response.status}`
+        `Could not load ${EXCEL_FILE}. HTTP ${response.status}`
       );
 
     }
 
 
-    /* Convert file to ArrayBuffer */
-
     const arrayBuffer =
       await response.arrayBuffer();
 
 
-    /* Read Excel workbook */
-
     const workbook =
-      XLSX.read(arrayBuffer, {
-        type: "array"
-      });
+      XLSX.read(
+        arrayBuffer,
+        {
+          type: "array"
+        }
+      );
 
-
-    /* Read each sheet */
 
     lessonData.lessons =
-      readExcelSheet(
+      readSheet(
         workbook,
         "Lessons"
       );
 
-
     lessonData.story =
-      readExcelSheet(
+      readSheet(
         workbook,
         "Story"
       );
 
-
     lessonData.vocabulary =
-      readExcelSheet(
+      readSheet(
         workbook,
         "Vocabulary"
       );
 
-
     lessonData.exercises =
-      readExcelSheet(
+      readSheet(
         workbook,
         "Exercises"
       );
 
 
-    console.log(
-      "LinguaPath Excel data loaded successfully."
-    );
-
-    console.log(
-      "Lessons:",
-      lessonData.lessons
-    );
-
-    console.log(
-      "Story:",
-      lessonData.story
-    );
-
-    console.log(
-      "Vocabulary:",
-      lessonData.vocabulary
-    );
-
-    console.log(
-      "Exercises:",
-      lessonData.exercises
-    );
-
-
-    /*
-       Make data available globally.
-
-       Other JS files can use:
-
-       window.lessonData.lessons
-       window.lessonData.story
-       window.lessonData.vocabulary
-       window.lessonData.exercises
-    */
-
     window.lessonData =
       lessonData;
 
 
-    /*
-       Optional event for other scripts.
+    renderLessons();
 
-       Example:
 
-       document.addEventListener(
-         "lessonDataLoaded",
-         () => {
-           // Do something
-         }
-       );
-    */
+    if (status) {
+
+      status.textContent =
+        `${lessonData.lessons.length} lesson${lessonData.lessons.length === 1 ? "" : "s"} available`;
+
+    }
+
 
     document.dispatchEvent(
       new CustomEvent(
@@ -184,550 +475,231 @@ async function loadExcelData() {
     );
 
 
-    return lessonData;
-
-
   } catch (error) {
 
     console.error(
-      "Error loading Excel lesson data:",
+      "Excel loading error:",
       error
     );
 
 
-    /*
-       Show a warning only if the Excel file
-       is expected on this page.
-    */
+    if (status) {
 
-    showExcelError();
+      status.innerHTML = `
+        <strong>Lesson data could not be loaded.</strong>
+        <span>
+          Make sure <code>data/lessons.xlsx</code>
+          exists and that the website is running
+          through a local web server.
+        </span>
+      `;
 
+      status.classList.add("error");
 
-    return null;
-  }
-}
-
-
-/* =========================================================
-   READ EXCEL SHEET
-   ========================================================= */
-
-function readExcelSheet(
-  workbook,
-  sheetName
-) {
-
-  const sheet =
-    workbook.Sheets[sheetName];
-
-
-  /*
-     If the sheet doesn't exist,
-     return an empty array instead
-     of breaking the whole website.
-  */
-
-  if (!sheet) {
-
-    console.warn(
-      `Excel sheet "${sheetName}" was not found.`
-    );
-
-    return [];
-  }
-
-
-  return XLSX.utils.sheet_to_json(
-    sheet,
-    {
-      defval: ""
     }
-  );
+
+  }
+
 }
 
 
 /* =========================================================
-   EXCEL ERROR MESSAGE
-   ========================================================= */
+   RENDER LESSONS
+========================================================= */
 
-function showExcelError() {
+function renderLessons() {
 
-  /*
-     Don't create duplicate messages.
-  */
-
-  if (
+  const container =
     document.getElementById(
-      "excelDataError"
-    )
-  ) {
+      "lessonGrid"
+    );
+
+
+  if (!container) {
     return;
   }
 
 
-  const message =
-    document.createElement("div");
-
-
-  message.id =
-    "excelDataError";
-
-
-  message.style.cssText = `
-    position: fixed;
-    left: 20px;
-    right: 20px;
-    bottom: 20px;
-    z-index: 9999;
-
-    background: #fff1f2;
-    color: #9f1239;
-
-    border: 1px solid #fecdd3;
-    border-radius: 12px;
-
-    padding: 16px 20px;
-
-    font-family: system-ui, sans-serif;
-    font-size: 14px;
-
-    box-shadow:
-      0 10px 30px rgba(0,0,0,0.12);
-  `;
-
-
-  message.innerHTML = `
-    <strong>Lesson data could not be loaded.</strong>
-    <br>
-    Please make sure
-    <code>data/lessons.xlsx</code>
-    exists and is accessible.
-  `;
-
-
-  document.body.appendChild(
-    message
-  );
-}
-
-
-/* =========================================================
-   TONE DATA
-   ========================================================= */
-
-const toneData = {
-
-  1: {
-
-    syllable: "mā",
-
-    character: "妈",
-
-    meaning: "mother",
-
-    text:
-      "Tone 1 — high and flat",
-
-    path:
-      "M20 30 L480 30",
-
-    audio:
-      "./assets/audio/tones/ma-tone-1.mp3"
-  },
-
-
-  2: {
-
-    syllable: "má",
-
-    character: "麻",
-
-    meaning: "hemp / numb",
-
-    text:
-      "Tone 2 — rising",
-
-    path:
-      "M20 70 C170 70 320 65 480 20",
-
-    audio:
-      "./assets/audio/tones/ma-tone-2.mp3"
-  },
-
-
-  3: {
-
-    syllable: "mǎ",
-
-    character: "马",
-
-    meaning: "horse",
-
-    text:
-      "Tone 3 — dipping",
-
-    path:
-      "M20 35 C130 85 230 85 300 70 C370 55 420 30 480 25",
-
-    audio:
-      "./assets/audio/tones/ma-tone-3.mp3"
-  },
-
-
-  4: {
-
-    syllable: "mà",
-
-    character: "骂",
-
-    meaning: "scold",
-
-    text:
-      "Tone 4 — falling",
-
-    path:
-      "M20 20 C180 25 330 65 480 85",
-
-    audio:
-      "./assets/audio/tones/ma-tone-4.mp3"
-  }
-
-};
-
-
-/* =========================================================
-   TONE ELEMENTS
-   ========================================================= */
-
-const toneButtons =
-  document.querySelectorAll(
-    ".tone-button"
-  );
-
-
-const tonePath =
-  document.getElementById(
-    "tonePath"
-  );
-
-
-const toneDescription =
-  document.getElementById(
-    "toneDescription"
-  );
-
-
-let currentToneAudio =
-  null;
-
-
-/* =========================================================
-   PLAY TONE
-   ========================================================= */
-
-function playTone(
-  number,
-  button
-) {
-
-  const tone =
-    toneData[number];
-
-
-  if (!tone) {
-
-    console.error(
-      "Tone data not found:",
-      number
-    );
+  container.innerHTML = "";
+
+
+  if (!lessonData.lessons.length) {
+
+    container.innerHTML = `
+      <div class="empty-state">
+        <h3>No lessons found</h3>
+        <p>
+          Add lesson rows to the
+          <strong>Lessons</strong> sheet
+          in lessons.xlsx.
+        </p>
+      </div>
+    `;
 
     return;
   }
 
 
-  /* -------------------------------------------------------
-     Remove active state
-     ------------------------------------------------------- */
+  lessonData.lessons.forEach(
+    (lesson, index) => {
 
-  toneButtons.forEach(
-    item => {
-
-      item.classList.remove(
-        "active"
-      );
-
-    }
-  );
-
-
-  /* -------------------------------------------------------
-     Activate selected button
-     ------------------------------------------------------- */
-
-  if (button) {
-
-    button.classList.add(
-      "active"
-    );
-
-  }
-
-
-  /* -------------------------------------------------------
-     Update tone curve
-     ------------------------------------------------------- */
-
-  if (tonePath) {
-
-    tonePath.setAttribute(
-      "d",
-      tone.path
-    );
-
-  }
-
-
-  /* -------------------------------------------------------
-     Update description
-     ------------------------------------------------------- */
-
-  if (toneDescription) {
-
-    toneDescription.innerHTML =
-      `<strong>${tone.syllable}</strong> — ` +
-      `${tone.character} — ` +
-      `${tone.meaning}<br>` +
-      `${tone.text}`;
-
-  }
-
-
-  /* -------------------------------------------------------
-     Stop previous audio
-     ------------------------------------------------------- */
-
-  if (currentToneAudio) {
-
-    currentToneAudio.pause();
-
-    currentToneAudio.currentTime = 0;
-
-    currentToneAudio = null;
-  }
-
-
-  /* -------------------------------------------------------
-     Create new audio
-     ------------------------------------------------------- */
-
-  currentToneAudio =
-    new Audio();
-
-
-  currentToneAudio.preload =
-    "auto";
-
-
-  currentToneAudio.src =
-    tone.audio;
-
-
-  /* -------------------------------------------------------
-     Audio error
-     ------------------------------------------------------- */
-
-  currentToneAudio.addEventListener(
-    "error",
-    () => {
-
-      console.error(
-        "Could not load audio file:",
-        tone.audio
-      );
-
-
-      alert(
-        `Audio file could not be loaded:\n\n` +
-        `${tone.audio}\n\n` +
-        `Please check that the MP3 exists ` +
-        `and that the filename is exactly correct.`
-      );
-
-    }
-  );
-
-
-  /* -------------------------------------------------------
-     Play audio
-     ------------------------------------------------------- */
-
-  currentToneAudio
-    .play()
-    .then(() => {
-
-      console.log(
-        `Playing ${tone.syllable}:`,
-        tone.audio
-      );
-
-    })
-    .catch(error => {
-
-      console.error(
-        "Audio playback failed:",
-        error
-      );
-
-    });
-
-}
-
-
-/* =========================================================
-   TONE BUTTONS
-   ========================================================= */
-
-toneButtons.forEach(
-  button => {
-
-    button.addEventListener(
-      "click",
-      () => {
-
-        const toneNumber =
-          Number(
-            button.dataset.tone
-          );
-
-
-        playTone(
-          toneNumber,
-          button
+      const id =
+        getValue(
+          lesson,
+          "id",
+          "lessonId"
         );
 
-      }
-    );
 
-  }
-);
-
-
-/* =========================================================
-   INITIAL TONE
-   ========================================================= */
-
-if (
-  tonePath &&
-  toneDescription
-) {
-
-  tonePath.setAttribute(
-    "d",
-    toneData[1].path
-  );
+      const title =
+        getValue(
+          lesson,
+          "title"
+        ) ||
+        `Lesson ${index + 1}`;
 
 
-  toneDescription.innerHTML =
-    `<strong>${toneData[1].syllable}</strong> — ` +
-    `${toneData[1].character} — ` +
-    `${toneData[1].meaning}<br>` +
-    `${toneData[1].text}`;
-
-}
-
-
-/* =========================================================
-   CHINESE SPEECH
-   ========================================================= */
-
-function speak(text) {
-
-  if (
-    !("speechSynthesis" in window)
-  ) {
-
-    console.warn(
-      "Speech synthesis is not supported."
-    );
-
-    return;
-  }
+      const chineseTitle =
+        getValue(
+          lesson,
+          "chineseTitle",
+          "chinese"
+        );
 
 
-  /*
-     Stop anything currently speaking.
-  */
-
-  window.speechSynthesis.cancel();
-
-
-  const utterance =
-    new SpeechSynthesisUtterance(
-      text
-    );
+      const pinyin =
+        getValue(
+          lesson,
+          "pinyin"
+        );
 
 
-  utterance.lang =
-    "zh-CN";
+      const meaning =
+        getValue(
+          lesson,
+          "meaning"
+        );
 
 
-  utterance.rate =
-    0.8;
+      const level =
+        getValue(
+          lesson,
+          "level"
+        ) ||
+        "Beginner";
 
 
-  utterance.pitch =
-    1;
+      const description =
+        getValue(
+          lesson,
+          "description"
+        );
 
 
-  /*
-     Try to find a Chinese voice.
-  */
-
-  const voices =
-    window.speechSynthesis
-      .getVoices();
-
-
-  const chineseVoice =
-    voices.find(
-      voice =>
-        voice.lang
-          .toLowerCase()
-          .startsWith("zh")
-    );
+      const poster =
+        getValue(
+          lesson,
+          "poster",
+          "image"
+        );
 
 
-  if (chineseVoice) {
-
-    utterance.voice =
-      chineseVoice;
-
-  }
+      const card =
+        document.createElement("article");
 
 
-  window.speechSynthesis.speak(
-    utterance
-  );
-}
+      card.className =
+        "lesson-card";
 
 
-/* =========================================================
-   HERO AUDIO
-   ========================================================= */
+      const imageHTML =
+        poster
+          ? `
+            <div class="lesson-card-image">
+              <img
+                src="${escapeHTML(poster)}"
+                alt="${escapeHTML(title)}"
+                loading="lazy"
+              >
+            </div>
+          `
+          : `
+            <div class="lesson-card-placeholder">
+              <span>文</span>
+            </div>
+          `;
 
-const heroAudioButton =
-  document.getElementById(
-    "heroAudioButton"
-  );
+
+      card.innerHTML = `
+
+        ${imageHTML}
+
+        <div class="lesson-card-body">
+
+          <div class="lesson-card-meta">
+
+            <span>
+              ${escapeHTML(level)}
+            </span>
+
+            <span>
+              Lesson ${index + 1}
+            </span>
+
+          </div>
+
+          <div class="lesson-chinese">
+            ${escapeHTML(chineseTitle)}
+          </div>
+
+          <h3>
+            ${escapeHTML(title)}
+          </h3>
+
+          ${
+            pinyin
+              ? `
+                <p class="lesson-pinyin">
+                  ${escapeHTML(pinyin)}
+                </p>
+              `
+              : ""
+          }
+
+          ${
+            meaning
+              ? `
+                <p class="lesson-meaning">
+                  ${escapeHTML(meaning)}
+                </p>
+              `
+              : ""
+          }
+
+          ${
+            description
+              ? `
+                <p class="lesson-description">
+                  ${escapeHTML(description)}
+                </p>
+              `
+              : ""
+          }
+
+          <a
+            class="lesson-button"
+            href="story.html?id=${encodeURIComponent(id)}"
+          >
+            Start lesson
+            <span>→</span>
+          </a>
+
+        </div>
+
+      `;
 
 
-if (heroAudioButton) {
-
-  heroAudioButton.addEventListener(
-    "click",
-    () => {
-
-      speak("学");
+      container.appendChild(card);
 
     }
   );
@@ -736,67 +708,32 @@ if (heroAudioButton) {
 
 
 /* =========================================================
-   GREETING AUDIO
-   ========================================================= */
+   ESCAPE HTML
+========================================================= */
 
-const greetingAudioButton =
-  document.getElementById(
-    "greetingAudioButton"
-  );
+function escapeHTML(value) {
 
-
-if (greetingAudioButton) {
-
-  greetingAudioButton.addEventListener(
-    "click",
-    () => {
-
-      speak("你好");
-
-    }
-  );
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 
 }
 
 
 /* =========================================================
-   LOAD CHINESE VOICES
-   ========================================================= */
-
-if (
-  "speechSynthesis" in window
-) {
-
-  window.speechSynthesis
-    .addEventListener(
-      "voiceschanged",
-      () => {
-
-        window.speechSynthesis
-          .getVoices();
-
-      }
-    );
-
-}
-
-
-/* =========================================================
-   INITIALIZE
-   ========================================================= */
+   START
+========================================================= */
 
 document.addEventListener(
   "DOMContentLoaded",
   () => {
 
-    /*
-       Load Excel after the page
-       has loaded.
-
-       This does NOT interfere with
-       your tone buttons.
-    */
-
+    setupToneDemo();
+    setupSpeechButtons();
+    setupMobileMenu();
     loadExcelData();
 
   }

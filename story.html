@@ -12,22 +12,27 @@
 
   <meta
     name="description"
-    content="Interactive Chinese story lesson with video, reading, images, vocabulary, and pronunciation."
+    content="Interactive Chinese story lesson with video, images, reading, vocabulary, pronunciation, and exercises."
   >
 
-  <title>LinguaPath | Chinese Story Lesson</title>
+  <title>LinguaPath | Story Lesson</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&family=Roboto:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  >
 
   <link rel="stylesheet" href="style.css">
 
 </head>
 
-
 <body>
 
-
-  <!-- =====================================================
-       NAVIGATION
-       ===================================================== -->
+  <!-- ================= NAVIGATION ================= -->
 
   <nav class="navbar">
 
@@ -37,10 +42,12 @@
 
         <span class="logo-mark">文</span>
 
-        <span>LinguaPath</span>
+        <span class="logo-text">
+          <strong>LinguaPath</strong>
+          <small>Language Learning Hub</small>
+        </span>
 
       </a>
-
 
       <div class="nav-links">
 
@@ -58,11 +65,7 @@
 
       </div>
 
-
-      <a
-        href="index.html"
-        class="nav-button"
-      >
+      <a href="index.html#learning-hub" class="nav-button">
         Learning Hub
       </a>
 
@@ -71,52 +74,35 @@
   </nav>
 
 
-
-  <!-- =====================================================
-       STORY HERO
-       ===================================================== -->
+  <!-- ================= STORY HERO ================= -->
 
   <header class="story-hero">
 
     <div class="container">
 
       <span class="section-label">
-        Chinese Story Lesson
+        CHINESE STORY LESSON
       </span>
-
-
-      <!-- Loaded from Excel -->
 
       <h1 id="storyTitle">
         Loading lesson...
       </h1>
-
 
       <p
         class="story-pinyin"
         id="storyPinyin"
       ></p>
 
-
       <p
         class="story-meaning"
         id="storyMeaning"
       ></p>
 
-
       <div class="story-meta">
 
-        <span>
-          🇨🇳 Beginner Chinese
-        </span>
-
-        <span>
-          🎧 Native Audio
-        </span>
-
-        <span>
-          📖 Reading Practice
-        </span>
+        <span>🇨🇳 Beginner Chinese</span>
+        <span>🎧 Audio Practice</span>
+        <span>📖 Reading Practice</span>
 
       </div>
 
@@ -125,42 +111,31 @@
   </header>
 
 
-
-  <!-- =====================================================
-       01 · WATCH
-       ===================================================== -->
+  <!-- ================= WATCH ================= -->
 
   <section class="story-section">
 
     <div class="container">
 
-
       <div class="section-heading">
 
         <span class="section-label">
-          01 · Watch
+          01 · WATCH
         </span>
-
 
         <h2>
           Watch the story.
         </h2>
 
-
         <p id="storyDescription">
-
-          First, watch the short video and listen to the Chinese
-          pronunciation. Try to understand the story from the images
-          and context before reading the translation.
-
+          First, watch the short video and listen
+          carefully to the Chinese pronunciation.
         </p>
 
       </div>
 
 
-
       <div class="video-card">
-
 
         <video
           id="lessonVideo"
@@ -168,11 +143,8 @@
           controls
           preload="metadata"
         >
-
           Your browser does not support HTML5 video.
-
         </video>
-
 
         <div class="video-caption">
 
@@ -180,9 +152,9 @@
             Chinese Story
           </strong>
 
-
           <span>
-            Listen carefully to the pronunciation and tones.
+            Listen carefully to the pronunciation
+            and tones.
           </span>
 
         </div>
@@ -194,54 +166,39 @@
   </section>
 
 
-
-  <!-- =====================================================
-       02 · UNDERSTAND
-       ===================================================== -->
+  <!-- ================= IMAGES ================= -->
 
   <section class="story-images-section">
 
     <div class="container">
 
-
       <div class="section-heading">
 
         <span class="section-label">
-          02 · Understand
+          02 · UNDERSTAND
         </span>
-
 
         <h2>
           Understand through images.
         </h2>
 
-
         <p>
-          Connect the Chinese words with visual situations instead
-          of translating every sentence in your head.
+          Connect Chinese words with visual situations
+          instead of translating every sentence in
+          your head.
         </p>
 
       </div>
 
-
-
-      <!--
-
-        STORY.JS INSERTS THE EXCEL DATA HERE.
-
-        Source:
-        Story sheet in data/lessons.xlsx
-
-      -->
 
       <div
         class="story-image-grid"
         id="storyImageGrid"
       >
 
-        <p>
+        <div class="loading-message">
           Loading story images...
-        </p>
+        </div>
 
       </div>
 
@@ -250,10 +207,7 @@
   </section>
 
 
-
-  <!-- =====================================================
-       03 · READ
-       ===================================================== -->
+  <!-- ================= READING ================= -->
 
   <section
     class="story-reading"
@@ -262,45 +216,32 @@
 
     <div class="container">
 
-
       <div class="section-heading">
 
         <span class="section-label">
-          03 · Read
+          03 · READ
         </span>
-
 
         <h2>
           Read the story.
         </h2>
 
-
         <p>
-          Read each sentence in Chinese. Look at the pinyin when
-          you need help, then listen to the sentence.
+          Read each sentence in Chinese. Look at
+          the pinyin when you need help, then listen.
         </p>
 
       </div>
 
-
-
-      <!--
-
-        STORY.JS INSERTS STORY SENTENCES HERE.
-
-        Source:
-        Story sheet in data/lessons.xlsx
-
-      -->
 
       <div
         class="reading-card"
         id="storyContent"
       >
 
-        <p>
+        <div class="loading-message">
           Loading story...
-        </p>
+        </div>
 
       </div>
 
@@ -309,53 +250,38 @@
   </section>
 
 
-
-  <!-- =====================================================
-       04 · VOCABULARY
-       ===================================================== -->
+  <!-- ================= VOCABULARY ================= -->
 
   <section class="story-vocabulary">
 
     <div class="container">
 
-
       <div class="section-heading">
 
         <span class="section-label">
-          04 · Vocabulary
+          04 · VOCABULARY
         </span>
-
 
         <h2>
           Key words from the story.
         </h2>
 
-
         <p>
-          Learn the most useful words before moving on.
+          Learn the most useful words before
+          moving on.
         </p>
 
       </div>
 
-
-
-      <!--
-
-        STORY.JS INSERTS VOCABULARY HERE.
-
-        Source:
-        Vocabulary sheet in data/lessons.xlsx
-
-      -->
 
       <div
         class="vocabulary-grid"
         id="vocabularyContent"
       >
 
-        <p>
+        <div class="loading-message">
           Loading vocabulary...
-        </p>
+        </div>
 
       </div>
 
@@ -364,24 +290,11 @@
   </section>
 
 
-
-  <!-- =====================================================
-       05 · EXERCISES
-       ===================================================== -->
+  <!-- ================= EXERCISES ================= -->
 
   <section class="story-quiz">
 
     <div class="container">
-
-
-      <!--
-
-        STORY.JS INSERTS EXERCISES HERE.
-
-        Source:
-        Exercises sheet in data/lessons.xlsx
-
-      -->
 
       <div
         class="story-quiz-card"
@@ -389,14 +302,12 @@
       >
 
         <span class="section-label">
-          05 · Check Your Understanding
+          05 · CHECK YOUR UNDERSTANDING
         </span>
-
 
         <h2>
           Loading exercise...
         </h2>
-
 
         <p>
           Loading your exercise...
@@ -409,58 +320,63 @@
   </section>
 
 
-
-  <!-- =====================================================
-       FOOTER
-       ===================================================== -->
+  <!-- ================= FOOTER ================= -->
 
   <footer>
 
-    <div class="container">
+    <div class="container footer-inner">
 
-      <p>
+      <div class="footer-brand">
+
+        <a href="index.html" class="logo">
+
+          <span class="logo-mark">
+            文
+          </span>
+
+          <span class="logo-text">
+            <strong>LinguaPath</strong>
+            <small>Language Learning Hub</small>
+          </span>
+
+        </a>
+
+        <p>
+          Learn visually. Listen carefully.
+          Speak confidently.
+        </p>
+
+      </div>
+
+      <div class="footer-links">
+
+        <a href="index.html#methodology">
+          Methodology
+        </a>
+
+        <a href="index.html#learning-hub">
+          Learning Hub
+        </a>
+
+      </div>
+
+    </div>
+
+    <div class="container footer-bottom">
+
+      <span>
         © 2026 LinguaPath Learning Hub.
-        Learn visually. Listen carefully. Speak confidently.
-      </p>
+      </span>
 
     </div>
 
   </footer>
 
 
+  <!-- ================= JAVASCRIPT ================= -->
 
-  <!-- =====================================================
-       JAVASCRIPT
-       ===================================================== -->
-
-
-  <!--
-    SheetJS
-    Used to read data/lessons.xlsx
-  -->
-
-  <script
-    src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"
-  ></script>
-
-
-  <!--
-    Story application
-
-    This file:
-    - Reads lessons.xlsx
-    - Finds the lesson from ?id=
-    - Loads video
-    - Loads images
-    - Loads story sentences
-    - Loads vocabulary
-    - Loads exercises
-    - Handles pronunciation
-  -->
-
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="story.js"></script>
 
-
 </body>
-
 </html>
