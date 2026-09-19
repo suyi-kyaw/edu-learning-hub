@@ -439,7 +439,7 @@ function initializeMicroQuiz() {
           if (feedback) {
 
             feedback.textContent =
-              "Correct!";
+              "Correct! 妈 (mā) means mother.";
 
             feedback.className =
               "quiz-feedback correct-feedback";
@@ -455,7 +455,7 @@ function initializeMicroQuiz() {
           if (feedback) {
 
             feedback.textContent =
-              "Not quite. Try again!";
+              "Not quite. 妈 (mā) means mother.";
 
             feedback.className =
               "quiz-feedback incorrect-feedback";
@@ -473,7 +473,7 @@ function initializeMicroQuiz() {
 
 
 /* =========================================================
-   EXCEL DATA & STATE
+   EXCEL DATA
    ========================================================= */
 
 const EXCEL_FILE =
@@ -532,7 +532,7 @@ function readExcelSheet(
 
 
 /* =========================================================
-   LOAD EXCEL & POPULATE DEMOS
+   LOAD EXCEL
    ========================================================= */
 
 async function loadExcelData() {
@@ -622,13 +622,9 @@ async function loadExcelData() {
     );
 
 
-    // Render standard lesson cards into the main grid
     renderLessonCards(
       lessonData.lessons
     );
-
-    // Populate Demo Lessons Section with Excel Data
-    populateDemoSectionFromExcel(workbook);
 
 
     document.dispatchEvent(
@@ -677,103 +673,6 @@ async function loadExcelData() {
 
   }
 
-}
-
-
-/* =========================================================
-   POPULATE DEMO SECTION FROM EXCEL WORKBOOK
-   ========================================================= */
-
-function populateDemoSectionFromExcel(workbook) {
-
-  // 1. Everyday Chinese (Phrases / Vocabulary Sheet)
-  const phrasesSheet = workbook.Sheets['Phrases'] || workbook.Sheets['Vocabulary'] || workbook.Sheets[workbook.SheetNames[1]];
-  if (phrasesSheet) {
-    const phrases = XLSX.utils.sheet_to_json(phrasesSheet, { defval: "" });
-    if (phrases.length > 0) {
-      const item = phrases[0];
-      const chinese = getValue(item, "chinese", "Chinese", "Text", "text") || "你好";
-      const pinyin = getValue(item, "pinyin", "Pinyin") || "Nǐ hǎo";
-      const meaning = getValue(item, "meaning", "Meaning", "English", "english") || "Hello";
-
-      const chineseEl = document.getElementById('demoGreetingChinese');
-      const pinyinEl = document.getElementById('demoGreetingPinyin');
-      const meaningEl = document.getElementById('demoGreetingMeaning');
-      const speechBtn = document.getElementById('demoGreetingSpeechButton');
-
-      if (chineseEl) chineseEl.textContent = chinese;
-      if (pinyinEl) pinyinEl.textContent = pinyin;
-      if (meaningEl) meaningEl.textContent = meaning;
-      if (speechBtn) speechBtn.dataset.text = `${chinese}。${pinyin}.`;
-    }
-  }
-
-  // 2. Mini Dialogue (Story / Dialogues Sheet)
-  const dialogueSheet = workbook.Sheets['Dialogues'] || workbook.Sheets['Story'] || workbook.Sheets[workbook.SheetNames[2]];
-  if (dialogueSheet) {
-    const dialogueLines = XLSX.utils.sheet_to_json(dialogueSheet, { defval: "" });
-    const container = document.getElementById('demoDialogueContainer');
-    
-    if (dialogueLines.length > 0 && container) {
-      // Pick up to first 2 dialogue lines for demo display
-      const linesToShow = dialogueLines.slice(0, 2);
-      
-      container.innerHTML = linesToShow.map((line, idx) => {
-        const speaker = getValue(line, "speaker", "Speaker") || (idx === 0 ? "A" : "B");
-        const chinese = getValue(line, "chinese", "Chinese", "text", "Text") || "";
-        const pinyin = getValue(line, "pinyin", "Pinyin") || "";
-        const meaning = getValue(line, "meaning", "Meaning", "english", "English") || "";
-
-        return `
-          <div class="dialogue-line">
-            <span class="dialogue-speaker">${escapeHTML(speaker)}</span>
-            <div>
-              <strong>${escapeHTML(chinese)}</strong>
-              <small>${escapeHTML(pinyin)}</small>
-              <em>${escapeHTML(meaning)}</em>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-  }
-
-  // 3. Quick Check Quiz (Exercises / Quiz Sheet)
-  const quizSheet = workbook.Sheets['Exercises'] || workbook.Sheets['Quiz'] || workbook.Sheets[workbook.SheetNames[3]];
-  if (quizSheet) {
-    const quizData = XLSX.utils.sheet_to_json(quizSheet, { defval: "" });
-    if (quizData.length > 0) {
-      const q = quizData[0];
-      const questionText = getValue(q, "question", "Question", "prompt", "Prompt");
-      const word = getValue(q, "word", "Word", "chinese", "Chinese");
-      const correctAnswer = getValue(q, "correctAnswer", "CorrectAnswer", "answer", "Answer");
-      const option1 = getValue(q, "option1", "Option1", "opt1");
-      const option2 = getValue(q, "option2", "Option2", "opt2");
-      const option3 = getValue(q, "option3", "Option3", "opt3");
-
-      const questionEl = document.getElementById('demoQuizQuestion');
-      const optionsContainer = document.getElementById('demoQuizOptions');
-
-      if (questionEl) {
-        if (questionText) {
-          questionEl.innerHTML = escapeHTML(questionText);
-        } else if (word) {
-          questionEl.innerHTML = `What does <strong>${escapeHTML(word)}</strong> mean?`;
-        }
-      }
-
-      if (optionsContainer && (option1 || option2 || option3)) {
-        optionsContainer.innerHTML = `
-          <button type="button" data-answer="${String(option1).trim() === String(correctAnswer).trim() ? 'correct' : 'wrong'}">${escapeHTML(option1)}</button>
-          <button type="button" data-answer="${String(option2).trim() === String(correctAnswer).trim() ? 'correct' : 'wrong'}">${escapeHTML(option2)}</button>
-          <button type="button" data-answer="${String(option3).trim() === String(correctAnswer).trim() ? 'correct' : 'wrong'}">${escapeHTML(option3)}</button>
-        `;
-
-        // Re-bind click event handlers for the newly inserted options
-        initializeMicroQuiz();
-      }
-    }
-  }
 }
 
 
