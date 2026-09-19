@@ -390,25 +390,25 @@
       </div>
 
 
-      <!-- Demo Grid Wrapper (Strict 2-Column Layout Container) -->
+      <!-- Demo Grid Wrapper (2x2 Layout) -->
       <div class="demos-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
 
-        <!-- Row 1, Column 1: Pronunciation -->
-        <article class="demo-card tone-demo">
+        <!-- 1. Pronunciation (Tone Lesson) -->
+        <article class="demo-card tone-demo" id="demoToneCard">
 
           <div class="demo-card-header">
 
             <div>
 
-              <span class="demo-label">
+              <span class="demo-label" id="toneDemoLabel">
                 Pronunciation
               </span>
 
-              <h3>
+              <h3 id="toneDemoTitle">
                 The Four Tones
               </h3>
 
-              <p>
+              <p id="toneDemoDescription">
                 See and hear how Mandarin tones change.
               </p>
 
@@ -417,7 +417,7 @@
           </div>
 
 
-          <div class="tone-buttons">
+          <div class="tone-buttons" id="toneButtons">
 
             <button
               class="tone-button active"
@@ -519,18 +519,18 @@
         </article>
 
 
-        <!-- Row 1, Column 2: Everyday Chinese -->
-        <article class="demo-card greeting-demo">
+        <!-- 2. Everyday Chinese (Greeting Container) -->
+        <article class="demo-card greeting-demo" id="demoGreetingCard">
 
           <div class="demo-card-header">
 
             <div>
 
-              <span class="demo-label">
+              <span class="demo-label" id="greetingDemoLabel">
                 Everyday Chinese
               </span>
 
-              <h3>
+              <h3 id="greetingDemoTitle">
                 Practical Greeting
               </h3>
 
@@ -539,22 +539,23 @@
           </div>
 
 
-          <div class="language-example">
+          <div class="language-example" id="demoGreetingContent">
 
-            <div class="chinese-large">
+            <div class="chinese-large" id="demoGreetingChinese">
               你好
             </div>
 
-            <div class="pinyin-large">
+            <div class="pinyin-large" id="demoGreetingPinyin">
               Nǐ hǎo
             </div>
 
-            <div class="meaning-large">
+            <div class="meaning-large" id="demoGreetingMeaning">
               Hello
             </div>
 
             <button
               class="speech-button"
+              id="demoGreetingSpeechButton"
               data-text="你好。Nǐ hǎo."
               type="button"
             >
@@ -566,18 +567,18 @@
         </article>
 
 
-        <!-- Row 2, Column 1: Conversation -->
-        <article class="demo-card dialogue-demo">
+        <!-- 3. Conversation (Dialogue Container) -->
+        <article class="demo-card dialogue-demo" id="demoDialogueCard">
 
           <div class="demo-card-header">
 
             <div>
 
-              <span class="demo-label">
+              <span class="demo-label" id="dialogueDemoLabel">
                 Conversation
               </span>
 
-              <h3>
+              <h3 id="dialogueDemoTitle">
                 Mini Dialogue
               </h3>
 
@@ -586,7 +587,7 @@
           </div>
 
 
-          <div class="dialogue">
+          <div class="dialogue" id="demoDialogueContainer">
 
             <div class="dialogue-line">
 
@@ -642,18 +643,18 @@
         </article>
 
 
-        <!-- Row 2, Column 2: Quick Check -->
-        <article class="demo-card vocabulary-demo">
+        <!-- 4. Quick Check (Vocabulary Quiz Container) -->
+        <article class="demo-card vocabulary-demo" id="demoQuizCard">
 
           <div class="demo-card-header">
 
             <div>
 
-              <span class="demo-label">
+              <span class="demo-label" id="quizDemoLabel">
                 Quick Check
               </span>
 
-              <h3>
+              <h3 id="quizDemoTitle">
                 Micro Vocabulary Quiz
               </h3>
 
@@ -662,13 +663,13 @@
           </div>
 
 
-          <div class="micro-quiz">
+          <div class="micro-quiz" id="demoQuizContainer">
 
-            <p>
+            <p id="demoQuizQuestion">
               What does <strong>妈 (mā)</strong> mean?
             </p>
 
-            <div class="micro-options">
+            <div class="micro-options" id="demoQuizOptions">
 
               <button
                 type="button"
