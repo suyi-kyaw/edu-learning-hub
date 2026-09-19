@@ -454,15 +454,27 @@
 
         <div class="tone-display">
 
-          <div class="tone-word">
+          <div class="tone-word-wrapper" style="display: flex; align-items: center; justify-content: center; gap: 1rem;">
 
-            <span id="toneSyllable">
-              mā
-            </span>
+            <div class="tone-word">
 
-            <small id="toneCharacter">
-              妈
-            </small>
+              <span id="toneSyllable">
+                mā
+              </span>
+
+              <small id="toneCharacter">
+                妈
+              </small>
+
+            </div>
+
+            <button
+              id="toneAudioButton"
+              class="primary-button"
+              type="button"
+            >
+              🔊 Listen
+            </button>
 
           </div>
 
@@ -496,15 +508,6 @@
           </div>
 
         </div>
-
-
-        <button
-          id="toneAudioButton"
-          class="primary-button"
-          type="button"
-        >
-          🔊 Listen
-        </button>
 
         <audio
           id="currentToneAudio"
