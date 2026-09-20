@@ -1,28 +1,15 @@
-```html
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
+  <title>LinguaPath - Learn Chinese</title>
 
   <meta
     name="description"
-    content="LinguaPath — an interactive language learning hub combining visual learning, pronunciation, stories, vocabulary, and practice."
-  >
-
-  <title>LinguaPath | Language Learning Hub</title>
-
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-  <link
-    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Roboto:wght@400;500;600;700&display=swap"
-    rel="stylesheet"
+    content="Learn Chinese through pronunciation, everyday conversations, vocabulary, exercises, and interactive lessons."
   >
 
   <link rel="stylesheet" href="style.css">
@@ -31,671 +18,382 @@
 <body>
 
   <!-- =========================
-       NAVIGATION
+       HEADER / NAVIGATION
   ========================== -->
-
-  <nav class="navbar">
-
-    <div class="nav-inner">
+  <header class="site-header">
+    <div class="container nav-container">
 
       <a href="index.html" class="logo">
-        <span class="logo-mark">文</span>
-
-        <span class="logo-text">
-          <strong>LinguaPath</strong>
-          <small>Language Learning Hub</small>
-        </span>
-      </a>
-
-      <div class="nav-links">
-        <a href="#methodology">Methodology</a>
-        <a href="#journey">Learning Journey</a>
-        <a href="#demos">Demo Lessons</a>
-        <a href="#learning-hub">Learning Hub</a>
-      </div>
-
-      <a
-        href="#learning-hub"
-        class="nav-button"
-      >
-        Start Learning
+        <span class="logo-chinese">语</span>
+        <span class="logo-text">LinguaPath</span>
       </a>
 
       <button
-        class="mobile-menu-button"
-        id="mobileMenuButton"
+        class="menu-toggle"
+        id="menuToggle"
         type="button"
-        aria-label="Open navigation"
+        aria-label="Toggle navigation"
         aria-expanded="false"
       >
         ☰
       </button>
 
-    </div>
+      <nav class="main-nav" id="mainNav">
+        <a href="#home">Home</a>
+        <a href="#demos">Demo Lessons</a>
+        <a href="#lessons">Learning Hub</a>
+        <a href="#story">Story</a>
+      </nav>
 
-    <div
-      class="mobile-menu"
-      id="mobileMenu"
-    >
-      <a href="#methodology">Methodology</a>
-      <a href="#journey">Learning Journey</a>
-      <a href="#demos">Demo Lessons</a>
-      <a href="#learning-hub">Learning Hub</a>
     </div>
-
-  </nav>
+  </header>
 
 
   <!-- =========================
        HERO
   ========================== -->
+  <main>
 
-  <header class="hero section-light">
+    <section class="hero" id="home">
+      <div class="container hero-content">
 
-    <div class="container hero-grid">
+        <div class="hero-text">
+          <span class="eyebrow">Learn Chinese Step by Step</span>
 
-      <div class="hero-content">
+          <h1>
+            Learn Chinese
+            <span>with Confidence.</span>
+          </h1>
 
-        <span class="section-label">
-          Language Learning Hub
-        </span>
+          <p>
+            Build your Chinese skills through pronunciation,
+            everyday expressions, conversations, vocabulary,
+            and practical exercises.
+          </p>
 
-        <h1>
-          Learn languages
-          <span>through connection.</span>
-        </h1>
+          <div class="hero-buttons">
+            <a href="#demos" class="btn btn-primary">
+              Explore Demo Lessons
+            </a>
 
-        <p class="hero-description">
-          LinguaPath combines visual association,
-          pronunciation, contextual stories,
-          vocabulary, and active practice
-          into one simple learning journey.
-        </p>
+            <a href="#lessons" class="btn btn-secondary">
+              Learning Hub
+            </a>
+          </div>
+        </div>
 
-        <div class="hero-actions">
+        <div class="hero-visual">
+          <div class="hero-character">你好</div>
 
-          <a
-            href="#learning-hub"
-            class="primary-button"
-          >
-            Explore Lessons
-          </a>
+          <div class="hero-pinyin">
+            Nǐ hǎo
+          </div>
 
-          <a
-            href="#methodology"
-            class="secondary-button"
-          >
-            How It Works
-          </a>
-
+          <div class="hero-translation">
+            Hello
+          </div>
         </div>
 
       </div>
+    </section>
 
 
-      <div class="hero-character-card">
+    <!-- =========================
+         DEMO LESSONS
+    ========================== -->
+    <section class="section demos-section" id="demos">
 
-        <div class="hero-character">
-          学
+      <div class="container">
+
+        <div class="section-heading">
+          <span class="section-label">Interactive Practice</span>
+
+          <h2>Demo Lessons</h2>
+
+          <p>
+            Explore a few interactive examples from the
+            LinguaPath learning experience.
+          </p>
         </div>
 
-        <div class="hero-character-pinyin">
-          xué
-        </div>
 
-        <div class="hero-character-meaning">
-          to learn
-        </div>
-
-        <button
-          class="speech-button hero-speech"
-          data-text="学，xué"
-          type="button"
-        >
-          🔊 Listen
-        </button>
-
-      </div>
-
-    </div>
-
-  </header>
-
-
-  <!-- =========================
-       METHODOLOGY
-  ========================== -->
-
-  <section
-    class="section section-alt"
-    id="methodology"
-  >
-
-    <div class="container">
-
-      <div class="section-heading">
-
-        <span class="section-label">
-          Our Method
-        </span>
-
-        <h2>
-          Learning built around connection.
-        </h2>
-
-        <p>
-          Instead of memorizing isolated words,
-          LinguaPath connects sounds, characters,
-          images, meanings, and real situations.
-        </p>
-
-      </div>
-
-
-      <div class="method-grid">
-
-        <article class="method-card">
-
-          <div class="method-number">
-            01
-          </div>
-
-          <h3>
-            Visual & Auditory Association
-          </h3>
-
-          <p>
-            Connect new language with visual situations
-            and authentic pronunciation.
-          </p>
-
-        </article>
-
-
-        <article class="method-card">
-
-          <div class="method-number">
-            02
-          </div>
-
-          <h3>
-            Pinyin & Tone Foundation
-          </h3>
-
-          <p>
-            Build pronunciation confidence by understanding
-            sounds and tones from the beginning.
-          </p>
-
-        </article>
-
-
-        <article class="method-card">
-
-          <div class="method-number">
-            03
-          </div>
-
-          <h3>
-            Contextual Conversation
-          </h3>
-
-          <p>
-            Move from individual words to useful sentences
-            and everyday communication.
-          </p>
-
-        </article>
-
-      </div>
-
-    </div>
-
-  </section>
-
-
-  <!-- =========================
-       LEARNING JOURNEY
-  ========================== -->
-
-  <section
-    class="section section-light"
-    id="journey"
-  >
-
-    <div class="container">
-
-      <div class="section-heading">
-
-        <span class="section-label">
-          Student Journey
-        </span>
-
-        <h2>
-          A simple path from listening to speaking.
-        </h2>
-
-      </div>
-
-
-      <div class="journey-grid">
-
-        <article class="journey-card">
-
-          <span class="journey-number">
-            01
-          </span>
-
-          <h3>
-            Listen & Repeat
-          </h3>
-
-          <p>
-            Hear the pronunciation and repeat the sound
-            before worrying about memorization.
-          </p>
-
-        </article>
-
-
-        <article class="journey-card">
-
-          <span class="journey-number">
-            02
-          </span>
-
-          <h3>
-            Read & Recognize
-          </h3>
-
-          <p>
-            Connect the sound with pinyin, characters,
-            images, and meaning.
-          </p>
-
-        </article>
-
-
-        <article class="journey-card">
-
-          <span class="journey-number">
-            03
-          </span>
-
-          <h3>
-            Practice & Self-Check
-          </h3>
-
-          <p>
-            Use exercises and short quizzes to check
-            understanding.
-          </p>
-
-        </article>
-
-      </div>
-
-    </div>
-
-  </section>
-
-
-  <!-- =========================
-       DEMO LESSONS
-       LOADED FROM EXCEL
-  ========================== -->
-
-  <section
-    class="section section-alt"
-    id="demos"
-  >
-
-    <div class="container">
-
-      <div class="section-heading">
-
-        <span class="section-label">
-          Demo Lessons
-        </span>
-
-        <h2>
-          Start with the building blocks.
-        </h2>
-
-        <p>
-          Demo lesson content is loaded dynamically
-          from the <strong>Demo</strong> sheet in
-          <strong>data/lessons.xlsx</strong>.
-        </p>
-
-      </div>
-
-
-      <div class="demos-grid">
-
-
-        <!-- =========================
-             PRONUNCIATION
-        ========================== -->
-
-        <article class="demo-card tone-demo">
-
-          <div class="demo-card-header">
-
-            <div>
-
-              <span class="demo-label">
-                Pronunciation
-              </span>
-
-              <h3>
-                The Four Tones
-              </h3>
-
-              <p>
-                See and hear how Mandarin tones change.
-              </p>
-
-            </div>
-
-          </div>
-
-
-          <div
-            class="tone-buttons"
-            id="toneButtons"
-          >
-            <div class="loading-card">
-              Loading pronunciation...
-            </div>
-          </div>
-
-
-          <div class="tone-display">
-
-            <div
-              class="tone-word-wrapper"
-              style="
-                display:flex;
-                align-items:center;
-                justify-content:flex-start;
-                gap:1rem;
-              "
-            >
-
-              <div class="tone-word">
-
-                <span id="toneSyllable">
-                  mā
-                </span>
-
-                <small id="toneCharacter">
-                  妈
-                </small>
-
+        <!--
+          Demo cards are arranged:
+          
+          Pronunciation | Everyday Chinese
+          Conversation   | Quick Check
+
+          Content inside these cards is loaded dynamically
+          from the Demo sheet in data/lessons.xlsx.
+        -->
+        <div class="demos-grid">
+
+          <!-- =========================
+               PRONUNCIATION
+          ========================== -->
+          <article class="demo-card pronunciation-card">
+
+            <div class="demo-card-header">
+              <div>
+                <span class="card-label">01</span>
+                <h3>Pronunciation</h3>
               </div>
 
+              <span class="card-icon">声</span>
+            </div>
+
+            <div class="tone-buttons" id="toneButtons">
+              <!-- Generated by main.js -->
+            </div>
+
+            <div class="tone-display">
+
+              <div class="tone-main">
+                <div class="tone-syllable" id="toneSyllable">
+                  mā
+                </div>
+
+                <div class="tone-character" id="toneCharacter">
+                  妈
+                </div>
+              </div>
 
               <button
+                class="audio-button"
                 id="toneAudioButton"
-                class="primary-button"
                 type="button"
               >
-                🔊 Listen
+                ▶ Play
               </button>
 
             </div>
 
-
-            <div class="tone-graph">
-
+            <div class="tone-graph" aria-hidden="true">
               <svg
-                viewBox="0 0 500 110"
-                preserveAspectRatio="none"
+                viewBox="0 0 300 100"
+                role="img"
+                aria-label="Tone contour"
               >
-
                 <path
                   id="tonePath"
-                  d="M20 30 L480 30"
+                  d="M10 70 L290 70"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="5"
                   stroke-linecap="round"
                 />
-
               </svg>
-
             </div>
 
+            <p class="tone-description" id="toneDescription">
+              Select a tone to hear the pronunciation.
+            </p>
+
+            <audio id="currentToneAudio" preload="none"></audio>
+
+          </article>
+
+
+          <!-- =========================
+               EVERYDAY CHINESE
+          ========================== -->
+          <article class="demo-card everyday-card">
+
+            <div class="demo-card-header">
+              <div>
+                <span class="card-label">02</span>
+                <h3>Everyday Chinese</h3>
+              </div>
+
+              <span class="card-icon">日</span>
+            </div>
 
             <div
-              class="tone-description"
-              id="toneDescription"
+              class="dynamic-demo-content"
+              id="everydayChineseDemo"
             >
-              Loading tone...
+              <div class="loading-message">
+                Loading lesson...
+              </div>
             </div>
 
-          </div>
+          </article>
 
 
-          <audio
-            id="currentToneAudio"
-            preload="none"
-          ></audio>
+          <!-- =========================
+               CONVERSATION
+          ========================== -->
+          <article class="demo-card conversation-card">
 
-        </article>
+            <div class="demo-card-header">
+              <div>
+                <span class="card-label">03</span>
+                <h3>Conversation</h3>
+              </div>
 
-
-        <!-- =========================
-             EVERYDAY CHINESE
-        ========================== -->
-
-        <article class="demo-card greeting-demo">
-
-          <div class="demo-card-header">
-
-            <div>
-
-              <span class="demo-label">
-                Everyday Chinese
-              </span>
-
-              <h3>
-                Practical Greeting
-              </h3>
-
-              <p>
-                A useful phrase for everyday communication.
-              </p>
-
+              <span class="card-icon">对</span>
             </div>
 
-          </div>
-
-
-          <div
-            class="language-example"
-            id="everydayChineseDemo"
-          >
-
-            <div class="loading-card">
-              Loading Everyday Chinese...
+            <div
+              class="dynamic-demo-content"
+              id="conversationDemo"
+            >
+              <div class="loading-message">
+                Loading conversation...
+              </div>
             </div>
 
-          </div>
-
-        </article>
+          </article>
 
 
-        <!-- =========================
-             CONVERSATION
-        ========================== -->
+          <!-- =========================
+               QUICK CHECK
+          ========================== -->
+          <article class="demo-card quick-check-card">
 
-        <article class="demo-card dialogue-demo">
+            <div class="demo-card-header">
+              <div>
+                <span class="card-label">04</span>
+                <h3>Quick Check</h3>
+              </div>
 
-          <div class="demo-card-header">
-
-            <div>
-
-              <span class="demo-label">
-                Conversation
-              </span>
-
-              <h3>
-                Mini Dialogue
-              </h3>
-
-              <p>
-                Practice a short real-life conversation.
-              </p>
-
+              <span class="card-icon">✓</span>
             </div>
 
-          </div>
-
-
-          <div
-            class="dialogue"
-            id="conversationDemo"
-          >
-
-            <div class="loading-card">
-              Loading conversation...
+            <div
+              class="dynamic-demo-content"
+              id="quickCheckDemo"
+            >
+              <div class="loading-message">
+                Loading questions...
+              </div>
             </div>
 
-          </div>
+          </article>
 
-        </article>
-
-
-        <!-- =========================
-             QUICK CHECK
-        ========================== -->
-
-        <article class="demo-card vocabulary-demo">
-
-          <div class="demo-card-header">
-
-            <div>
-
-              <span class="demo-label">
-                Quick Check
-              </span>
-
-              <h3>
-                Quick Knowledge Check
-              </h3>
-
-              <p>
-                Check your understanding.
-              </p>
-
-            </div>
-
-          </div>
-
-
-          <div
-            class="micro-quiz"
-            id="quickCheckDemo"
-          >
-
-            <div class="loading-card">
-              Loading questions...
-            </div>
-
-          </div>
-
-        </article>
+        </div>
 
       </div>
-
-    </div>
-
-  </section>
+    </section>
 
 
-  <!-- =========================
-       LEARNING HUB
-       LOADED FROM EXCEL
-  ========================== -->
+    <!-- =========================
+         LEARNING HUB
+    ========================== -->
+    <section class="section learning-section" id="lessons">
 
-  <section
-    class="section section-light"
-    id="learning-hub"
-  >
+      <div class="container">
 
-    <div class="container">
+        <div class="section-heading">
+          <span class="section-label">Continue Learning</span>
 
-      <div class="section-heading">
+          <h2>Learning Hub</h2>
 
-        <span class="section-label">
-          Learning Hub
-        </span>
+          <p>
+            Choose a lesson and continue building your
+            Chinese skills.
+          </p>
+        </div>
 
-        <h2>
-          Explore your lessons.
-        </h2>
-
-        <p>
-          Your lessons, stories, vocabulary,
-          and exercises are loaded from
-          the LinguaPath Excel workbook.
-        </p>
+        <div
+          class="lesson-grid"
+          id="lessonGrid"
+        >
+          <div class="loading-message">
+            Loading lessons...
+          </div>
+        </div>
 
       </div>
+    </section>
 
 
-      <div
-        id="lessonGrid"
-        class="lesson-grid"
-      >
+    <!-- =========================
+         STORY SECTION
+    ========================== -->
+    <section class="section story-section" id="story">
 
-        <div class="loading-card">
-          Loading lessons...
+      <div class="container story-preview">
+
+        <div class="story-image">
+          <img
+            src="assets/images/story-poster.jpg"
+            alt="Chinese learning story"
+          >
+        </div>
+
+        <div class="story-content">
+
+          <span class="section-label">
+            Learn Through Stories
+          </span>
+
+          <h2>Learn Chinese in Context</h2>
+
+          <p>
+            Follow a simple story and discover useful
+            Chinese vocabulary and expressions along
+            the way.
+          </p>
+
+          <a href="story.html" class="btn btn-primary">
+            Read the Story
+          </a>
+
         </div>
 
       </div>
 
-    </div>
+    </section>
 
-  </section>
+  </main>
 
 
   <!-- =========================
        FOOTER
   ========================== -->
+  <footer class="site-footer">
 
-  <footer class="section-dark-alt">
+    <div class="container footer-content">
 
-    <div class="container">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <span>语</span>
+          LinguaPath
+        </div>
 
-      <p>
-        © 2026 LinguaPath Learning Hub.
-        Learn visually. Listen carefully.
-        Speak confidently.
-      </p>
+        <p>
+          A practical path to learning Chinese.
+        </p>
+      </div>
 
+      <div class="footer-links">
+        <a href="#home">Home</a>
+        <a href="#demos">Demo Lessons</a>
+        <a href="#lessons">Learning Hub</a>
+        <a href="story.html">Story</a>
+      </div>
+
+    </div>
+
+    <div class="footer-bottom">
+      <div class="container">
+        <p>
+          © 2026 LinguaPath. Learn Chinese step by step.
+        </p>
+      </div>
     </div>
 
   </footer>
 
 
-  <!-- =========================
-       SHEETJS
-  ========================== -->
+  <!--
+    SheetJS is used by main.js to read lessons.xlsx.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
-  <script
-    src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"
-  ></script>
-
-
-  <!-- =========================
-       MAIN JAVASCRIPT
-  ========================== -->
-
+  <!-- Main application JavaScript -->
   <script src="main.js"></script>
 
 </body>
 </html>
-```
