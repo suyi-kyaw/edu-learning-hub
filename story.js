@@ -16,29 +16,33 @@ const EXCEL_FILE =
    ========================================================= */
 
 function escapeHTML(value) {
-
   return String(value ?? "")
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
+function getStoryFallbackSvg(chinese, pinyin, english) {
+  const c = escapeHTML(chinese || "中文故事");
+  const p = escapeHTML(pinyin || "Zhōngwén Gùshì");
+  const e = escapeHTML(english || "Chinese Story");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="100%" height="100%">
+    <defs>
+      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#fff7ed" />
+        <stop offset="100%" stop-color="#ffedd5" />
+      </linearGradient>
+    </defs>
+    <rect width="600" height="400" fill="url(#g)" rx="16" />
+    <circle cx="300" cy="130" r="54" fill="#fb923c" fill-opacity="0.2" />
+    <text x="300" y="150" font-size="52" text-anchor="middle">📖</text>
+    <text x="300" y="240" font-family="'Noto Serif SC', 'Songti SC', serif" font-weight="bold" font-size="34" fill="#9a3412" text-anchor="middle">${c}</text>
+    <text x="300" y="285" font-family="system-ui, sans-serif" font-weight="600" font-size="18" fill="#ea580c" text-anchor="middle">${p}</text>
+    <text x="300" y="325" font-family="system-ui, sans-serif" font-size="16" fill="#78350f" text-anchor="middle">${e}</text>
+  </svg>`;
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
 }
 
 
@@ -575,10 +579,14 @@ function renderVideo(
 
 
     if (poster) {
-
-      videoElement.poster =
-        poster;
-
+      videoElement.poster = poster;
+      videoElement.onerror = () => {
+        if (videoElement.poster.endsWith(".jpg")) {
+          videoElement.poster = videoElement.poster.replace(/\.jpg$/, ".svg");
+        } else if (videoElement.poster.endsWith(".svg")) {
+          videoElement.poster = videoElement.poster.replace(/\.svg$/, ".png");
+        }
+      };
     }
 
   }
@@ -678,17 +686,38 @@ function renderStoryImages(
           );
 
 
+        const fallbackDataUri = getStoryFallbackSvg(chinese, getValue(row, "pinyin", "Pinyin"), english);
+
         return `
-
           <article class="story-image-card">
-
             <img
               src="${escapeHTML(image)}"
               alt="${escapeHTML(
                 english || chinese || `Story scene ${index + 1}`
               )}"
               loading="lazy"
-              onerror="this.onerror=null; if(this.src.endsWith('.jpg')) { this.src = this.src.replace('.jpg', '.svg'); } else { this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 600 400\' width=\'100%25\' height=\'100%25\'><rect width=\'600\' height=\'400\' fill=\'%23f8fafc\'/><text x=\'50%25\' y=\'45%25\' font-size=\'48\' text-anchor=\'middle\'>📖</text><text x=\'50%25\' y=\'65%25\' font-size=\'22\' font-weight=\'bold\' fill=\'%23334155\' text-anchor=\'middle\'>${encodeURIComponent(chinese || 'Story Scene')}</text></svg>'; }"
+              data-fallback="${fallbackDataUri}"
+              onerror="
+                if (!this.dataset.step) {
+                  this.dataset.step = '1';
+                  if (this.src.endsWith('.jpg')) {
+                    this.src = this.src.replace(/\\.jpg$/, '.svg');
+                    return;
+                  } else if (this.src.endsWith('.svg')) {
+                    this.src = this.src.replace(/\\.svg$/, '.png');
+                    return;
+                  }
+                }
+                if (this.dataset.step === '1') {
+                  this.dataset.step = '2';
+                  if (this.src.endsWith('.svg')) {
+                    this.src = this.src.replace(/\\.svg$/, '.png');
+                    return;
+                  }
+                }
+                this.onerror = null;
+                this.src = this.dataset.fallback;
+              "
             >
 
 

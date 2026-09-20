@@ -1509,7 +1509,7 @@ function renderLearningHub() {
       <div class="lesson-card-image">
         ${
           poster
-            ? `<img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}">`
+            ? `<img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}" loading="lazy" onerror="if (this.src.endsWith('.jpg')) { this.src = this.src.replace(/\\.jpg$/, '.svg'); } else if (this.src.endsWith('.svg')) { this.src = this.src.replace(/\\.svg$/, '.png'); } else { this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 800 450\\' width=\\'100%25\\' height=\\'100%25\\'><rect width=\\'800\\' height=\\'450\\' fill=\\'%23fff7ed\\'/><text x=\\'50%25\\' y=\\'45%25\\' font-size=\\'56\\' text-anchor=\\'middle\\'>📖</text><text x=\\'50%25\\' y=\\'65%25\\' font-size=\\'28\\' font-weight=\\'bold\\' fill=\\'%239a3412\\' text-anchor=\\'middle\\'>${encodeURIComponent(title || 'Chinese Lesson')}</text></svg>'; }">`
             : `<div class="lesson-card-placeholder">文</div>`
         }
       </div>
