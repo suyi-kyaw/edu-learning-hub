@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -38,38 +39,23 @@
     <div class="nav-inner">
 
       <a href="index.html" class="logo">
-
         <span class="logo-mark">文</span>
 
         <span class="logo-text">
           <strong>LinguaPath</strong>
           <small>Language Learning Hub</small>
         </span>
-
       </a>
 
       <div class="nav-links">
-
-        <a href="index.html#methodology">
-          Methodology
-        </a>
-
-        <a href="index.html#journey">
-          Learning Journey
-        </a>
-
-        <a href="index.html#demos">
-          Demo Lessons
-        </a>
-
-        <a href="index.html#learning-hub">
-          Learning Hub
-        </a>
-
+        <a href="#methodology">Methodology</a>
+        <a href="#journey">Learning Journey</a>
+        <a href="#demos">Demo Lessons</a>
+        <a href="#learning-hub">Learning Hub</a>
       </div>
 
       <a
-        href="index.html#learning-hub"
+        href="#learning-hub"
         class="nav-button"
       >
         Start Learning
@@ -91,23 +77,10 @@
       class="mobile-menu"
       id="mobileMenu"
     >
-
-      <a href="index.html#methodology">
-        Methodology
-      </a>
-
-      <a href="index.html#journey">
-        Learning Journey
-      </a>
-
-      <a href="index.html#demos">
-        Demo Lessons
-      </a>
-
-      <a href="index.html#learning-hub">
-        Learning Hub
-      </a>
-
+      <a href="#methodology">Methodology</a>
+      <a href="#journey">Learning Journey</a>
+      <a href="#demos">Demo Lessons</a>
+      <a href="#learning-hub">Learning Hub</a>
     </div>
 
   </nav>
@@ -133,8 +106,9 @@
         </h1>
 
         <p class="hero-description">
-          LinguaPath combines visual association, pronunciation,
-          contextual stories, vocabulary, and active practice
+          LinguaPath combines visual association,
+          pronunciation, contextual stories,
+          vocabulary, and active practice
           into one simple learning journey.
         </p>
 
@@ -210,9 +184,9 @@
         </h2>
 
         <p>
-          Instead of memorizing isolated words, LinguaPath
-          connects sounds, characters, images, meanings,
-          and real situations.
+          Instead of memorizing isolated words,
+          LinguaPath connects sounds, characters,
+          images, meanings, and real situations.
         </p>
 
       </div>
@@ -368,6 +342,7 @@
 
   <!-- =========================
        DEMO LESSONS
+       LOADED FROM EXCEL
   ========================== -->
 
   <section
@@ -387,13 +362,22 @@
           Start with the building blocks.
         </h2>
 
+        <p>
+          Demo lesson content is loaded dynamically
+          from the <strong>Demo</strong> sheet in
+          <strong>data/lessons.xlsx</strong>.
+        </p>
+
       </div>
 
 
-      <!-- Demo Grid Wrapper (Strict 2-Column Layout Container) -->
-      <div class="demos-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+      <div class="demos-grid">
 
-        <!-- Row 1, Column 1: Pronunciation -->
+
+        <!-- =========================
+             PRONUNCIATION
+        ========================== -->
+
         <article class="demo-card tone-demo">
 
           <div class="demo-card-header">
@@ -417,46 +401,27 @@
           </div>
 
 
-          <div class="tone-buttons">
-
-            <button
-              class="tone-button active"
-              data-tone="1"
-              type="button"
-            >
-              mā
-            </button>
-
-            <button
-              class="tone-button"
-              data-tone="2"
-              type="button"
-            >
-              má
-            </button>
-
-            <button
-              class="tone-button"
-              data-tone="3"
-              type="button"
-            >
-              mǎ
-            </button>
-
-            <button
-              class="tone-button"
-              data-tone="4"
-              type="button"
-            >
-              mà
-            </button>
-
+          <div
+            class="tone-buttons"
+            id="toneButtons"
+          >
+            <div class="loading-card">
+              Loading pronunciation...
+            </div>
           </div>
 
 
           <div class="tone-display">
 
-            <div class="tone-word-wrapper" style="display: flex; align-items: center; justify-content: left; gap: 1rem;">
+            <div
+              class="tone-word-wrapper"
+              style="
+                display:flex;
+                align-items:center;
+                justify-content:flex-start;
+                gap:1rem;
+              "
+            >
 
               <div class="tone-word">
 
@@ -469,6 +434,7 @@
                 </small>
 
               </div>
+
 
               <button
                 id="toneAudioButton"
@@ -506,10 +472,11 @@
               class="tone-description"
               id="toneDescription"
             >
-              Tone 1 — high and flat
+              Loading tone...
             </div>
 
           </div>
+
 
           <audio
             id="currentToneAudio"
@@ -519,7 +486,10 @@
         </article>
 
 
-        <!-- Row 1, Column 2: Everyday Chinese -->
+        <!-- =========================
+             EVERYDAY CHINESE
+        ========================== -->
+
         <article class="demo-card greeting-demo">
 
           <div class="demo-card-header">
@@ -534,39 +504,33 @@
                 Practical Greeting
               </h3>
 
+              <p>
+                A useful phrase for everyday communication.
+              </p>
+
             </div>
 
           </div>
 
 
-          <div class="language-example">
+          <div
+            class="language-example"
+            id="everydayChineseDemo"
+          >
 
-            <div class="chinese-large">
-              你好
+            <div class="loading-card">
+              Loading Everyday Chinese...
             </div>
-
-            <div class="pinyin-large">
-              Nǐ hǎo
-            </div>
-
-            <div class="meaning-large">
-              Hello
-            </div>
-
-            <button
-              class="speech-button"
-              data-text="你好。Nǐ hǎo."
-              type="button"
-            >
-              🔊 Listen
-            </button>
 
           </div>
 
         </article>
 
 
-        <!-- Row 2, Column 1: Conversation -->
+        <!-- =========================
+             CONVERSATION
+        ========================== -->
+
         <article class="demo-card dialogue-demo">
 
           <div class="demo-card-header">
@@ -581,60 +545,22 @@
                 Mini Dialogue
               </h3>
 
+              <p>
+                Practice a short real-life conversation.
+              </p>
+
             </div>
 
           </div>
 
 
-          <div class="dialogue">
+          <div
+            class="dialogue"
+            id="conversationDemo"
+          >
 
-            <div class="dialogue-line">
-
-              <span class="dialogue-speaker">
-                A
-              </span>
-
-              <div>
-
-                <strong>
-                  你好！你好吗？
-                </strong>
-
-                <small>
-                  Nǐ hǎo! Nǐ hǎo ma?
-                </small>
-
-                <em>
-                  Hello! How are you?
-                </em>
-
-              </div>
-
-            </div>
-
-
-            <div class="dialogue-line">
-
-              <span class="dialogue-speaker">
-                B
-              </span>
-
-              <div>
-
-                <strong>
-                  我很好，谢谢！
-                </strong>
-
-                <small>
-                  Wǒ hěn hǎo, xièxie!
-                </small>
-
-                <em>
-                  I'm very well, thank you!
-                </em>
-
-              </div>
-
+            <div class="loading-card">
+              Loading conversation...
             </div>
 
           </div>
@@ -642,7 +568,10 @@
         </article>
 
 
-        <!-- Row 2, Column 2: Quick Check -->
+        <!-- =========================
+             QUICK CHECK
+        ========================== -->
+
         <article class="demo-card vocabulary-demo">
 
           <div class="demo-card-header">
@@ -654,49 +583,26 @@
               </span>
 
               <h3>
-                Micro Vocabulary Quiz
+                Quick Knowledge Check
               </h3>
+
+              <p>
+                Check your understanding.
+              </p>
 
             </div>
 
           </div>
 
 
-          <div class="micro-quiz">
+          <div
+            class="micro-quiz"
+            id="quickCheckDemo"
+          >
 
-            <p>
-              What does <strong>妈 (mā)</strong> mean?
-            </p>
-
-            <div class="micro-options">
-
-              <button
-                type="button"
-                data-answer="wrong"
-              >
-                teacher
-              </button>
-
-              <button
-                type="button"
-                data-answer="correct"
-              >
-                mother
-              </button>
-
-              <button
-                type="button"
-                data-answer="wrong"
-              >
-                horse
-              </button>
-
+            <div class="loading-card">
+              Loading questions...
             </div>
-
-            <div
-              class="quiz-feedback"
-              id="microQuizFeedback"
-            ></div>
 
           </div>
 
@@ -711,6 +617,7 @@
 
   <!-- =========================
        LEARNING HUB
+       LOADED FROM EXCEL
   ========================== -->
 
   <section
@@ -731,8 +638,9 @@
         </h2>
 
         <p>
-          Your lessons, stories, vocabulary, and exercises
-          are loaded from the LinguaPath Excel workbook.
+          Your lessons, stories, vocabulary,
+          and exercises are loaded from
+          the LinguaPath Excel workbook.
         </p>
 
       </div>
@@ -764,7 +672,8 @@
 
       <p>
         © 2026 LinguaPath Learning Hub.
-        Learn visually. Listen carefully. Speak confidently.
+        Learn visually. Listen carefully.
+        Speak confidently.
       </p>
 
     </div>
@@ -772,13 +681,21 @@
   </footer>
 
 
-  <!-- SheetJS -->
+  <!-- =========================
+       SHEETJS
+  ========================== -->
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"
+  ></script>
 
-  <!-- Main JavaScript -->
+
+  <!-- =========================
+       MAIN JAVASCRIPT
+  ========================== -->
 
   <script src="main.js"></script>
 
 </body>
 </html>
+```
