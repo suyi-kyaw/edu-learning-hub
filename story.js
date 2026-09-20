@@ -688,6 +688,7 @@ function renderStoryImages(
                 english || chinese || `Story scene ${index + 1}`
               )}"
               loading="lazy"
+              onerror="this.onerror=null; if(this.src.endsWith('.jpg')) { this.src = this.src.replace('.jpg', '.svg'); } else { this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 600 400\' width=\'100%25\' height=\'100%25\'><rect width=\'600\' height=\'400\' fill=\'%23f8fafc\'/><text x=\'50%25\' y=\'45%25\' font-size=\'48\' text-anchor=\'middle\'>📖</text><text x=\'50%25\' y=\'65%25\' font-size=\'22\' font-weight=\'bold\' fill=\'%23334155\' text-anchor=\'middle\'>${encodeURIComponent(chinese || 'Story Scene')}</text></svg>'; }"
             >
 
 
@@ -1435,37 +1436,52 @@ function updateLessonNavigation(
 
 
 /* =========================================================
+   GET LESSON ID FROM URL
+   ========================================================= */
+
+function getLessonId() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id") || params.get("lesson") || params.get("lessonId");
+    if (id && String(id).trim() !== "") {
+      return String(id).trim();
+    }
+  } catch (e) {
+    console.warn("Could not read URL parameters:", e);
+  }
+  return "lesson-01";
+}
+
+
+/* =========================================================
    LOAD STORY DATA
    ========================================================= */
 
 async function loadStoryLesson() {
-
-  const lessonId =
-    getLessonId();
-
-
   try {
+    const lessonId = getLessonId();
+
     let workbook = null;
     let lessons = [];
-    let storyRows = [];
-    let vocabularyRows = [];
-    let exerciseRows = [];
+    let allStoryRows = [];
+    let allVocabularyRows = [];
+    let allExerciseRows = [];
     let loaded = false;
 
-    // Strategy 1: Direct Excel parsing if XLSX is available
+    // Strategy 1: Direct Excel parsing if XLSX is available in the browser
     if (typeof XLSX !== "undefined") {
       try {
-        const response = await fetch(EXCEL_FILE);
+        const response = await fetch(EXCEL_FILE, { cache: "no-cache" });
         if (response.ok) {
           const arrayBuffer = await response.arrayBuffer();
           workbook = XLSX.read(arrayBuffer, { type: "array" });
 
           if (workbook && workbook.SheetNames) {
             lessons = readSheet(workbook, "Lessons");
-            storyRows = sortByOrder(filterByLesson(readSheet(workbook, "Story"), lessonId));
-            vocabularyRows = sortByOrder(filterByLesson(readSheet(workbook, "Vocabulary"), lessonId));
-            exerciseRows = sortByOrder(filterByLesson(readSheet(workbook, "Exercises"), lessonId));
-            if (lessons.length > 0) {
+            allStoryRows = readSheet(workbook, "Story");
+            allVocabularyRows = readSheet(workbook, "Vocabulary");
+            allExerciseRows = readSheet(workbook, "Exercises");
+            if (lessons.length > 0 || allStoryRows.length > 0) {
               loaded = true;
             }
           }
@@ -1478,15 +1494,15 @@ async function loadStoryLesson() {
     // Strategy 2: Server API endpoint /api/lessons-data
     if (!loaded) {
       try {
-        const apiResponse = await fetch("/api/lessons-data");
+        const apiResponse = await fetch("/api/lessons-data", { cache: "no-cache" });
         if (apiResponse.ok) {
           const apiData = await apiResponse.json();
           if (apiData.success && apiData.sheets) {
             lessons = apiData.sheets["Lessons"] || [];
-            storyRows = sortByOrder(filterByLesson(apiData.sheets["Story"] || [], lessonId));
-            vocabularyRows = sortByOrder(filterByLesson(apiData.sheets["Vocabulary"] || [], lessonId));
-            exerciseRows = sortByOrder(filterByLesson(apiData.sheets["Exercises"] || [], lessonId));
-            if (lessons.length > 0) {
+            allStoryRows = apiData.sheets["Story"] || [];
+            allVocabularyRows = apiData.sheets["Vocabulary"] || [];
+            allExerciseRows = apiData.sheets["Exercises"] || [];
+            if (lessons.length > 0 || allStoryRows.length > 0) {
               loaded = true;
             }
           }
@@ -1499,15 +1515,15 @@ async function loadStoryLesson() {
     // Strategy 3: Static JSON file data/lessons.json
     if (!loaded) {
       try {
-        const jsonResponse = await fetch("data/lessons.json");
+        const jsonResponse = await fetch("data/lessons.json", { cache: "no-cache" });
         if (jsonResponse.ok) {
           const jsonData = await jsonResponse.json();
           if (jsonData.sheets) {
             lessons = jsonData.sheets["Lessons"] || [];
-            storyRows = sortByOrder(filterByLesson(jsonData.sheets["Story"] || [], lessonId));
-            vocabularyRows = sortByOrder(filterByLesson(jsonData.sheets["Vocabulary"] || [], lessonId));
-            exerciseRows = sortByOrder(filterByLesson(jsonData.sheets["Exercises"] || [], lessonId));
-            if (lessons.length > 0) {
+            allStoryRows = jsonData.sheets["Story"] || [];
+            allVocabularyRows = jsonData.sheets["Vocabulary"] || [];
+            allExerciseRows = jsonData.sheets["Exercises"] || [];
+            if (lessons.length > 0 || allStoryRows.length > 0) {
               loaded = true;
             }
           }
@@ -1517,7 +1533,7 @@ async function loadStoryLesson() {
       }
     }
 
-    // Strategy 4: Embedded fallback data
+    // Strategy 4: Embedded fallback dataset directly matching data/lessons.xlsx
     if (!loaded) {
       console.info("Using embedded story lesson dataset.");
       lessons = [
@@ -1533,104 +1549,74 @@ async function loadStoryLesson() {
           poster: "assets/images/story-poster.jpg"
         }
       ];
-      storyRows = [
+      allStoryRows = [
         { lessonId: "lesson-01", order: 1, chinese: "早上好！", pinyin: "Zǎoshang hǎo!", english: "Good morning!", image: "assets/images/story-01.jpg", audio: "assets/audio/story-01.mp3" },
-        { lessonId: "lesson-01", order: 2, chinese: "小明去学校。", pinyin: "Xiǎomíng qù xuéxiào.", english: "Xiaoming goes to school.", image: "assets/images/story-02.jpg", audio: "assets/audio/story-02.mp3" },
-        { lessonId: "lesson-01", order: 3, chinese: "老师说：“请坐。”", pinyin: "Lǎoshī shuō: \"Qǐng zuò.\"", english: "The teacher says, \"Please sit down.\"", image: "assets/images/story-03.jpg", audio: "assets/audio/story-03.mp3" },
-        { lessonId: "lesson-01", order: 4, chinese: "我们在学中文。", pinyin: "Wǒmen zài xué Zhōngwén.", english: "We are learning Chinese.", image: "assets/images/story-04.jpg", audio: "assets/audio/story-04.mp3" },
-        { lessonId: "lesson-01", order: 5, chinese: "明天见！", pinyin: "Míngtiān jiàn!", english: "See you tomorrow!", image: "assets/images/story-05.jpg", audio: "assets/audio/story-05.mp3" }
+        { lessonId: "lesson-01", order: 2, chinese: "小明起床了。", pinyin: "Xiǎomíng qǐchuáng le.", english: "Xiaoming gets up.", image: "assets/images/story-02.jpg", audio: "assets/audio/story-02.mp3" },
+        { lessonId: "lesson-01", order: 3, chinese: "他吃早饭。", pinyin: "Tā chī zǎofàn.", english: "He eats breakfast.", image: "assets/images/story-03.jpg", audio: "assets/audio/story-03.mp3" },
+        { lessonId: "lesson-01", order: 4, chinese: "然后，他去学校。", pinyin: "Ránhòu, tā qù xuéxiào.", english: "Then, he goes to school.", image: "assets/images/story-04.jpg", audio: "assets/audio/story-04.mp3" },
+        { lessonId: "lesson-01", order: 5, chinese: "他很开心。", pinyin: "Tā hěn kāixīn.", english: "He is very happy.", image: "assets/images/story-05.jpg", audio: "assets/audio/story-05.mp3" }
       ];
-      vocabularyRows = [
+      allVocabularyRows = [
         { lessonId: "lesson-01", order: 1, character: "早上", pinyin: "zǎoshang", meaning: "morning", audio: "assets/audio/zaoshang.mp3" },
-        { lessonId: "lesson-01", order: 2, character: "学校", pinyin: "xuéxiào", meaning: "school", audio: "assets/audio/xuexiao.mp3" },
-        { lessonId: "lesson-01", order: 3, character: "老师", pinyin: "lǎoshī", meaning: "teacher", audio: "assets/audio/laoshi.mp3" },
-        { lessonId: "lesson-01", order: 4, character: "中文", pinyin: "Zhōngwén", meaning: "Chinese language", audio: "assets/audio/zhongwen.mp3" }
+        { lessonId: "lesson-01", order: 2, character: "起床", pinyin: "qǐchuáng", meaning: "get up", audio: "assets/audio/qichuang.mp3" },
+        { lessonId: "lesson-01", order: 3, character: "学校", pinyin: "xuéxiào", meaning: "school", audio: "assets/audio/xuexiao.mp3" },
+        { lessonId: "lesson-01", order: 4, character: "开心", pinyin: "kāixīn", meaning: "happy", audio: "assets/audio/kaixin.mp3" }
       ];
-      exerciseRows = [
+      allExerciseRows = [
         { lessonId: "lesson-01", order: 1, type: "multiple-choice", question: "Where does Xiaoming go?", optionA: "家 — Home", optionB: "学校 — School", optionC: "商店 — Shop", answer: "学校 — School" }
       ];
       loaded = true;
     }
 
-    const lesson =
-      lessons.find(
-        row => {
-          const id =
-            getValue(
-              row,
-              "id",
-              "ID",
-              "lessonId"
-            );
-
-          return String(id).trim() ===
-            String(lessonId).trim();
-        }
-      ) || lessons[0];
+    // Match lesson by ID or fall back to first lesson
+    const lesson = lessons.find(row => {
+      const id = getValue(row, "id", "ID", "lessonId");
+      return String(id).trim().toLowerCase() === String(lessonId).trim().toLowerCase();
+    }) || lessons[0];
 
     if (!lesson) {
-      throw new Error(
-        `Lesson "${lessonId}" was not found in the Lessons sheet.`
-      );
+      throw new Error(`Lesson "${lessonId}" was not found in the Lessons sheet.`);
     }
 
-    renderLessonHeader(
-      lesson
-    );
+    const currentLessonId = getValue(lesson, "id", "ID", "lessonId") || lessonId;
 
-    renderVideo(
-      lesson
-    );
+    // Filter by active lesson ID
+    let storyRows = sortByOrder(filterByLesson(allStoryRows, currentLessonId));
+    let vocabularyRows = sortByOrder(filterByLesson(allVocabularyRows, currentLessonId));
+    let exerciseRows = sortByOrder(filterByLesson(allExerciseRows, currentLessonId));
 
-    renderStoryImages(
-      storyRows
-    );
+    // Fall back to all sheet rows if filtering by ID returned empty
+    if (storyRows.length === 0 && allStoryRows.length > 0) {
+      storyRows = sortByOrder(allStoryRows);
+    }
+    if (vocabularyRows.length === 0 && allVocabularyRows.length > 0) {
+      vocabularyRows = sortByOrder(allVocabularyRows);
+    }
+    if (exerciseRows.length === 0 && allExerciseRows.length > 0) {
+      exerciseRows = sortByOrder(allExerciseRows);
+    }
 
-    renderStoryReading(
-      storyRows
-    );
+    // Render all page sections
+    renderLessonHeader(lesson);
+    renderVideo(lesson);
+    renderStoryImages(storyRows);
+    renderStoryReading(storyRows);
+    renderVocabulary(vocabularyRows);
+    renderExercises(exerciseRows);
+    updateLessonNavigation(storyRows, vocabularyRows, exerciseRows);
 
-    renderVocabulary(
-      vocabularyRows
-    );
-
-    renderExercises(
-      exerciseRows
-    );
-
-    updateLessonNavigation(
-      storyRows,
-      vocabularyRows,
-      exerciseRows
-    );
-
-
-    console.log(
-      "Story lesson loaded:",
-      {
-        lessonId,
-        lesson,
-        story: storyRows,
-        vocabulary: vocabularyRows,
-        exercises: exerciseRows
-      }
-    );
-
+    console.log("Story lesson loaded successfully:", {
+      lessonId: currentLessonId,
+      lesson,
+      storyCount: storyRows.length,
+      vocabularyCount: vocabularyRows.length,
+      exerciseCount: exerciseRows.length
+    });
 
   } catch (error) {
-
-    console.error(
-      "Story lesson loading error:",
-      error
-    );
-
-
-    showPageError(
-      error
-    );
-
+    console.error("Story lesson loading error:", error);
+    showPageError(error);
   }
-
 }
 
 
@@ -1679,19 +1665,10 @@ function showPageError(
 ) {
 
   const containers = [
-
-    document.getElementById(
-      "storyContent"
-    ),
-
-    document.getElementById(
-      "vocabularyContent"
-    ),
-
-    document.getElementById(
-      "exerciseContent"
-    )
-
+    document.getElementById("storyImageGrid"),
+    document.getElementById("storyContent"),
+    document.getElementById("vocabularyContent"),
+    document.getElementById("exerciseContent")
   ];
 
 

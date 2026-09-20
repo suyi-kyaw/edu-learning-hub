@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="100%" height="100%">
+  <defs>
+    <linearGradient id="posterBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fff7ed" />
+      <stop offset="100%" stop-color="#fed7aa" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#posterBg)" />
+  <circle cx="400" cy="180" r="100" fill="#fb923c" fill-opacity="0.2" />
+  <g transform="translate(400, 160)" text-anchor="middle">
+    <text font-size="64" y="10">📖</text>
+    <text font-family="'Noto Serif SC', 'Songti SC', serif" font-weight="bold" font-size="42" fill="#9a3412" y="80">小明的一天</text>
+    <text font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="20" font-weight="600" fill="#c2410c" y="120">Xiǎomíng de yì tiān · Xiaoming's Day</text>
+    <text font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="16" fill="#7c2d12" y="155">Beginner Chinese Video Story Lesson</text>
+  </g>
+</svg>

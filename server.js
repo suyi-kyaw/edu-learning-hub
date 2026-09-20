@@ -53,6 +53,33 @@ function syncLessonsJson() {
 // Initial sync
 syncLessonsJson();
 
+// Serve image assets with automatic SVG fallback and proper content-type
+app.use('/assets/images', (req, res, next) => {
+  const requestedFile = req.path.replace(/^\//, '');
+  const filePath = path.join(__dirname, 'assets', 'images', requestedFile);
+
+  if (fs.existsSync(filePath)) {
+    try {
+      const data = fs.readFileSync(filePath);
+      const str = data.toString('utf8', 0, 50);
+      if (str.trim().startsWith('<svg')) {
+        res.setHeader('Content-Type', 'image/svg+xml');
+        return res.send(data);
+      }
+    } catch (e) {
+      // proceed to normal static
+    }
+  } else {
+    // Try replacing extension with .svg
+    const svgAlt = path.join(__dirname, 'assets', 'images', requestedFile.replace(/\.(jpg|jpeg|png)$/i, '.svg'));
+    if (fs.existsSync(svgAlt)) {
+      res.setHeader('Content-Type', 'image/svg+xml');
+      return res.sendFile(svgAlt);
+    }
+  }
+  next();
+});
+
 // Serve API for lesson data parsed directly from Excel
 app.get('/api/lessons-data', (req, res) => {
   try {
