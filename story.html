@@ -446,10 +446,13 @@
   </footer>
 
 
-  <!-- SheetJS -->
-
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-
+  <!-- SheetJS (Local with CDN fallback) -->
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script>
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"><\/script>');
+    }
+  </script>
 
   <!-- Story JavaScript -->
 

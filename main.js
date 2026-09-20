@@ -23,6 +23,20 @@ let currentToneIndex = 0;
 
 
 /* =========================================================
+   HELPERS
+========================================================= */
+
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+
+/* =========================================================
    DOM READY
 ========================================================= */
 
@@ -33,66 +47,106 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 /* =========================================================
-   LOAD EXCEL WORKBOOK
+   LOAD EXCEL WORKBOOK & LESSON DATA
 ========================================================= */
 
 async function loadWorkbook() {
-  try {
-    const response = await fetch("data/lessons.xlsx");
+  let loaded = false;
 
-    if (!response.ok) {
-      throw new Error(
-        `Could not load lessons.xlsx (${response.status})`
-      );
-    }
+  // Strategy 1: Direct Excel parsing if SheetJS (XLSX) is present
+  if (typeof XLSX !== "undefined") {
+    try {
+      const response = await fetch("data/lessons.xlsx");
 
-    const arrayBuffer = await response.arrayBuffer();
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
 
-    workbook = XLSX.read(arrayBuffer, {
-      type: "array"
-    });
+        workbook = XLSX.read(arrayBuffer, {
+          type: "array"
+        });
 
-    /*
-      Load Demo sheet
-    */
-    if (workbook.SheetNames.includes("Demo")) {
-      const demoSheet = workbook.Sheets["Demo"];
+        if (workbook && workbook.SheetNames) {
+          if (workbook.SheetNames.includes("Demo")) {
+            demoData = XLSX.utils.sheet_to_json(
+              workbook.Sheets["Demo"],
+              { defval: "" }
+            );
+          }
 
-      demoData = XLSX.utils.sheet_to_json(
-        demoSheet,
-        {
-          defval: ""
+          if (workbook.SheetNames.includes("Lessons")) {
+            lessonData = XLSX.utils.sheet_to_json(
+              workbook.Sheets["Lessons"],
+              { defval: "" }
+            );
+          }
+
+          if (demoData.length > 0 || lessonData.length > 0) {
+            loaded = true;
+          }
         }
-      );
-    } else {
-      console.warn("Demo sheet not found.");
-      demoData = [];
+      }
+    } catch (excelError) {
+      console.warn("Client-side Excel parsing note:", excelError);
     }
+  }
 
+  // Strategy 2: Server API endpoint /api/lessons-data (parsed from data/lessons.xlsx)
+  if (!loaded) {
+    try {
+      const apiResponse = await fetch("/api/lessons-data");
 
-    /*
-      Load Lessons sheet
-    */
-    if (workbook.SheetNames.includes("Lessons")) {
-      const lessonSheet = workbook.Sheets["Lessons"];
+      if (apiResponse.ok) {
+        const apiData = await apiResponse.json();
 
-      lessonData = XLSX.utils.sheet_to_json(
-        lessonSheet,
-        {
-          defval: ""
+        if (apiData.success && apiData.sheets) {
+          demoData = apiData.sheets["Demo"] || [];
+          lessonData = apiData.sheets["Lessons"] || [];
+
+          if (demoData.length > 0 || lessonData.length > 0) {
+            loaded = true;
+          }
         }
-      );
-    } else {
-      console.warn("Lessons sheet not found.");
-      lessonData = [];
+      }
+    } catch (apiError) {
+      console.warn("Server API fallback note:", apiError);
     }
+  }
 
+  // Strategy 3: Static JSON file data/lessons.json
+  if (!loaded) {
+    try {
+      const jsonResponse = await fetch("data/lessons.json");
 
+      if (jsonResponse.ok) {
+        const jsonData = await jsonResponse.json();
+
+        if (jsonData.sheets) {
+          demoData = jsonData.sheets["Demo"] || [];
+          lessonData = jsonData.sheets["Lessons"] || [];
+
+          if (demoData.length > 0 || lessonData.length > 0) {
+            loaded = true;
+          }
+        }
+      }
+    } catch (jsonError) {
+      console.warn("Static JSON fallback note:", jsonError);
+    }
+  }
+
+  // Strategy 4: Embedded fallback data matching data/lessons.xlsx
+  if (!loaded) {
+    console.info("Using embedded lesson dataset.");
+    demoData = getFallbackDemoData();
+    lessonData = getFallbackLessonData();
+    loaded = true;
+  }
+
+  if (loaded) {
     /*
       Prepare Demo sections
     */
     prepareDemoData();
-
 
     /*
       Render the page
@@ -102,12 +156,107 @@ async function loadWorkbook() {
     renderConversation();
     renderQuickCheck();
     renderLearningHub();
-
-  } catch (error) {
-    console.error("Workbook loading error:", error);
-
+  } else {
     showWorkbookError();
   }
+}
+
+/* =========================================================
+   FALLBACK DATASETS (mirrors data/lessons.xlsx)
+========================================================= */
+
+function getFallbackDemoData() {
+  return [
+    {
+      section: "Pronunciation",
+      order: 1,
+      chinese: "妈",
+      pinyin: "mā",
+      english: "mother",
+      audio: "assets/audio/tones/ma-tone-1.mp3"
+    },
+    {
+      section: "Pronunciation",
+      order: 2,
+      chinese: "麻",
+      pinyin: "má",
+      english: "hemp; numb",
+      audio: "assets/audio/tones/ma-tone-2.mp3"
+    },
+    {
+      section: "Pronunciation",
+      order: 3,
+      chinese: "马",
+      pinyin: "mǎ",
+      english: "horse",
+      audio: "assets/audio/tones/ma-tone-3.mp3"
+    },
+    {
+      section: "Pronunciation",
+      order: 4,
+      chinese: "骂",
+      pinyin: "mà",
+      english: "scold",
+      audio: "assets/audio/tones/ma-tone-4.mp3"
+    },
+    {
+      section: "Pronunciation",
+      order: 5,
+      chinese: "吗",
+      pinyin: "ma",
+      english: "question particle"
+    },
+    {
+      section: "Everyday Chinese",
+      order: 1,
+      chinese: "你好",
+      pinyin: "Nǐ hǎo",
+      english: "Hello",
+      audio: "assets/audio/hello.mp3"
+    },
+    {
+      section: "Conversation",
+      order: 1,
+      chinese: "你好！你好吗？",
+      pinyin: "Nǐ hǎo! Nǐ hǎo ma?",
+      english: "Hello! How are you?",
+      audio: "assets/audio/nihao-conversation.mp3"
+    },
+    {
+      section: "Quick Check",
+      order: 1,
+      question: "How do you say “Hello” in Chinese?",
+      optionA: "你好",
+      optionB: "谢谢",
+      optionC: "再见",
+      answer: "你好"
+    },
+    {
+      section: "Quick Check",
+      order: 2,
+      question: "What does “你好吗？” mean?",
+      optionA: "What's your name?",
+      optionB: "How are you?",
+      optionC: "Where are you?",
+      answer: "How are you?"
+    }
+  ];
+}
+
+function getFallbackLessonData() {
+  return [
+    {
+      id: "lesson-01",
+      title: "Xiaoming's Day",
+      chineseTitle: "小明的一天",
+      pinyin: "Xiǎomíng de yì tiān",
+      meaning: "Xiaoming's Day",
+      level: "Beginner",
+      description: "Learn Chinese through a simple story.",
+      video: "assets/video/lesson-01.mp4",
+      poster: "assets/images/story-poster.jpg"
+    }
+  ];
 }
 
 
