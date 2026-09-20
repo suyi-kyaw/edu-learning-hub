@@ -1,2583 +1,1315 @@
-/* =========================================================
-   LinguaPath
-   Global Styles
-   ========================================================= */
-
 
 /* =========================================================
-   VARIABLES
-   ========================================================= */
-
-:root {
-
-  --blue: #2563eb;
-  --blue-dark: #1d4ed8;
-  --blue-light: #eff6ff;
-
-  --navy: #0f172a;
-  --navy-soft: #172033;
-
-  --text: #172033;
-  --text-light: #64748b;
-  --text-muted: #94a3b8;
-
-  --white: #ffffff;
-
-  --background: #ffffff;
-  --background-soft: #f0f7ff; /* Light blue section background */
-
-  --border: #e2e8f0;
-
-  --green: #16a34a;
-  --green-light: #dcfce7;
-
-  --red: #dc2626;
-  --red-light: #fee2e2;
-
-  --yellow: #f59e0b;
-  --yellow-light: #fef3c7;
-
-  --shadow-sm:
-    0 2px 10px rgba(15, 23, 42, 0.05);
-
-  --shadow:
-    0 10px 30px rgba(15, 23, 42, 0.08);
-
-  --shadow-lg:
-    0 20px 50px rgba(15, 23, 42, 0.12);
-
-  --radius: 14px;
-
-  --max-width: 1180px;
-
-}
+   LINGUAPATH
+   Main Stylesheet
+========================================================= */
 
 
 /* =========================================================
    RESET
-   ========================================================= */
+========================================================= */
 
 * {
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
-
 
 html {
   scroll-behavior: smooth;
 }
 
-
 body {
-
-  margin: 0;
-
-  color: var(--text);
-
-  background: var(--background);
-
   font-family:
-    "Roboto",
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
     sans-serif;
 
+  background: #f7f8fc;
+  color: #1f2937;
   line-height: 1.6;
-
 }
-
 
 img {
-
   display: block;
-
   max-width: 100%;
-
 }
-
 
 button,
 input,
-textarea,
-select {
-
+select,
+textarea {
   font: inherit;
-
 }
-
 
 button {
-
   cursor: pointer;
-
 }
-
 
 a {
-
   color: inherit;
-
   text-decoration: none;
-
-}
-
-
-/* Chinese */
-
-.chinese-sentence,
-.story-hero h1,
-.vocabulary-character,
-.story-image-content h3,
-.chinese-large,
-.tone-word {
-
-  font-family:
-    "Noto Sans SC",
-    sans-serif;
-
-}
-
-
-.story-pinyin,
-.story-meaning,
-.pinyin-sentence,
-.english-sentence,
-.vocabulary-pinyin,
-.vocabulary-meaning,
-.lesson-pinyin {
-
-  font-family:
-    "Roboto",
-    "Noto Sans SC",
-    sans-serif;
-
 }
 
 
 /* =========================================================
-   CONTAINER
-   ========================================================= */
+   GLOBAL
+========================================================= */
 
 .container {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+}
 
-  width:
-    min(
-      calc(100% - 40px),
-      var(--max-width)
-    );
+.section {
+  padding: 90px 0;
+}
 
-  margin:
-    0 auto;
+.section-heading {
+  max-width: 700px;
+  margin: 0 auto 45px;
+  text-align: center;
+}
 
+.section-label,
+.eyebrow {
+  display: inline-block;
+  margin-bottom: 10px;
+
+  color: #b45309;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.section-heading h2 {
+  margin-bottom: 14px;
+
+  color: #111827;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.15;
+}
+
+.section-heading p {
+  color: #6b7280;
+  font-size: 1.05rem;
 }
 
 
 /* =========================================================
-   NAVBAR
-   ========================================================= */
+   BUTTONS
+========================================================= */
 
-.navbar {
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
+  min-height: 48px;
+  padding: 0 22px;
+
+  border-radius: 12px;
+
+  font-size: 0.95rem;
+  font-weight: 700;
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn-primary {
+  background: #b45309;
+  color: #ffffff;
+
+  box-shadow:
+    0 8px 20px rgba(180, 83, 9, 0.18);
+}
+
+.btn-primary:hover {
+  background: #92400e;
+}
+
+.btn-secondary {
+  background: #ffffff;
+  color: #374151;
+
+  border: 1px solid #e5e7eb;
+}
+
+.btn-secondary:hover {
+  background: #f9fafb;
+
+  box-shadow:
+    0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+.site-header {
   position: sticky;
-
   top: 0;
-
   z-index: 1000;
 
-  background:
-    rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.94);
 
-  border-bottom:
-    1px solid var(--border);
+  border-bottom: 1px solid #e5e7eb;
 
-  backdrop-filter:
-    blur(16px);
-
+  backdrop-filter: blur(12px);
 }
 
-
-.nav-inner {
-
-  width:
-    min(
-      calc(100% - 40px),
-      var(--max-width)
-    );
-
-  min-height: 78px;
-
-  margin: 0 auto;
+.nav-container {
+  min-height: 72px;
 
   display: flex;
-
   align-items: center;
-
-  gap: 24px;
-
+  justify-content: space-between;
 }
-
 
 .logo {
-
-  display: flex;
-
+  display: inline-flex;
   align-items: center;
+  gap: 10px;
 
-  gap: 11px;
-
-  flex-shrink: 0;
-
+  font-size: 1.15rem;
+  font-weight: 800;
 }
 
-
-.logo-mark {
-
-  width: 40px;
-
-  height: 40px;
-
+.logo-chinese {
   display: grid;
-
   place-items: center;
 
-  color: white;
-
-  background: var(--blue);
+  width: 38px;
+  height: 38px;
 
   border-radius: 10px;
 
-  font-family:
-    "Noto Sans SC",
-    sans-serif;
+  background: #b45309;
+  color: #ffffff;
 
-  font-size: 20px;
-
-  font-weight: 700;
-
+  font-size: 1.3rem;
 }
-
 
 .logo-text {
+  color: #111827;
+}
 
+.main-nav {
   display: flex;
-
-  flex-direction: column;
-
-  line-height: 1.1;
-
-}
-
-
-.logo-text strong {
-
-  font-size: 17px;
-
-  letter-spacing: -0.3px;
-
-}
-
-
-.logo-text small {
-
-  margin-top: 4px;
-
-  color: var(--text-light);
-
-  font-size: 9px;
-
-  text-transform: uppercase;
-
-  letter-spacing: 0.6px;
-
-}
-
-
-.nav-links {
-
-  display: flex;
-
   align-items: center;
-
-  justify-content: center;
-
-  gap: 5px;
-
-  flex: 1;
-
+  gap: 28px;
 }
 
+.main-nav a {
+  position: relative;
 
-.nav-links a {
+  color: #4b5563;
 
-  padding:
-    8px 12px;
-
-  color: var(--text-light);
-
-  font-size: 12px;
-
+  font-size: 0.92rem;
   font-weight: 600;
 
-  border-radius: 7px;
-
-  transition:
-    color .2s ease,
-    background .2s ease;
-
+  transition: color 0.2s ease;
 }
 
-
-.nav-links a:hover {
-
-  color: var(--blue);
-
-  background: var(--blue-light);
-
+.main-nav a:hover {
+  color: #b45309;
 }
 
-
-.nav-button {
-
-  display: inline-flex;
-
-  align-items: center;
-
-  justify-content: center;
-
-  min-height: 40px;
-
-  padding:
-    0 17px;
-
-  color: white;
-
-  background: var(--blue);
-
-  border-radius: 8px;
-
-  font-size: 11px;
-
-  font-weight: 700;
-
-  text-transform: uppercase;
-
-  letter-spacing: .4px;
-
-  transition:
-    background .2s ease,
-    transform .2s ease;
-
-}
-
-
-.nav-button:hover {
-
-  background: var(--blue-dark);
-
-  transform:
-    translateY(-1px);
-
-}
-
-
-.mobile-menu-button {
-
+.menu-toggle {
   display: none;
 
-  width: 40px;
+  border: 0;
+  background: transparent;
 
-  height: 40px;
+  color: #111827;
 
-  border: 1px solid var(--border);
-
-  border-radius: 8px;
-
-  background: white;
-
-  color: var(--text);
-
-  font-size: 20px;
-
-}
-
-
-.mobile-menu {
-
-  display: none;
-
+  font-size: 1.7rem;
 }
 
 
 /* =========================================================
    HERO
-   ========================================================= */
+========================================================= */
 
 .hero {
+  position: relative;
 
-  padding:
-    90px 0;
+  overflow: hidden;
+
+  padding: 110px 0 100px;
 
   background:
-    linear-gradient(
-      135deg,
-      #f8fbff 0%,
-      #ffffff 55%,
-      #eff6ff 100%
-    );
-
+    radial-gradient(
+      circle at 85% 20%,
+      rgba(245, 158, 11, 0.14),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 10% 80%,
+      rgba(251, 191, 36, 0.1),
+      transparent 30%
+    ),
+    #fffaf5;
 }
 
-
-.hero-grid {
-
+.hero-content {
   display: grid;
-
-  grid-template-columns:
-    1.2fr .8fr;
+  grid-template-columns: 1.1fr 0.9fr;
 
   align-items: center;
 
-  gap: 80px;
-
+  gap: 70px;
 }
 
+.hero-text h1 {
+  max-width: 700px;
 
-.section-label {
+  margin-bottom: 24px;
 
-  display: inline-block;
+  color: #111827;
 
-  margin-bottom: 12px;
-
-  color: var(--blue);
-
-  font-size: 10px;
-
-  font-weight: 700;
-
-  text-transform: uppercase;
-
-  letter-spacing: 1.2px;
-
+  font-size: clamp(3rem, 7vw, 5.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.05em;
 }
 
-
-.hero h1 {
-
-  max-width: 720px;
-
-  margin:
-    0 0 22px;
-
-  font-size:
-    clamp(
-      42px,
-      6vw,
-      76px
-    );
-
-  line-height: 1.02;
-
-  letter-spacing: -3px;
-
-}
-
-
-.hero h1 span {
-
+.hero-text h1 span {
   display: block;
 
-  color: var(--blue);
-
+  color: #b45309;
 }
 
+.hero-text > p {
+  max-width: 620px;
 
-.hero-description {
+  margin-bottom: 30px;
 
-  max-width: 650px;
+  color: #6b7280;
 
-  margin: 0 0 30px;
-
-  color: var(--text-light);
-
-  font-size: 17px;
-
+  font-size: 1.1rem;
 }
 
+.hero-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 
-.hero-actions {
+.hero-visual {
+  min-height: 390px;
 
   display: flex;
-
-  flex-wrap: wrap;
-
-  gap: 10px;
-
-}
-
-
-.primary-button,
-.secondary-button {
-
-  display: inline-flex;
-
+  flex-direction: column;
   align-items: center;
-
   justify-content: center;
-
-  min-height: 44px;
-
-  padding:
-    0 18px;
-
-  border-radius: 8px;
-
-  font-size: 11px;
-
-  font-weight: 700;
-
-  text-transform: uppercase;
-
-  letter-spacing: .5px;
-
-  transition:
-    all .2s ease;
-
-}
-
-
-.primary-button {
-
-  color: white;
-
-  background: var(--blue);
-
-  border: 1px solid var(--blue);
-
-}
-
-
-.primary-button:hover {
-
-  background: var(--blue-dark);
-
-  border-color: var(--blue-dark);
-
-  transform:
-    translateY(-1px);
-
-}
-
-
-.secondary-button {
-
-  color: var(--text);
-
-  background: white;
-
-  border: 1px solid var(--border);
-
-}
-
-
-.secondary-button:hover {
-
-  color: var(--blue);
-
-  border-color: var(--blue);
-
-}
-
-
-.hero-character-card {
-
-  min-height: 390px;
 
   padding: 40px;
 
-  display: flex;
-
-  flex-direction: column;
-
-  align-items: center;
-
-  justify-content: center;
-
-  text-align: center;
-
-  background: white;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 24px;
-
-  box-shadow:
-    var(--shadow-lg);
-
-}
-
-
-.hero-character {
-
-  color: var(--blue);
-
-  font-family:
-    "Noto Sans SC",
-    sans-serif;
-
-  font-size: 170px;
-
-  line-height: 1;
-
-}
-
-
-.hero-character-pinyin {
-
-  margin-top: 10px;
-
-  font-size: 30px;
-
-  font-weight: 600;
-
-}
-
-
-.hero-character-meaning {
-
-  margin-top: 5px;
-
-  color: var(--text-light);
-
-  font-size: 14px;
-
-}
-
-
-.speech-button {
-
-  margin-top: 16px;
-
-  padding:
-    8px 13px;
-
-  color: var(--blue);
-
-  background: var(--blue-light);
-
-  border: 1px solid #dbeafe;
-
-  border-radius: 7px;
-
-  font-size: 10px;
-
-  font-weight: 700;
-
-  text-transform: uppercase;
-
-  letter-spacing: .4px;
-
-  transition: all .2s ease;
-
-}
-
-
-.speech-button:hover {
-
-  color: white;
-
-  background: var(--blue);
-
-}
-
-
-/* =========================================================
-   GENERAL SECTIONS & BACKGROUND ALTERNATIONS
-   ========================================================= */
-
-.section {
-
-  padding:
-    90px 0;
-
-}
-
-
-/* White Background Section */
-.section-white {
-
-  background: var(--white);
-
-}
-
-
-/* Light Blue Background Section */
-.section-blue,
-.section-light {
-
-  background: var(--background-soft);
-
-}
-
-
-.section-dark {
-
-  color: white;
+  border-radius: 32px;
 
   background:
-    var(--navy);
-
-}
-
-
-.section-heading {
-
-  max-width: 720px;
-
-  margin-bottom: 40px;
-
-}
-
-
-.section-heading h2 {
-
-  margin:
-    0 0 14px;
-
-  font-size:
-    clamp(
-      30px,
-      4vw,
-      48px
+    linear-gradient(
+      145deg,
+      #ffffff,
+      #fff7ed
     );
 
-  line-height: 1.1;
+  border: 1px solid #fed7aa;
 
-  letter-spacing: -1.5px;
+  box-shadow:
+    0 25px 70px rgba(120, 53, 15, 0.1);
 
+  text-align: center;
 }
 
+.hero-character {
+  color: #9a3412;
 
-.section-heading p {
+  font-family:
+    "Noto Serif SC",
+    "Songti SC",
+    serif;
 
-  margin: 0;
+  font-size: clamp(7rem, 16vw, 11rem);
+  font-weight: 600;
 
-  color: var(--text-light);
-
+  line-height: 1;
 }
 
+.hero-pinyin {
+  margin-top: 15px;
 
-.section-heading-light p {
+  color: #374151;
 
-  color: #94a3b8;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
 
+.hero-translation {
+  margin-top: 4px;
+
+  color: #9ca3af;
+
+  font-size: 1rem;
 }
 
 
 /* =========================================================
-   METHODOLOGY
-   ========================================================= */
+   DEMO LESSONS
+========================================================= */
 
-.method-grid {
+.demos-section {
+  background: #ffffff;
+}
 
+
+/*
+  IMPORTANT:
+  Demo cards are displayed in exactly two columns
+  on desktop.
+
+  Row 1:
+  Pronunciation | Everyday Chinese
+
+  Row 2:
+  Conversation  | Quick Check
+*/
+
+.demos-grid {
   display: grid;
 
   grid-template-columns:
-    repeat(3, 1fr);
+    repeat(2, minmax(0, 1fr));
 
-  gap: 18px;
+  gap: 1.5rem;
 
+  align-items: stretch;
 }
 
+.demos-grid .demo-card {
+  width: 100%;
+  min-width: 0;
 
-.method-card {
-
-  padding: 28px;
-
-  background: white;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: var(--radius);
-
-  box-shadow: var(--shadow-sm);
-
-}
-
-
-.method-number {
-
-  margin-bottom: 35px;
-
-  color: var(--blue);
-
-  font-size: 11px;
-
-  font-weight: 700;
-
-}
-
-
-.method-card h3 {
-
-  margin:
-    0 0 10px;
-
-  font-size: 20px;
-
-}
-
-
-.method-card p {
-
-  margin: 0;
-
-  color: var(--text-light);
-
-  font-size: 14px;
-
-}
-
-
-/* =========================================================
-   JOURNEY
-   ========================================================= */
-
-.journey-grid {
-
-  display: grid;
-
-  grid-template-columns:
-    repeat(3, 1fr);
-
-  gap: 18px;
-
-}
-
-
-.journey-card {
-
-  padding: 30px;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: var(--radius);
-
-  background: white;
-
-}
-
-
-.journey-number {
-
-  display: inline-flex;
-
-  margin-bottom: 25px;
-
-  color: var(--blue);
-
-  font-size: 12px;
-
-  font-weight: 700;
-
-}
-
-
-.journey-card h3 {
-
-  margin:
-    0 0 10px;
-
-}
-
-
-.journey-card p {
-
-  margin: 0;
-
-  color: var(--text-light);
-
+  box-sizing: border-box;
 }
 
 
 /* =========================================================
    DEMO CARDS
-   ========================================================= */
+========================================================= */
 
 .demo-card {
+  position: relative;
 
-  margin-bottom: 20px;
+  min-height: 340px;
 
-  padding: 30px;
+  padding: 28px;
 
-  background: white;
+  overflow: hidden;
 
-  border:
-    1px solid var(--border);
+  background: #ffffff;
 
-  border-radius: var(--radius);
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
 
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    0 10px 30px rgba(15, 23, 42, 0.05);
 
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
 }
 
+.demo-card:hover {
+  transform: translateY(-4px);
+
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.09);
+}
 
 .demo-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
 
   margin-bottom: 25px;
-
 }
 
-
-.demo-label {
-
+.card-label {
   display: block;
 
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 
-  color: var(--blue);
+  color: #b45309;
 
-  font-size: 10px;
-
-  font-weight: 700;
-
-  text-transform: uppercase;
-
-  letter-spacing: .8px;
-
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
 }
-
 
 .demo-card h3 {
+  color: #111827;
 
-  margin:
-    0 0 5px;
-
-  font-size: 24px;
-
+  font-size: 1.45rem;
+  line-height: 1.2;
 }
 
+.card-icon {
+  display: grid;
+  place-items: center;
 
-.demo-card p {
+  width: 44px;
+  height: 44px;
 
-  margin: 0;
+  border-radius: 12px;
 
-  color: var(--text-light);
+  background: #fff7ed;
+  color: #b45309;
 
+  font-family:
+    "Noto Serif SC",
+    "Songti SC",
+    serif;
+
+  font-size: 1.25rem;
+  font-weight: 700;
 }
 
 
 /* =========================================================
-   TONES
-   ========================================================= */
+   PRONUNCIATION
+========================================================= */
 
 .tone-buttons {
-
   display: flex;
-
-  gap: 8px;
-
   flex-wrap: wrap;
+  gap: 8px;
 
   margin-bottom: 25px;
-
 }
-
 
 .tone-button {
+  min-width: 42px;
+  height: 42px;
 
-  min-width: 72px;
+  padding: 0 10px;
 
-  padding:
-    12px 18px;
-
-  color: var(--text);
-
-  background: var(--white);
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 8px;
-
-  font-family:
-    "Noto Sans SC",
-    sans-serif;
-
-  font-weight: 600;
-
-}
-
-
-.tone-button:hover,
-.tone-button.active {
-
-  color: white;
-
-  background: var(--blue);
-
-  border-color: var(--blue);
-
-}
-
-
-.tone-display {
-
-  padding: 30px;
-
-  background:
-    var(--white);
-
-  border: 1px solid var(--border);
-
-  border-radius: 12px;
-
-}
-
-
-.tone-word {
-
-  display: flex;
-
-  align-items: baseline;
-
-  gap: 15px;
-
-}
-
-
-.tone-word > span {
-
-  color: var(--blue);
-
-  font-size: 48px;
-
-  font-weight: 700;
-
-}
-
-
-.tone-word small {
-
-  font-size: 30px;
-
-}
-
-
-.tone-graph {
-
-  height: 130px;
-
-  margin:
-    25px 0 15px;
-
-  color: var(--blue);
-
-}
-
-
-.tone-graph svg {
-
-  width: 100%;
-
-  height: 100%;
-
-}
-
-
-.tone-description {
-
-  color: var(--text-light);
-
-  font-size: 13px;
-
-}
-
-
-/* =========================================================
-   LANGUAGE EXAMPLE
-   ========================================================= */
-
-.language-example {
-
-  padding: 35px;
-
-  text-align: center;
-
-  background:
-    var(--white);
-
-  border: 1px solid var(--border);
-
-  border-radius: 12px;
-
-}
-
-
-.chinese-large {
-
-  font-size: 60px;
-
-  font-weight: 700;
-
-}
-
-
-.pinyin-large {
-
-  margin-top: 5px;
-
-  color: var(--blue);
-
-  font-size: 22px;
-
-}
-
-
-.meaning-large {
-
-  color: var(--text-light);
-
-}
-
-
-/* =========================================================
-   DIALOGUE
-   ========================================================= */
-
-.dialogue {
-
-  display: grid;
-
-  gap: 15px;
-
-}
-
-
-.dialogue-line {
-
-  display: flex;
-
-  gap: 15px;
-
-  padding: 20px;
-
-  background:
-    var(--white);
-
-  border: 1px solid var(--border);
-
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
 
-}
-
-
-.dialogue-speaker {
-
-  width: 34px;
-
-  height: 34px;
-
-  flex-shrink: 0;
-
-  display: grid;
-
-  place-items: center;
-
-  color: white;
-
-  background: var(--blue);
-
-  border-radius: 50%;
-
-  font-size: 11px;
+  background: #ffffff;
+  color: #4b5563;
 
   font-weight: 700;
 
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
 }
 
+.tone-button:hover {
+  border-color: #d97706;
 
-.dialogue-line strong,
-.dialogue-line small,
-.dialogue-line em {
-
-  display: block;
-
+  color: #b45309;
 }
 
+.tone-button.active {
+  border-color: #b45309;
 
-.dialogue-line strong {
-
-  font-family:
-    "Noto Sans SC",
-    sans-serif;
-
+  background: #b45309;
+  color: #ffffff;
 }
 
-
-.dialogue-line small {
-
-  margin-top: 4px;
-
-  color: var(--blue);
-
-}
-
-
-.dialogue-line em {
-
-  margin-top: 4px;
-
-  color: var(--text-light);
-
-  font-size: 13px;
-
-}
-
-
-/* =========================================================
-   MICRO QUIZ
-   ========================================================= */
-
-.micro-quiz p {
-
-  margin-bottom: 18px;
-
-}
-
-
-.micro-options {
-
+.tone-display {
   display: flex;
-
-  flex-wrap: wrap;
-
-  gap: 10px;
-
-}
-
-
-.micro-options button {
-
-  padding:
-    11px 16px;
-
-  background: white;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 8px;
-
-}
-
-
-.micro-options button:hover {
-
-  border-color: var(--blue);
-
-}
-
-
-.micro-options button.correct {
-
-  color: var(--green);
-
-  background:
-    var(--green-light);
-
-  border-color:
-    var(--green);
-
-}
-
-
-.micro-options button.incorrect {
-
-  color: var(--red);
-
-  background:
-    var(--red-light);
-
-  border-color:
-    var(--red);
-
-}
-
-
-.quiz-feedback {
-
-  margin-top: 15px;
-
-  font-size: 13px;
-
-  font-weight: 600;
-
-}
-
-
-.correct-feedback {
-
-  color: var(--green);
-
-}
-
-
-.incorrect-feedback {
-
-  color: var(--red);
-
-}
-
-
-/* =========================================================
-   LESSON GRID
-   ========================================================= */
-
-.lesson-grid {
-
-  display: grid;
-
-  grid-template-columns:
-    repeat(3, 1fr);
-
-  gap: 20px;
-
-}
-
-
-.lesson-card {
-
-  overflow: hidden;
-
-  background:
-    #ffffff;
-
-  border:
-    1px solid #263248;
-
-  border-radius: 14px;
-
-}
-
-
-.lesson-card-image {
-
-  aspect-ratio:
-    16 / 9;
-
-  overflow: hidden;
-
-}
-
-
-.lesson-card-image img {
-
-  width: 100%;
-
-  height: 100%;
-
-  object-fit: cover;
-
-}
-
-
-.lesson-card-placeholder {
-
-  aspect-ratio:
-    16 / 9;
-
-  display: grid;
-
-  place-items: center;
-
-  color: #60a5fa;
-
-  background: #111c30;
-
-  font-family:
-    "Noto Sans SC",
-    sans-serif;
-
-  font-size: 80px;
-
-}
-
-
-.lesson-card-content {
-
-  padding: 24px;
-
-}
-
-
-.lesson-level {
-
-  color: #60a5fa;
-
-  font-size: 9px;
-
-  font-weight: 700;
-
-  text-transform: uppercase;
-
-  letter-spacing: 1px;
-
-}
-
-
-.lesson-card h3 {
-
-  margin:
-    8px 0 5px;
-
-  color: #393e46;
-
-  font-size: 22px;
-
-}
-
-
-.lesson-chinese-title {
-
-  color: #747f8e;
-
-  font-family:
-    "Noto Sans SC",
-    sans-serif;
-
-  font-size: 22px;
-
-}
-
-
-.lesson-pinyin {
-
-  margin-top: 3px;
-
-  color: #60a5fa;
-
-  font-size: 13px;
-
-}
-
-
-.lesson-meaning {
-
-  color: #94a3b8;
-
-  font-size: 12px;
-
-}
-
-
-.lesson-card p {
-
-  margin:
-    15px 0 20px;
-
-  color: #94a3b8;
-
-  font-size: 13px;
-
-}
-
-
-.lesson-button {
-
-  width: 100%;
-
-}
-
-
-/* =========================================================
-   LOADING / ERROR
-   ========================================================= */
-
-.loading-card,
-.empty-card,
-.error-card {
-
-  padding: 30px;
-
-  text-align: center;
-
-  border-radius: 12px;
-
-}
-
-
-.loading-card {
-
-  color: #94a3b8;
-
-  border:
-    1px dashed #334155;
-
-}
-
-
-.empty-card {
-
-  background:
-    var(--background-soft);
-
-  border:
-    1px dashed var(--border);
-
-}
-
-
-.error-card {
-
-  color: var(--red);
-
-  background:
-    var(--red-light);
-
-  border:
-    1px solid #fecaca;
-
-}
-
-
-.error-card h3 {
-
-  margin-top: 0;
-
-}
-
-
-.error-card small {
-
-  display: block;
-
-  margin-top: 10px;
-
-  opacity: .8;
-
-}
-
-
-/* =========================================================
-   STORY HERO
-   ========================================================= */
-
-.story-hero {
-
-  padding:
-    75px 0;
-
-  color: white;
-
-  background:
-    linear-gradient(
-      135deg,
-      #0f172a,
-      #172554
-    );
-
-}
-
-
-.story-hero .section-label {
-
-  color: #60a5fa;
-
-}
-
-
-.story-hero h1 {
-
-  margin:
-    0 0 10px;
-
-  font-size:
-    clamp(
-      42px,
-      7vw,
-      76px
-    );
-
-  line-height: 1.05;
-
-  letter-spacing: -2px;
-
-}
-
-
-.story-pinyin {
-
-  margin: 0;
-
-  color: #60a5fa;
-
-  font-size: 22px;
-
-}
-
-
-.story-meaning {
-
-  margin:
-    5px 0 20px;
-
-  color: #cbd5e1;
-
-  font-size: 16px;
-
-}
-
-
-.story-meta {
-
-  display: flex;
-
-  flex-wrap: wrap;
-
-  gap: 8px;
-
-}
-
-
-.story-meta span {
-
-  padding:
-    7px 10px;
-
-  color: #cbd5e1;
-
-  background:
-    rgba(255,255,255,.07);
-
-  border:
-    1px solid rgba(255,255,255,.1);
-
-  border-radius: 6px;
-
-  font-size: 10px;
-
-}
-
-
-/* =========================================================
-   LESSON NAVIGATION
-   ========================================================= */
-
-.lesson-navigation {
-
-  position: sticky;
-
-  top: 78px;
-
-  z-index: 900;
-
-  background:
-    rgba(255,255,255,.96);
-
-  border-bottom:
-    1px solid var(--border);
-
-  backdrop-filter:
-    blur(14px);
-
-}
-
-
-.lesson-navigation-inner {
-
-  min-height: 52px;
-
-  display: flex;
-
   align-items: center;
-
-  justify-content: center;
-
-  gap: 5px;
-
-  overflow-x: auto;
-
-}
-
-
-.lesson-navigation a {
-
-  flex-shrink: 0;
-
-  padding:
-    8px 13px;
-
-  color: var(--text-light);
-
-  border-radius: 7px;
-
-  font-size: 10px;
-
-  font-weight: 700;
-
-  text-transform: uppercase;
-
-  letter-spacing: .4px;
-
-  transition: all .2s ease;
-
-}
-
-
-.lesson-navigation a:hover {
-
-  color: var(--blue);
-
-  background:
-    var(--blue-light);
-
-}
-
-
-#watch,
-#understand,
-#reading,
-#vocabulary,
-#exercises {
-
-  scroll-margin-top: 140px;
-
-}
-
-
-/* =========================================================
-   STORY SECTIONS
-   ========================================================= */
-
-.story-section,
-.story-images-section,
-.story-reading,
-.story-vocabulary,
-.story-quiz {
-
-  padding:
-    80px 0;
-
-}
-
-
-.story-images-section,
-.story-vocabulary {
-
-  background:
-    var(--background-soft);
-
-}
-
-
-/* =========================================================
-   VIDEO
-   ========================================================= */
-
-.video-card {
-
-  overflow: hidden;
-
-  background: white;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 16px;
-
-  box-shadow: var(--shadow);
-
-}
-
-
-.story-video {
-
-  width: 100%;
-
-  display: block;
-
-  max-height: 650px;
-
-  background: black;
-
-}
-
-
-.video-caption {
-
-  padding:
-    18px 22px;
-
-  display: flex;
-
   justify-content: space-between;
 
   gap: 20px;
 
+  margin-bottom: 18px;
 }
 
-
-.video-caption strong {
-
-  font-size: 14px;
-
+.tone-main {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
 }
 
+.tone-syllable {
+  color: #111827;
 
-.video-caption span {
-
-  color: var(--text-light);
-
-  font-size: 12px;
-
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
-
-/* =========================================================
-   STORY IMAGES
-   ========================================================= */
-
-.story-image-grid {
-
-  display: grid;
-
-  grid-template-columns:
-    repeat(3, 1fr);
-
-  gap: 20px;
-
-}
-
-
-.story-image-card {
-
-  overflow: hidden;
-
-  background: white;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 14px;
-
-  box-shadow: var(--shadow-sm);
-
-}
-
-
-.story-image-card img {
-
-  width: 100%;
-
-  aspect-ratio:
-    4 / 3;
-
-  object-fit: cover;
-
-}
-
-
-.story-image-content {
-
-  padding: 20px;
-
-}
-
-
-.story-image-content h3 {
-
-  margin:
-    0 0 5px;
-
-  font-size: 21px;
-
-}
-
-
-.story-image-content p {
-
-  margin: 0;
-
-  color: var(--text-light);
-
-  font-size: 13px;
-
-}
-
-
-/* =========================================================
-   READING
-   ========================================================= */
-
-.reading-card {
-
-  overflow: hidden;
-
-  background: white;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 14px;
-
-  box-shadow: var(--shadow-sm);
-
-}
-
-
-.reading-item {
-
-  display: grid;
-
-  grid-template-columns: 60px 1fr;
-
-  gap: 15px;
-
-  padding:
-    28px;
-
-  border-bottom:
-    1px solid var(--border);
-
-}
-
-
-.reading-item:last-child {
-
-  border-bottom: 0;
-
-}
-
-
-.reading-number {
-
-  color: var(--blue);
-
-  font-size: 11px;
-
-  font-weight: 700;
-
-}
-
-
-.chinese-sentence {
-
-  font-size: 29px;
-
-  font-weight: 600;
-
-}
-
-
-.pinyin-sentence {
-
-  margin-top: 5px;
-
-  color: var(--blue);
-
-  font-size: 16px;
-
-}
-
-
-.english-sentence {
-
-  margin-top: 5px;
-
-  color: var(--text-light);
-
-  font-size: 14px;
-
-}
-
-
-/* =========================================================
-   VOCABULARY
-   ========================================================= */
-
-.vocabulary-grid {
-
-  display: grid;
-
-  grid-template-columns:
-    repeat(4, 1fr);
-
-  gap: 18px;
-
-}
-
-
-.vocabulary-card {
-
-  position: relative;
-
-  padding: 25px;
-
-  text-align: center;
-
-  background: white;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 14px;
-
-  box-shadow: var(--shadow-sm);
-
-}
-
-
-.vocabulary-number {
-
-  position: absolute;
-
-  top: 15px;
-
-  left: 18px;
-
-  color: var(--text-muted);
-
-  font-size: 9px;
-
-  font-weight: 700;
-
-}
-
-
-.vocabulary-character {
-
-  margin-top: 15px;
-
-  color: var(--blue);
-
-  font-size: 48px;
-
-  font-weight: 700;
-
-}
-
-
-.vocabulary-pinyin {
-
-  margin-top: 3px;
-
-  font-size: 15px;
-
-  font-weight: 600;
-
-}
-
-
-.vocabulary-meaning {
-
-  margin-top: 3px;
-
-  color: var(--text-light);
-
-  font-size: 12px;
-
-}
-
-
-/* =========================================================
-   EXERCISES
-   ========================================================= */
-
-.story-quiz {
-
-  background:
-    var(--background-soft);
-
-}
-
-
-.story-quiz-card {
-
-  padding:
-    45px;
-
-  background: white;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 16px;
-
-  box-shadow: var(--shadow);
-
-}
-
-
-.story-quiz-card h2 {
-
-  margin:
-    0 0 10px;
-
-  font-size: 36px;
-
-}
-
-
-.exercise-intro {
-
-  margin-bottom: 30px;
-
-  color: var(--text-light);
-
-}
-
-
-.exercise-list {
-
-  display: grid;
-
-  gap: 20px;
-
-}
-
-
-.exercise-item {
-
-  display: grid;
-
-  grid-template-columns: 45px 1fr;
-
-  gap: 18px;
-
-  padding: 24px;
-
-  background:
-    var(--background-soft);
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 12px;
-
-}
-
-
-.exercise-number {
-
-  color: var(--blue);
-
-  font-size: 11px;
-
-  font-weight: 700;
-
-}
-
-
-.exercise-body h3 {
-
-  margin:
-    0 0 16px;
+.tone-character {
+  color: #b45309;
 
   font-family:
-    "Noto Sans SC",
-    sans-serif;
+    "Noto Serif SC",
+    "Songti SC",
+    serif;
 
-  font-size: 20px;
+  font-size: 2.6rem;
+  line-height: 1;
+}
 
+.audio-button {
+  flex-shrink: 0;
+
+  min-height: 42px;
+
+  padding: 0 15px;
+
+  border: 0;
+  border-radius: 10px;
+
+  background: #111827;
+  color: #ffffff;
+
+  font-size: 0.85rem;
+  font-weight: 700;
+
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+.audio-button:hover {
+  background: #374151;
+
+  transform: translateY(-1px);
+}
+
+.tone-graph {
+  width: 100%;
+  height: 90px;
+
+  margin: 10px 0 12px;
+
+  overflow: hidden;
+
+  border-radius: 14px;
+
+  background: #fff7ed;
+
+  color: #b45309;
+}
+
+.tone-graph svg {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+}
+
+.tone-description {
+  color: #6b7280;
+
+  font-size: 0.9rem;
+}
+
+.loading-message {
+  padding: 20px 0;
+
+  color: #9ca3af;
+
+  font-size: 0.9rem;
 }
 
 
-.exercise-options {
+/* =========================================================
+   EVERYDAY CHINESE
+========================================================= */
 
+.dynamic-demo-content {
+  min-height: 220px;
+}
+
+.demo-word {
+  margin-bottom: 6px;
+
+  color: #111827;
+
+  font-family:
+    "Noto Serif SC",
+    "Songti SC",
+    serif;
+
+  font-size: 3rem;
+  font-weight: 700;
+
+  line-height: 1.2;
+}
+
+.demo-pinyin {
+  margin-bottom: 8px;
+
+  color: #b45309;
+
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.demo-english {
+  margin-bottom: 20px;
+
+  color: #6b7280;
+
+  font-size: 1rem;
+}
+
+.demo-audio-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 42px;
+
+  padding: 0 15px;
+
+  border: 0;
+  border-radius: 10px;
+
+  background: #fff7ed;
+  color: #9a3412;
+
+  font-weight: 700;
+}
+
+.demo-audio-button:hover {
+  background: #ffedd5;
+}
+
+
+/* =========================================================
+   CONVERSATION
+========================================================= */
+
+.conversation-line {
+  margin-bottom: 15px;
+  padding: 15px 18px;
+
+  border-radius: 14px;
+
+  background: #f9fafb;
+  border: 1px solid #f0f1f3;
+}
+
+.conversation-line:last-child {
+  margin-bottom: 0;
+}
+
+.conversation-chinese {
+  margin-bottom: 4px;
+
+  color: #111827;
+
+  font-family:
+    "Noto Serif SC",
+    "Songti SC",
+    serif;
+
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.conversation-pinyin {
+  margin-bottom: 3px;
+
+  color: #b45309;
+
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.conversation-english {
+  color: #6b7280;
+
+  font-size: 0.88rem;
+}
+
+
+/* =========================================================
+   QUICK CHECK
+========================================================= */
+
+.quiz-question {
+  margin-bottom: 18px;
+
+  color: #111827;
+
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.quiz-options {
   display: grid;
 
-  gap: 9px;
+  grid-template-columns: 1fr 1fr;
 
+  gap: 9px;
 }
 
+.quiz-option {
+  width: 100%;
 
-.exercise-option {
+  padding: 11px 13px;
 
-  padding:
-    12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+
+  background: #ffffff;
+  color: #374151;
 
   text-align: left;
 
-  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
 
-  background: white;
-
-  border:
-    1px solid var(--border);
-
-  border-radius: 8px;
-
-  transition: all .2s ease;
-
-  width: 100%;
-
-  cursor: pointer;
-
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
 }
 
+.quiz-option:hover {
+  border-color: #d97706;
 
-.exercise-option:hover {
-
-  color: var(--blue);
-
-  border-color:
-    var(--blue);
-
-  background: var(--blue-light);
-
+  background: #fffaf5;
 }
 
+.quiz-option.correct {
+  border-color: #16a34a;
 
-.exercise-option.correct {
-
-  color: var(--green);
-
-  background:
-    var(--green-light);
-
-  border-color:
-    var(--green);
-
+  background: #f0fdf4;
+  color: #166534;
 }
 
+.quiz-option.incorrect {
+  border-color: #dc2626;
 
-.exercise-option.incorrect {
-
-  color: var(--red);
-
-  background:
-    var(--red-light);
-
-  border-color:
-    var(--red);
-
+  background: #fef2f2;
+  color: #991b1b;
 }
 
-
-.exercise-feedback {
-
-  min-height: 20px;
+.quiz-feedback {
+  min-height: 24px;
 
   margin-top: 12px;
 
-  font-size: 12px;
-
+  font-size: 0.85rem;
   font-weight: 700;
+}
 
+.quiz-feedback.correct {
+  color: #15803d;
+}
+
+.quiz-feedback.incorrect {
+  color: #b91c1c;
+}
+
+.quiz-block {
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.quiz-block:last-child {
+  padding-bottom: 0;
+  margin-bottom: 0;
+
+  border-bottom: 0;
+}
+
+
+/* =========================================================
+   LEARNING HUB
+========================================================= */
+
+.learning-section {
+  background: #f7f8fc;
+}
+
+.lesson-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+
+  gap: 22px;
+}
+
+.lesson-card {
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+
+  min-height: 260px;
+
+  padding: 25px;
+
+  overflow: hidden;
+
+  border-radius: 20px;
+
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.04);
+
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.lesson-card:hover {
+  transform: translateY(-4px);
+
+  box-shadow:
+    0 15px 35px rgba(15, 23, 42, 0.08);
+}
+
+.lesson-card h3 {
+  margin-bottom: 8px;
+
+  color: #111827;
+
+  font-size: 1.25rem;
+}
+
+.lesson-card p {
+  margin-bottom: 18px;
+
+  color: #6b7280;
+
+  font-size: 0.92rem;
+}
+
+.lesson-card-footer {
+  margin-top: auto;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 15px;
+}
+
+.lesson-card-tag {
+  color: #b45309;
+
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.lesson-card-link {
+  color: #b45309;
+
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+
+/* =========================================================
+   STORY
+========================================================= */
+
+.story-section {
+  background: #ffffff;
+}
+
+.story-preview {
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  align-items: center;
+
+  gap: 60px;
+}
+
+.story-image {
+  overflow: hidden;
+
+  border-radius: 24px;
+
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.1);
+}
+
+.story-image img {
+  width: 100%;
+  height: 100%;
+
+  aspect-ratio: 4 / 3;
+
+  object-fit: cover;
+}
+
+.story-content h2 {
+  margin-bottom: 18px;
+
+  color: #111827;
+
+  font-size: clamp(2rem, 4vw, 3rem);
+
+  line-height: 1.15;
+}
+
+.story-content p {
+  max-width: 520px;
+
+  margin-bottom: 25px;
+
+  color: #6b7280;
+
+  font-size: 1.05rem;
 }
 
 
 /* =========================================================
    FOOTER
-   ========================================================= */
+========================================================= */
 
-footer {
+.site-footer {
+  background: #111827;
 
-  padding:
-    30px 0;
-
-  color: #94a3b8;
-
-  background:
-    var(--navy);
-
-  border-top:
-    1px solid #1e293b;
-
+  color: #d1d5db;
 }
 
+.footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-footer p {
+  gap: 40px;
 
-  margin: 0;
+  padding: 55px 0;
+}
+
+.footer-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  margin-bottom: 8px;
+
+  color: #ffffff;
+
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.footer-logo span {
+  display: grid;
+  place-items: center;
+
+  width: 34px;
+  height: 34px;
+
+  border-radius: 9px;
+
+  background: #b45309;
+  color: #ffffff;
+
+  font-family:
+    "Noto Serif SC",
+    "Songti SC",
+    serif;
+}
+
+.footer-brand p {
+  color: #9ca3af;
+
+  font-size: 0.9rem;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 22px;
+}
+
+.footer-links a {
+  color: #d1d5db;
+
+  font-size: 0.9rem;
+}
+
+.footer-links a:hover {
+  color: #ffffff;
+}
+
+.footer-bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.footer-bottom p {
+  padding: 18px 0;
+
+  color: #9ca3af;
+
+  font-size: 0.8rem;
 
   text-align: center;
-
-  font-size: 11px;
-
 }
 
 
 /* =========================================================
    RESPONSIVE
-   ========================================================= */
+========================================================= */
 
-@media (max-width: 950px) {
 
-  .nav-links {
+/* ---------------------------------------------------------
+   TABLET
+--------------------------------------------------------- */
 
-    display: none;
+@media (max-width: 960px) {
 
+  .hero-content {
+    grid-template-columns: 1fr;
+
+    gap: 45px;
   }
 
-
-  .nav-button {
-
-    display: none;
-
+  .hero-text {
+    text-align: center;
   }
 
-
-  .mobile-menu-button {
-
-    display: block;
-
+  .hero-text > p {
     margin-left: auto;
-
+    margin-right: auto;
   }
 
-
-  .mobile-menu {
-
-    width:
-      min(
-        calc(100% - 40px),
-        var(--max-width)
-      );
-
-    margin:
-      0 auto;
-
-    padding:
-      0 0 15px;
-
-    flex-direction: column;
-
-    gap: 3px;
-
+  .hero-buttons {
+    justify-content: center;
   }
 
+  .hero-visual {
+    max-width: 600px;
 
-  .mobile-menu.open {
+    width: 100%;
 
-    display: flex;
-
+    margin: 0 auto;
   }
-
-
-  .mobile-menu a {
-
-    padding:
-      11px 12px;
-
-    color: var(--text-light);
-
-    border-radius: 7px;
-
-    font-size: 12px;
-
-    font-weight: 600;
-
-  }
-
-
-  .mobile-menu a:hover {
-
-    color: var(--blue);
-
-    background:
-      var(--blue-light);
-
-  }
-
-
-  .hero-grid {
-
-    grid-template-columns:
-      1fr;
-
-    gap: 40px;
-
-  }
-
-
-  .hero-character-card {
-
-    min-height: 300px;
-
-  }
-
-
-  .method-grid,
-  .journey-grid {
-
-    grid-template-columns:
-      1fr;
-
-  }
-
 
   .lesson-grid {
-
     grid-template-columns:
-      repeat(2, 1fr);
-
+      repeat(2, minmax(0, 1fr));
   }
 
+  .story-preview {
+    grid-template-columns: 1fr;
 
-  .story-image-grid {
-
-    grid-template-columns:
-      repeat(2, 1fr);
-
+    gap: 40px;
   }
 
+  .story-image {
+    max-width: 700px;
 
-  .vocabulary-grid {
-
-    grid-template-columns:
-      repeat(2, 1fr);
-
+    margin: 0 auto;
   }
 
 }
 
 
-@media (max-width: 700px) {
+/* ---------------------------------------------------------
+   MOBILE
+--------------------------------------------------------- */
 
-  .container,
-  .nav-inner,
-  .mobile-menu {
+@media (max-width: 768px) {
 
-    width:
-      min(
-        calc(100% - 28px),
-        var(--max-width)
-      );
-
+  .container {
+    width: min(100% - 28px, 1120px);
   }
 
+  .section {
+    padding: 65px 0;
+  }
+
+
+  /* Header */
+
+  .nav-container {
+    min-height: 65px;
+  }
+
+  .menu-toggle {
+    display: block;
+  }
+
+  .main-nav {
+    position: absolute;
+
+    top: 65px;
+    left: 0;
+    right: 0;
+
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+
+    padding: 15px;
+
+    background: #ffffff;
+
+    border-bottom: 1px solid #e5e7eb;
+
+    box-shadow:
+      0 10px 25px rgba(15, 23, 42, 0.06);
+  }
+
+  .main-nav.active {
+    display: flex;
+  }
+
+  .main-nav a {
+    padding: 12px 10px;
+  }
+
+
+  /* Hero */
 
   .hero {
-
-    padding:
-      60px 0;
-
+    padding: 75px 0 65px;
   }
 
-
-  .section,
-  .story-section,
-  .story-images-section,
-  .story-reading,
-  .story-vocabulary,
-  .story-quiz {
-
-    padding:
-      60px 0;
-
+  .hero-text h1 {
+    font-size: clamp(2.8rem, 13vw, 4rem);
   }
 
-
-  .hero h1 {
-
-    font-size: 46px;
-
-    letter-spacing: -2px;
-
+  .hero-text > p {
+    font-size: 1rem;
   }
 
-
-  .hero-description {
-
-    font-size: 15px;
-
+  .hero-buttons {
+    flex-direction: column;
   }
 
+  .hero-buttons .btn {
+    width: 100%;
+  }
+
+  .hero-visual {
+    min-height: 300px;
+
+    padding: 25px;
+
+    border-radius: 24px;
+  }
 
   .hero-character {
-
-    font-size: 120px;
-
+    font-size: 7rem;
   }
 
 
-  .lesson-navigation {
+  /* Demo grid becomes one column */
 
-    top: 78px;
+  .demos-grid {
+    grid-template-columns: 1fr;
+  }
 
+  .demo-card {
+    min-height: auto;
+
+    padding: 23px;
   }
 
 
-  .lesson-navigation-inner {
+  /* Learning Hub */
 
-    justify-content: flex-start;
-
-    min-height: 48px;
-
+  .lesson-grid {
+    grid-template-columns: 1fr;
   }
 
 
-  .lesson-navigation a {
+  /* Story */
 
-    padding:
-      7px 10px;
+  .story-content {
+    text-align: center;
+  }
 
-    font-size: 9px;
-
+  .story-content p {
+    margin-left: auto;
+    margin-right: auto;
   }
 
 
-  .lesson-grid,
-  .story-image-grid,
-  .vocabulary-grid {
+  /* Footer */
 
-    grid-template-columns:
-      1fr;
-
-  }
-
-
-  .video-caption {
-
+  .footer-content {
     flex-direction: column;
 
-    gap: 5px;
-
+    align-items: flex-start;
   }
 
+}
 
-  .reading-item {
 
-    grid-template-columns:
-      35px 1fr;
+/* ---------------------------------------------------------
+   SMALL MOBILE
+--------------------------------------------------------- */
 
-    padding:
-      22px;
+@media (max-width: 480px) {
 
+  .section-heading {
+    margin-bottom: 32px;
   }
 
-
-  .chinese-sentence {
-
-    font-size: 24px;
-
+  .section-heading h2 {
+    font-size: 2rem;
   }
 
-
-  .story-quiz-card {
-
-    padding:
-      25px;
-
+  .demo-card-header {
+    margin-bottom: 20px;
   }
 
+  .tone-display {
+    align-items: flex-start;
 
-  .story-quiz-card h2 {
-
-    font-size: 30px;
-
+    flex-direction: column;
   }
 
+  .tone-main {
+    width: 100%;
 
-  .exercise-item {
+    justify-content: space-between;
+  }
 
-    grid-template-columns:
-      30px 1fr;
+  .audio-button {
+    width: 100%;
+  }
 
-    padding:
-      20px;
+  .quiz-options {
+    grid-template-columns: 1fr;
+  }
 
+  .footer-links {
+    flex-direction: column;
+
+    gap: 10px;
   }
 
 }
