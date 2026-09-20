@@ -143,14 +143,12 @@ function sortByOrder(
 function initializeMobileMenu() {
 
   const menuButton =
-    document.getElementById(
-      "mobileMenuButton"
-    );
+    document.getElementById("menuToggle") ||
+    document.getElementById("mobileMenuButton");
 
   const mobileMenu =
-    document.getElementById(
-      "mobileMenu"
-    );
+    document.getElementById("mainNav") ||
+    document.getElementById("mobileMenu");
 
 
   if (!menuButton || !mobileMenu) {
@@ -163,9 +161,8 @@ function initializeMobileMenu() {
     () => {
 
       const isOpen =
-        mobileMenu.classList.toggle(
-          "open"
-        );
+        mobileMenu.classList.toggle("active") ||
+        mobileMenu.classList.toggle("open");
 
 
       menuButton.setAttribute(
@@ -196,6 +193,7 @@ function initializeMobileMenu() {
         () => {
 
           mobileMenu.classList.remove(
+            "active",
             "open"
           );
 
@@ -214,31 +212,48 @@ function initializeMobileMenu() {
 
 
 /* =========================================================
-   GET LESSON ID
+   AUDIO & SPEECH MANAGEMENT
    ========================================================= */
 
-function getLessonId() {
+let currentPlayingButton = null;
+let currentAudioInstance = null;
 
-  const params =
-    new URLSearchParams(
-      window.location.search
-    );
+function stopCurrentStoryAudio() {
 
+  if (currentAudioInstance) {
 
-  return (
-    params.get("id") ||
-    "lesson-01"
-  );
+    try {
+
+      currentAudioInstance.pause();
+      currentAudioInstance.currentTime = 0;
+
+    } catch (e) {
+      /* ignore */
+    }
+
+    currentAudioInstance = null;
+
+  }
+
+  if ("speechSynthesis" in window) {
+
+    window.speechSynthesis.cancel();
+
+  }
+
+  if (currentPlayingButton) {
+
+    currentPlayingButton.textContent = "▶ Play";
+    currentPlayingButton.classList.remove("playing");
+    currentPlayingButton = null;
+
+  }
 
 }
 
-
-/* =========================================================
-   SPEECH
-   ========================================================= */
-
 function speakText(
-  text
+  text,
+  button
 ) {
 
   if (
@@ -250,7 +265,7 @@ function speakText(
   }
 
 
-  window.speechSynthesis.cancel();
+  stopCurrentStoryAudio();
 
 
   const utterance =
@@ -269,6 +284,37 @@ function speakText(
     1;
 
 
+  if (button) {
+
+    currentPlayingButton = button;
+    button.textContent = "⏸ Playing...";
+    button.classList.add("playing");
+
+    utterance.onend = () => {
+
+      button.textContent = "▶ Play";
+      button.classList.remove("playing");
+
+      if (currentPlayingButton === button) {
+        currentPlayingButton = null;
+      }
+
+    };
+
+    utterance.onerror = () => {
+
+      button.textContent = "▶ Play";
+      button.classList.remove("playing");
+
+      if (currentPlayingButton === button) {
+        currentPlayingButton = null;
+      }
+
+    };
+
+  }
+
+
   window.speechSynthesis.speak(
     utterance
   );
@@ -282,8 +328,19 @@ function speakText(
 
 function playAudio(
   audioPath,
-  text
+  text,
+  button
 ) {
+
+  /* If already playing this exact button, clicking it toggles off */
+  if (button && currentPlayingButton === button) {
+
+    stopCurrentStoryAudio();
+    return;
+
+  }
+
+  stopCurrentStoryAudio();
 
   if (audioPath) {
 
@@ -292,12 +349,45 @@ function playAudio(
         audioPath
       );
 
+    currentAudioInstance = audio;
+
+    if (button) {
+
+      currentPlayingButton = button;
+      button.textContent = "⏸ Playing...";
+      button.classList.add("playing");
+
+      audio.addEventListener("ended", () => {
+
+        button.textContent = "▶ Play";
+        button.classList.remove("playing");
+
+        if (currentPlayingButton === button) {
+          currentPlayingButton = null;
+        }
+
+        currentAudioInstance = null;
+
+      });
+
+      audio.addEventListener("error", () => {
+
+        /* Fallback to speech synthesis on audio error */
+        speakText(
+          text,
+          button
+        );
+
+      });
+
+    }
 
     audio.play().catch(
       () => {
 
         speakText(
-          text
+          text,
+          button
         );
 
       }
@@ -309,7 +399,8 @@ function playAudio(
 
 
   speakText(
-    text
+    text,
+    button
   );
 
 }
@@ -754,12 +845,12 @@ function renderStoryReading(
 
 
               <button
-                class="speech-button reading-audio"
+                class="audio-button reading-audio"
                 type="button"
                 data-audio="${escapeHTML(audio)}"
                 data-text="${escapeHTML(chinese)}"
               >
-                🔊 Listen
+                ▶ Play
               </button>
 
             </div>
@@ -784,7 +875,8 @@ function renderStoryReading(
 
           playAudio(
             button.dataset.audio,
-            button.dataset.text
+            button.dataset.text,
+            button
           );
 
         }
@@ -902,12 +994,12 @@ function renderVocabulary(
 
 
             <button
-              class="speech-button vocabulary-audio"
+              class="audio-button vocabulary-audio"
               type="button"
               data-audio="${escapeHTML(audio)}"
               data-text="${escapeHTML(character)}"
             >
-              🔊 Listen
+              ▶ Play
             </button>
 
           </article>
@@ -930,7 +1022,8 @@ function renderVocabulary(
 
           playAudio(
             button.dataset.audio,
-            button.dataset.text
+            button.dataset.text,
+            button
           );
 
         }

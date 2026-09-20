@@ -1021,135 +1021,548 @@ a {
 
 .lesson-card {
   position: relative;
-
   display: flex;
   flex-direction: column;
-
-  min-height: 260px;
-
-  padding: 25px;
-
   overflow: hidden;
-
-  border-radius: 20px;
-
+  border-radius: 18px;
   background: #ffffff;
-
   border: 1px solid #e5e7eb;
-
-  box-shadow:
-    0 8px 24px rgba(15, 23, 42, 0.04);
-
-  transition:
-    transform 0.25s ease,
-    box-shadow 0.25s ease;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .lesson-card:hover {
   transform: translateY(-4px);
-
-  box-shadow:
-    0 15px 35px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.1);
 }
 
-.lesson-card h3 {
-  margin-bottom: 8px;
-
-  color: #111827;
-
-  font-size: 1.25rem;
+.lesson-card-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #0f172a;
 }
 
-.lesson-card p {
-  margin-bottom: 18px;
-
-  color: #6b7280;
-
-  font-size: 0.92rem;
+.lesson-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
 }
 
-.lesson-card-footer {
-  margin-top: auto;
+.lesson-card:hover .lesson-card-image img {
+  transform: scale(1.03);
+}
 
+.lesson-card-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #d97706;
+  background: #111827;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 3.5rem;
+}
+
+.lesson-card-content {
+  padding: 24px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  gap: 15px;
+  flex-direction: column;
+  flex-grow: 1;
 }
 
-.lesson-card-tag {
+.lesson-level {
+  display: inline-block;
   color: #b45309;
-
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 800;
-
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  margin-bottom: 6px;
 }
 
-.lesson-card-link {
-  color: #b45309;
+.lesson-card-content h3 {
+  margin: 0 0 6px;
+  color: #111827;
+  font-size: 1.3rem;
+  font-weight: 800;
+}
 
-  font-size: 0.9rem;
+.lesson-chinese-title {
+  color: #374151;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 1.35rem;
   font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.lesson-pinyin {
+  color: #b45309;
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.lesson-meaning {
+  color: #6b7280;
+  font-size: 0.88rem;
+  margin-bottom: 12px;
+}
+
+.lesson-description {
+  margin: 0 0 20px;
+  color: #4b5563;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  flex-grow: 1;
+}
+
+.lesson-card-actions {
+  margin-top: auto;
+}
+
+.lesson-button {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 
 /* =========================================================
-   STORY
+   STORY LESSON PAGE (story.html)
 ========================================================= */
 
-.story-section {
+.section-light {
   background: #ffffff;
 }
 
-.story-preview {
-  display: grid;
+.section-alt {
+  background: #f7f8fc;
+}
 
-  grid-template-columns: 1fr 1fr;
+.section-dark {
+  background: #0f172a;
+  color: #ffffff;
+}
 
+.section-dark .section-heading h2 {
+  color: #ffffff;
+}
+
+.section-dark .section-heading p {
+  color: #94a3b8;
+}
+
+/* Lesson Sticky Subnavigation */
+.lesson-navigation {
+  position: sticky;
+  top: 70px;
+  z-index: 900;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.lesson-navigation-inner {
+  display: flex;
   align-items: center;
-
-  gap: 60px;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  overflow-x: auto;
+  padding: 6px 0;
 }
 
-.story-image {
-  overflow: hidden;
-
-  border-radius: 24px;
-
-  box-shadow:
-    0 20px 50px rgba(15, 23, 42, 0.1);
+.lesson-navigation a {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  color: #4b5563;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
-.story-image img {
-  width: 100%;
-  height: 100%;
-
-  aspect-ratio: 4 / 3;
-
-  object-fit: cover;
+.lesson-navigation a:hover {
+  color: #b45309;
+  background: #fff7ed;
 }
 
-.story-content h2 {
-  margin-bottom: 18px;
+/* Story Hero */
+.story-hero {
+  padding: 60px 0 50px;
+  background: #111827;
+  color: #ffffff;
+}
 
-  color: #111827;
+.story-hero .section-label {
+  color: #f59e0b;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  display: block;
+  margin-bottom: 12px;
+}
 
-  font-size: clamp(2rem, 4vw, 3rem);
-
+.story-hero h1 {
+  font-size: clamp(2.4rem, 5vw, 3.8rem);
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  margin: 0 0 10px;
+  color: #ffffff;
   line-height: 1.15;
 }
 
-.story-content p {
-  max-width: 520px;
+.story-pinyin {
+  color: #fbbf24;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
 
-  margin-bottom: 25px;
-
-  color: #6b7280;
-
+.story-meaning {
+  color: #d1d5db;
   font-size: 1.05rem;
+  margin: 0 0 22px;
+}
+
+.story-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.story-meta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  color: #e5e7eb;
+}
+
+/* 01 Watch Video Section */
+.story-section,
+.story-images-section,
+.story-reading,
+.story-vocabulary,
+.story-quiz {
+  padding: 70px 0;
+}
+
+.video-card {
+  max-width: 860px;
+  margin: 0 auto;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  box-shadow: 0 12px 35px rgba(15, 23, 42, 0.08);
+}
+
+.story-video {
+  width: 100%;
+  display: block;
+  max-height: 520px;
+  background: #000000;
+}
+
+.video-caption {
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: #ffffff;
+}
+
+.video-caption strong {
+  color: #111827;
+  font-size: 1rem;
+}
+
+.video-caption span {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+/* 02 Understand Images */
+.story-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.story-image-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.story-image-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.story-image-card img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.story-image-content {
+  padding: 20px;
+}
+
+.story-image-content h3 {
+  margin: 0 0 6px;
+  font-size: 1.2rem;
+  color: #111827;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+}
+
+.story-image-content p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+/* 03 Story Reading */
+.reading-card {
+  max-width: 900px;
+  margin: 0 auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 8px 25px rgba(15, 23, 42, 0.05);
+}
+
+.reading-item {
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  gap: 16px;
+  padding: 26px 30px;
+  border-bottom: 1px solid #e5e7eb;
+  align-items: start;
+}
+
+.reading-item:last-child {
+  border-bottom: none;
+}
+
+.reading-number {
+  color: #b45309;
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding-top: 4px;
+}
+
+.reading-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chinese-sentence {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.4;
+}
+
+.pinyin-sentence {
+  color: #b45309;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.english-sentence {
+  color: #4b5563;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+/* 04 Vocabulary */
+.vocabulary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.vocabulary-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 28px 20px 22px;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vocabulary-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.vocabulary-number {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  color: #9ca3af;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.vocabulary-character {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 3.2rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 6px 0 4px;
+  line-height: 1.1;
+}
+
+.vocabulary-pinyin {
+  color: #b45309;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.vocabulary-meaning {
+  color: #6b7280;
+  font-size: 0.92rem;
+  margin-bottom: 16px;
+}
+
+/* 05 Quiz & Exercises */
+.story-quiz-card {
+  max-width: 860px;
+  margin: 0 auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  padding: 42px;
+  box-shadow: 0 15px 40px rgba(15, 23, 42, 0.08);
+  color: #111827;
+}
+
+.story-quiz-card h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 0 0 8px;
+  color: #111827;
+}
+
+.exercise-intro {
+  color: #6b7280;
+  font-size: 1rem;
+  margin: 0 0 30px;
+}
+
+.exercise-list {
+  display: grid;
+  gap: 24px;
+}
+
+.exercise-item {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 16px;
+  padding: 24px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  align-items: start;
+}
+
+.exercise-number {
+  color: #b45309;
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding-top: 2px;
+}
+
+.exercise-body h3 {
+  margin: 0 0 16px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.45;
+}
+
+.exercise-options {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.exercise-option {
+  padding: 13px 18px;
+  text-align: left;
+  background: #ffffff;
+  border: 1.5px solid #d1d5db;
+  border-radius: 10px;
+  color: #1f2937;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.exercise-option:hover {
+  border-color: #b45309;
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.exercise-option.correct {
+  border-color: #16a34a;
+  background: #dcfce7;
+  color: #15803d;
+  font-weight: 700;
+}
+
+.exercise-option.incorrect {
+  border-color: #dc2626;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.exercise-feedback {
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
+.correct-feedback {
+  color: #15803d;
+}
+
+.incorrect-feedback {
+  color: #b91c1c;
 }
 
 
@@ -1423,6 +1836,36 @@ a {
   .story-content p {
     margin-left: auto;
     margin-right: auto;
+  }
+
+  /* Story Lesson Page Responsive */
+  .story-hero {
+    padding: 45px 0 35px;
+  }
+
+  .lesson-navigation-inner {
+    justify-content: flex-start;
+    padding: 8px 15px;
+  }
+
+  .reading-item {
+    grid-template-columns: 32px 1fr;
+    padding: 20px 16px;
+    gap: 12px;
+  }
+
+  .chinese-sentence {
+    font-size: 1.35rem;
+  }
+
+  .story-quiz-card {
+    padding: 24px 18px;
+  }
+
+  .exercise-item {
+    grid-template-columns: 1fr;
+    padding: 18px;
+    gap: 10px;
   }
 
 

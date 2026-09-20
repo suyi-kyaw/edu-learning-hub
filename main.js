@@ -511,10 +511,10 @@ function renderEverydayChinese() {
     audioButton.type = "button";
 
     audioButton.className =
-      "demo-audio-button";
+      "audio-button demo-audio-button";
 
     audioButton.textContent =
-      "🔊 Play Sound";
+      "▶ Play";
 
 
     audioButton.addEventListener(
@@ -524,7 +524,7 @@ function renderEverydayChinese() {
         playExcelAudio(
           row.audio,
           audioButton,
-          "🔊 Play Sound",
+          "▶ Play",
           "⏸ Playing..."
         );
 
@@ -554,10 +554,10 @@ function renderEverydayChinese() {
       speechButton.type = "button";
 
       speechButton.className =
-        "demo-audio-button";
+        "audio-button demo-audio-button";
 
       speechButton.textContent =
-        "🔊 Listen";
+        "▶ Play";
 
 
       speechButton.addEventListener(
@@ -691,10 +691,10 @@ function renderConversation() {
       audioButton.type = "button";
 
       audioButton.className =
-        "conversation-audio-button";
+        "audio-button conversation-audio-button";
 
       audioButton.textContent =
-        "🔊 Play Sound";
+        "▶ Play";
 
 
       audioButton.addEventListener(
@@ -704,7 +704,7 @@ function renderConversation() {
           playExcelAudio(
             row.audio,
             audioButton,
-            "🔊 Play Sound",
+            "▶ Play",
             "⏸ Playing..."
           );
 
@@ -729,10 +729,10 @@ function renderConversation() {
       speechButton.type = "button";
 
       speechButton.className =
-        "conversation-audio-button";
+        "audio-button conversation-audio-button";
 
       speechButton.textContent =
-        "🔊 Listen";
+        "▶ Play";
 
 
       speechButton.addEventListener(
@@ -1035,7 +1035,7 @@ function checkQuizAnswer(
 function playExcelAudio(
   audioPath,
   button,
-  defaultText = "🔊 Play Sound",
+  defaultText = "▶ Play",
   playingText = "⏸ Playing..."
 ) {
 
@@ -1172,26 +1172,14 @@ function stopAllDemoAudio() {
 
   document
     .querySelectorAll(
+      ".audio-button.playing, " +
       ".demo-audio-button.playing, " +
       ".conversation-audio-button.playing"
     )
     .forEach(button => {
 
-      if (
-        button.classList.contains(
-          "conversation-audio-button"
-        )
-      ) {
-
-        button.textContent =
-          "🔊 Play Sound";
-
-      } else {
-
-        button.textContent =
-          "🔊 Play Sound";
-
-      }
+      button.textContent =
+        "▶ Play";
 
       button.classList.remove(
         "playing"
@@ -1252,7 +1240,7 @@ function speakChinese(
   utterance.onend = () => {
 
     button.textContent =
-      "🔊 Listen";
+      "▶ Play";
 
     button.classList.remove(
       "playing"
@@ -1264,7 +1252,7 @@ function speakChinese(
   utterance.onerror = () => {
 
     button.textContent =
-      "🔊 Listen";
+      "▶ Play";
 
     button.classList.remove(
       "playing"
@@ -1311,7 +1299,9 @@ function renderLearningHub() {
 
 
   /*
-    Render every row in Lessons sheet.
+    Render previous format of learning hub lessons
+    with poster image, level, title, Chinese title,
+    pinyin, meaning, description, and Open Lesson button.
   */
 
   lessonData.forEach((row, index) => {
@@ -1323,97 +1313,101 @@ function renderLearningHub() {
       "lesson-card";
 
 
-    /*
-      Possible column names supported:
-      title
-      name
-      lesson
-      chinese
-      description
-      english
-      category
-    */
+    const lessonId =
+      row.id ||
+      row.lessonId ||
+      row.lesson_id ||
+      `lesson-0${index + 1}`;
 
     const title =
       row.title ||
       row.name ||
       row.lesson ||
-      row.chinese ||
       `Lesson ${index + 1}`;
 
+    const chineseTitle =
+      row.chineseTitle ||
+      row.chinese_title ||
+      row.chinese ||
+      "";
+
+    const pinyin =
+      row.pinyin ||
+      "";
+
+    const meaning =
+      row.meaning ||
+      "";
 
     const description =
       row.description ||
       row.english ||
       "";
 
-
-    const category =
+    const level =
+      row.level ||
       row.category ||
       row.section ||
-      "Chinese Lesson";
+      "Beginner";
+
+    const poster =
+      row.poster ||
+      row.image ||
+      "assets/images/story-poster.jpg";
 
 
-    const titleElement =
-      document.createElement("h3");
+    card.innerHTML = `
+      <div class="lesson-card-image">
+        ${
+          poster
+            ? `<img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}">`
+            : `<div class="lesson-card-placeholder">文</div>`
+        }
+      </div>
 
-    titleElement.textContent =
-      title;
+      <div class="lesson-card-content">
+        <span class="lesson-level">
+          ${escapeHTML(level)}
+        </span>
 
+        <h3>
+          ${escapeHTML(title)}
+        </h3>
 
-    const descriptionElement =
-      document.createElement("p");
+        ${
+          chineseTitle
+            ? `<div class="lesson-chinese-title">${escapeHTML(chineseTitle)}</div>`
+            : ""
+        }
 
-    descriptionElement.textContent =
-      description;
+        ${
+          pinyin
+            ? `<div class="lesson-pinyin">${escapeHTML(pinyin)}</div>`
+            : ""
+        }
 
+        ${
+          meaning
+            ? `<div class="lesson-meaning">${escapeHTML(meaning)}</div>`
+            : ""
+        }
 
-    const footer =
-      document.createElement("div");
+        ${
+          description
+            ? `<p class="lesson-description">${escapeHTML(description)}</p>`
+            : ""
+        }
 
-    footer.className =
-      "lesson-card-footer";
-
-
-    const tag =
-      document.createElement("span");
-
-    tag.className =
-      "lesson-card-tag";
-
-    tag.textContent =
-      category;
-
-
-    const link =
-      document.createElement("a");
-
-    link.className =
-      "lesson-card-link";
-
-    link.href =
-      "#demos";
-
-    link.textContent =
-      "Start →";
-
-
-    footer.appendChild(tag);
-
-    footer.appendChild(link);
-
-
-    card.appendChild(titleElement);
-
-    if (description) {
-
-      card.appendChild(
-        descriptionElement
-      );
-
-    }
-
-    card.appendChild(footer);
+        <div class="lesson-card-actions">
+          <a
+            href="story.html?id=${encodeURIComponent(lessonId)}"
+            class="btn btn-primary lesson-button"
+          >
+            Open Lesson
+          </a>
+        </div>
+      </div>
+    `;
 
 
     container.appendChild(card);

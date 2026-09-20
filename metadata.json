@@ -1,0 +1,6 @@
+{
+  "name": "LinguaPath - Learn Chinese",
+  "description": "Learn Chinese through pronunciation, everyday conversations, vocabulary, exercises, and interactive lessons.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
