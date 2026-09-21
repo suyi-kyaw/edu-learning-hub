@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef3c7" />
+      <stop offset="100%" stop-color="#fde68a" />
+    </linearGradient>
+    <filter id="sh4" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.08" />
+    </filter>
+  </defs>
+  <rect width="600" height="400" fill="url(#bg4)" rx="16" />
+  <circle cx="80" cy="80" r="60" fill="white" fill-opacity="0.4" />
+  <circle cx="520" cy="80" r="65" fill="white" fill-opacity="0.3" />
+  <g transform="translate(150, 45)" filter="url(#sh4)">
+    <rect width="300" height="200" rx="20" fill="white" fill-opacity="0.95" />
+    <circle cx="150" cy="80" r="42" fill="#d97706" fill-opacity="0.15" />
+    <text x="150" y="115" font-size="64" text-anchor="middle">🛍️</text>
+  </g>
+  <g transform="translate(300, 290)" text-anchor="middle">
+    <text font-family="'Noto Serif SC', 'Songti SC', serif" font-weight="bold" font-size="30" fill="#0f172a" y="0">他买了三个大苹果。</text>
+    <text font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="18" font-weight="600" fill="#d97706" y="32">Tā mǎi le sān gè dà píngguǒ.</text>
+    <text font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="16" fill="#64748b" y="60">He bought three big apples.</text>
+  </g>
+</svg>

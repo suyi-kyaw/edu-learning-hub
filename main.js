@@ -255,6 +255,17 @@ function getFallbackLessonData() {
       description: "Learn Chinese through a simple story.",
       video: "assets/video/lesson-01.mp4",
       poster: "assets/images/story-poster.jpg"
+    },
+    {
+      id: "lesson-02",
+      title: "Xiaoming Buys Fruit",
+      chineseTitle: "小明买水果",
+      pinyin: "Xiǎomíng mǎi shuǐguǒ",
+      meaning: "Xiaoming Buys Fruit",
+      level: "Beginner",
+      description: "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
+      video: "assets/video/lesson-02.mp4",
+      poster: "assets/images/story2-poster.jpg"
     }
   ];
 }
@@ -1558,6 +1569,12 @@ function renderLearningHub() {
       </div>
     `;
 
+    card.style.cursor = "pointer";
+    card.addEventListener("click", (e) => {
+      if (!e.target.closest("a") && !e.target.closest("button")) {
+        window.location.href = `story.html?id=${encodeURIComponent(lessonId)}`;
+      }
+    });
 
     container.appendChild(card);
 
