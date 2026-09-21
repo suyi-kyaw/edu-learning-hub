@@ -204,7 +204,8 @@ function getFallbackDemoData() {
       order: 5,
       chinese: "吗",
       pinyin: "ma",
-      english: "question particle"
+      english: "question particle",
+      audio: "assets/audio/tones/ma-tone-5.mp3"
     },
     {
       section: "Everyday Chinese",
@@ -221,6 +222,14 @@ function getFallbackDemoData() {
       pinyin: "Nǐ hǎo! Nǐ hǎo ma?",
       english: "Hello! How are you?",
       audio: "assets/audio/nihao-conversation.mp3"
+    },
+    {
+      section: "Conversation",
+      order: 2,
+      chinese: "早上好 !",
+      pinyin: "Zǎo Shang hǎo!",
+      english: "Good Morning !",
+      audio: "assets/audio/morning-conversation.mp3"
     },
     {
       section: "Quick Check",
@@ -375,7 +384,7 @@ function renderPronunciation() {
     button.addEventListener(
       "click",
       () => {
-        selectTone(index);
+        selectTone(index, true);
       }
     );
 
@@ -384,9 +393,9 @@ function renderPronunciation() {
 
 
   /*
-    Select first tone automatically
+    Select first tone automatically (without auto-playing on page load)
   */
-  selectTone(0);
+  selectTone(0, false);
 
 
   /*
@@ -409,7 +418,8 @@ function renderPronunciation() {
           row.audio,
           toneAudioButton,
           "▶ Play",
-          "⏸ Playing..."
+          "⏸ Playing...",
+          row.chinese
         );
 
       }
@@ -430,7 +440,7 @@ function renderPronunciation() {
    SELECT TONE
 ========================================================= */
 
-function selectTone(index) {
+function selectTone(index, shouldPlay = false) {
 
   if (
     index < 0 ||
@@ -508,6 +518,22 @@ function selectTone(index) {
     Update tone graph
   */
   updateToneGraph(index);
+
+  /*
+    Play sound if user explicitly clicked tone button
+  */
+  if (shouldPlay && row) {
+    const toneAudioButton =
+      document.getElementById("toneAudioButton");
+
+    playExcelAudio(
+      row.audio,
+      toneAudioButton,
+      "▶ Play",
+      "⏸ Playing...",
+      row.chinese
+    );
+  }
 
 }
 
@@ -685,7 +711,8 @@ function renderEverydayChinese() {
           row.audio,
           audioButton,
           "▶ Play",
-          "⏸ Playing..."
+          "⏸ Playing...",
+          row.chinese
         );
 
       }
@@ -865,7 +892,8 @@ function renderConversation() {
             row.audio,
             audioButton,
             "▶ Play",
-            "⏸ Playing..."
+            "⏸ Playing...",
+            row.chinese
           );
 
         }
@@ -1152,6 +1180,8 @@ function checkQuizAnswer(
     feedback.textContent =
       "✓ Correct!";
 
+    playFeedbackSound(true);
+
   } else {
 
     selectedButton.classList.add(
@@ -1163,6 +1193,8 @@ function checkQuizAnswer(
 
     feedback.textContent =
       `✗ Correct answer: ${correctAnswer}`;
+
+    playFeedbackSound(false);
 
     /*
       Highlight correct option
@@ -1189,6 +1221,61 @@ function checkQuizAnswer(
 
 
 /* =========================================================
+   AUDIO FEEDBACK SOUNDS (QUIZ / EXERCISES)
+========================================================= */
+
+function playFeedbackSound(isCorrect) {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    if (isCorrect) {
+      // Pleasant rising chime (D5 -> A5)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(587.33, now);
+      osc.frequency.setValueAtTime(880.00, now + 0.12);
+
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.45);
+    } else {
+      // Gentle soft descending tone (400Hz -> 310Hz)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(400, now);
+      osc.frequency.setValueAtTime(310, now + 0.14);
+
+      gain.gain.setValueAtTime(0.14, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.38);
+    }
+  } catch (e) {
+    /* AudioContext blocked or unsupported */
+  }
+}
+
+
+/* =========================================================
    PLAY AUDIO FROM EXCEL
 ========================================================= */
 
@@ -1196,100 +1283,112 @@ function playExcelAudio(
   audioPath,
   button,
   defaultText = "▶ Play",
-  playingText = "⏸ Playing..."
+  playingText = "⏸ Playing...",
+  fallbackText = ""
 ) {
 
   /*
-    If there is no audio path,
-    use speech fallback.
+    If this button is already playing, clicking it stops audio.
   */
-
-  if (!hasAudio(audioPath)) {
-
+  if (button && button.classList.contains("playing")) {
+    stopAllDemoAudio();
     return;
-
   }
-
 
   /*
     Stop currently playing demo audio.
   */
-
   stopAllDemoAudio();
 
+  /*
+    If there is no audio path, use speech fallback.
+  */
+  if (!hasAudio(audioPath)) {
+    if (fallbackText && button) {
+      speakChinese(fallbackText, button);
+    }
+    return;
+  }
 
   const audio =
     new Audio(audioPath);
 
+  if (button) {
+    button.textContent =
+      playingText;
 
-  button.textContent =
-    playingText;
-
-  button.classList.add(
-    "playing"
-  );
-
+    button.classList.add(
+      "playing"
+    );
+  }
 
   audio.addEventListener(
     "ended",
     () => {
+      if (button) {
+        button.textContent =
+          defaultText;
 
-      button.textContent =
-        defaultText;
+        button.classList.remove(
+          "playing"
+        );
+      }
 
-      button.classList.remove(
-        "playing"
-      );
-
+      if (window.linguaPathCurrentAudio === audio) {
+        window.linguaPathCurrentAudio = null;
+      }
     }
   );
-
 
   audio.addEventListener(
     "error",
     () => {
-
       console.warn(
         "Could not play audio:",
         audioPath
       );
 
+      if (fallbackText && button) {
+        speakChinese(
+          fallbackText,
+          button
+        );
+      } else if (button) {
+        button.textContent =
+          defaultText;
 
-      button.textContent =
-        defaultText;
-
-      button.classList.remove(
-        "playing"
-      );
-
+        button.classList.remove(
+          "playing"
+        );
+      }
     }
   );
 
-
   audio.play()
     .catch(error => {
-
       console.warn(
-        "Audio playback was blocked:",
+        "Audio playback was blocked or failed:",
         error
       );
 
+      if (fallbackText && button) {
+        speakChinese(
+          fallbackText,
+          button
+        );
+      } else if (button) {
+        button.textContent =
+          defaultText;
 
-      button.textContent =
-        defaultText;
-
-      button.classList.remove(
-        "playing"
-      );
-
+        button.classList.remove(
+          "playing"
+        );
+      }
     });
 
-
   /*
-    Store reference so other demo audio
-    can stop it.
+    Store reference so other demo audio can stop it.
   */
-
   window.linguaPathCurrentAudio =
     audio;
 }

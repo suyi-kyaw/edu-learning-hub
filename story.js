@@ -328,6 +328,61 @@ function speakText(
 
 
 /* =========================================================
+   AUDIO FEEDBACK SOUNDS (EXERCISES)
+   ========================================================= */
+
+function playFeedbackSound(isCorrect) {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    if (isCorrect) {
+      // Pleasant rising chime (D5 -> A5)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(587.33, now);
+      osc.frequency.setValueAtTime(880.00, now + 0.12);
+
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.45);
+    } else {
+      // Gentle soft descending tone (400Hz -> 310Hz)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(400, now);
+      osc.frequency.setValueAtTime(310, now + 0.14);
+
+      gain.gain.setValueAtTime(0.14, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.38);
+    }
+  } catch (e) {
+    /* AudioContext blocked or unsupported */
+  }
+}
+
+
+/* =========================================================
    PLAY AUDIO
    ========================================================= */
 
@@ -601,6 +656,35 @@ function renderVideo(
 
   }
 
+  /*
+    Full Story Audio Player
+  */
+  const fullStoryBtn =
+    document.getElementById("fullStoryAudioBtn");
+
+  if (fullStoryBtn) {
+    const lessonId =
+      getValue(lesson, "id", "ID", "lessonId") || "lesson-01";
+
+    const fullAudioPath =
+      getValue(lesson, "fullAudio", "FullAudio") ||
+      (lessonId === "lesson-02"
+        ? "assets/audio/lesson-02-full.mp3"
+        : "assets/audio/lesson-01-full.mp3");
+
+    const fullStoryText =
+      getValue(lesson, "chineseTitle", "ChineseTitle", "title") ||
+      "Chinese Story";
+
+    fullStoryBtn.onclick = () => {
+      playAudio(
+        fullAudioPath,
+        fullStoryText,
+        fullStoryBtn
+      );
+    };
+  }
+
 }
 
 
@@ -745,6 +829,16 @@ function renderStoryImages(
                   : ""
               }
 
+              <button
+                type="button"
+                class="audio-button understand-audio"
+                data-audio="${escapeHTML(getValue(row, "audio", "Audio"))}"
+                data-text="${escapeHTML(chinese)}"
+                style="margin-top: 10px; font-size: 0.8rem; padding: 5px 12px; min-height: 32px;"
+              >
+                ▶ Play Sound
+              </button>
+
             </div>
 
           </article>
@@ -753,6 +847,19 @@ function renderStoryImages(
 
       }
     ).join("");
+
+  container
+    .querySelectorAll(".understand-audio")
+    .forEach(button => {
+      button.addEventListener("click", (e) => {
+        e.stopPropagation();
+        playAudio(
+          button.dataset.audio,
+          button.dataset.text,
+          button
+        );
+      });
+    });
 
 }
 
@@ -1376,6 +1483,12 @@ function initializeExercises() {
                   : "incorrect"
               );
 
+              playFeedbackSound(isCorrect);
+
+              const chineseMatch = (option.dataset.value || "").match(/[\u4e00-\u9fa5]+/);
+              if (chineseMatch) {
+                speakText(chineseMatch[0]);
+              }
 
               if (feedback) {
 

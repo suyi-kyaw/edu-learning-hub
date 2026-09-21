@@ -602,6 +602,11 @@ a {
   transform: translateY(-1px);
 }
 
+.audio-button.playing {
+  background: #b45309 !important;
+  color: #ffffff !important;
+}
+
 .tone-graph {
   width: 100%;
   height: 90px;
