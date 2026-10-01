@@ -10,6 +10,10 @@
 const EXCEL_FILE =
   "data/lessons.xlsx";
 
+let currentLoadedLessonId = "lesson-01";
+let currentLoadedLesson = null;
+let currentLoadedAllLessons = [];
+
 
 /* =========================================================
    HELPERS
@@ -1500,6 +1504,8 @@ function initializeExercises() {
                   feedback.className =
                     "exercise-feedback correct-feedback";
 
+                  checkAllExercisesCompleted();
+
                 } else {
 
                   feedback.textContent =
@@ -1778,6 +1784,10 @@ async function loadStoryLesson() {
       exerciseRows = sortByOrder(allExerciseRows);
     }
 
+    currentLoadedLessonId = currentLessonId;
+    currentLoadedLesson = lesson;
+    currentLoadedAllLessons = lessons;
+
     // Render all page sections
     renderLessonHeader(lesson);
     renderVideo(lesson);
@@ -2052,6 +2062,133 @@ function updateStoryProgressUI(lessonId) {
   }
 }
 
+function checkAllExercisesCompleted() {
+  const allExercises = document.querySelectorAll(".exercise-item");
+  if (!allExercises.length) return;
+
+  const correctCount = document.querySelectorAll(".exercise-item .exercise-option.correct").length;
+  if (correctCount >= allExercises.length) {
+    const prog = getStoryLessonProgress(currentLoadedLessonId);
+    if (!prog.completed) {
+      saveStoryLessonProgress(currentLoadedLessonId, 100, true);
+      updateStoryProgressUI(currentLoadedLessonId);
+      const title = currentLoadedLesson
+        ? (currentLoadedLesson.title ? `${currentLoadedLesson.title} (${currentLoadedLesson.chineseTitle || ""})` : currentLoadedLessonId)
+        : currentLoadedLessonId;
+      showStoryCompletionModal(title, currentLoadedLessonId, currentLoadedAllLessons);
+    }
+  }
+}
+
+function getTotalCompletedLessonsCount() {
+  try {
+    const raw = localStorage.getItem("linguapath_lesson_progress");
+    if (!raw) return 0;
+    const all = JSON.parse(raw);
+    let count = 0;
+    for (const k of Object.keys(all)) {
+      if (all[k] && (all[k].completed || all[k].percent >= 100)) {
+        count++;
+      }
+    }
+    return count;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function showStoryCompletionModal(lessonTitle, lessonId, lessons) {
+  const modal = document.getElementById("completionModal");
+  if (!modal) return;
+
+  const count = getTotalCompletedLessonsCount();
+  const totalAvailable = (lessons && lessons.length) ? lessons.length : 2;
+
+  const titleEl = document.getElementById("completionLessonTitle");
+  if (titleEl) {
+    titleEl.textContent = lessonTitle ? `You completed ${lessonTitle}!` : "You completed this lesson!";
+  }
+
+  const countEl = document.getElementById("completionTotalCount");
+  if (countEl) {
+    countEl.textContent = String(count);
+  }
+
+  const statusEl = document.getElementById("completionStatusMessage");
+  if (statusEl) {
+    if (count >= totalAvailable && totalAvailable > 0) {
+      statusEl.textContent = `🌟 Outstanding achievement! You have completed all ${totalAvailable} lessons!`;
+    } else {
+      statusEl.textContent = `You've completed ${count} of ${totalAvailable} lessons. Keep up the great work!`;
+    }
+  }
+
+  // Find next lesson if available
+  const nextLesson = (lessons || []).find((l) => {
+    const lid = String(l.id || l.lessonId || "").trim().toLowerCase();
+    return lid && lid !== String(lessonId).trim().toLowerCase();
+  });
+
+  const actionsContainer = document.getElementById("completionModalActions");
+  if (actionsContainer) {
+    actionsContainer.innerHTML = "";
+
+    if (nextLesson) {
+      const nextBtn = document.createElement("a");
+      nextBtn.href = `story.html?id=${encodeURIComponent(nextLesson.id || nextLesson.lessonId)}`;
+      nextBtn.className = "btn btn-primary";
+      nextBtn.textContent = `Next: ${nextLesson.title || "Next Lesson"} →`;
+      actionsContainer.appendChild(nextBtn);
+    }
+
+    const hubBtn = document.createElement("a");
+    hubBtn.href = "index.html#lessons";
+    hubBtn.className = nextLesson ? "btn btn-secondary" : "btn btn-primary";
+    hubBtn.textContent = "Learning Hub";
+    actionsContainer.appendChild(hubBtn);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "btn btn-secondary";
+    closeBtn.textContent = "Close";
+    closeBtn.addEventListener("click", closeStoryCompletionModal);
+    actionsContainer.appendChild(closeBtn);
+  }
+
+  modal.classList.add("active");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+}
+
+function closeStoryCompletionModal() {
+  const modal = document.getElementById("completionModal");
+  if (!modal) return;
+  modal.classList.remove("active");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+}
+
+function setupStoryCompletionModalListeners() {
+  const modal = document.getElementById("completionModal");
+  const closeBtn = document.getElementById("closeCompletionModalBtn");
+
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeStoryCompletionModal);
+  }
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        closeStoryCompletionModal();
+      }
+    });
+  }
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal && modal.classList.contains("active")) {
+      closeStoryCompletionModal();
+    }
+  });
+}
+
 function setupStoryProgress(lessonId) {
   const current = getStoryLessonProgress(lessonId);
   // Mark as started (e.g. 35% in progress) if not started yet
@@ -2069,6 +2206,13 @@ function setupStoryProgress(lessonId) {
       const newDone = !isDone;
       saveStoryLessonProgress(lessonId, newDone ? 100 : 35, newDone);
       updateStoryProgressUI(lessonId);
+
+      if (newDone) {
+        const title = currentLoadedLesson
+          ? (currentLoadedLesson.title ? `${currentLoadedLesson.title} (${currentLoadedLesson.chineseTitle || ""})` : lessonId)
+          : lessonId;
+        showStoryCompletionModal(title, lessonId, currentLoadedAllLessons);
+      }
     });
   }
 }
@@ -2083,6 +2227,8 @@ document.addEventListener(
   () => {
 
     initializeMobileMenu();
+
+    setupStoryCompletionModalListeners();
 
     loadStoryLesson();
 

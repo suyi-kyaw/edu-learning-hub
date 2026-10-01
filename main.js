@@ -44,6 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupMobileMenu();
   setupSearchAndFilter();
   setupDemoCardsClick();
+  setupCompletionModalListeners();
   loadWorkbook();
 });
 
@@ -501,20 +502,29 @@ function selectTone(index, shouldPlay = false) {
 
 
   if (toneCharacter) {
-
     toneCharacter.textContent =
       row.chinese ||
       "";
-
   }
 
+  const toneTranslation =
+    document.getElementById("toneTranslation");
+
+  if (toneTranslation) {
+    toneTranslation.textContent =
+      row.english ? `(${row.english})` : "";
+  }
 
   if (toneDescription) {
-
+    const toneGuides = [
+      "1st Tone: High & flat pitch contour",
+      "2nd Tone: Rising pitch like asking a question",
+      "3rd Tone: Dipping pitch that drops then rises",
+      "4th Tone: Falling pitch like giving a command",
+      "Neutral Tone: Light and short de-emphasized pitch"
+    ];
     toneDescription.textContent =
-      row.english ||
-      "Select a tone to hear the pronunciation.";
-
+      toneGuides[index] || "Select a tone to hear the pronunciation.";
   }
 
 
@@ -1587,6 +1597,98 @@ function toggleLessonCompletion(lessonId) {
   const newPercent = newCompleted ? 100 : 0;
   saveLessonProgress(cleanId, newPercent, newCompleted);
   renderLearningHub();
+
+  if (newCompleted) {
+    const lesson = (lessonData || []).find((l) => {
+      const lid = l.id || l.lessonId || l.lesson_id;
+      return String(lid).trim().toLowerCase() === cleanId.toLowerCase();
+    });
+    const lessonTitle = lesson
+      ? (lesson.title ? `${lesson.title} (${lesson.chineseTitle || ""})` : cleanId)
+      : cleanId;
+    showCompletionModal(lessonTitle, cleanId);
+  }
+}
+
+function getTotalCompletedLessonsCount() {
+  const all = getAllLessonProgress();
+  let count = 0;
+  for (const k of Object.keys(all)) {
+    if (all[k] && (all[k].completed || all[k].percent >= 100)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function showCompletionModal(lessonTitle, lessonId) {
+  const modal = document.getElementById("completionModal");
+  if (!modal) return;
+
+  const count = getTotalCompletedLessonsCount();
+  const totalAvailable = (lessonData && lessonData.length) ? lessonData.length : 2;
+
+  const titleEl = document.getElementById("completionLessonTitle");
+  if (titleEl) {
+    titleEl.textContent = lessonTitle ? `You completed ${lessonTitle}!` : "You completed this lesson!";
+  }
+
+  const countEl = document.getElementById("completionTotalCount");
+  if (countEl) {
+    countEl.textContent = String(count);
+  }
+
+  const statusEl = document.getElementById("completionStatusMessage");
+  if (statusEl) {
+    if (count >= totalAvailable && totalAvailable > 0) {
+      statusEl.textContent = `🌟 Amazing achievement! You have completed all ${totalAvailable} lessons!`;
+    } else {
+      statusEl.textContent = `You've completed ${count} of ${totalAvailable} lessons. Keep up the great work!`;
+    }
+  }
+
+  const primaryBtn = document.getElementById("completionPrimaryBtn");
+  if (primaryBtn) {
+    primaryBtn.textContent = "Continue Learning";
+    primaryBtn.onclick = () => closeCompletionModal();
+  }
+
+  modal.classList.add("active");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+}
+
+function closeCompletionModal() {
+  const modal = document.getElementById("completionModal");
+  if (!modal) return;
+  modal.classList.remove("active");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+}
+
+function setupCompletionModalListeners() {
+  const modal = document.getElementById("completionModal");
+  const closeBtn = document.getElementById("closeCompletionModalBtn");
+  const secondaryBtn = document.getElementById("completionSecondaryBtn");
+
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeCompletionModal);
+  }
+  if (secondaryBtn) {
+    secondaryBtn.addEventListener("click", closeCompletionModal);
+  }
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        closeCompletionModal();
+      }
+    });
+  }
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal && modal.classList.contains("active")) {
+      closeCompletionModal();
+    }
+  });
 }
 
 

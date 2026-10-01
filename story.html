@@ -517,6 +517,38 @@
   </footer>
 
 
+  <!-- =========================
+       LESSON COMPLETION MODAL
+  ========================== -->
+  <div id="completionModal" class="completion-modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="completionModalTitle">
+    <div class="completion-modal-card">
+      <button type="button" class="completion-modal-close" id="closeCompletionModalBtn" aria-label="Close modal">✕</button>
+      
+      <div class="completion-trophy-wrap" aria-hidden="true">🎉</div>
+      <span class="completion-badge">Lesson Complete</span>
+      <h2 id="completionModalTitle">恭喜！Congratulations!</h2>
+      <p id="completionLessonTitle" class="completion-lesson-name">You have completed the lesson.</p>
+
+      <div class="completion-stats-box">
+        <div class="completion-stat-item">
+          <span class="stat-icon" aria-hidden="true">🏆</span>
+          <div class="stat-info">
+            <span class="stat-value" id="completionTotalCount">0</span>
+            <span class="stat-label">Total Lessons Completed</span>
+          </div>
+        </div>
+        <div class="completion-stat-status" id="completionStatusMessage">
+          You are making wonderful progress on your Chinese learning journey!
+        </div>
+      </div>
+
+      <div class="completion-modal-actions" id="completionModalActions">
+        <!-- Dynamic actions injected by story.js -->
+      </div>
+    </div>
+  </div>
+
+
   <!-- SheetJS (Local with CDN fallback) -->
   <script src="vendor/xlsx.full.min.js"></script>
   <script>
