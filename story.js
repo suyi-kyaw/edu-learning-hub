@@ -2407,6 +2407,454 @@ function setupStreakBadgeInteractions() {
 
 
 /* =========================================================
+   DAILY STUDY REMINDER & BROWSER NOTIFICATION SYSTEM
+========================================================= */
+
+const DAILY_REMINDER_STORAGE_KEY = "linguapath_daily_reminder";
+
+function getDailyReminderSettings() {
+  try {
+    const raw = localStorage.getItem(DAILY_REMINDER_STORAGE_KEY);
+    if (!raw) {
+      return {
+        enabled: true,
+        time: "18:00",
+        lastNotifiedDate: null
+      };
+    }
+    const data = JSON.parse(raw);
+    return {
+      enabled: data.enabled !== false,
+      time: data.time || "18:00",
+      lastNotifiedDate: data.lastNotifiedDate || null
+    };
+  } catch (e) {
+    return { enabled: true, time: "18:00", lastNotifiedDate: null };
+  }
+}
+
+function saveDailyReminderSettings(settings) {
+  try {
+    localStorage.setItem(DAILY_REMINDER_STORAGE_KEY, JSON.stringify(settings));
+    updateReminderBellUI();
+    updateReminderGoalStatusUI();
+  } catch (e) {
+    console.warn("Could not save reminder settings:", e);
+  }
+}
+
+function hasCompletedDailyGoalToday() {
+  const today = getLocalDateString();
+  const streakData = getDailyStreakData();
+  if (streakData && streakData.lastCompletedDate === today) {
+    return true;
+  }
+  try {
+    const raw = localStorage.getItem("linguapath_lesson_progress");
+    if (raw) {
+      const all = JSON.parse(raw);
+      for (const k of Object.keys(all)) {
+        if (all[k] && all[k].completed && all[k].lastUpdated) {
+          const d = getLocalDateString(new Date(all[k].lastUpdated));
+          if (d === today) return true;
+        }
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
+function formatReminderTimeDisplay(timeStr) {
+  if (!timeStr) return "06:00 PM";
+  const [hStr, mStr] = timeStr.split(":");
+  let h = parseInt(hStr, 10);
+  const m = mStr || "00";
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12;
+  h = h ? h : 12;
+  const displayH = String(h).padStart(2, "0");
+  return `${displayH}:${m} ${ampm}`;
+}
+
+async function requestBrowserNotificationPermission(onResult) {
+  if (!("Notification" in window)) {
+    if (typeof onResult === "function") onResult("unsupported");
+    return "unsupported";
+  }
+  try {
+    const permission = await Notification.requestPermission();
+    updatePermissionCardUI();
+    if (typeof onResult === "function") onResult(permission);
+    return permission;
+  } catch (e) {
+    console.warn("Notification.requestPermission failed:", e);
+    if (typeof onResult === "function") onResult("denied");
+    return "denied";
+  }
+}
+
+function sendBrowserNotification(title, options = {}) {
+  const bodyText = options.body || "Keep your learning streak going! Complete today's Chinese lesson.";
+  const notifOptions = {
+    body: bodyText,
+    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='25' fill='%23ea580c'/><text x='50' y='68' font-size='50' text-anchor='middle' fill='%23ffffff' font-family='sans-serif'>语</text></svg>",
+    badge: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔔</text></svg>",
+    tag: options.tag || "linguapath-reminder",
+    renotify: true
+  };
+
+  let sentNative = false;
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      const notif = new Notification(title, notifOptions);
+      notif.onclick = () => {
+        window.focus();
+        if (options.url) {
+          window.location.href = options.url;
+        }
+        notif.close();
+      };
+      sentNative = true;
+    } catch (e) {
+      console.warn("Native Notification dispatch error (browser iframe policy):", e);
+    }
+  }
+
+  // Always show in-app toast for visibility and fallback
+  showInAppReminderToast(title, bodyText, options.url || "index.html#lessons");
+  return sentNative;
+}
+
+function showInAppReminderToast(title, message, actionUrl) {
+  const container = document.getElementById("reminderToastContainer");
+  if (!container) return;
+
+  const toast = document.createElement("div");
+  toast.className = "reminder-toast";
+  toast.setAttribute("role", "alert");
+  toast.innerHTML = `
+    <div class="reminder-toast-icon">🔔</div>
+    <div class="reminder-toast-content">
+      <div class="reminder-toast-title">${escapeHTML(title)}</div>
+      <div class="reminder-toast-body">${escapeHTML(message)}</div>
+      ${actionUrl ? `<a href="${actionUrl}" class="reminder-toast-action">Start Lesson →</a>` : ""}
+    </div>
+    <button type="button" class="reminder-toast-close" aria-label="Dismiss">✕</button>
+  `;
+
+  const closeBtn = toast.querySelector(".reminder-toast-close");
+  const dismiss = () => {
+    toast.classList.add("toast-hiding");
+    setTimeout(() => toast.remove(), 260);
+  };
+
+  if (closeBtn) closeBtn.onclick = dismiss;
+  const actionBtn = toast.querySelector(".reminder-toast-action");
+  if (actionBtn) {
+    actionBtn.addEventListener("click", () => {
+      dismiss();
+    });
+  }
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    if (toast.parentNode) dismiss();
+  }, 7500);
+}
+
+function checkAndTriggerDailyReminder() {
+  const settings = getDailyReminderSettings();
+  if (!settings.enabled) return;
+
+  // If already completed daily goal today, no need to remind!
+  if (hasCompletedDailyGoalToday()) {
+    updateReminderGoalStatusUI();
+    return;
+  }
+
+  const today = getLocalDateString();
+  if (settings.lastNotifiedDate === today) {
+    // Already notified today
+    return;
+  }
+
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const [hStr, mStr] = (settings.time || "18:00").split(":");
+  const targetMinutes = (parseInt(hStr, 10) || 0) * 60 + (parseInt(mStr, 10) || 0);
+
+  if (currentMinutes >= targetMinutes) {
+    // Trigger notification!
+    const targetUrl = typeof currentLoadedLessonId !== "undefined"
+      ? `story.html?id=${encodeURIComponent(currentLoadedLessonId)}#exercises`
+      : "index.html#lessons";
+
+    sendBrowserNotification("LinguaPath Daily Lesson Reminder 🎯", {
+      body: "You haven't completed a lesson yet today! Practice now to keep your streak burning 🔥",
+      tag: "daily-study-reminder-" + today,
+      url: targetUrl
+    });
+
+    settings.lastNotifiedDate = today;
+    saveDailyReminderSettings(settings);
+    updateReminderGoalStatusUI();
+  }
+}
+
+function startDailyReminderScheduler() {
+  checkAndTriggerDailyReminder();
+  setInterval(checkAndTriggerDailyReminder, 60000);
+}
+
+function updateReminderBellUI() {
+  const settings = getDailyReminderSettings();
+  const dot = document.getElementById("reminderStatusDot");
+  const bellBtn = document.getElementById("reminderBellBtn");
+
+  if (dot) {
+    if (settings.enabled) {
+      dot.classList.add("active");
+    } else {
+      dot.classList.remove("active");
+    }
+  }
+
+  if (bellBtn) {
+    const formatted = formatReminderTimeDisplay(settings.time);
+    if (settings.enabled) {
+      bellBtn.setAttribute("title", `Daily Study Reminder active for ${formatted}. Click to change settings.`);
+    } else {
+      bellBtn.setAttribute("title", "Daily Study Reminder is paused. Click to enable.");
+    }
+  }
+}
+
+function updatePermissionCardUI() {
+  const card = document.getElementById("reminderPermissionCard");
+  const icon = document.getElementById("permissionIcon");
+  const title = document.getElementById("permissionTitle");
+  const text = document.getElementById("permissionStatusText");
+  const btn = document.getElementById("requestPermissionBtn");
+  if (!card) return;
+
+  if (!("Notification" in window)) {
+    card.className = "reminder-permission-card";
+    if (icon) icon.textContent = "ℹ️";
+    if (title) title.textContent = "In-App Notifications";
+    if (text) text.textContent = "Browser Notification API is not supported in this browser; in-app reminder toasts will be used.";
+    if (btn) btn.style.display = "none";
+    return;
+  }
+
+  const perm = Notification.permission;
+  if (perm === "granted") {
+    card.className = "reminder-permission-card is-granted";
+    if (icon) icon.textContent = "✅";
+    if (title) title.textContent = "Browser Notifications Active";
+    if (text) text.textContent = "Notifications are allowed. You'll receive system alerts even when this tab is in the background.";
+    if (btn) btn.style.display = "none";
+  } else if (perm === "denied") {
+    card.className = "reminder-permission-card is-denied";
+    if (icon) icon.textContent = "⚠️";
+    if (title) title.textContent = "Browser Notifications Blocked";
+    if (text) text.textContent = "Notifications are blocked in your browser settings. In-app reminder alerts will be used instead.";
+    if (btn) btn.style.display = "none";
+  } else {
+    card.className = "reminder-permission-card";
+    if (icon) icon.textContent = "🔔";
+    if (title) title.textContent = "Enable Browser Alerts";
+    if (text) text.textContent = "Allow browser notifications so you never miss your daily Chinese practice goal.";
+    if (btn) {
+      btn.style.display = "inline-flex";
+      btn.textContent = "Allow";
+    }
+  }
+}
+
+function updateReminderGoalStatusUI() {
+  const statusCard = document.getElementById("reminderGoalStatus");
+  const icon = document.getElementById("goalStatusIcon");
+  const title = document.getElementById("goalStatusTitle");
+  const desc = document.getElementById("goalStatusDesc");
+  if (!statusCard) return;
+
+  const isCompleted = hasCompletedDailyGoalToday();
+  const settings = getDailyReminderSettings();
+  const formattedTime = formatReminderTimeDisplay(settings.time);
+
+  if (isCompleted) {
+    if (icon) icon.textContent = "🎉";
+    if (title) title.textContent = "Daily Goal Completed!";
+    if (desc) desc.textContent = "Great job! You've already completed a lesson today. Your daily streak is safe!";
+  } else {
+    if (icon) icon.textContent = "⏳";
+    if (title) title.textContent = "Daily Goal Pending";
+    if (desc) {
+      if (settings.enabled) {
+        desc.textContent = `You'll be prompted at ${formattedTime} if you haven't finished a lesson today.`;
+      } else {
+        desc.textContent = "No lesson completed yet today. Enable the reminder above to receive an alert!";
+      }
+    }
+  }
+}
+
+function openReminderModal() {
+  const modal = document.getElementById("reminderModal");
+  if (!modal) return;
+
+  const settings = getDailyReminderSettings();
+
+  const toggle = document.getElementById("reminderToggle");
+  if (toggle) {
+    toggle.checked = settings.enabled;
+  }
+
+  const customInput = document.getElementById("reminderCustomTime");
+  if (customInput) {
+    customInput.value = settings.time || "18:00";
+  }
+
+  const chips = document.querySelectorAll("#reminderTimePresets .time-chip");
+  chips.forEach((chip) => {
+    chip.classList.toggle("active", chip.dataset.time === settings.time);
+  });
+
+  const timeSection = document.getElementById("reminderTimeSection");
+  if (timeSection) {
+    timeSection.style.opacity = settings.enabled ? "1" : "0.5";
+    timeSection.style.pointerEvents = settings.enabled ? "auto" : "none";
+  }
+
+  updatePermissionCardUI();
+  updateReminderGoalStatusUI();
+
+  modal.classList.add("active");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+}
+
+function closeReminderModal() {
+  const modal = document.getElementById("reminderModal");
+  if (!modal) return;
+  modal.classList.remove("active");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+}
+
+function setupReminderUI() {
+  const bellBtn = document.getElementById("reminderBellBtn");
+  const modal = document.getElementById("reminderModal");
+  const closeBtn = document.getElementById("closeReminderModalBtn");
+  const saveBtn = document.getElementById("saveReminderBtn");
+  const testBtn = document.getElementById("testNotificationBtn");
+  const toggle = document.getElementById("reminderToggle");
+  const customInput = document.getElementById("reminderCustomTime");
+  const requestPermBtn = document.getElementById("requestPermissionBtn");
+  const timePresets = document.querySelectorAll("#reminderTimePresets .time-chip");
+
+  updateReminderBellUI();
+
+  if (bellBtn) {
+    bellBtn.addEventListener("click", () => {
+      openReminderModal();
+    });
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeReminderModal);
+  }
+
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        closeReminderModal();
+      }
+    });
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal && modal.classList.contains("active")) {
+      closeReminderModal();
+    }
+  });
+
+  if (toggle) {
+    toggle.addEventListener("change", () => {
+      const timeSection = document.getElementById("reminderTimeSection");
+      if (timeSection) {
+        timeSection.style.opacity = toggle.checked ? "1" : "0.5";
+        timeSection.style.pointerEvents = toggle.checked ? "auto" : "none";
+      }
+      if (toggle.checked && "Notification" in window && Notification.permission === "default") {
+        requestBrowserNotificationPermission();
+      }
+    });
+  }
+
+  timePresets.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      timePresets.forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      if (customInput) {
+        customInput.value = chip.dataset.time;
+      }
+    });
+  });
+
+  if (customInput) {
+    customInput.addEventListener("input", () => {
+      timePresets.forEach((c) => {
+        c.classList.toggle("active", c.dataset.time === customInput.value);
+      });
+    });
+  }
+
+  if (requestPermBtn) {
+    requestPermBtn.addEventListener("click", () => {
+      requestBrowserNotificationPermission();
+    });
+  }
+
+  if (testBtn) {
+    testBtn.addEventListener("click", async () => {
+      if ("Notification" in window && Notification.permission === "default") {
+        await requestBrowserNotificationPermission();
+      }
+      const timeVal = customInput ? customInput.value : "18:00";
+      sendBrowserNotification("LinguaPath Daily Reminder 🔔", {
+        body: `Test successful! You'll be reminded at ${formatReminderTimeDisplay(timeVal)} if today's lesson isn't completed.`,
+        url: typeof currentLoadedLessonId !== "undefined"
+          ? `story.html?id=${encodeURIComponent(currentLoadedLessonId)}#exercises`
+          : "index.html#lessons"
+      });
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      const enabled = toggle ? toggle.checked : true;
+      const time = customInput ? (customInput.value || "18:00") : "18:00";
+      const settings = getDailyReminderSettings();
+      settings.enabled = enabled;
+      settings.time = time;
+      saveDailyReminderSettings(settings);
+      closeReminderModal();
+      showInAppReminderToast("Reminder Saved", `Daily reminder is ${enabled ? `active for ${formatReminderTimeDisplay(time)}` : "paused"}.`);
+    });
+  }
+
+  window.addEventListener("storage", (e) => {
+    if (e.key === DAILY_REMINDER_STORAGE_KEY) {
+      updateReminderBellUI();
+    }
+  });
+}
+
+
+/* =========================================================
    START
    ========================================================= */
 
@@ -2417,6 +2865,8 @@ document.addEventListener(
     setupStoryCompletionModalListeners();
     updateHeaderStreakUI();
     setupStreakBadgeInteractions();
+    setupReminderUI();
+    startDailyReminderScheduler();
     loadStoryLesson();
   }
 );

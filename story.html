@@ -76,6 +76,18 @@
           </div>
         </div>
 
+        <!-- Daily Lesson Reminder Bell -->
+        <button
+          type="button"
+          class="reminder-bell-btn"
+          id="reminderBellBtn"
+          aria-label="Daily Lesson Reminder"
+          title="Daily Lesson Reminder: Get prompted to complete a lesson"
+        >
+          <span class="bell-icon" aria-hidden="true">🔔</span>
+          <span class="reminder-status-dot" id="reminderStatusDot" aria-hidden="true"></span>
+        </button>
+
         <nav class="main-nav" id="mainNav">
           <a href="index.html#home">Home</a>
           <a href="index.html#demos">Demo Lessons</a>
@@ -578,6 +590,79 @@
       </div>
     </div>
   </div>
+
+
+  <!-- =========================
+       DAILY REMINDER MODAL
+  ========================== -->
+  <div id="reminderModal" class="reminder-modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="reminderModalTitle">
+    <div class="reminder-modal-card">
+      <button type="button" class="reminder-modal-close" id="closeReminderModalBtn" aria-label="Close reminder settings">✕</button>
+
+      <div class="reminder-modal-header">
+        <div class="reminder-bell-avatar" aria-hidden="true">🔔</div>
+        <h2 id="reminderModalTitle">Daily Lesson Reminder</h2>
+        <p class="reminder-modal-subtitle">Stay consistent on your Chinese learning journey with a daily notification.</p>
+      </div>
+
+      <div class="reminder-section">
+        <div class="reminder-toggle-row">
+          <div class="reminder-toggle-text">
+            <strong>Daily Goal Reminder</strong>
+            <span>Prompt me to complete a lesson if I haven't reached my daily goal</span>
+          </div>
+          <label class="switch-toggle" for="reminderToggle">
+            <input type="checkbox" id="reminderToggle" checked>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="reminder-section" id="reminderTimeSection">
+        <label class="reminder-section-label" for="reminderCustomTime">Reminder Time</label>
+        <p class="reminder-section-desc">If today's lesson isn't completed by this time, a reminder notification will pop up.</p>
+        
+        <div class="reminder-preset-chips" id="reminderTimePresets">
+          <button type="button" class="time-chip" data-time="09:00">09:00 AM 🌅</button>
+          <button type="button" class="time-chip" data-time="12:30">12:30 PM ☀️</button>
+          <button type="button" class="time-chip active" data-time="18:00">06:00 PM 🌇</button>
+          <button type="button" class="time-chip" data-time="20:30">08:30 PM 🌙</button>
+        </div>
+
+        <div class="reminder-custom-time-row">
+          <label for="reminderCustomTime">Custom time:</label>
+          <input type="time" id="reminderCustomTime" value="18:00" class="reminder-time-input">
+        </div>
+      </div>
+
+      <!-- Permission status box -->
+      <div class="reminder-permission-card" id="reminderPermissionCard">
+        <div class="permission-icon" id="permissionIcon">ℹ️</div>
+        <div class="permission-content">
+          <strong id="permissionTitle">Browser Notifications</strong>
+          <span id="permissionStatusText">Allow notifications so LinguaPath can remind you even when this tab is closed.</span>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="requestPermissionBtn">Enable</button>
+      </div>
+
+      <!-- Today's goal status preview -->
+      <div class="reminder-goal-status" id="reminderGoalStatus">
+        <span class="goal-status-icon" id="goalStatusIcon">🎯</span>
+        <div class="goal-status-text">
+          <strong id="goalStatusTitle">Today's Lesson Status</strong>
+          <p id="goalStatusDesc">Pending — complete 1 lesson today to keep your streak burning!</p>
+        </div>
+      </div>
+
+      <div class="reminder-modal-actions">
+        <button type="button" class="btn btn-secondary" id="testNotificationBtn">🔔 Test Notification</button>
+        <button type="button" class="btn btn-primary" id="saveReminderBtn">Save & Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- In-app Toast Banner for reminders and test notifications -->
+  <div id="reminderToastContainer" class="reminder-toast-container" aria-live="polite"></div>
 
 
   <!-- SheetJS (Local with CDN fallback) -->
