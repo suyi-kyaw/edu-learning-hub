@@ -1788,6 +1788,7 @@ async function loadStoryLesson() {
     updateLessonNavigation(storyRows, vocabularyRows, exerciseRows);
     renderStorySwitcher(lessons, currentLessonId);
     renderStoryPagination(lessons, currentLessonId);
+    setupStoryProgress(currentLessonId);
 
     console.log("Story lesson loaded successfully:", {
       lessonId: currentLessonId,
@@ -1994,6 +1995,82 @@ function showPageError(
     }
   );
 
+}
+
+
+/* =========================================================
+   STORY PROGRESS TRACKING (LOCALSTORAGE PERSISTENCE)
+   ========================================================= */
+
+function getStoryLessonProgress(lessonId) {
+  try {
+    const raw = localStorage.getItem("linguapath_lesson_progress");
+    const all = raw ? JSON.parse(raw) : {};
+    const cleanId = String(lessonId || "").trim();
+    return all[cleanId] || { completed: false, percent: 0 };
+  } catch (e) {
+    return { completed: false, percent: 0 };
+  }
+}
+
+function saveStoryLessonProgress(lessonId, percent, completed) {
+  try {
+    const cleanId = String(lessonId || "").trim();
+    const raw = localStorage.getItem("linguapath_lesson_progress");
+    const all = raw ? JSON.parse(raw) : {};
+    const isDone = Boolean(completed || percent >= 100);
+    all[cleanId] = {
+      percent: isDone ? 100 : Math.min(100, Math.max(0, percent)),
+      completed: isDone,
+      lastUpdated: Date.now()
+    };
+    localStorage.setItem("linguapath_lesson_progress", JSON.stringify(all));
+  } catch (e) {
+    console.warn("Could not save story progress to localStorage:", e);
+  }
+}
+
+function updateStoryProgressUI(lessonId) {
+  const btn = document.getElementById("storyProgressToggleBtn");
+  const icon = document.getElementById("storyProgressIcon");
+  const text = document.getElementById("storyProgressText");
+  if (!btn) return;
+
+  const prog = getStoryLessonProgress(lessonId);
+  const isDone = Boolean(prog.completed || prog.percent >= 100);
+
+  if (isDone) {
+    btn.classList.add("is-completed");
+    if (icon) icon.textContent = "✓";
+    if (text) text.textContent = "Completed";
+    btn.setAttribute("title", "Lesson completed! Click to mark incomplete.");
+  } else {
+    btn.classList.remove("is-completed");
+    if (icon) icon.textContent = "○";
+    if (text) text.textContent = prog.percent > 0 ? `${prog.percent}% In Progress` : "Mark Complete";
+    btn.setAttribute("title", "Click to mark lesson complete");
+  }
+}
+
+function setupStoryProgress(lessonId) {
+  const current = getStoryLessonProgress(lessonId);
+  // Mark as started (e.g. 35% in progress) if not started yet
+  if (!current.completed && current.percent === 0) {
+    saveStoryLessonProgress(lessonId, 35, false);
+  }
+  updateStoryProgressUI(lessonId);
+
+  const btn = document.getElementById("storyProgressToggleBtn");
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = "true";
+    btn.addEventListener("click", () => {
+      const prog = getStoryLessonProgress(lessonId);
+      const isDone = Boolean(prog.completed || prog.percent >= 100);
+      const newDone = !isDone;
+      saveStoryLessonProgress(lessonId, newDone ? 100 : 35, newDone);
+      updateStoryProgressUI(lessonId);
+    });
+  }
 }
 
 

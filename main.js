@@ -43,6 +43,7 @@ function escapeHTML(value) {
 document.addEventListener("DOMContentLoaded", () => {
   setupMobileMenu();
   setupSearchAndFilter();
+  setupDemoCardsClick();
   loadWorkbook();
 });
 
@@ -793,6 +794,7 @@ function renderConversation() {
 
 
   container.innerHTML = "";
+  container.className = "dynamic-demo-content conversation-list";
 
 
   if (!conversationData.length) {
@@ -1544,6 +1546,51 @@ function speakChinese(
 
 
 /* =========================================================
+   LESSON PROGRESS TRACKING (LOCALSTORAGE PERSISTENCE)
+========================================================= */
+
+function getAllLessonProgress() {
+  try {
+    const raw = localStorage.getItem("linguapath_lesson_progress");
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function getLessonProgress(lessonId) {
+  const all = getAllLessonProgress();
+  const cleanId = String(lessonId || "").trim();
+  return all[cleanId] || { completed: false, percent: 0 };
+}
+
+function saveLessonProgress(lessonId, percent, completed) {
+  const cleanId = String(lessonId || "").trim();
+  const all = getAllLessonProgress();
+  const isDone = Boolean(completed || percent >= 100);
+  all[cleanId] = {
+    percent: isDone ? 100 : Math.min(100, Math.max(0, percent)),
+    completed: isDone,
+    lastUpdated: Date.now()
+  };
+  try {
+    localStorage.setItem("linguapath_lesson_progress", JSON.stringify(all));
+  } catch (e) {
+    console.warn("Could not save progress to localStorage:", e);
+  }
+}
+
+function toggleLessonCompletion(lessonId) {
+  const cleanId = String(lessonId || "").trim();
+  const current = getLessonProgress(cleanId);
+  const newCompleted = !current.completed;
+  const newPercent = newCompleted ? 100 : 0;
+  saveLessonProgress(cleanId, newPercent, newCompleted);
+  renderLearningHub();
+}
+
+
+/* =========================================================
    FAVORITES MANAGEMENT (LOCALSTORAGE PERSISTENCE)
 ========================================================= */
 
@@ -1902,6 +1949,9 @@ function renderLearningHub() {
     const level = row.level || row.category || row.section || "Beginner";
     const poster = row.poster || row.image || "assets/images/story-poster.jpg";
     const isFav = isLessonFavorited(lessonId);
+    const progress = getLessonProgress(lessonId);
+    const isCompleted = progress.completed || (progress.percent >= 100);
+    const progressPercent = isCompleted ? 100 : (progress.percent || 0);
 
     // Determine topic tags for visual display
     let tagList = [];
@@ -1916,6 +1966,28 @@ function renderLearningHub() {
           ${tagList.map(tag => `<span class="lesson-keyword-badge">${escapeHTML(tag)}</span>`).join("")}
         </div>`
       : "";
+
+    const progressHtml = `
+      <div class="lesson-progress-box" data-lesson-id="${escapeHTML(lessonId)}">
+        <div class="progress-bar-meta">
+          <span class="progress-status-label ${isCompleted ? 'is-completed' : ''}">
+            ${isCompleted ? '✓ Completed' : (progressPercent > 0 ? `${progressPercent}% in progress` : '○ Not started')}
+          </span>
+          <button
+            type="button"
+            class="progress-toggle-btn ${isCompleted ? 'is-done' : ''}"
+            data-lesson-id="${escapeHTML(lessonId)}"
+            title="${isCompleted ? 'Mark as incomplete' : 'Mark as complete'}"
+            aria-label="${isCompleted ? 'Mark as incomplete' : 'Mark as complete'}"
+          >
+            ${isCompleted ? '✓ Done' : '○ Mark Done'}
+          </button>
+        </div>
+        <div class="progress-bar-track" role="progressbar" aria-valuenow="${progressPercent}" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar-fill ${isCompleted ? 'completed-fill' : ''}" style="width: ${progressPercent}%;"></div>
+        </div>
+      </div>
+    `;
 
     card.innerHTML = `
       <div class="lesson-card-image">
@@ -1970,12 +2042,14 @@ function renderLearningHub() {
 
         ${tagsHtml}
 
+        ${progressHtml}
+
         <div class="lesson-card-actions">
           <a
             href="story.html?id=${encodeURIComponent(lessonId)}"
             class="btn btn-primary lesson-button"
           >
-            Open Lesson →
+            ${isCompleted ? 'Review Lesson →' : (progressPercent > 0 ? 'Continue Lesson →' : 'Start Lesson →')}
           </a>
         </div>
       </div>
@@ -1991,14 +2065,52 @@ function renderLearningHub() {
       });
     }
 
-    card.style.cursor = "pointer";
+    // Progress toggle button listener
+    const progressToggle = card.querySelector(".progress-toggle-btn");
+    if (progressToggle) {
+      progressToggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        toggleLessonCompletion(lessonId);
+      });
+    }
+
+    // Card click redirects to respective story page to continue
     card.addEventListener("click", (e) => {
-      if (!e.target.closest("a") && !e.target.closest("button")) {
+      if (!e.target.closest("button")) {
         window.location.href = `story.html?id=${encodeURIComponent(lessonId)}`;
       }
     });
 
     container.appendChild(card);
+  });
+}
+
+
+/* =========================================================
+   DEMO CARDS CLICK TO CONTINUE
+========================================================= */
+
+function setupDemoCardsClick() {
+  const cards = document.querySelectorAll(".demo-card[data-target]");
+  cards.forEach((card) => {
+    card.addEventListener("click", (e) => {
+      // Do not navigate if user clicked interactive buttons or audio
+      if (
+        e.target.closest("button") ||
+        e.target.closest(".audio-button") ||
+        e.target.closest(".tone-button") ||
+        e.target.closest(".quiz-option") ||
+        e.target.closest("audio")
+      ) {
+        return;
+      }
+
+      const target = card.getAttribute("data-target");
+      if (target) {
+        window.location.href = target;
+      }
+    });
   });
 }
 

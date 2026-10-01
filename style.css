@@ -398,23 +398,47 @@ a {
 
 .demo-card {
   position: relative;
-  min-height: 350px;
+  min-height: auto;
+  height: auto;
   padding: 30px;
-  overflow: hidden;
+  overflow: visible;
   background: #ffffff;
-  border: 1.5px solid #fed7aa;
+  border: none;
   border-radius: 24px;
-  box-shadow: 0 10px 32px rgba(249, 115, 22, 0.06);
+  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
   transition:
     transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.25s ease,
-    border-color 0.25s ease;
+    box-shadow 0.25s ease;
 }
 
 .demo-card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 20px 45px rgba(249, 115, 22, 0.12);
-  border-color: #f97316;
+  box-shadow: 0 20px 45px rgba(249, 115, 22, 0.15);
+}
+
+.demo-card-action {
+  margin-top: 24px;
+  padding-top: 14px;
+  border-top: 1px dashed #fed7aa;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.demo-continue-link {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #ea580c;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.demo-card:hover .demo-continue-link {
+  transform: translateX(4px);
+  color: #c2410c;
 }
 
 .demo-card-header {
@@ -717,10 +741,12 @@ a {
    CONVERSATION DEMO
 ========================================================= */
 
+#conversationDemo,
 .conversation-list {
-  display: flex;
-  flex-direction: column;
-  gap: 22px; /* Ample space between conversation lines */
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  width: 100%;
 }
 
 .conversation-line {
@@ -729,27 +755,31 @@ a {
   align-items: flex-start;
   gap: 8px;
   padding: 22px 24px;
+  margin-bottom: 26px;
   background: #f0fdf4;
   border: 1.5px solid #a7f3d0;
   border-radius: 20px;
-  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.06);
+  box-shadow: 0 4px 18px rgba(5, 150, 105, 0.08);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
+.conversation-line:last-child {
+  margin-bottom: 0;
+}
+
 .conversation-line:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(5, 150, 105, 0.12);
   border-color: #34d399;
+  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.12);
 }
 
 .conversation-chinese-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  justify-content: flex-start;
+  gap: 14px;
   width: 100%;
   flex-wrap: wrap;
-  padding-bottom: 2px;
+  margin-bottom: 6px;
 }
 
 .conversation-chinese {
@@ -758,7 +788,7 @@ a {
     "Noto Serif SC",
     "Songti SC",
     serif;
-  font-size: 1.6rem;
+  font-size: 1.65rem;
   font-weight: 800;
   line-height: 1.25;
 }
@@ -767,22 +797,24 @@ a {
   min-height: 38px;
   padding: 0 16px;
   font-size: 0.85rem;
-  border-radius: 10px;
+  border-radius: 12px;
   flex-shrink: 0;
 }
 
 .conversation-pinyin {
   color: #059669;
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 0.01em;
+  line-height: 1.35;
+  margin-bottom: 4px;
 }
 
 .conversation-english {
   color: #475569;
-  font-size: 0.98rem;
+  font-size: 1rem;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 
@@ -1089,18 +1121,93 @@ a {
   overflow: hidden;
   border-radius: 24px;
   background: #ffffff;
-  border: 1.5px solid #fed7aa;
-  box-shadow: 0 10px 30px rgba(249, 115, 22, 0.06);
+  border: none;
+  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
   transition:
     transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.25s ease,
-    border-color 0.25s ease;
+    box-shadow 0.25s ease;
 }
 
 .lesson-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-6px);
+  box-shadow: 0 22px 50px rgba(249, 115, 22, 0.18);
+}
+
+/* Lesson Progress Bar */
+.lesson-progress-box {
+  margin: 10px 0 18px;
+  padding: 12px 14px;
+  background: #fff7ed;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: none;
+}
+
+.progress-bar-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.progress-status-label {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.progress-status-label.is-completed {
+  color: #059669;
+}
+
+.progress-toggle-btn {
+  border: 1.5px solid #fed7aa;
+  background: #ffffff;
+  color: #c2410c;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 3px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.progress-toggle-btn:hover {
+  background: #ffedd5;
   border-color: #f97316;
-  box-shadow: 0 20px 45px rgba(249, 115, 22, 0.14);
+  color: #ea580c;
+  transform: scale(1.05);
+}
+
+.progress-toggle-btn.is-done {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.progress-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f97316 0%, #fb923c 100%);
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.progress-bar-fill.completed-fill {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
 }
 
 .lesson-card-image {
@@ -1399,6 +1506,35 @@ a {
   font-weight: 700;
   color: #9a3412;
   box-shadow: 0 2px 8px rgba(249, 115, 22, 0.06);
+}
+
+.story-progress-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 18px;
+  background: #ffffff;
+  border: 1.5px solid #fed7aa;
+  border-radius: 9999px;
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: #ea580c;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.08);
+}
+
+.story-progress-btn:hover {
+  background: #fff7ed;
+  border-color: #f97316;
+  transform: translateY(-1px);
+}
+
+.story-progress-btn.is-completed {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+  box-shadow: 0 2px 10px rgba(5, 150, 105, 0.15);
 }
 
 /* Story Switcher Tabs */
@@ -1922,21 +2058,27 @@ a {
 .contact-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   color: #cbd5e1;
   text-decoration: none;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  padding: 8px 0;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+  cursor: pointer;
 }
 
 .contact-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: #f97316;
-  color: #ffffff;
-  transform: translateY(-2px);
+  background: transparent !important;
+  border: none !important;
+  color: #fb923c;
+  transform: translateX(4px);
+}
+
+.contact-item:hover .contact-value {
+  color: #fb923c;
+  text-decoration: underline;
 }
 
 .contact-icon {
@@ -1947,7 +2089,14 @@ a {
   height: 36px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.08);
+  border: none;
   flex-shrink: 0;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.contact-item:hover .contact-icon {
+  transform: scale(1.1);
+  background: rgba(249, 115, 22, 0.22);
 }
 
 .viber-badge {

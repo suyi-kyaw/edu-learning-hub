@@ -158,7 +158,7 @@
           <!-- =========================
                01. PRONUNCIATION
           ========================== -->
-          <article class="demo-card pronunciation-card">
+          <article class="demo-card pronunciation-card" data-target="story.html?id=lesson-01#watch">
 
             <div class="demo-card-header">
 
@@ -251,11 +251,14 @@
               Select a tone to hear the pronunciation.
             </p>
 
-
             <audio
               id="currentToneAudio"
               preload="none"
             ></audio>
+
+            <div class="demo-card-action">
+              <span class="demo-continue-link">Continue to Lesson →</span>
+            </div>
 
           </article>
 
@@ -263,7 +266,7 @@
           <!-- =========================
                02. EVERYDAY CHINESE
           ========================== -->
-          <article class="demo-card everyday-card">
+          <article class="demo-card everyday-card" data-target="story.html?id=lesson-01#reading">
 
             <div class="demo-card-header">
 
@@ -285,16 +288,8 @@
 
             </div>
 
-
             <!--
               main.js loads this content from Excel.
-
-              It will include:
-              - Chinese
-              - Pinyin
-              - English
-              - Sound button
-              - Audio element
             -->
             <div
               class="dynamic-demo-content"
@@ -307,13 +302,17 @@
 
             </div>
 
+            <div class="demo-card-action">
+              <span class="demo-continue-link">Continue to Lesson →</span>
+            </div>
+
           </article>
 
 
           <!-- =========================
                03. CONVERSATION
           ========================== -->
-          <article class="demo-card conversation-card">
+          <article class="demo-card conversation-card" data-target="story.html?id=lesson-01#reading">
 
             <div class="demo-card-header">
 
@@ -335,13 +334,12 @@
 
             </div>
 
-
             <!--
               main.js loads conversation content
               and its sound button from Excel.
             -->
             <div
-              class="dynamic-demo-content"
+              class="dynamic-demo-content conversation-list"
               id="conversationDemo"
             >
 
@@ -351,13 +349,17 @@
 
             </div>
 
+            <div class="demo-card-action">
+              <span class="demo-continue-link">Continue to Lesson →</span>
+            </div>
+
           </article>
 
 
           <!-- =========================
                04. QUICK CHECK
           ========================== -->
-          <article class="demo-card quick-check-card">
+          <article class="demo-card quick-check-card" data-target="story.html?id=lesson-01#exercises">
 
             <div class="demo-card-header">
 
@@ -379,7 +381,6 @@
 
             </div>
 
-
             <div
               class="dynamic-demo-content"
               id="quickCheckDemo"
@@ -389,6 +390,10 @@
                 Loading questions...
               </div>
 
+            </div>
+
+            <div class="demo-card-action">
+              <span class="demo-continue-link">Continue to Lesson →</span>
             </div>
 
           </article>
@@ -554,21 +559,21 @@
           </li>
 
           <li>
-            <a href="tel:+15553828899" class="contact-item">
+            <a href="tel:+959798123456" class="contact-item">
               <span class="contact-icon" aria-hidden="true">📞</span>
               <div class="contact-details">
-                <span class="contact-label">Phone</span>
-                <span class="contact-value">+1 (555) 382-8899</span>
+                <span class="contact-label">Phone (Myanmar)</span>
+                <span class="contact-value">+95 9 798 123 456</span>
               </div>
             </a>
           </li>
 
           <li>
-            <a href="viber://chat?number=%2B15553828899" class="contact-item" title="Chat on Viber">
+            <a href="viber://chat?number=%2B959798123456" class="contact-item" title="Chat on Viber">
               <span class="contact-icon viber-badge" aria-hidden="true">💬</span>
               <div class="contact-details">
-                <span class="contact-label">Viber</span>
-                <span class="contact-value">+1 (555) 382-8899</span>
+                <span class="contact-label">Viber (Myanmar)</span>
+                <span class="contact-value">+95 9 798 123 456</span>
               </div>
             </a>
           </li>
