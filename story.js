@@ -2072,6 +2072,7 @@ function checkAllExercisesCompleted() {
     if (!prog.completed) {
       saveStoryLessonProgress(currentLoadedLessonId, 100, true);
       updateStoryProgressUI(currentLoadedLessonId);
+      recordLessonCompletionStreak();
       const title = currentLoadedLesson
         ? (currentLoadedLesson.title ? `${currentLoadedLesson.title} (${currentLoadedLesson.chineseTitle || ""})` : currentLoadedLessonId)
         : currentLoadedLessonId;
@@ -2102,6 +2103,7 @@ function showStoryCompletionModal(lessonTitle, lessonId, lessons) {
   if (!modal) return;
 
   const count = getTotalCompletedLessonsCount();
+  const streakData = getDailyStreakData();
   const totalAvailable = (lessons && lessons.length) ? lessons.length : 2;
 
   const titleEl = document.getElementById("completionLessonTitle");
@@ -2114,12 +2116,18 @@ function showStoryCompletionModal(lessonTitle, lessonId, lessons) {
     countEl.textContent = String(count);
   }
 
+  const streakEl = document.getElementById("completionStreakCount");
+  if (streakEl) {
+    const s = streakData.currentStreak;
+    streakEl.textContent = `${s} ${s === 1 ? "Day" : "Days"}`;
+  }
+
   const statusEl = document.getElementById("completionStatusMessage");
   if (statusEl) {
     if (count >= totalAvailable && totalAvailable > 0) {
-      statusEl.textContent = `🌟 Outstanding achievement! You have completed all ${totalAvailable} lessons!`;
+      statusEl.textContent = `🌟 Outstanding achievement! You have completed all ${totalAvailable} lessons! Keep up your streak!`;
     } else {
-      statusEl.textContent = `You've completed ${count} of ${totalAvailable} lessons. Keep up the great work!`;
+      statusEl.textContent = `You've completed ${count} of ${totalAvailable} lessons. Keep up your daily streak!`;
     }
   }
 
@@ -2208,6 +2216,7 @@ function setupStoryProgress(lessonId) {
       updateStoryProgressUI(lessonId);
 
       if (newDone) {
+        recordLessonCompletionStreak();
         const title = currentLoadedLesson
           ? (currentLoadedLesson.title ? `${currentLoadedLesson.title} (${currentLoadedLesson.chineseTitle || ""})` : lessonId)
           : lessonId;
@@ -2219,18 +2228,195 @@ function setupStoryProgress(lessonId) {
 
 
 /* =========================================================
+   DAILY STREAK COUNTER (LOCALSTORAGE PERSISTENCE)
+========================================================= */
+
+const STREAK_STORAGE_KEY = "linguapath_daily_streak";
+
+function getLocalDateString(date = new Date()) {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getDaysDifference(dateStr1, dateStr2) {
+  if (!dateStr1 || !dateStr2) return Infinity;
+  const d1 = new Date(dateStr1 + "T00:00:00");
+  const d2 = new Date(dateStr2 + "T00:00:00");
+  const diffTime = d2.getTime() - d1.getTime();
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+}
+
+function getDailyStreakData() {
+  try {
+    const raw = localStorage.getItem(STREAK_STORAGE_KEY);
+    const today = getLocalDateString();
+
+    if (!raw) {
+      // Check if user has previously completed lessons
+      const totalCompleted = getTotalCompletedLessonsCount();
+      if (totalCompleted > 0) {
+        return {
+          currentStreak: 1,
+          lastCompletedDate: today,
+          streakDates: [today],
+          bestStreak: 1
+        };
+      }
+      return {
+        currentStreak: 0,
+        lastCompletedDate: null,
+        streakDates: [],
+        bestStreak: 0
+      };
+    }
+
+    const data = JSON.parse(raw);
+    const currentStreak = Number(data.currentStreak) || 0;
+    const lastCompletedDate = data.lastCompletedDate || null;
+    const streakDates = Array.isArray(data.streakDates) ? data.streakDates : [];
+    const bestStreak = Number(data.bestStreak) || currentStreak;
+
+    if (!lastCompletedDate) {
+      return { currentStreak: 0, lastCompletedDate: null, streakDates, bestStreak };
+    }
+
+    const diff = getDaysDifference(lastCompletedDate, today);
+    if (diff === 0) {
+      // Completed today
+      return { currentStreak: Math.max(1, currentStreak), lastCompletedDate, streakDates, bestStreak };
+    } else if (diff === 1) {
+      // Completed yesterday, streak intact awaiting today
+      return { currentStreak: Math.max(1, currentStreak), lastCompletedDate, streakDates, bestStreak };
+    } else {
+      // Missed days
+      return { currentStreak: 0, lastCompletedDate, streakDates, bestStreak };
+    }
+  } catch (e) {
+    console.warn("Could not read streak data:", e);
+    return { currentStreak: 0, lastCompletedDate: null, streakDates: [], bestStreak: 0 };
+  }
+}
+
+function recordLessonCompletionStreak() {
+  try {
+    const today = getLocalDateString();
+    const streakData = getDailyStreakData();
+    let currentStreak = streakData.currentStreak;
+    let streakDates = [...(streakData.streakDates || [])];
+
+    if (!streakData.lastCompletedDate) {
+      currentStreak = 1;
+      streakDates = [today];
+    } else {
+      const diff = getDaysDifference(streakData.lastCompletedDate, today);
+      if (diff === 0) {
+        currentStreak = Math.max(1, currentStreak);
+        if (!streakDates.includes(today)) streakDates.push(today);
+      } else if (diff === 1) {
+        currentStreak = currentStreak + 1;
+        if (!streakDates.includes(today)) streakDates.push(today);
+      } else {
+        currentStreak = 1;
+        if (!streakDates.includes(today)) streakDates.push(today);
+      }
+    }
+
+    const bestStreak = Math.max(streakData.bestStreak || 0, currentStreak);
+    const updated = {
+      currentStreak,
+      lastCompletedDate: today,
+      streakDates,
+      bestStreak,
+      lastUpdated: Date.now()
+    };
+
+    localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(updated));
+    updateHeaderStreakUI();
+    return updated;
+  } catch (e) {
+    console.warn("Could not save streak data:", e);
+    return { currentStreak: 1, lastCompletedDate: getLocalDateString(), bestStreak: 1 };
+  }
+}
+
+function updateHeaderStreakUI() {
+  const streakData = getDailyStreakData();
+  const countEl = document.getElementById("dailyStreakCount");
+  const badgeEl = document.getElementById("dailyStreakBadge");
+  const tooltipTitle = document.getElementById("streakTooltipTitle");
+  const tooltipDesc = document.getElementById("streakTooltipDesc");
+
+  const streak = streakData.currentStreak;
+
+  if (countEl) {
+    countEl.textContent = String(streak);
+  }
+
+  if (badgeEl) {
+    if (streak > 0) {
+      badgeEl.classList.add("is-active");
+      badgeEl.setAttribute("aria-label", `Daily Streak: ${streak} ${streak === 1 ? 'day' : 'days'}`);
+    } else {
+      badgeEl.classList.remove("is-active");
+      badgeEl.setAttribute("aria-label", "Daily Streak: 0 days. Complete a lesson today to start!");
+    }
+  }
+
+  if (tooltipTitle && tooltipDesc) {
+    const today = getLocalDateString();
+    const isCompletedToday = streakData.lastCompletedDate === today;
+
+    if (streak > 0) {
+      tooltipTitle.textContent = `🔥 ${streak}-Day Streak!`;
+      if (isCompletedToday) {
+        tooltipDesc.textContent = `You completed a lesson today! Come back tomorrow to keep the flame alive. (Best: ${streakData.bestStreak || streak} days)`;
+      } else {
+        tooltipDesc.textContent = `Complete a lesson today to extend your streak to ${streak + 1} days!`;
+      }
+    } else {
+      tooltipTitle.textContent = "🔥 Start Your Daily Streak";
+      tooltipDesc.textContent = "Complete any lesson today to ignite your streak!";
+    }
+  }
+}
+
+function setupStreakBadgeInteractions() {
+  const badgeEl = document.getElementById("dailyStreakBadge");
+  if (!badgeEl) return;
+
+  badgeEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    badgeEl.classList.toggle("show-tooltip");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!badgeEl.contains(e.target)) {
+      badgeEl.classList.remove("show-tooltip");
+    }
+  });
+
+  window.addEventListener("storage", (e) => {
+    if (e.key === STREAK_STORAGE_KEY || e.key === "linguapath_lesson_progress") {
+      updateHeaderStreakUI();
+    }
+  });
+}
+
+
+/* =========================================================
    START
    ========================================================= */
 
 document.addEventListener(
   "DOMContentLoaded",
   () => {
-
     initializeMobileMenu();
-
     setupStoryCompletionModalListeners();
-
+    updateHeaderStreakUI();
+    setupStreakBadgeInteractions();
     loadStoryLesson();
-
   }
 );
