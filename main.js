@@ -13,6 +13,8 @@ let workbook = null;
 
 let demoData = [];
 let lessonData = [];
+let vocabularyData = [];
+let storyData = [];
 
 let pronunciationData = [];
 let everydayChineseData = [];
@@ -51,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupUserLevelInteractions();
   setupReminderUI();
   startDailyReminderScheduler();
+  setupReviewMode();
   loadWorkbook();
 });
 
@@ -89,6 +92,20 @@ async function loadWorkbook() {
             );
           }
 
+          if (workbook.SheetNames.includes("Vocabulary")) {
+            vocabularyData = XLSX.utils.sheet_to_json(
+              workbook.Sheets["Vocabulary"],
+              { defval: "" }
+            );
+          }
+
+          if (workbook.SheetNames.includes("Story")) {
+            storyData = XLSX.utils.sheet_to_json(
+              workbook.Sheets["Story"],
+              { defval: "" }
+            );
+          }
+
           if (demoData.length > 0 || lessonData.length > 0) {
             loaded = true;
           }
@@ -110,6 +127,8 @@ async function loadWorkbook() {
         if (apiData.success && apiData.sheets) {
           demoData = apiData.sheets["Demo"] || [];
           lessonData = apiData.sheets["Lessons"] || [];
+          vocabularyData = apiData.sheets["Vocabulary"] || [];
+          storyData = apiData.sheets["Story"] || [];
 
           if (demoData.length > 0 || lessonData.length > 0) {
             loaded = true;
@@ -132,6 +151,8 @@ async function loadWorkbook() {
         if (jsonData.sheets) {
           demoData = jsonData.sheets["Demo"] || [];
           lessonData = jsonData.sheets["Lessons"] || [];
+          vocabularyData = jsonData.sheets["Vocabulary"] || [];
+          storyData = jsonData.sheets["Story"] || [];
 
           if (demoData.length > 0 || lessonData.length > 0) {
             loaded = true;
@@ -148,7 +169,17 @@ async function loadWorkbook() {
     console.info("Using embedded lesson dataset.");
     demoData = getFallbackDemoData();
     lessonData = getFallbackLessonData();
+    vocabularyData = getFallbackVocabularyData();
+    storyData = getFallbackStoryData();
     loaded = true;
+  }
+
+  // Ensure vocabulary & story fallbacks are populated if sheets were empty
+  if (!vocabularyData || !vocabularyData.length) {
+    vocabularyData = getFallbackVocabularyData();
+  }
+  if (!storyData || !storyData.length) {
+    storyData = getFallbackStoryData();
   }
 
   if (loaded) {
@@ -287,6 +318,36 @@ function getFallbackLessonData() {
       poster: "assets/images/story2-poster.jpg",
       keywords: "fruit, market, apple, shopping, fresh, sweet, delicious, red, buy, 水果, 市场, 苹果, 买, 甜, 好吃"
     }
+  ];
+}
+
+function getFallbackVocabularyData() {
+  return [
+    { lessonId: "lesson-01", order: 1, character: "早上", pinyin: "zǎoshang", meaning: "morning", audio: "assets/audio/zaoshang.mp3" },
+    { lessonId: "lesson-01", order: 2, character: "起床", pinyin: "qǐchuáng", meaning: "get up", audio: "assets/audio/qichuang.mp3" },
+    { lessonId: "lesson-01", order: 3, character: "学校", pinyin: "xuéxiào", meaning: "school", audio: "assets/audio/xuexiao.mp3" },
+    { lessonId: "lesson-01", order: 4, character: "开心", pinyin: "kāixīn", meaning: "happy", audio: "assets/audio/kaixin.mp3" },
+
+    { lessonId: "lesson-02", order: 1, character: "水果", pinyin: "shuǐguǒ", meaning: "fruit", audio: "assets/audio/shuiguo.mp3" },
+    { lessonId: "lesson-02", order: 2, character: "市场", pinyin: "shìchǎng", meaning: "market", audio: "assets/audio/shichang.mp3" },
+    { lessonId: "lesson-02", order: 3, character: "苹果", pinyin: "píngguǒ", meaning: "apple", audio: "assets/audio/pingguo.mp3" },
+    { lessonId: "lesson-02", order: 4, character: "新鲜", pinyin: "xīnxiān", meaning: "fresh", audio: "assets/audio/xinxian.mp3" }
+  ];
+}
+
+function getFallbackStoryData() {
+  return [
+    { lessonId: "lesson-01", order: 1, chinese: "小明早上七点起床。", pinyin: "Xiǎomíng zǎoshang qī diǎn qǐchuáng.", english: "Xiaoming gets up at seven in the morning.", image: "assets/images/story-01.jpg", audio: "assets/audio/story-01.mp3" },
+    { lessonId: "lesson-01", order: 2, chinese: "他洗脸刷牙。", pinyin: "Tā xǐliǎn shuāyá.", english: "He washes his face and brushes his teeth.", image: "assets/images/story-02.jpg", audio: "assets/audio/story-02.mp3" },
+    { lessonId: "lesson-01", order: 3, chinese: "他吃早饭。", pinyin: "Tā chī zǎofàn.", english: "He eats breakfast.", image: "assets/images/story-03.jpg", audio: "assets/audio/story-03.mp3" },
+    { lessonId: "lesson-01", order: 4, chinese: "然后，他去学校。", pinyin: "Ránhòu, tā qù xuéxiào.", english: "Then, he goes to school.", image: "assets/images/story-04.jpg", audio: "assets/audio/story-04.mp3" },
+    { lessonId: "lesson-01", order: 5, chinese: "他很开心。", pinyin: "Tā hěn kāixīn.", english: "He is very happy.", image: "assets/images/story-05.jpg", audio: "assets/audio/story-05.mp3" },
+
+    { lessonId: "lesson-02", order: 1, chinese: "今天天气真好！", pinyin: "Jīntiān tiānqì zhēn hǎo!", english: "The weather is really nice today!", image: "assets/images/story2-01.jpg", audio: "assets/audio/story2-01.mp3" },
+    { lessonId: "lesson-02", order: 2, chinese: "小明去水果市场。", pinyin: "Xiǎomíng qù shuǐguǒ shìchǎng.", english: "Xiaoming goes to the fruit market.", image: "assets/images/story2-02.jpg", audio: "assets/audio/story2-02.mp3" },
+    { lessonId: "lesson-02", order: 3, chinese: "市场里有很多新鲜的红苹果。", pinyin: "Shìchǎng lǐ yǒu hěn duō xīnxiān de hóng píngguǒ.", english: "There are many fresh red apples in the market.", image: "assets/images/story2-03.jpg", audio: "assets/audio/story2-03.mp3" },
+    { lessonId: "lesson-02", order: 4, chinese: "他买了三个大苹果。", pinyin: "Tā mǎi le sān gè dà píngguǒ.", english: "He bought three big apples.", image: "assets/images/story2-04.jpg", audio: "assets/audio/story2-04.mp3" },
+    { lessonId: "lesson-02", order: 5, chinese: "苹果又甜又好吃，他真开心！", pinyin: "Píngguǒ yòu tián yòu hǎochī, tā zhēn kāixīn!", english: "The apples are sweet and delicious, he is really happy!", image: "assets/images/story2-05.jpg", audio: "assets/audio/story2-05.mp3" }
   ];
 }
 
@@ -2490,9 +2551,14 @@ function toggleFavorite(lessonId) {
 }
 
 function updateFavoriteCountBadge() {
+  const count = getFavorites().length;
   const favCountEl = document.getElementById("favoriteCount");
   if (favCountEl) {
-    favCountEl.textContent = getFavorites().length;
+    favCountEl.textContent = count;
+  }
+  const reviewBadge = document.getElementById("reviewFavoritesBadge");
+  if (reviewBadge) {
+    reviewBadge.textContent = `${count} saved`;
   }
 }
 
@@ -3110,6 +3176,534 @@ function hasAudio(value) {
 
 
 /* =========================================================
+   REVIEW MODE FLASHCARDS QUEUE (FAVORITE LESSONS PRACTICE)
+========================================================= */
+
+let reviewQueue = [];
+let currentReviewIndex = 0;
+let masteredCardsCount = 0;
+let practiceCardsCount = 0;
+let firstTryMasteredCount = 0;
+let totalCardsInSession = 0;
+let cardAttemptsMap = {};
+let isReviewFlipped = false;
+let reviewModeInitialized = false;
+
+function setupReviewMode() {
+  updateFavoriteCountBadge();
+
+  if (reviewModeInitialized) {
+    return;
+  }
+  reviewModeInitialized = true;
+
+  // Trigger buttons (filter bar & header navigation)
+  const startBtn = document.getElementById("startReviewModeBtn");
+  if (startBtn) {
+    startBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      startReviewMode(false);
+    });
+  }
+
+  const navBtn = document.getElementById("navReviewModeBtn");
+  if (navBtn) {
+    navBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      startReviewMode(false);
+    });
+  }
+
+  // Close buttons
+  const closeBtn = document.getElementById("closeReviewModalBtn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeReviewModal);
+  }
+
+  const emptyCloseBtn = document.getElementById("closeReviewEmptyBtn");
+  if (emptyCloseBtn) {
+    emptyCloseBtn.addEventListener("click", () => {
+      closeReviewModal();
+      const lessonsSec = document.getElementById("lessons");
+      if (lessonsSec) {
+        lessonsSec.scrollIntoView({ behavior: "smooth" });
+      }
+    });
+  }
+
+  const summaryCloseBtn = document.getElementById("summaryCloseBtn");
+  if (summaryCloseBtn) {
+    summaryCloseBtn.addEventListener("click", closeReviewModal);
+  }
+
+  // Fallback to all lessons when favorites empty
+  const fallbackBtn = document.getElementById("reviewAllLessonsFallbackBtn");
+  if (fallbackBtn) {
+    fallbackBtn.addEventListener("click", () => {
+      startReviewMode(true);
+    });
+  }
+
+  // Reshuffle queue button
+  const reshuffleBtn = document.getElementById("reshuffleQueueBtn");
+  if (reshuffleBtn) {
+    reshuffleBtn.addEventListener("click", handleReshuffleReviewQueue);
+  }
+
+  // Restart practice from summary
+  const restartBtn = document.getElementById("summaryRestartShuffledBtn");
+  if (restartBtn) {
+    restartBtn.addEventListener("click", () => {
+      startReviewMode(false);
+    });
+  }
+
+  // Flip card controls
+  const flipBtn = document.getElementById("reviewFlipCardBtn");
+  if (flipBtn) {
+    flipBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleFlashcardFlip();
+    });
+  }
+
+  const flashcardContainer = document.getElementById("flashcardContainer");
+  if (flashcardContainer) {
+    flashcardContainer.addEventListener("click", (e) => {
+      if (e.target.closest("button") || e.target.closest(".card-audio-btn")) {
+        return;
+      }
+      toggleFlashcardFlip();
+    });
+  }
+
+  // Got it & Need Practice action buttons
+  const gotItBtn = document.getElementById("reviewGotItBtn");
+  if (gotItBtn) {
+    gotItBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleReviewGotIt();
+    });
+  }
+
+  const needPracticeBtn = document.getElementById("reviewNeedPracticeBtn");
+  if (needPracticeBtn) {
+    needPracticeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleReviewNeedPractice();
+    });
+  }
+
+  // Audio Pronunciation buttons
+  const frontAudioBtn = document.getElementById("cardFrontAudioBtn");
+  if (frontAudioBtn) {
+    frontAudioBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      playCurrentReviewAudio(frontAudioBtn);
+    });
+  }
+
+  const backAudioBtn = document.getElementById("cardBackAudioBtn");
+  if (backAudioBtn) {
+    backAudioBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      playCurrentReviewAudio(backAudioBtn);
+    });
+  }
+
+  // Close when clicking modal backdrop
+  const modal = document.getElementById("reviewModal");
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        closeReviewModal();
+      }
+    });
+  }
+
+  // Global Keyboard Shortcuts for Review Mode
+  document.addEventListener("keydown", handleReviewKeyboardShortcuts);
+
+  // Check URL hash for direct entry (#review)
+  if (window.location.hash === "#review") {
+    setTimeout(() => {
+      startReviewMode(false);
+    }, 250);
+  }
+
+  window.addEventListener("hashchange", () => {
+    if (window.location.hash === "#review") {
+      startReviewMode(false);
+    }
+  });
+}
+
+function startReviewMode(forceAll = false) {
+  const modal = document.getElementById("reviewModal");
+  if (!modal) return;
+
+  updateFavoriteCountBadge();
+
+  const favs = getFavorites();
+  const targetIds = forceAll || favs.length === 0
+    ? (forceAll ? (lessonData || []).map((l, i) => l.id || l.lessonId || `lesson-0${i + 1}`) : [])
+    : favs;
+
+  modal.classList.add("active");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+
+  const emptyState = document.getElementById("reviewEmptyState");
+  const cardArea = document.getElementById("reviewCardArea");
+  const summaryScreen = document.getElementById("reviewSummaryScreen");
+
+  if (!forceAll && favs.length === 0) {
+    if (emptyState) emptyState.style.display = "block";
+    if (cardArea) cardArea.style.display = "none";
+    if (summaryScreen) summaryScreen.style.display = "none";
+
+    const fill = document.getElementById("reviewProgressFill");
+    if (fill) fill.style.width = "0%";
+    const counter = document.getElementById("reviewCardCounter");
+    if (counter) counter.textContent = "0 cards available";
+    const mastered = document.getElementById("reviewMasteredCount");
+    if (mastered) mastered.textContent = "0";
+    const practice = document.getElementById("reviewPracticeCount");
+    if (practice) practice.textContent = "0";
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = "none";
+  if (summaryScreen) summaryScreen.style.display = "none";
+  if (cardArea) cardArea.style.display = "block";
+
+  // Gather cards
+  const cards = getReviewCardsForFavorites(targetIds);
+  if (cards.length === 0) {
+    // If favorites returned no cards, fallback to all lessons
+    const allLessonCards = getReviewCardsForFavorites(
+      (lessonData || []).map((l, i) => l.id || l.lessonId || `lesson-0${i + 1}`)
+    );
+    reviewQueue = shuffleCardsArray(allLessonCards);
+  } else {
+    reviewQueue = shuffleCardsArray(cards);
+  }
+
+  totalCardsInSession = reviewQueue.length;
+  currentReviewIndex = 0;
+  masteredCardsCount = 0;
+  practiceCardsCount = 0;
+  firstTryMasteredCount = 0;
+  cardAttemptsMap = {};
+
+  renderCurrentReviewCard();
+}
+
+function closeReviewModal() {
+  const modal = document.getElementById("reviewModal");
+  if (modal) {
+    modal.classList.remove("active");
+    modal.setAttribute("aria-hidden", "true");
+  }
+  document.body.style.overflow = "";
+  stopAllDemoAudio();
+
+  if (window.location.hash === "#review") {
+    if (window.history && window.history.pushState) {
+      window.history.pushState(null, "", window.location.pathname + window.location.search);
+    } else {
+      window.location.hash = "";
+    }
+  }
+}
+
+function getReviewCardsForFavorites(favoriteIds) {
+  const norm = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  const targetNorms = (favoriteIds || []).map(norm);
+  const cards = [];
+
+  // Match lessons
+  (lessonData || []).forEach((row, index) => {
+    const rawId = row.id || row.lessonId || `lesson-0${index + 1}`;
+    const rNorm = norm(rawId);
+    const isTarget = targetNorms.includes(rNorm) ||
+      targetNorms.some(t => t && (rNorm.includes(t) || t.includes(rNorm)));
+
+    if (!isTarget) return;
+
+    const lessonTitle = row.title || row.chineseTitle || rawId;
+
+    // 1. Gather vocabulary rows for this lesson
+    const matchingVocab = (vocabularyData || []).filter((v) => {
+      const vLesson = norm(v.lessonId || v.lesson_id || v.id);
+      return vLesson === rNorm || vLesson.includes(rNorm) || rNorm.includes(vLesson);
+    });
+
+    if (matchingVocab.length > 0) {
+      matchingVocab.forEach((v, vIndex) => {
+        const char = v.character || v.chinese || "";
+        // Find matching story sentence for context
+        const matchingStory = (storyData || []).find((s) => {
+          const sLesson = norm(s.lessonId || s.lesson_id || s.id);
+          const sameLesson = sLesson === rNorm || sLesson.includes(rNorm) || rNorm.includes(sLesson);
+          const sText = String(s.chinese || s.character || "");
+          return sameLesson && sText.includes(char);
+        });
+
+        cards.push({
+          id: `${rawId}-vocab-${v.order || vIndex + 1}`,
+          lessonId: rawId,
+          source: `${lessonTitle} • Vocabulary`,
+          character: char,
+          pinyin: v.pinyin || "",
+          meaning: v.meaning || v.english || "",
+          audio: v.audio || "",
+          contextChinese: matchingStory ? matchingStory.chinese : "",
+          contextEnglish: matchingStory ? matchingStory.english : ""
+        });
+      });
+    } else {
+      // Create flashcard from core lesson info
+      cards.push({
+        id: `${rawId}-core`,
+        lessonId: rawId,
+        source: `${lessonTitle} • Core Lesson`,
+        character: row.chineseTitle || row.title || "",
+        pinyin: row.pinyin || "",
+        meaning: row.meaning || row.description || row.title || "",
+        audio: row.audio || "",
+        contextChinese: row.chineseTitle ? `${row.chineseTitle} - ${row.title || ""}` : "",
+        contextEnglish: row.description || ""
+      });
+    }
+  });
+
+  return cards;
+}
+
+function shuffleCardsArray(array) {
+  const copy = [...array];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function renderCurrentReviewCard() {
+  if (currentReviewIndex >= reviewQueue.length) {
+    showReviewSummary();
+    return;
+  }
+
+  const card = reviewQueue[currentReviewIndex];
+  isReviewFlipped = false;
+
+  const inner = document.getElementById("flashcardInner");
+  if (inner) {
+    inner.classList.remove("is-flipped");
+  }
+
+  // Front card
+  const frontTag = document.getElementById("cardSourceTag");
+  const frontChar = document.getElementById("cardFrontChar");
+  if (frontTag) frontTag.textContent = card.source;
+  if (frontChar) frontChar.textContent = card.character;
+
+  // Back card
+  const backTag = document.getElementById("cardBackSourceTag");
+  const backChar = document.getElementById("cardBackChar");
+  const backPinyin = document.getElementById("cardBackPinyin");
+  const backMeaning = document.getElementById("cardBackMeaning");
+  const contextBox = document.getElementById("cardBackContext");
+  const contextZh = document.getElementById("cardContextChinese");
+  const contextEn = document.getElementById("cardContextEnglish");
+
+  if (backTag) backTag.textContent = card.source;
+  if (backChar) backChar.textContent = card.character;
+  if (backPinyin) backPinyin.textContent = card.pinyin;
+  if (backMeaning) backMeaning.textContent = card.meaning;
+
+  if (card.contextChinese) {
+    if (contextBox) contextBox.style.display = "inline-flex";
+    if (contextZh) contextZh.textContent = card.contextChinese;
+    if (contextEn) contextEn.textContent = card.contextEnglish;
+  } else {
+    if (contextBox) contextBox.style.display = "none";
+  }
+
+  // Reset audio button states
+  const frontAudioBtn = document.getElementById("cardFrontAudioBtn");
+  const backAudioBtn = document.getElementById("cardBackAudioBtn");
+  [frontAudioBtn, backAudioBtn].forEach((btn) => {
+    if (btn) {
+      btn.textContent = "🔊 Pronounce";
+      btn.classList.remove("playing");
+    }
+  });
+
+  // Progress Bar & Meta
+  const fill = document.getElementById("reviewProgressFill");
+  const counter = document.getElementById("reviewCardCounter");
+  const mastered = document.getElementById("reviewMasteredCount");
+  const practice = document.getElementById("reviewPracticeCount");
+
+  const progressPercent = totalCardsInSession > 0
+    ? Math.min(100, Math.round((currentReviewIndex / totalCardsInSession) * 100))
+    : 0;
+
+  if (fill) fill.style.width = `${progressPercent}%`;
+  if (counter) counter.textContent = `Card ${currentReviewIndex + 1} of ${reviewQueue.length}`;
+  if (mastered) mastered.textContent = masteredCardsCount;
+  if (practice) practice.textContent = Math.max(0, reviewQueue.length - currentReviewIndex);
+
+  const container = document.getElementById("flashcardContainer");
+  if (container) {
+    container.focus();
+  }
+}
+
+function toggleFlashcardFlip() {
+  const inner = document.getElementById("flashcardInner");
+  if (!inner) return;
+  isReviewFlipped = !isReviewFlipped;
+  inner.classList.toggle("is-flipped", isReviewFlipped);
+}
+
+function handleReviewGotIt() {
+  const card = reviewQueue[currentReviewIndex];
+  if (!card) return;
+
+  const priorAttempts = cardAttemptsMap[card.id] || 0;
+  if (priorAttempts === 0) {
+    firstTryMasteredCount++;
+  }
+  masteredCardsCount++;
+  playFeedbackSound(true);
+
+  currentReviewIndex++;
+  renderCurrentReviewCard();
+}
+
+function handleReviewNeedPractice() {
+  const card = reviewQueue[currentReviewIndex];
+  if (!card) return;
+
+  cardAttemptsMap[card.id] = (cardAttemptsMap[card.id] || 0) + 1;
+  practiceCardsCount++;
+  playFeedbackSound(false);
+
+  // Re-queue card to end of queue for repeated practice
+  reviewQueue.push(card);
+
+  currentReviewIndex++;
+  renderCurrentReviewCard();
+}
+
+function handleReshuffleReviewQueue() {
+  if (currentReviewIndex >= reviewQueue.length) return;
+
+  const currentAndRemaining = reviewQueue.slice(currentReviewIndex);
+  const shuffled = shuffleCardsArray(currentAndRemaining);
+  reviewQueue = [...reviewQueue.slice(0, currentReviewIndex), ...shuffled];
+
+  renderCurrentReviewCard();
+
+  const reshuffleBtn = document.getElementById("reshuffleQueueBtn");
+  if (reshuffleBtn) {
+    const originalText = reshuffleBtn.innerHTML;
+    reshuffleBtn.innerHTML = "✨ Shuffled!";
+    setTimeout(() => {
+      reshuffleBtn.innerHTML = originalText;
+    }, 1200);
+  }
+}
+
+function playCurrentReviewAudio(button) {
+  const card = reviewQueue[currentReviewIndex];
+  if (!card) return;
+
+  playAudioWithSpeechFallback(
+    card.audio,
+    button,
+    "🔊 Pronounce",
+    "🔊 Playing...",
+    card.character
+  );
+}
+
+function showReviewSummary() {
+  const cardArea = document.getElementById("reviewCardArea");
+  const summaryScreen = document.getElementById("reviewSummaryScreen");
+
+  if (cardArea) cardArea.style.display = "none";
+  if (summaryScreen) summaryScreen.style.display = "block";
+
+  const totalEl = document.getElementById("summaryTotalCards");
+  const masteredEl = document.getElementById("summaryMasteredCards");
+  const accuracyEl = document.getElementById("summaryAccuracy");
+  const fill = document.getElementById("reviewProgressFill");
+  const counter = document.getElementById("reviewCardCounter");
+
+  if (fill) fill.style.width = "100%";
+  if (counter) counter.textContent = `Completed ${totalCardsInSession} of ${totalCardsInSession}`;
+
+  if (totalEl) totalEl.textContent = totalCardsInSession;
+  if (masteredEl) masteredEl.textContent = masteredCardsCount;
+
+  const accuracy = totalCardsInSession > 0
+    ? Math.round((firstTryMasteredCount / totalCardsInSession) * 100)
+    : 100;
+  if (accuracyEl) accuracyEl.textContent = `${accuracy}%`;
+
+  // Celebratory sound
+  playFeedbackSound(true);
+}
+
+function handleReviewKeyboardShortcuts(e) {
+  const modal = document.getElementById("reviewModal");
+  if (!modal || !modal.classList.contains("active")) {
+    return;
+  }
+
+  // Ignore keystrokes when typing in inputs
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+    return;
+  }
+
+  const cardArea = document.getElementById("reviewCardArea");
+  const isCardAreaVisible = cardArea && cardArea.style.display !== "none";
+
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeReviewModal();
+    return;
+  }
+
+  if (!isCardAreaVisible) {
+    return;
+  }
+
+  if (e.code === "Space") {
+    e.preventDefault();
+    toggleFlashcardFlip();
+  } else if (e.key === "ArrowRight" || e.key === "2") {
+    e.preventDefault();
+    handleReviewGotIt();
+  } else if (e.key === "ArrowLeft" || e.key === "1") {
+    e.preventDefault();
+    handleReviewNeedPractice();
+  } else if (e.key === "a" || e.key === "A") {
+    e.preventDefault();
+    const frontAudioBtn = document.getElementById("cardFrontAudioBtn");
+    const backAudioBtn = document.getElementById("cardBackAudioBtn");
+    const targetAudioBtn = isReviewFlipped ? backAudioBtn : frontAudioBtn;
+    playCurrentReviewAudio(targetAudioBtn);
+  }
+}
+
+
+/* =========================================================
    GLOBAL DEBUG ACCESS
 ========================================================= */
 
@@ -3121,6 +3715,10 @@ window.linguaPath = {
 
   getLessonData: () => lessonData,
 
+  getVocabularyData: () => vocabularyData,
+
+  getStoryData: () => storyData,
+
   getPronunciationData:
     () => pronunciationData,
 
@@ -3131,6 +3729,13 @@ window.linguaPath = {
     () => conversationData,
 
   getQuickCheckData:
-    () => quickCheckData
+    () => quickCheckData,
+
+  startReviewMode: (forceAll = false) => startReviewMode(forceAll),
+
+  closeReviewModal: () => closeReviewModal(),
+
+  getReviewQueue: () => reviewQueue
 
 };
+

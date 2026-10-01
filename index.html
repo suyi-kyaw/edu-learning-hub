@@ -105,6 +105,7 @@
           <a href="#home">Home</a>
           <a href="#demos">Demo Lessons</a>
           <a href="#lessons">Learning Hub</a>
+          <a href="#review" id="navReviewModeBtn">🎴 Review Mode</a>
         </nav>
 
         <button
@@ -563,17 +564,32 @@
             </button>
           </div>
 
-          <!-- Quick Keyword Filter Chips -->
+          <!-- Quick Keyword Filter Chips & Review Mode Button -->
           <div class="search-keywords-bar" id="searchKeywordsBar">
-            <span class="keywords-label">Filter by topic:</span>
-            <div class="keywords-chips">
-              <button type="button" class="keyword-chip active" data-filter="all">All Lessons</button>
-              <button type="button" class="keyword-chip favorite-filter-chip" data-filter="favorites" id="favoriteFilterBtn">❤️ Saved (<span id="favoriteCount">0</span>)</button>
-              <button type="button" class="keyword-chip" data-filter="morning">🌅 Morning &amp; Routine</button>
-              <button type="button" class="keyword-chip" data-filter="fruit">🍎 Fruit &amp; Market</button>
-              <button type="button" class="keyword-chip" data-filter="school">🏫 School</button>
-              <button type="button" class="keyword-chip" data-filter="beginner">⭐ Beginner</button>
+            <div class="keywords-chips-group">
+              <span class="keywords-label">Filter by topic:</span>
+              <div class="keywords-chips">
+                <button type="button" class="keyword-chip active" data-filter="all">All Lessons</button>
+                <button type="button" class="keyword-chip favorite-filter-chip" data-filter="favorites" id="favoriteFilterBtn">❤️ Saved (<span id="favoriteCount">0</span>)</button>
+                <button type="button" class="keyword-chip" data-filter="morning">🌅 Morning &amp; Routine</button>
+                <button type="button" class="keyword-chip" data-filter="fruit">🍎 Fruit &amp; Market</button>
+                <button type="button" class="keyword-chip" data-filter="school">🏫 School</button>
+                <button type="button" class="keyword-chip" data-filter="beginner">⭐ Beginner</button>
+              </div>
             </div>
+
+            <!-- Review Mode Button: gathers favorite lessons for shuffled flashcard practice -->
+            <button
+              type="button"
+              class="btn-review-mode"
+              id="startReviewModeBtn"
+              title="Practice all your favorited lessons in a shuffled flashcard queue"
+              aria-label="Start Review Mode with favorite lessons"
+            >
+              <span class="review-btn-icon" aria-hidden="true">🎴</span>
+              <span class="review-btn-text">Review Mode</span>
+              <span class="review-badge-count" id="reviewFavoritesBadge">0 saved</span>
+            </button>
           </div>
 
           <!-- Real-time search status indicator -->
@@ -868,6 +884,209 @@
 
   <!-- In-app Toast Banner for reminders and test notifications -->
   <div id="reminderToastContainer" class="reminder-toast-container" aria-live="polite"></div>
+
+  <!-- =========================
+       REVIEW MODE FLASHCARDS MODAL
+  ========================== -->
+  <div
+    id="reviewModal"
+    class="review-modal-backdrop"
+    aria-hidden="true"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="reviewModalTitle"
+  >
+    <div class="review-modal-card">
+      <!-- Modal Header -->
+      <div class="review-modal-header">
+        <div class="review-header-left">
+          <span class="review-header-badge">🎴 Flashcards</span>
+          <h2 id="reviewModalTitle">Review Mode</h2>
+        </div>
+        <div class="review-header-actions">
+          <button
+            type="button"
+            class="btn-review-header"
+            id="reshuffleQueueBtn"
+            title="Reshuffle flashcard queue"
+            aria-label="Reshuffle flashcards"
+          >
+            🔀 Reshuffle
+          </button>
+          <button
+            type="button"
+            class="review-modal-close"
+            id="closeReviewModalBtn"
+            aria-label="Close Review Mode"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Queue Progress & Filter bar -->
+      <div class="review-progress-bar-wrap">
+        <div class="review-progress-track">
+          <div class="review-progress-fill" id="reviewProgressFill" style="width: 0%;"></div>
+        </div>
+        <div class="review-progress-meta">
+          <span id="reviewCardCounter">Card 1 of 10</span>
+          <div class="review-stat-pills">
+            <span class="review-stat-pill pill-mastered">✅ <span id="reviewMasteredCount">0</span> Mastered</span>
+            <span class="review-stat-pill pill-practice">🔄 <span id="reviewPracticeCount">0</span> To Review</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty Favorites Prompt State (if no favorites are saved) -->
+      <div class="review-empty-state" id="reviewEmptyState" style="display: none;">
+        <div class="review-empty-icon">❤️</div>
+        <h3>No Favorite Lessons Saved Yet</h3>
+        <p>Review Mode gathers all lessons marked as favorites and presents them in a shuffled flashcard-style queue for practice. Click the ❤️ icon on any lesson card below to add it to your favorites!</p>
+        <div class="review-empty-actions">
+          <button type="button" class="btn btn-primary" id="reviewAllLessonsFallbackBtn">
+            🌟 Review All Lessons (Shuffled)
+          </button>
+          <button type="button" class="btn btn-secondary" id="closeReviewEmptyBtn">
+            Browse Lessons
+          </button>
+        </div>
+      </div>
+
+      <!-- Flashcard Interactive Area -->
+      <div class="review-card-area" id="reviewCardArea">
+        <div class="flashcard-container" id="flashcardContainer" tabindex="0" role="button" aria-label="Flashcard. Press Space to flip.">
+          <div class="flashcard-inner" id="flashcardInner">
+            
+            <!-- Front of Card -->
+            <div class="flashcard-face flashcard-front">
+              <div class="card-face-header">
+                <span class="card-source-tag" id="cardSourceTag">Xiaoming's Day • Vocabulary</span>
+                <span class="card-hint-pill">Front: Chinese</span>
+              </div>
+
+              <div class="card-main-content">
+                <div class="card-character" id="cardFrontChar">早上</div>
+              </div>
+
+              <div class="card-face-footer">
+                <button type="button" class="card-audio-btn" id="cardFrontAudioBtn" aria-label="Listen to pronunciation">
+                  🔊 Pronounce
+                </button>
+                <span class="card-flip-prompt">Tap card or press <strong>Space</strong> to flip ↺</span>
+              </div>
+            </div>
+
+            <!-- Back of Card -->
+            <div class="flashcard-face flashcard-back">
+              <div class="card-face-header">
+                <span class="card-source-tag" id="cardBackSourceTag">Xiaoming's Day • Vocabulary</span>
+                <span class="card-hint-pill back-pill">Back: Meaning</span>
+              </div>
+
+              <div class="card-main-content">
+                <div class="card-character-sub" id="cardBackChar">早上</div>
+                <div class="card-pinyin" id="cardBackPinyin">zǎoshang</div>
+                <div class="card-meaning" id="cardBackMeaning">morning</div>
+                <div class="card-context-box" id="cardBackContext" style="display: none;">
+                  <span class="context-label">In story:</span>
+                  <span class="context-chinese" id="cardContextChinese">早上好！</span>
+                  <span class="context-english" id="cardContextEnglish">Good morning!</span>
+                </div>
+              </div>
+
+              <div class="card-face-footer">
+                <button type="button" class="card-audio-btn" id="cardBackAudioBtn" aria-label="Listen to pronunciation">
+                  🔊 Pronounce
+                </button>
+                <span class="card-flip-prompt">Tap card or press <strong>Space</strong> to flip back ↺</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Flashcard Control Controls -->
+        <div class="review-controls">
+          <button
+            type="button"
+            class="review-action-btn btn-need-practice"
+            id="reviewNeedPracticeBtn"
+            title="Press Left Arrow or click if you need more practice with this card"
+          >
+            <span class="btn-action-icon">↺</span>
+            <div class="btn-action-label">
+              <strong>Need Practice</strong>
+              <small>← Key [1]</small>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            class="review-action-btn btn-flip-card"
+            id="reviewFlipCardBtn"
+            title="Press Space or click to flip card"
+          >
+            <span class="btn-action-icon">🔄</span>
+            <div class="btn-action-label">
+              <strong>Flip Card</strong>
+              <small>Spacebar</small>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            class="review-action-btn btn-got-it"
+            id="reviewGotItBtn"
+            title="Press Right Arrow or click if you mastered this card"
+          >
+            <span class="btn-action-icon">✓</span>
+            <div class="btn-action-label">
+              <strong>Got It!</strong>
+              <small>→ Key [2]</small>
+            </div>
+          </button>
+        </div>
+
+        <!-- Keyboard hints bar -->
+        <div class="review-keyboard-hints">
+          <span>⌨️ Shortcuts: <strong>Space</strong> to flip • <strong>←</strong> Need Practice • <strong>→</strong> Got It • <strong>A</strong> Pronounce • <strong>Esc</strong> Exit</span>
+        </div>
+      </div>
+
+      <!-- Completion Screen (Shown when all cards in queue are finished) -->
+      <div class="review-summary-screen" id="reviewSummaryScreen" style="display: none;">
+        <div class="summary-trophy">🎉</div>
+        <h3>Review Session Complete!</h3>
+        <p class="summary-subtitle">You practiced all flashcards from your favorite lessons.</p>
+
+        <div class="summary-stats-grid">
+          <div class="summary-stat-box">
+            <span class="stat-number" id="summaryTotalCards">0</span>
+            <span class="stat-label">Cards Practiced</span>
+          </div>
+          <div class="summary-stat-box">
+            <span class="stat-number" id="summaryMasteredCards">0</span>
+            <span class="stat-label">Mastered</span>
+          </div>
+          <div class="summary-stat-box">
+            <span class="stat-number" id="summaryAccuracy">100%</span>
+            <span class="stat-label">First-Try Accuracy</span>
+          </div>
+        </div>
+
+        <div class="summary-actions">
+          <button type="button" class="btn btn-primary" id="summaryRestartShuffledBtn">
+            🔀 Practice Again (Shuffled)
+          </button>
+          <button type="button" class="btn btn-secondary" id="summaryCloseBtn">
+            Back to Learning Hub
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
 
 
   <!-- SheetJS (Local with CDN fallback) -->
