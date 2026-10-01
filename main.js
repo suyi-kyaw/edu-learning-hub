@@ -808,7 +808,10 @@ function renderConversation() {
 
 
   /*
-    Each Excel row becomes one conversation line.
+    Each Excel row becomes one conversation line:
+    Line 1: Chinese text with the play button right beside it
+    Line 2: Pinyin
+    Line 3: English
   */
 
   conversationData.forEach((row) => {
@@ -821,11 +824,17 @@ function renderConversation() {
 
 
     /*
-      Chinese
+      Line 1: Chinese row with Play button beside Chinese
     */
 
-    const chinese =
+    const chineseRow =
       document.createElement("div");
+
+    chineseRow.className =
+      "conversation-chinese-row";
+
+    const chinese =
+      document.createElement("span");
 
     chinese.className =
       "conversation-chinese";
@@ -833,44 +842,11 @@ function renderConversation() {
     chinese.textContent =
       row.chinese || "";
 
-
-    /*
-      Pinyin
-    */
-
-    const pinyin =
-      document.createElement("div");
-
-    pinyin.className =
-      "conversation-pinyin";
-
-    pinyin.textContent =
-      row.pinyin || "";
+    chineseRow.appendChild(chinese);
 
 
     /*
-      English
-    */
-
-    const english =
-      document.createElement("div");
-
-    english.className =
-      "conversation-english";
-
-    english.textContent =
-      row.english || "";
-
-
-    line.appendChild(chinese);
-
-    line.appendChild(pinyin);
-
-    line.appendChild(english);
-
-
-    /*
-      Sound button
+      Sound button placed directly beside Chinese
     */
 
     if (hasAudio(row.audio)) {
@@ -886,6 +862,7 @@ function renderConversation() {
       audioButton.textContent =
         "▶ Play";
 
+      audioButton.setAttribute("aria-label", `Listen to: ${row.chinese || "phrase"}`);
 
       audioButton.addEventListener(
         "click",
@@ -902,8 +879,7 @@ function renderConversation() {
         }
       );
 
-
-      line.appendChild(
+      chineseRow.appendChild(
         audioButton
       );
 
@@ -925,6 +901,7 @@ function renderConversation() {
       speechButton.textContent =
         "▶ Play";
 
+      speechButton.setAttribute("aria-label", `Listen to: ${row.chinese}`);
 
       speechButton.addEventListener(
         "click",
@@ -938,11 +915,48 @@ function renderConversation() {
         }
       );
 
-
-      line.appendChild(
+      chineseRow.appendChild(
         speechButton
       );
 
+    }
+
+    line.appendChild(chineseRow);
+
+
+    /*
+      Line 2: Pinyin
+    */
+
+    if (row.pinyin) {
+      const pinyin =
+        document.createElement("div");
+
+      pinyin.className =
+        "conversation-pinyin";
+
+      pinyin.textContent =
+        row.pinyin;
+
+      line.appendChild(pinyin);
+    }
+
+
+    /*
+      Line 3: English
+    */
+
+    if (row.english) {
+      const english =
+        document.createElement("div");
+
+      english.className =
+        "conversation-english";
+
+      english.textContent =
+        row.english;
+
+      line.appendChild(english);
     }
 
 
@@ -1530,6 +1544,55 @@ function speakChinese(
 
 
 /* =========================================================
+   FAVORITES MANAGEMENT (LOCALSTORAGE PERSISTENCE)
+========================================================= */
+
+function getFavorites() {
+  try {
+    const raw = localStorage.getItem("linguapath_favorites");
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function isLessonFavorited(lessonId) {
+  const favs = getFavorites();
+  const norm = String(lessonId || "").trim().toLowerCase();
+  return favs.some((id) => String(id).trim().toLowerCase() === norm);
+}
+
+function toggleFavorite(lessonId) {
+  const cleanId = String(lessonId || "").trim();
+  let favs = getFavorites();
+  const norm = cleanId.toLowerCase();
+  const existingIndex = favs.findIndex((id) => String(id).trim().toLowerCase() === norm);
+
+  if (existingIndex > -1) {
+    favs.splice(existingIndex, 1);
+  } else {
+    favs.push(cleanId);
+  }
+
+  try {
+    localStorage.setItem("linguapath_favorites", JSON.stringify(favs));
+  } catch (e) {
+    console.warn("Could not save to localStorage:", e);
+  }
+
+  updateFavoriteCountBadge();
+  renderLearningHub();
+}
+
+function updateFavoriteCountBadge() {
+  const favCountEl = document.getElementById("favoriteCount");
+  if (favCountEl) {
+    favCountEl.textContent = getFavorites().length;
+  }
+}
+
+
+/* =========================================================
    SEARCH & FILTER STATE
 ========================================================= */
 
@@ -1538,6 +1601,8 @@ let activeTopicFilter = "all";
 let searchFilterInitialized = false;
 
 function setupSearchAndFilter() {
+  updateFavoriteCountBadge();
+
   if (searchFilterInitialized) {
     return;
   }
@@ -1577,7 +1642,7 @@ function setupSearchAndFilter() {
     });
   }
 
-  // Quick topic filter chips
+  // Quick topic filter chips (including Favorites)
   keywordChips.forEach((chip) => {
     chip.addEventListener("click", () => {
       const topic = chip.getAttribute("data-filter") || "all";
@@ -1654,7 +1719,7 @@ function applySearchSuggestion(term) {
 
 
 /* =========================================================
-   LEARNING HUB (WITH INSTANT SEARCH & TOPIC FILTERING)
+   LEARNING HUB (WITH INSTANT SEARCH & FAVORITES FILTERING)
 ========================================================= */
 
 function renderLearningHub() {
@@ -1665,7 +1730,7 @@ function renderLearningHub() {
     return;
   }
 
-  // Ensure search listeners are ready
+  // Ensure search listeners & favorite badge are ready
   setupSearchAndFilter();
 
   container.innerHTML = "";
@@ -1695,7 +1760,8 @@ function renderLearningHub() {
     .filter(Boolean);
 
   const filteredLessons = lessonData.filter((row, index) => {
-    const lessonId = String(row.id || row.lessonId || `lesson-0${index + 1}`).toLowerCase();
+    const rawId = row.id || row.lessonId || `lesson-0${index + 1}`;
+    const lessonId = String(rawId).toLowerCase();
     const title = String(row.title || row.name || row.lesson || "");
     const chineseTitle = String(row.chineseTitle || row.chinese_title || row.chinese || "");
     const pinyin = String(row.pinyin || "");
@@ -1705,30 +1771,22 @@ function renderLearningHub() {
     const keywords = String(row.keywords || "");
     const inferred = defaultKeywordsMap[lessonId] || "";
 
-    const combinedSearchable = [
-      title,
-      chineseTitle,
-      pinyin,
-      meaning,
-      description,
-      level,
-      keywords,
-      inferred
-    ].join(" ").toLowerCase();
-
-    // 1. Check Topic Filter
+    // 1. Check Topic / Favorites Filter
     if (activeTopicFilter !== "all") {
       let topicMatches = false;
-      if (activeTopicFilter === "morning") {
-        topicMatches = /morning|routine|breakfast|起床|早上|早饭|school/.test(combinedSearchable);
+
+      if (activeTopicFilter === "favorites") {
+        topicMatches = isLessonFavorited(rawId);
+      } else if (activeTopicFilter === "morning") {
+        topicMatches = /morning|routine|breakfast|起床|早上|早饭|school/.test([title, description, keywords, inferred].join(" ").toLowerCase());
       } else if (activeTopicFilter === "fruit") {
-        topicMatches = /fruit|market|apple|shopping|sweet|delicious|水果|苹果|买/.test(combinedSearchable);
+        topicMatches = /fruit|market|apple|shopping|sweet|delicious|水果|苹果|买/.test([title, description, keywords, inferred].join(" ").toLowerCase());
       } else if (activeTopicFilter === "school") {
-        topicMatches = /school|学校|xuéxiào/.test(combinedSearchable);
+        topicMatches = /school|学校|xuéxiào/.test([title, description, keywords, inferred].join(" ").toLowerCase());
       } else if (activeTopicFilter === "beginner") {
         topicMatches = /beginner|初级/.test(level.toLowerCase());
       } else {
-        topicMatches = combinedSearchable.includes(activeTopicFilter.toLowerCase());
+        topicMatches = [title, chineseTitle, pinyin, meaning, description, level, keywords, inferred].join(" ").toLowerCase().includes(activeTopicFilter.toLowerCase());
       }
 
       if (!topicMatches) {
@@ -1738,6 +1796,17 @@ function renderLearningHub() {
 
     // 2. Check Search Query Words (every word must match in combined text)
     if (queryWords.length > 0) {
+      const combinedSearchable = [
+        title,
+        chineseTitle,
+        pinyin,
+        meaning,
+        description,
+        level,
+        keywords,
+        inferred
+      ].join(" ").toLowerCase();
+
       const allWordsMatch = queryWords.every((word) => combinedSearchable.includes(word));
       if (!allWordsMatch) {
         return false;
@@ -1749,7 +1818,9 @@ function renderLearningHub() {
 
   // Update Result Status Indicator
   if (countIndicator) {
-    if (activeSearchQuery && activeTopicFilter !== "all") {
+    if (activeTopicFilter === "favorites") {
+      countIndicator.textContent = `Showing ${filteredLessons.length} saved ${filteredLessons.length === 1 ? "lesson" : "lessons"}`;
+    } else if (activeSearchQuery && activeTopicFilter !== "all") {
       countIndicator.textContent = `Found ${filteredLessons.length} ${filteredLessons.length === 1 ? "lesson" : "lessons"} matching "${activeSearchQuery}" in topic`;
     } else if (activeSearchQuery) {
       countIndicator.textContent = `Found ${filteredLessons.length} ${filteredLessons.length === 1 ? "lesson" : "lessons"} matching "${activeSearchQuery}"`;
@@ -1764,35 +1835,53 @@ function renderLearningHub() {
   if (filteredLessons.length === 0) {
     const emptyState = document.createElement("div");
     emptyState.className = "search-empty-state";
-    emptyState.innerHTML = `
-      <div class="empty-icon">🔍</div>
-      <h3>No lessons found</h3>
-      <p>We couldn't find any lessons matching "<strong>${escapeHTML(activeSearchQuery || activeTopicFilter)}</strong>".</p>
-      <div class="empty-suggestions">
-        <span>Try searching:</span>
-        <button type="button" class="suggestion-chip" data-search="fruit">🍎 Fruit</button>
-        <button type="button" class="suggestion-chip" data-search="morning">🌅 Morning</button>
-        <button type="button" class="suggestion-chip" data-search="school">🏫 School</button>
-        <button type="button" class="suggestion-chip" data-search="beginner">⭐ Beginner</button>
-      </div>
-      <button type="button" class="btn btn-secondary reset-search-btn" id="resetSearchBtn">
-        Reset Search &amp; Filters
-      </button>
-    `;
 
-    // Wire suggestion clicks
-    emptyState.querySelectorAll(".suggestion-chip").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const term = btn.getAttribute("data-search") || "";
-        applySearchSuggestion(term);
-      });
-    });
+    if (activeTopicFilter === "favorites") {
+      emptyState.innerHTML = `
+        <div class="empty-icon">❤️</div>
+        <h3>No Saved Lessons Yet</h3>
+        <p>You haven't added any lessons to your favorites yet. Click the 🤍 heart icon on any lesson card to save it here for quick practice!</p>
+        <button type="button" class="btn btn-primary" id="viewAllLessonsBtn">
+          Browse All Lessons
+        </button>
+      `;
 
-    const resetBtn = emptyState.querySelector("#resetSearchBtn");
-    if (resetBtn) {
-      resetBtn.addEventListener("click", () => {
-        resetAllFilters();
+      const viewAllBtn = emptyState.querySelector("#viewAllLessonsBtn");
+      if (viewAllBtn) {
+        viewAllBtn.addEventListener("click", () => {
+          resetAllFilters();
+        });
+      }
+    } else {
+      emptyState.innerHTML = `
+        <div class="empty-icon">🔍</div>
+        <h3>No lessons found</h3>
+        <p>We couldn't find any lessons matching "<strong>${escapeHTML(activeSearchQuery || activeTopicFilter)}</strong>".</p>
+        <div class="empty-suggestions">
+          <span>Try searching:</span>
+          <button type="button" class="suggestion-chip" data-search="fruit">🍎 Fruit</button>
+          <button type="button" class="suggestion-chip" data-search="morning">🌅 Morning</button>
+          <button type="button" class="suggestion-chip" data-search="school">🏫 School</button>
+          <button type="button" class="suggestion-chip" data-search="beginner">⭐ Beginner</button>
+        </div>
+        <button type="button" class="btn btn-secondary reset-search-btn" id="resetSearchBtn">
+          Reset Search &amp; Filters
+        </button>
+      `;
+
+      emptyState.querySelectorAll(".suggestion-chip").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const term = btn.getAttribute("data-search") || "";
+          applySearchSuggestion(term);
+        });
       });
+
+      const resetBtn = emptyState.querySelector("#resetSearchBtn");
+      if (resetBtn) {
+        resetBtn.addEventListener("click", () => {
+          resetAllFilters();
+        });
+      }
     }
 
     container.appendChild(emptyState);
@@ -1812,6 +1901,7 @@ function renderLearningHub() {
     const description = row.description || row.english || "";
     const level = row.level || row.category || row.section || "Beginner";
     const poster = row.poster || row.image || "assets/images/story-poster.jpg";
+    const isFav = isLessonFavorited(lessonId);
 
     // Determine topic tags for visual display
     let tagList = [];
@@ -1834,6 +1924,15 @@ function renderLearningHub() {
             ? `<img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}" loading="lazy" onerror="if (this.src.endsWith('.jpg')) { this.src = this.src.replace(/\\.jpg$/, '.svg'); } else if (this.src.endsWith('.svg')) { this.src = this.src.replace(/\\.svg$/, '.png'); } else { this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 800 450\\' width=\\'100%25\\' height=\\'100%25\\'><rect width=\\'800\\' height=\\'450\\' fill=\\'%23fff7ed\\'/><text x=\\'50%25\\' y=\\'45%25\\' font-size=\\'56\\' text-anchor=\\'middle\\'>📖</text><text x=\\'50%25\\' y=\\'65%25\\' font-size=\\'28\\' font-weight=\\'bold\\' fill=\\'%23ea580c\\' text-anchor=\\'middle\\'>${encodeURIComponent(title || 'Chinese Lesson')}</text></svg>'; }">`
             : `<div class="lesson-card-placeholder">文</div>`
         }
+        <button
+          type="button"
+          class="lesson-favorite-btn ${isFav ? 'active' : ''}"
+          data-lesson-id="${escapeHTML(lessonId)}"
+          title="${isFav ? 'Remove from saved favorites' : 'Save to favorites'}"
+          aria-label="${isFav ? 'Remove from saved favorites' : 'Save to favorites'}"
+        >
+          <span class="heart-icon">${isFav ? '❤️' : '🤍'}</span>
+        </button>
       </div>
 
       <div class="lesson-card-content">
@@ -1881,6 +1980,16 @@ function renderLearningHub() {
         </div>
       </div>
     `;
+
+    // Heart favorite toggle button listener
+    const favBtn = card.querySelector(".lesson-favorite-btn");
+    if (favBtn) {
+      favBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        toggleFavorite(lessonId);
+      });
+    }
 
     card.style.cursor = "pointer";
     card.addEventListener("click", (e) => {
