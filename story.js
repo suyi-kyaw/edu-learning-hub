@@ -2035,6 +2035,7 @@ function saveStoryLessonProgress(lessonId, percent, completed) {
       lastUpdated: Date.now()
     };
     localStorage.setItem("linguapath_lesson_progress", JSON.stringify(all));
+    updateUserLevelUI();
   } catch (e) {
     console.warn("Could not save story progress to localStorage:", e);
   }
@@ -2105,6 +2106,7 @@ function showStoryCompletionModal(lessonTitle, lessonId, lessons) {
   const count = getTotalCompletedLessonsCount();
   const streakData = getDailyStreakData();
   const totalAvailable = (lessons && lessons.length) ? lessons.length : 2;
+  const levelInfo = getUserLevelInfo(count);
 
   const titleEl = document.getElementById("completionLessonTitle");
   if (titleEl) {
@@ -2122,12 +2124,22 @@ function showStoryCompletionModal(lessonTitle, lessonId, lessons) {
     streakEl.textContent = `${s} ${s === 1 ? "Day" : "Days"}`;
   }
 
+  const rankIconEl = document.getElementById("completionRankIcon");
+  if (rankIconEl) {
+    rankIconEl.textContent = levelInfo.icon;
+  }
+
+  const rankValEl = document.getElementById("completionRankValue");
+  if (rankValEl) {
+    rankValEl.textContent = `${levelInfo.rank}`;
+  }
+
   const statusEl = document.getElementById("completionStatusMessage");
   if (statusEl) {
     if (count >= totalAvailable && totalAvailable > 0) {
-      statusEl.textContent = `🌟 Outstanding achievement! You have completed all ${totalAvailable} lessons! Keep up your streak!`;
+      statusEl.textContent = `🌟 Outstanding achievement! You reached ${levelInfo.rank} rank and completed all ${totalAvailable} lessons! Keep up your streak!`;
     } else {
-      statusEl.textContent = `You've completed ${count} of ${totalAvailable} lessons. Keep up your daily streak!`;
+      statusEl.textContent = `You've completed ${count} of ${totalAvailable} lessons. Current rank: ${levelInfo.rank} (${levelInfo.chineseRank})!`;
     }
   }
 
@@ -2401,6 +2413,117 @@ function setupStreakBadgeInteractions() {
   window.addEventListener("storage", (e) => {
     if (e.key === STREAK_STORAGE_KEY || e.key === "linguapath_lesson_progress") {
       updateHeaderStreakUI();
+      updateUserLevelUI();
+    }
+  });
+}
+
+
+/* =========================================================
+   USER LEVEL & RANK PROGRESSION SYSTEM (Novice, Scholar, Master)
+========================================================= */
+
+const USER_LEVEL_DEFINITIONS = [
+  { level: 1, rank: "Novice", chineseRank: "初学者", minCompleted: 0, icon: "🌱", class: "rank-novice", nextRequired: 1 },
+  { level: 2, rank: "Scholar", chineseRank: "学者", minCompleted: 1, icon: "📚", class: "rank-scholar", nextRequired: 2 },
+  { level: 3, rank: "Master", chineseRank: "大师", minCompleted: 2, icon: "👑", class: "rank-master", nextRequired: null }
+];
+
+function getUserLevelInfo(completedCount) {
+  const count = typeof completedCount === "number" ? completedCount : getTotalCompletedLessonsCount();
+  let current = USER_LEVEL_DEFINITIONS[0];
+  for (let i = USER_LEVEL_DEFINITIONS.length - 1; i >= 0; i--) {
+    if (count >= USER_LEVEL_DEFINITIONS[i].minCompleted) {
+      current = USER_LEVEL_DEFINITIONS[i];
+      break;
+    }
+  }
+
+  let progressPercent = 100;
+  let progressText = "Maximum Rank Achieved!";
+  let nextRankName = "Max Rank";
+
+  if (current.nextRequired !== null) {
+    const prevMin = current.minCompleted;
+    const nextReq = current.nextRequired;
+    const numerator = Math.max(0, count - prevMin);
+    const denominator = Math.max(1, nextReq - prevMin);
+    progressPercent = Math.min(100, Math.round((numerator / denominator) * 100));
+    progressText = `${count} / ${nextReq} completed`;
+    const nextDef = USER_LEVEL_DEFINITIONS.find((d) => d.minCompleted === current.nextRequired);
+    nextRankName = nextDef ? `Next: ${nextDef.rank}` : "Next Rank";
+  }
+
+  return {
+    ...current,
+    count,
+    progressPercent,
+    progressText,
+    nextRankName
+  };
+}
+
+function updateUserLevelUI() {
+  const count = getTotalCompletedLessonsCount();
+  const info = getUserLevelInfo(count);
+
+  const badgeEl = document.getElementById("userLevelBadge");
+  const iconEl = document.getElementById("userLevelIcon");
+  const rankEl = document.getElementById("userLevelRank");
+  const subEl = document.getElementById("userLevelSubtitle");
+  const tooltipTitle = document.getElementById("levelTooltipTitle");
+  const tooltipChinese = document.getElementById("levelTooltipChinese");
+  const tooltipDesc = document.getElementById("levelTooltipDesc");
+  const progressBar = document.getElementById("levelProgressBar");
+  const progressText = document.getElementById("levelProgressText");
+  const nextRankEl = document.getElementById("levelNextRank");
+
+  if (badgeEl) {
+    badgeEl.classList.remove("rank-novice", "rank-scholar", "rank-master");
+    badgeEl.classList.add(info.class);
+    badgeEl.setAttribute("aria-label", `User Level: ${info.rank} (Level ${info.level})`);
+    badgeEl.setAttribute("title", `User Learning Rank: ${info.rank} (${info.chineseRank})`);
+  }
+
+  if (iconEl) iconEl.textContent = info.icon;
+  if (rankEl) rankEl.textContent = info.rank;
+  if (subEl) subEl.textContent = `Lvl ${info.level}`;
+
+  if (tooltipTitle) tooltipTitle.textContent = `${info.icon} ${info.rank} (Level ${info.level})`;
+  if (tooltipChinese) tooltipChinese.textContent = info.chineseRank;
+
+  if (tooltipDesc) {
+    if (info.nextRequired !== null) {
+      const needed = Math.max(1, info.nextRequired - count);
+      tooltipDesc.textContent = `Complete ${needed} more ${needed === 1 ? "lesson" : "lessons"} to reach ${info.nextRankName.replace("Next: ", "")} rank!`;
+    } else {
+      tooltipDesc.textContent = "Congratulations! You have reached Master rank by completing all available lessons!";
+    }
+  }
+
+  if (progressBar) {
+    progressBar.style.width = `${info.progressPercent}%`;
+  }
+  if (progressText) {
+    progressText.textContent = info.progressText;
+  }
+  if (nextRankEl) {
+    nextRankEl.textContent = info.nextRankName;
+  }
+}
+
+function setupUserLevelInteractions() {
+  const badgeEl = document.getElementById("userLevelBadge");
+  if (!badgeEl) return;
+
+  badgeEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    badgeEl.classList.toggle("show-tooltip");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!badgeEl.contains(e.target)) {
+      badgeEl.classList.remove("show-tooltip");
     }
   });
 }
@@ -2865,6 +2988,8 @@ document.addEventListener(
     setupStoryCompletionModalListeners();
     updateHeaderStreakUI();
     setupStreakBadgeInteractions();
+    updateUserLevelUI();
+    setupUserLevelInteractions();
     setupReminderUI();
     startDailyReminderScheduler();
     loadStoryLesson();

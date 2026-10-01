@@ -14,6 +14,14 @@
   <meta property="og:title" content="LinguaPath - Learn Chinese">
   <meta property="og:description" content="Learn Chinese through pronunciation, everyday conversations, vocabulary, exercises, and interactive lessons.">
 
+  <!-- Google Fonts with display=swap for high performance rendering -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@600;700&family=Roboto:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  >
+
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -48,6 +56,36 @@
           <div class="streak-tooltip" id="streakTooltip">
             <strong id="streakTooltipTitle">Daily Streak: 0 days</strong>
             <p id="streakTooltipDesc">Complete a lesson today to start your streak!</p>
+          </div>
+        </div>
+
+        <!-- User Level & Rank Badge (Novice, Scholar, Master) -->
+        <div
+          class="level-badge rank-novice"
+          id="userLevelBadge"
+          role="status"
+          aria-label="User Level: Novice (Level 1)"
+          tabindex="0"
+          title="User Learning Level: Novice"
+        >
+          <span class="level-icon" id="userLevelIcon" aria-hidden="true">🌱</span>
+          <div class="level-text-wrap">
+            <span class="level-rank" id="userLevelRank">Novice</span>
+            <span class="level-label" id="userLevelSubtitle">Lvl 1</span>
+          </div>
+          <div class="level-tooltip" id="levelTooltip">
+            <div class="level-tooltip-header">
+              <strong id="levelTooltipTitle">🌱 Novice (Level 1)</strong>
+              <span class="level-tooltip-chinese" id="levelTooltipChinese">初学者</span>
+            </div>
+            <p id="levelTooltipDesc">Complete 1 lesson to achieve Scholar rank!</p>
+            <div class="level-progress-bar-wrap">
+              <div class="level-progress-bar" id="levelProgressBar" style="width: 0%;"></div>
+            </div>
+            <div class="level-progress-footer">
+              <span id="levelProgressText">0 / 1 completed</span>
+              <span id="levelNextRank">Next: Scholar</span>
+            </div>
           </div>
         </div>
 
@@ -130,6 +168,18 @@
 
         <div class="hero-visual">
 
+          <!-- Subtle decorative background elements -->
+          <div class="hero-card-decoration" aria-hidden="true">
+            <div class="hero-deco-radical-wrap">
+              <span class="hero-deco-radical">亻 + 尔 = 你</span>
+              <span class="hero-deco-dot">•</span>
+              <span class="hero-deco-radical">女 + 子 = 好</span>
+            </div>
+            <svg class="hero-deco-contour" viewBox="0 0 200 40" fill="none" preserveAspectRatio="none">
+              <path d="M 10 30 Q 50 38 75 16 T 130 18 T 190 28" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="3 4" opacity="0.4" />
+            </svg>
+          </div>
+
           <div class="hero-character">
             你好
           </div>
@@ -140,6 +190,12 @@
 
           <div class="hero-translation">
             Hello
+          </div>
+
+          <!-- Subtle tone contour preview pill -->
+          <div class="hero-tone-preview" aria-hidden="true">
+            <span class="tone-tag">3rd Tone ˇ</span>
+            <span class="tone-sandhi-hint">Tone Sandhi: 2nd + 3rd Tone</span>
           </div>
 
         </div>
@@ -532,8 +588,59 @@
           id="lessonGrid"
         >
 
-          <div class="loading-message">
-            Loading lessons...
+          <!-- 3-Card Skeleton Loader prior to script execution -->
+          <div class="lesson-card skeleton-card" aria-hidden="true">
+            <div class="skeleton-shimmer"></div>
+            <div class="skeleton-header">
+              <div class="skeleton-box skeleton-badge"></div>
+              <div class="skeleton-box skeleton-action"></div>
+            </div>
+            <div class="skeleton-box skeleton-title"></div>
+            <div class="skeleton-box skeleton-subtitle"></div>
+            <div class="skeleton-tags">
+              <div class="skeleton-box skeleton-tag"></div>
+              <div class="skeleton-box skeleton-tag"></div>
+            </div>
+            <div class="skeleton-footer">
+              <div class="skeleton-box skeleton-progress-bar"></div>
+              <div class="skeleton-box skeleton-btn"></div>
+            </div>
+          </div>
+
+          <div class="lesson-card skeleton-card" aria-hidden="true">
+            <div class="skeleton-shimmer"></div>
+            <div class="skeleton-header">
+              <div class="skeleton-box skeleton-badge"></div>
+              <div class="skeleton-box skeleton-action"></div>
+            </div>
+            <div class="skeleton-box skeleton-title"></div>
+            <div class="skeleton-box skeleton-subtitle"></div>
+            <div class="skeleton-tags">
+              <div class="skeleton-box skeleton-tag"></div>
+              <div class="skeleton-box skeleton-tag"></div>
+            </div>
+            <div class="skeleton-footer">
+              <div class="skeleton-box skeleton-progress-bar"></div>
+              <div class="skeleton-box skeleton-btn"></div>
+            </div>
+          </div>
+
+          <div class="lesson-card skeleton-card" aria-hidden="true">
+            <div class="skeleton-shimmer"></div>
+            <div class="skeleton-header">
+              <div class="skeleton-box skeleton-badge"></div>
+              <div class="skeleton-box skeleton-action"></div>
+            </div>
+            <div class="skeleton-box skeleton-title"></div>
+            <div class="skeleton-box skeleton-subtitle"></div>
+            <div class="skeleton-tags">
+              <div class="skeleton-box skeleton-tag"></div>
+              <div class="skeleton-box skeleton-tag"></div>
+            </div>
+            <div class="skeleton-footer">
+              <div class="skeleton-box skeleton-progress-bar"></div>
+              <div class="skeleton-box skeleton-btn"></div>
+            </div>
           </div>
 
         </div>
@@ -667,6 +774,13 @@
             <div class="stat-info">
               <span class="stat-value" id="completionStreakCount">1</span>
               <span class="stat-label">Daily Streak</span>
+            </div>
+          </div>
+          <div class="completion-stat-item">
+            <span class="stat-icon" id="completionRankIcon" aria-hidden="true">🌱</span>
+            <div class="stat-info">
+              <span class="stat-value" id="completionRankValue">Novice</span>
+              <span class="stat-label">User Rank</span>
             </div>
           </div>
         </div>
