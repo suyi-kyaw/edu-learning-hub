@@ -18,7 +18,8 @@
         "description": "Learn Chinese through a simple story.",
         "video": "assets/video/lesson-01.mp4",
         "poster": "assets/images/story-poster.jpg",
-        "fullAudio": "assets/audio/lesson-01-full.mp3"
+        "fullAudio": "assets/audio/lesson-01-full.mp3",
+        "keywords": "morning, routine, breakfast, school, happy, day, get up, early, 早上, 起床, 学校, 早饭, 开心"
       },
       {
         "id": "lesson-02",
@@ -30,7 +31,8 @@
         "description": "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
         "video": "assets/video/lesson-02.mp4",
         "poster": "assets/images/story2-poster.jpg",
-        "fullAudio": "assets/audio/lesson-02-full.mp3"
+        "fullAudio": "assets/audio/lesson-02-full.mp3",
+        "keywords": "fruit, market, apple, shopping, fresh, sweet, delicious, red, buy, 水果, 市场, 苹果, 买, 甜, 好吃"
       }
     ],
     "Story": [

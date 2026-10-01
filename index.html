@@ -427,6 +427,57 @@
 
         </div>
 
+        <!-- =========================
+             LEARNING HUB SEARCH BAR
+        ========================== -->
+        <div class="learning-search-box" id="learningSearchBox" role="search" aria-label="Lesson Search">
+          <div class="search-bar-inner">
+            <span class="search-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </span>
+
+            <input
+              type="search"
+              id="lessonSearchInput"
+              class="lesson-search-input"
+              placeholder="Search lessons by title, keyword, pinyin, or Chinese (e.g. fruit, morning, school)..."
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Search lessons by title or keyword"
+            />
+
+            <button
+              type="button"
+              id="clearSearchBtn"
+              class="clear-search-btn"
+              aria-label="Clear search"
+              style="display: none;"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- Quick Keyword Filter Chips -->
+          <div class="search-keywords-bar" id="searchKeywordsBar">
+            <span class="keywords-label">Filter by topic:</span>
+            <div class="keywords-chips">
+              <button type="button" class="keyword-chip active" data-filter="all">All Lessons</button>
+              <button type="button" class="keyword-chip" data-filter="morning">🌅 Morning &amp; Routine</button>
+              <button type="button" class="keyword-chip" data-filter="fruit">🍎 Fruit &amp; Market</button>
+              <button type="button" class="keyword-chip" data-filter="school">🏫 School</button>
+              <button type="button" class="keyword-chip" data-filter="beginner">⭐ Beginner</button>
+            </div>
+          </div>
+
+          <!-- Real-time search status indicator -->
+          <div class="search-results-info" id="searchResultsInfo" aria-live="polite">
+            <span id="searchResultsCount">Showing all lessons</span>
+          </div>
+        </div>
+
 
         <div
           class="lesson-grid"

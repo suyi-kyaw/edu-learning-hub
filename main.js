@@ -42,6 +42,7 @@ function escapeHTML(value) {
 
 document.addEventListener("DOMContentLoaded", () => {
   setupMobileMenu();
+  setupSearchAndFilter();
   loadWorkbook();
 });
 
@@ -263,7 +264,8 @@ function getFallbackLessonData() {
       level: "Beginner",
       description: "Learn Chinese through a simple story.",
       video: "assets/video/lesson-01.mp4",
-      poster: "assets/images/story-poster.jpg"
+      poster: "assets/images/story-poster.jpg",
+      keywords: "morning, routine, breakfast, school, happy, day, get up, early, 早上, 起床, 学校, 早饭, 开心"
     },
     {
       id: "lesson-02",
@@ -274,7 +276,8 @@ function getFallbackLessonData() {
       level: "Beginner",
       description: "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
       video: "assets/video/lesson-02.mp4",
-      poster: "assets/images/story2-poster.jpg"
+      poster: "assets/images/story2-poster.jpg",
+      keywords: "fruit, market, apple, shopping, fresh, sweet, delicious, red, buy, 水果, 市场, 苹果, 买, 甜, 好吃"
     }
   ];
 }
@@ -1527,106 +1530,315 @@ function speakChinese(
 
 
 /* =========================================================
-   LEARNING HUB
+   SEARCH & FILTER STATE
+========================================================= */
+
+let activeSearchQuery = "";
+let activeTopicFilter = "all";
+let searchFilterInitialized = false;
+
+function setupSearchAndFilter() {
+  if (searchFilterInitialized) {
+    return;
+  }
+
+  const searchInput = document.getElementById("lessonSearchInput");
+  const clearBtn = document.getElementById("clearSearchBtn");
+  const keywordChips = document.querySelectorAll(".keyword-chip");
+
+  if (!searchInput) {
+    return;
+  }
+
+  searchFilterInitialized = true;
+
+  // Real-time search filter input
+  searchInput.addEventListener("input", (e) => {
+    activeSearchQuery = String(e.target.value || "").trim();
+
+    if (clearBtn) {
+      clearBtn.style.display = activeSearchQuery ? "inline-flex" : "none";
+    }
+
+    renderLearningHub();
+  });
+
+  // Clear on Escape key
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      clearSearch();
+    }
+  });
+
+  // Clear button click
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      clearSearch();
+    });
+  }
+
+  // Quick topic filter chips
+  keywordChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const topic = chip.getAttribute("data-filter") || "all";
+      activeTopicFilter = topic;
+
+      keywordChips.forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+
+      renderLearningHub();
+    });
+  });
+}
+
+function clearSearch() {
+  activeSearchQuery = "";
+  const searchInput = document.getElementById("lessonSearchInput");
+  const clearBtn = document.getElementById("clearSearchBtn");
+
+  if (searchInput) {
+    searchInput.value = "";
+    searchInput.focus();
+  }
+
+  if (clearBtn) {
+    clearBtn.style.display = "none";
+  }
+
+  renderLearningHub();
+}
+
+function resetAllFilters() {
+  activeSearchQuery = "";
+  activeTopicFilter = "all";
+
+  const searchInput = document.getElementById("lessonSearchInput");
+  const clearBtn = document.getElementById("clearSearchBtn");
+  const keywordChips = document.querySelectorAll(".keyword-chip");
+
+  if (searchInput) {
+    searchInput.value = "";
+  }
+
+  if (clearBtn) {
+    clearBtn.style.display = "none";
+  }
+
+  keywordChips.forEach((chip) => {
+    if (chip.getAttribute("data-filter") === "all") {
+      chip.classList.add("active");
+    } else {
+      chip.classList.remove("active");
+    }
+  });
+
+  renderLearningHub();
+}
+
+function applySearchSuggestion(term) {
+  activeSearchQuery = term;
+  const searchInput = document.getElementById("lessonSearchInput");
+  const clearBtn = document.getElementById("clearSearchBtn");
+
+  if (searchInput) {
+    searchInput.value = term;
+    searchInput.focus();
+  }
+
+  if (clearBtn) {
+    clearBtn.style.display = "inline-flex";
+  }
+
+  renderLearningHub();
+}
+
+
+/* =========================================================
+   LEARNING HUB (WITH INSTANT SEARCH & TOPIC FILTERING)
 ========================================================= */
 
 function renderLearningHub() {
-
-  const container =
-    document.getElementById(
-      "lessonGrid"
-    );
+  const container = document.getElementById("lessonGrid");
+  const countIndicator = document.getElementById("searchResultsCount");
 
   if (!container) {
     return;
   }
 
+  // Ensure search listeners are ready
+  setupSearchAndFilter();
 
   container.innerHTML = "";
 
-
   if (!lessonData.length) {
-
     container.innerHTML = `
       <div class="loading-message">
-        No lessons found.
+        No lessons available.
       </div>
     `;
-
+    if (countIndicator) {
+      countIndicator.textContent = "No lessons found.";
+    }
     return;
   }
 
+  // Inferred keywords dictionary for lessons
+  const defaultKeywordsMap = {
+    "lesson-01": "morning routine breakfast school happy day get up early 早上 起床 学校 早饭 开心",
+    "lesson-02": "fruit market apple shopping fresh sweet delicious red buy 水果 市场 苹果 买 甜 好吃"
+  };
 
-  /*
-    Render previous format of learning hub lessons
-    with poster image, level, title, Chinese title,
-    pinyin, meaning, description, and Open Lesson button.
-  */
+  // Filter lessons based on activeSearchQuery and activeTopicFilter
+  const queryWords = activeSearchQuery
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
 
-  lessonData.forEach((row, index) => {
+  const filteredLessons = lessonData.filter((row, index) => {
+    const lessonId = String(row.id || row.lessonId || `lesson-0${index + 1}`).toLowerCase();
+    const title = String(row.title || row.name || row.lesson || "");
+    const chineseTitle = String(row.chineseTitle || row.chinese_title || row.chinese || "");
+    const pinyin = String(row.pinyin || "");
+    const meaning = String(row.meaning || "");
+    const description = String(row.description || row.english || "");
+    const level = String(row.level || row.category || row.section || "Beginner");
+    const keywords = String(row.keywords || "");
+    const inferred = defaultKeywordsMap[lessonId] || "";
 
-    const card =
-      document.createElement("article");
+    const combinedSearchable = [
+      title,
+      chineseTitle,
+      pinyin,
+      meaning,
+      description,
+      level,
+      keywords,
+      inferred
+    ].join(" ").toLowerCase();
 
-    card.className =
-      "lesson-card";
+    // 1. Check Topic Filter
+    if (activeTopicFilter !== "all") {
+      let topicMatches = false;
+      if (activeTopicFilter === "morning") {
+        topicMatches = /morning|routine|breakfast|起床|早上|早饭|school/.test(combinedSearchable);
+      } else if (activeTopicFilter === "fruit") {
+        topicMatches = /fruit|market|apple|shopping|sweet|delicious|水果|苹果|买/.test(combinedSearchable);
+      } else if (activeTopicFilter === "school") {
+        topicMatches = /school|学校|xuéxiào/.test(combinedSearchable);
+      } else if (activeTopicFilter === "beginner") {
+        topicMatches = /beginner|初级/.test(level.toLowerCase());
+      } else {
+        topicMatches = combinedSearchable.includes(activeTopicFilter.toLowerCase());
+      }
 
+      if (!topicMatches) {
+        return false;
+      }
+    }
 
-    const lessonId =
-      row.id ||
-      row.lessonId ||
-      row.lesson_id ||
-      `lesson-0${index + 1}`;
+    // 2. Check Search Query Words (every word must match in combined text)
+    if (queryWords.length > 0) {
+      const allWordsMatch = queryWords.every((word) => combinedSearchable.includes(word));
+      if (!allWordsMatch) {
+        return false;
+      }
+    }
 
-    const title =
-      row.title ||
-      row.name ||
-      row.lesson ||
-      `Lesson ${index + 1}`;
+    return true;
+  });
 
-    const chineseTitle =
-      row.chineseTitle ||
-      row.chinese_title ||
-      row.chinese ||
-      "";
+  // Update Result Status Indicator
+  if (countIndicator) {
+    if (activeSearchQuery && activeTopicFilter !== "all") {
+      countIndicator.textContent = `Found ${filteredLessons.length} ${filteredLessons.length === 1 ? "lesson" : "lessons"} matching "${activeSearchQuery}" in topic`;
+    } else if (activeSearchQuery) {
+      countIndicator.textContent = `Found ${filteredLessons.length} ${filteredLessons.length === 1 ? "lesson" : "lessons"} matching "${activeSearchQuery}"`;
+    } else if (activeTopicFilter !== "all") {
+      countIndicator.textContent = `Showing ${filteredLessons.length} ${filteredLessons.length === 1 ? "lesson" : "lessons"} for topic`;
+    } else {
+      countIndicator.textContent = `Showing all ${filteredLessons.length} ${filteredLessons.length === 1 ? "lesson" : "lessons"}`;
+    }
+  }
 
-    const pinyin =
-      row.pinyin ||
-      "";
+  // Handle Empty State
+  if (filteredLessons.length === 0) {
+    const emptyState = document.createElement("div");
+    emptyState.className = "search-empty-state";
+    emptyState.innerHTML = `
+      <div class="empty-icon">🔍</div>
+      <h3>No lessons found</h3>
+      <p>We couldn't find any lessons matching "<strong>${escapeHTML(activeSearchQuery || activeTopicFilter)}</strong>".</p>
+      <div class="empty-suggestions">
+        <span>Try searching:</span>
+        <button type="button" class="suggestion-chip" data-search="fruit">🍎 Fruit</button>
+        <button type="button" class="suggestion-chip" data-search="morning">🌅 Morning</button>
+        <button type="button" class="suggestion-chip" data-search="school">🏫 School</button>
+        <button type="button" class="suggestion-chip" data-search="beginner">⭐ Beginner</button>
+      </div>
+      <button type="button" class="btn btn-secondary reset-search-btn" id="resetSearchBtn">
+        Reset Search &amp; Filters
+      </button>
+    `;
 
-    const meaning =
-      row.meaning ||
-      "";
+    // Wire suggestion clicks
+    emptyState.querySelectorAll(".suggestion-chip").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const term = btn.getAttribute("data-search") || "";
+        applySearchSuggestion(term);
+      });
+    });
 
-    const description =
-      row.description ||
-      row.english ||
-      "";
+    const resetBtn = emptyState.querySelector("#resetSearchBtn");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        resetAllFilters();
+      });
+    }
 
-    const level =
-      row.level ||
-      row.category ||
-      row.section ||
-      "Beginner";
+    container.appendChild(emptyState);
+    return;
+  }
 
-    const poster =
-      row.poster ||
-      row.image ||
-      "assets/images/story-poster.jpg";
+  // Render Lesson Cards
+  filteredLessons.forEach((row, index) => {
+    const card = document.createElement("article");
+    card.className = "lesson-card";
 
+    const lessonId = row.id || row.lessonId || row.lesson_id || `lesson-0${index + 1}`;
+    const title = row.title || row.name || row.lesson || `Lesson ${index + 1}`;
+    const chineseTitle = row.chineseTitle || row.chinese_title || row.chinese || "";
+    const pinyin = row.pinyin || "";
+    const meaning = row.meaning || "";
+    const description = row.description || row.english || "";
+    const level = row.level || row.category || row.section || "Beginner";
+    const poster = row.poster || row.image || "assets/images/story-poster.jpg";
+
+    // Determine topic tags for visual display
+    let tagList = [];
+    if (lessonId.includes("01") || title.toLowerCase().includes("day") || description.toLowerCase().includes("simple story")) {
+      tagList = ["🌅 Morning", "🏫 School", "🍳 Routine"];
+    } else if (lessonId.includes("02") || title.toLowerCase().includes("fruit") || description.toLowerCase().includes("market")) {
+      tagList = ["🍎 Fruit", "🛒 Market", "😋 Delicious"];
+    }
+
+    const tagsHtml = tagList.length
+      ? `<div class="lesson-keywords">
+          ${tagList.map(tag => `<span class="lesson-keyword-badge">${escapeHTML(tag)}</span>`).join("")}
+        </div>`
+      : "";
 
     card.innerHTML = `
       <div class="lesson-card-image">
         ${
           poster
-            ? `<img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}" loading="lazy" onerror="if (this.src.endsWith('.jpg')) { this.src = this.src.replace(/\\.jpg$/, '.svg'); } else if (this.src.endsWith('.svg')) { this.src = this.src.replace(/\\.svg$/, '.png'); } else { this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 800 450\\' width=\\'100%25\\' height=\\'100%25\\'><rect width=\\'800\\' height=\\'450\\' fill=\\'%23fff7ed\\'/><text x=\\'50%25\\' y=\\'45%25\\' font-size=\\'56\\' text-anchor=\\'middle\\'>📖</text><text x=\\'50%25\\' y=\\'65%25\\' font-size=\\'28\\' font-weight=\\'bold\\' fill=\\'%239a3412\\' text-anchor=\\'middle\\'>${encodeURIComponent(title || 'Chinese Lesson')}</text></svg>'; }">`
+            ? `<img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}" loading="lazy" onerror="if (this.src.endsWith('.jpg')) { this.src = this.src.replace(/\\.jpg$/, '.svg'); } else if (this.src.endsWith('.svg')) { this.src = this.src.replace(/\\.svg$/, '.png'); } else { this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 800 450\\' width=\\'100%25\\' height=\\'100%25\\'><rect width=\\'800\\' height=\\'450\\' fill=\\'%23fff7ed\\'/><text x=\\'50%25\\' y=\\'45%25\\' font-size=\\'56\\' text-anchor=\\'middle\\'>📖</text><text x=\\'50%25\\' y=\\'65%25\\' font-size=\\'28\\' font-weight=\\'bold\\' fill=\\'%23ea580c\\' text-anchor=\\'middle\\'>${encodeURIComponent(title || 'Chinese Lesson')}</text></svg>'; }">`
             : `<div class="lesson-card-placeholder">文</div>`
         }
       </div>
 
       <div class="lesson-card-content">
         <span class="lesson-level">
-          ${escapeHTML(level)}
+          ⭐ ${escapeHTML(level)}
         </span>
 
         <h3>
@@ -1657,12 +1869,14 @@ function renderLearningHub() {
             : ""
         }
 
+        ${tagsHtml}
+
         <div class="lesson-card-actions">
           <a
             href="story.html?id=${encodeURIComponent(lessonId)}"
             class="btn btn-primary lesson-button"
           >
-            Open Lesson
+            Open Lesson →
           </a>
         </div>
       </div>
@@ -1676,9 +1890,7 @@ function renderLearningHub() {
     });
 
     container.appendChild(card);
-
   });
-
 }
 
 
