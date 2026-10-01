@@ -37,7 +37,18 @@
 
 
   <link rel="stylesheet" href="style.css">
-
+  <!-- Early dark theme application to avoid white-flash on reload -->
+  <script>
+    (function () {
+      try {
+        var savedTheme = localStorage.getItem("linguapath_theme");
+        var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 
 
@@ -116,6 +127,18 @@
         >
           <span class="bell-icon" aria-hidden="true">🔔</span>
           <span class="reminder-status-dot" id="reminderStatusDot" aria-hidden="true"></span>
+        </button>
+
+        <!-- Dark Mode Toggle Button for Late-Night Learning -->
+        <button
+          type="button"
+          class="theme-toggle-btn"
+          id="themeToggleBtn"
+          aria-label="Toggle dark mode"
+          title="Toggle light / dark mode for late-night learning sessions"
+        >
+          <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+          <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
         </button>
 
         <nav class="main-nav" id="mainNav">

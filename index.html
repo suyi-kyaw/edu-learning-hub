@@ -23,6 +23,18 @@
   >
 
   <link rel="stylesheet" href="style.css">
+  <!-- Early dark theme application to avoid white-flash on reload -->
+  <script>
+    (function () {
+      try {
+        var savedTheme = localStorage.getItem("linguapath_theme");
+        var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 
 <body>
@@ -99,6 +111,18 @@
         >
           <span class="bell-icon" aria-hidden="true">🔔</span>
           <span class="reminder-status-dot" id="reminderStatusDot" aria-hidden="true"></span>
+        </button>
+
+        <!-- Dark Mode Toggle Button for Late-Night Learning -->
+        <button
+          type="button"
+          class="theme-toggle-btn"
+          id="themeToggleBtn"
+          aria-label="Toggle dark mode"
+          title="Toggle light / dark mode for late-night learning sessions"
+        >
+          <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+          <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
         </button>
 
         <nav class="main-nav" id="mainNav">
@@ -280,7 +304,7 @@
 
             <div class="tone-display">
 
-              <div class="tone-main">
+              <div class="tone-main tone-word-wrapper" style="display: flex; align-items: center; justify-content: flex-start; gap: 1rem;">
 
                 <div
                   class="tone-syllable"
@@ -311,27 +335,39 @@
                 class="audio-button"
                 id="toneAudioButton"
                 type="button"
+                aria-label="Play tone pronunciation"
               >
                 ▶ Play
               </button>
 
             </div>
 
+            <!-- Inline error / synthesis fallback status banner -->
+            <div
+              class="tone-audio-fallback"
+              id="toneAudioFallback"
+              role="status"
+              aria-live="polite"
+              style="display: none;"
+            ></div>
+
 
             <div
               class="tone-graph"
+              id="toneGraphContainer"
               aria-hidden="true"
             >
 
               <svg
-                viewBox="0 0 300 100"
+                viewBox="0 0 500 100"
                 role="img"
                 aria-label="Tone contour"
+                class="tone-contour-svg"
               >
 
                 <path
                   id="tonePath"
-                  d="M10 70 L290 70"
+                  d="M20 30 L480 30"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="5"
