@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mandarin for Adults & Professionals - LinguaPath</title>
-  <meta name="description" content="Comprehensive Mandarin Chinese lessons for adults, working professionals, and university students. Focus on conversational fluency, business etiquette, and travel.">
+  <title>Mandarin for Adults &amp; Professionals - LinguaPath</title>
+  <meta name="description" content="Comprehensive Mandarin Chinese lessons for adults and working professionals. 3 core categories covering Everyday Basics, Travel & Daily Life, and Business & Workplace with interactive Video Lessons, Practice Quizzes, and Stroke Writing.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
@@ -13,41 +13,18 @@
     .adult-hero {
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e1b4b 100%);
       color: #ffffff;
-      padding: 60px 0 50px;
+      padding: 56px 0 44px;
       border-bottom: 1.5px solid #334155;
+      text-align: center;
     }
     .adult-hero .eyebrow {
       background: rgba(251, 146, 60, 0.18);
       color: #fdba74;
       border-color: #ea580c;
     }
-    .track-pills {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin: 24px 0 0;
-      justify-content: center;
-    }
-    .track-pill {
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      padding: 8px 18px;
-      border-radius: 9999px;
-      font-size: 0.88rem;
-      font-weight: 700;
-      color: #f8fafc;
-      text-decoration: none;
-      transition: all 0.2s ease;
-    }
-    .track-pill:hover, .track-pill.active {
-      background: #f97316;
-      border-color: #f97316;
-      color: #ffffff;
-      transform: translateY(-2px);
-    }
   </style>
 </head>
-<body>
+<body data-audience="Adult">
 
   <!-- Site Header -->
   <header class="site-header">
@@ -79,103 +56,35 @@
   <main>
     <!-- Hero Header -->
     <section class="adult-hero">
-      <div class="container" style="text-align: center;">
+      <div class="container">
         <span class="eyebrow">Adult &amp; Professional Pathway</span>
-        <h1 style="font-size: clamp(2.4rem, 6vw, 3.5rem); font-weight: 900; margin: 14px 0 16px;">
+        <h1 style="font-size: clamp(2.3rem, 5.5vw, 3.4rem); font-weight: 900; margin: 12px 0 14px; line-height: 1.2;">
           Mandarin for Adults &amp; Professionals
         </h1>
-        <p style="max-width: 680px; margin: 0 auto; font-size: 1.1rem; color: #cbd5e1; line-height: 1.6;">
-          Accelerate your Mandarin proficiency through practical conversation, business meetings, dining culture, and HSK test grammar frameworks.
+        <p style="max-width: 680px; margin: 0 auto; font-size: 1.08rem; color: #cbd5e1; line-height: 1.6;">
+          Accelerate your fluency with practical conversation, business etiquette, dining culture, and HSK grammar across 3 core dynamic modules.
         </p>
 
-        <div class="track-pills">
-          <a href="#all" class="track-pill active">All Topics</a>
-          <a href="#business" class="track-pill">💼 Business &amp; Work</a>
-          <a href="#travel" class="track-pill">✈️ Travel &amp; Living</a>
-          <a href="#dining" class="track-pill">🥢 Dining &amp; Social</a>
-          <a href="#grammar" class="track-pill">📚 HSK Core Grammar</a>
+        <!-- 3-Category Navigation Bar -->
+        <div class="curriculum-category-bar-wrap">
+          <div class="curriculum-category-bar" id="curriculumCategoryBar" role="tablist" aria-label="Adult Curriculum Categories">
+            <!-- Rendered dynamically by lessons.js -->
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- Adult Lesson Cards Grid -->
-    <section class="section" style="padding: 60px 0;">
+    <!-- 1. Curriculum Modules List View -->
+    <section class="section" id="curriculumListSection" style="padding: 50px 0 80px;">
       <div class="container">
         <div class="section-heading">
           <span class="section-label">Curriculum Modules</span>
           <h2>Select a Lesson Module</h2>
-          <p>Every lesson includes authentic dialogue, vocabulary flashcards, native audio recordings, and interactive comprehension quizzes.</p>
+          <p>Each lesson features 3 core sections: HD Video Lesson, Practice Quizzes with instant feedback, and Stroke-by-Stroke Character Writing.</p>
         </div>
 
-        <div class="lesson-grid">
-          <!-- Lesson 1 -->
-          <article class="lesson-card">
-            <div class="lesson-card-image">
-              <img src="assets/images/story-01.jpg" alt="Morning Routine and Greetings" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';">
-            </div>
-            <div class="lesson-card-content">
-              <span class="lesson-level">⭐ Beginner • Daily Talk</span>
-              <h3>Morning Greetings &amp; Politeness</h3>
-              <div class="lesson-chinese-title">早上好！日常问候</div>
-              <div class="lesson-pinyin">Zǎoshang hǎo! Rìcháng wènhòu</div>
-              <div class="lesson-meaning">Good morning! Daily pleasantries and greetings</div>
-              <p class="lesson-description">Learn natural greetings, introduce yourself with proper etiquette, and master the tone sandhi rhythm of "你好" and "早上好".</p>
-              <div class="lesson-keywords">
-                <span class="lesson-keyword-badge">Hello</span>
-                <span class="lesson-keyword-badge">Greetings</span>
-                <span class="lesson-keyword-badge">Morning</span>
-              </div>
-              <div class="lesson-card-actions">
-                <a href="story.html?id=lesson-01" class="btn btn-primary lesson-button">Start Lesson →</a>
-              </div>
-            </div>
-          </article>
-
-          <!-- Lesson 2 -->
-          <article class="lesson-card">
-            <div class="lesson-card-image">
-              <img src="assets/images/story-02.jpg" alt="Fruit Market and Dining" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';">
-            </div>
-            <div class="lesson-card-content">
-              <span class="lesson-level">⭐⭐ Elementary • Practical</span>
-              <h3>Fresh Market &amp; Bargaining</h3>
-              <div class="lesson-chinese-title">买水果与市场购物</div>
-              <div class="lesson-pinyin">Mǎi shuǐguǒ yǔ shìchǎng gòuwù</div>
-              <div class="lesson-meaning">Buying fruit and navigating local Chinese markets</div>
-              <p class="lesson-description">Essential phrases for asking prices ("多少钱？"), weights (斤), sweetness, and paying digitally with WeChat Pay and Alipay.</p>
-              <div class="lesson-keywords">
-                <span class="lesson-keyword-badge">Market</span>
-                <span class="lesson-keyword-badge">Shopping</span>
-                <span class="lesson-keyword-badge">Fruit</span>
-              </div>
-              <div class="lesson-card-actions">
-                <a href="story.html?id=lesson-02" class="btn btn-primary lesson-button">Start Lesson →</a>
-              </div>
-            </div>
-          </article>
-
-          <!-- Lesson 3 -->
-          <article class="lesson-card">
-            <div class="lesson-card-image">
-              <img src="assets/images/story-03.jpg" alt="Restaurant & Business Dinner" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';">
-            </div>
-            <div class="lesson-card-content">
-              <span class="lesson-level">⭐⭐ Intermediate • Dining &amp; Work</span>
-              <h3>Business Dining &amp; Tea Etiquette</h3>
-              <div class="lesson-chinese-title">商务聚餐与茶道礼仪</div>
-              <div class="lesson-pinyin">Shāngwù jùcān yǔ chádào lǐyí</div>
-              <div class="lesson-meaning">Professional dining, toasts, and seating etiquette</div>
-              <p class="lesson-description">Navigate banquets, master common polite phrases when proposing toasts, and understand table seating conventions in Chinese business culture.</p>
-              <div class="lesson-keywords">
-                <span class="lesson-keyword-badge">Business</span>
-                <span class="lesson-keyword-badge">Dining</span>
-                <span class="lesson-keyword-badge">Etiquette</span>
-              </div>
-              <div class="lesson-card-actions">
-                <a href="story.html?id=lesson-01#reading" class="btn btn-primary lesson-button">Start Lesson →</a>
-              </div>
-            </div>
-          </article>
+        <div class="lesson-grid" id="lessonsGrid">
+          <!-- Lesson cards rendered dynamically from lessons.xlsx by lessons.js -->
         </div>
 
         <div style="text-align: center; margin-top: 50px;">
@@ -184,8 +93,39 @@
         </div>
       </div>
     </section>
+
+    <!-- 2. Dedicated Lesson Workspace (3 Core Sections) -->
+    <section class="lesson-workspace-container" id="lessonWorkspace">
+      <div class="container">
+        <!-- Hero Card populated by lessons.js -->
+        <div id="workspaceHeroHeader" class="workspace-lesson-hero"></div>
+
+        <!-- 3 Core Section Tabs -->
+        <div class="workspace-tabs-bar" role="tablist" aria-label="Lesson Workspace Sections">
+          <button type="button" class="workspace-tab-btn active" data-tab="video" role="tab" aria-selected="true">
+            📺 Video Lesson
+          </button>
+          <button type="button" class="workspace-tab-btn" data-tab="exercises" role="tab" aria-selected="false">
+            ✏️ Practice Exercises
+          </button>
+          <button type="button" class="workspace-tab-btn" data-tab="writing" role="tab" aria-selected="false">
+            🖌️ Writing &amp; Stroke Order
+          </button>
+        </div>
+
+        <!-- Section 1: Video Lesson Panel -->
+        <div class="workspace-panel active" id="panel-video" role="tabpanel"></div>
+
+        <!-- Section 2: Exercises Panel -->
+        <div class="workspace-panel" id="panel-exercises" role="tabpanel"></div>
+
+        <!-- Section 3: Writing Panel -->
+        <div class="workspace-panel" id="panel-writing" role="tabpanel"></div>
+      </div>
+    </section>
   </main>
 
+  <!-- Footer -->
   <footer class="site-footer">
     <div class="container footer-content">
       <div class="footer-brand">
@@ -195,7 +135,7 @@
       <div class="footer-links">
         <h4 class="footer-title">Navigation</h4>
         <a href="index.html#home">Home</a>
-        <a href="index.html#stories-reels">Stories &amp; Reels</a>
+        <a href="story.html">Stories &amp; Reels</a>
         <a href="games.html">Games</a>
         <a href="lessons-adult.html">Adult Lessons</a>
         <a href="lessons-kids.html">Kids Lessons</a>
@@ -208,6 +148,15 @@
     </div>
   </footer>
 
+  <!-- SheetJS with local fallback -->
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script>
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"><\/script>');
+    }
+  </script>
+
+  <!-- Theme Toggle -->
   <script>
     const themeBtn = document.getElementById('themeToggleBtn');
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -221,5 +170,8 @@
       });
     }
   </script>
+
+  <!-- Dynamic Curriculum Controller -->
+  <script src="lessons.js"></script>
 </body>
 </html>

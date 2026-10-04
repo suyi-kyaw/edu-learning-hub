@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Interactive Games Arcade - LinguaPath Mandarin</title>
-  <meta name="description" content="Play interactive Mandarin games dynamically loaded from Excel. Practice Chinese tones, character recognition, pinyin, and vocabulary.">
+  <meta name="description" content="Play interactive Mandarin games. Practice Chinese tones, character recognition, pinyin, and vocabulary.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
@@ -21,22 +21,17 @@
       border-bottom-color: #334155;
     }
 
-    /* Embedded Games Section & Grid */
+    /* Embedded Games Section & Full-Width Single-Row Layout */
     .embedded-games-section {
       padding: 50px 0 70px;
     }
 
     .embedded-games-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
-      gap: 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
       margin-top: 36px;
-    }
-    @media (max-width: 600px) {
-      .embedded-games-grid {
-        grid-template-columns: 1fr;
-        gap: 28px;
-      }
+      width: 100%;
     }
 
     .embedded-game-card {
@@ -49,6 +44,7 @@
       gap: 18px;
       box-shadow: 0 12px 35px rgba(15, 23, 42, 0.08);
       transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+      width: 100%;
     }
     [data-theme="dark"] .embedded-game-card {
       background: #1e293b;
@@ -139,7 +135,7 @@
       overflow: hidden;
       border: 1.5px solid #fed7aa;
       background: #0f172a;
-      min-height: 380px;
+      min-height: 420px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -153,7 +149,7 @@
     .embedded-frame-stage iframe {
       width: 100%;
       max-width: 100%;
-      height: 380px;
+      height: 420px;
       border: none;
       display: block;
     }
@@ -186,7 +182,7 @@
       color: #475569;
       font-size: 0.78rem;
       font-weight: 700;
-      padding: 5px 10px;
+      padding: 5px 12px;
       border-radius: 8px;
       cursor: pointer;
       display: inline-flex;
@@ -204,92 +200,6 @@
       background: #ea580c;
       color: #ffffff;
       border-color: #ea580c;
-    }
-
-    /* Modal dialogs */
-    .game-modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.75);
-      backdrop-filter: blur(6px);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      z-index: 10020;
-    }
-    .game-modal-backdrop.active {
-      display: flex;
-    }
-    .game-modal-box {
-      background: #ffffff;
-      border-radius: 24px;
-      border: 2px solid #fed7aa;
-      max-width: 620px;
-      width: 100%;
-      padding: 32px;
-      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
-      position: relative;
-    }
-    [data-theme="dark"] .game-modal-box {
-      background: #1e293b;
-      border-color: #475569;
-      color: #f8fafc;
-    }
-    .modal-close-btn {
-      position: absolute;
-      top: 18px;
-      right: 18px;
-      width: 34px;
-      height: 34px;
-      border-radius: 50%;
-      border: 1px solid #cbd5e1;
-      background: #f1f5f9;
-      color: #475569;
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-      font-size: 1rem;
-      font-weight: 800;
-    }
-    [data-theme="dark"] .modal-close-btn {
-      background: #334155;
-      border-color: #475569;
-      color: #e2e8f0;
-    }
-
-    .dropzone-box {
-      border: 2px dashed #ea580c;
-      background: #fffaf5;
-      border-radius: 16px;
-      padding: 36px 20px;
-      text-align: center;
-      margin: 20px 0;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    [data-theme="dark"] .dropzone-box {
-      background: #0f172a;
-      border-color: #f97316;
-    }
-    .dropzone-box:hover, .dropzone-box.dragover {
-      background: #ffedd5;
-      border-color: #c2410c;
-    }
-    [data-theme="dark"] .dropzone-box:hover, [data-theme="dark"] .dropzone-box.dragover {
-      background: #1e293b;
-    }
-
-    .code-preview-block {
-      background: #0f172a;
-      color: #f8fafc;
-      padding: 14px 16px;
-      border-radius: 12px;
-      font-family: monospace;
-      font-size: 0.84rem;
-      overflow-x: auto;
-      margin: 12px 0;
-      border: 1px solid #334155;
     }
 
     /* Toast notification */
@@ -405,7 +315,6 @@
             <div class="game-card-footer">
               <span class="game-footer-info">Wordwall Interactive • Standard 500×380</span>
               <div class="game-footer-actions">
-                <button type="button" class="btn-frame-tool btn-fs-toggle" data-target="game-card-1">⛶ Fullscreen</button>
                 <button type="button" class="btn-frame-tool btn-reload-frame" data-target="game-card-1">↺ Reload</button>
                 <a href="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0" target="_blank" rel="noopener noreferrer" class="btn-frame-tool">↗ New Tab</a>
               </div>
@@ -441,7 +350,6 @@
             <div class="game-card-footer">
               <span class="game-footer-info">Wordwall Interactive • Standard 500×380</span>
               <div class="game-footer-actions">
-                <button type="button" class="btn-frame-tool btn-fs-toggle" data-target="game-card-2">⛶ Fullscreen</button>
                 <button type="button" class="btn-frame-tool btn-reload-frame" data-target="game-card-2">↺ Reload</button>
                 <a href="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0" target="_blank" rel="noopener noreferrer" class="btn-frame-tool">↗ New Tab</a>
               </div>
@@ -457,14 +365,11 @@
       </div>
     </section>
   </main>
-      </div>
-    </div>
-  </div>
 
   <!-- Toast Notification -->
   <div id="syncToast" class="sync-toast" role="status" aria-live="polite">
     <span id="toastIcon">✅</span>
-    <span id="toastMessage">Workbook refreshed</span>
+    <span id="toastMessage">Game reloaded</span>
   </div>
 
   <!-- Footer -->
@@ -477,20 +382,20 @@
       <div class="footer-links">
         <h4 class="footer-title">Navigation</h4>
         <a href="index.html#home">Home</a>
-        <a href="index.html#stories-reels">Stories &amp; Reels</a>
+        <a href="story.html">Stories &amp; Reels</a>
         <a href="games.html">Games</a>
-        <a href="index.html#lessons">Lessons</a>
+        <a href="lessons.html">Lessons</a>
         <a href="story.html">Story Lessons</a>
       </div>
     </div>
     <div class="footer-bottom">
       <div class="container">
-        <p>© 2026 LinguaPath. Excel-Driven Interactive Games.</p>
+        <p>© 2026 LinguaPath. Interactive Mandarin Games Arcade.</p>
       </div>
     </div>
   </footer>
 
-  <!-- SheetJS with local fallback -->
+  <!-- Data Script -->
   <script src="vendor/xlsx.full.min.js"></script>
   <script>
     if (typeof XLSX === "undefined") {
@@ -498,7 +403,7 @@
     }
   </script>
 
-  <!-- Interactive Games & Excel Sync Logic -->
+  <!-- Interactive Games Logic -->
   <script>
     // Theme toggle
     const themeBtn = document.getElementById('themeToggleBtn');
@@ -537,7 +442,7 @@
       return str;
     }
 
-    // Default Fallback Games in case Excel file is unreachable
+    // Default Fallback Games
     const DEFAULT_GAMES = [
       {
         id: 'game-01',
@@ -579,7 +484,7 @@
 
       if (!activeGames.length) {
         container.innerHTML = `
-          <div style="grid-column: 1/-1; text-align: center; padding: 40px; background: #fff7ed; border: 1.5px dashed #fed7aa; border-radius: 20px;">
+          <div style="text-align: center; padding: 40px; background: #fff7ed; border: 1.5px dashed #fed7aa; border-radius: 20px; width: 100%;">
             <h3>Interactive Games Loading</h3>
             <p>Please check back shortly or explore our lessons.</p>
           </div>
@@ -630,9 +535,8 @@
           </div>
 
           <div class="game-card-footer">
-            <span class="game-footer-info">Wordwall Embed • Responsive 500×380</span>
+            <span class="game-footer-info">Wordwall Interactive • Standard 500×380</span>
             <div class="game-footer-actions">
-              <button type="button" class="btn-frame-tool btn-fs-toggle" data-target="${cardId}">⛶ Fullscreen</button>
               <button type="button" class="btn-frame-tool btn-reload-frame" data-target="${cardId}">↺ Reload</button>
               <a href="${escapeHtml(src)}" target="_blank" rel="noopener noreferrer" class="btn-frame-tool">↗ New Tab</a>
             </div>
@@ -666,33 +570,11 @@
           }
         };
       });
-
-      // Fullscreen buttons
-      document.querySelectorAll('.btn-fs-toggle').forEach(btn => {
-        btn.onclick = () => {
-          const targetCard = document.getElementById(btn.dataset.target);
-          if (!targetCard) return;
-          const stage = targetCard.querySelector('.embedded-frame-stage');
-          if (!stage) return;
-
-          if (!document.fullscreenElement) {
-            if (stage.requestFullscreen) {
-              stage.requestFullscreen();
-            } else if (stage.webkitRequestFullscreen) {
-              stage.webkitRequestFullscreen();
-            }
-          } else {
-            if (document.exitFullscreen) {
-              document.exitFullscreen();
-            }
-          }
-        };
-      });
     }
 
-    // Load Games from server API / cached data
-    async function fetchGamesFromExcel() {
-      // Strategy 1: Call API (which reads lessons data)
+    // Load Games data
+    async function fetchGamesData() {
+      // Strategy 1: Call API
       try {
         const res = await fetch('/api/lessons-data?t=' + Date.now());
         if (res.ok) {
@@ -722,7 +604,7 @@
             }
           }
         } catch (e) {
-          console.warn('Direct XLSX fetch note:', e);
+          console.warn('Direct data fetch note:', e);
         }
       }
 
@@ -746,7 +628,7 @@
 
     // Initial load
     document.addEventListener('DOMContentLoaded', () => {
-      fetchGamesFromExcel();
+      fetchGamesData();
     });
   </script>
 </body>

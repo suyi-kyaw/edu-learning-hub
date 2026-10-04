@@ -14,6 +14,8 @@ let workbook = null;
 let lessonData = [];
 let vocabularyData = [];
 let storyData = [];
+let exercisesData = [];
+let writingData = [];
 
 
 /* =========================================================
@@ -92,6 +94,20 @@ async function loadWorkbook() {
             );
           }
 
+          if (workbook.SheetNames.includes("Exercises")) {
+            exercisesData = XLSX.utils.sheet_to_json(
+              workbook.Sheets["Exercises"],
+              { defval: "" }
+            );
+          }
+
+          if (workbook.SheetNames.includes("Writing")) {
+            writingData = XLSX.utils.sheet_to_json(
+              workbook.Sheets["Writing"],
+              { defval: "" }
+            );
+          }
+
           if (lessonData.length > 0) {
             loaded = true;
           }
@@ -114,6 +130,8 @@ async function loadWorkbook() {
           lessonData = apiData.sheets["Lessons"] || [];
           vocabularyData = apiData.sheets["Vocabulary"] || [];
           storyData = apiData.sheets["Story"] || [];
+          exercisesData = apiData.sheets["Exercises"] || [];
+          writingData = apiData.sheets["Writing"] || [];
 
           if (lessonData.length > 0) {
             loaded = true;
@@ -137,6 +155,8 @@ async function loadWorkbook() {
           lessonData = jsonData.sheets["Lessons"] || [];
           vocabularyData = jsonData.sheets["Vocabulary"] || [];
           storyData = jsonData.sheets["Story"] || [];
+          exercisesData = jsonData.sheets["Exercises"] || [];
+          writingData = jsonData.sheets["Writing"] || [];
 
           if (lessonData.length > 0) {
             loaded = true;
@@ -2788,6 +2808,10 @@ window.linguaPath = {
   getVocabularyData: () => vocabularyData,
 
   getStoryData: () => storyData,
+
+  getExercisesData: () => exercisesData,
+
+  getWritingData: () => writingData,
 
   startReviewMode: (forceAll = false) => startReviewMode(forceAll),
 

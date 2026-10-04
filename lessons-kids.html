@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chinese for Kids & Young Learners - LinguaPath Kids</title>
-  <meta name="description" content="Fun, joyful Chinese Mandarin learning for kids. Animals, songs, colors, and playful games.">
+  <title>Chinese for Kids &amp; Young Learners - LinguaPath Kids</title>
+  <meta name="description" content="Fun, joyful Chinese Mandarin learning for kids. 3 core categories covering Pinyin & Tones, Colors & Animals, and Nursery Rhymes with interactive Video Lessons, Practice Quizzes, and Stroke Writing.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet">
@@ -12,7 +12,7 @@
   <style>
     .kids-hero {
       background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #fef3c7 100%);
-      padding: 60px 0 50px;
+      padding: 56px 0 44px;
       text-align: center;
       border-bottom: 2px solid #a7f3d0;
     }
@@ -21,28 +21,15 @@
       border-bottom-color: #047857;
     }
     .kids-mascot {
-      font-size: 4rem;
+      font-size: 3.8rem;
       line-height: 1;
       display: inline-block;
       animation: floatPanda 2.4s ease-in-out infinite;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     @keyframes floatPanda {
       0%, 100% { transform: translateY(0) rotate(0deg); }
       50% { transform: translateY(-8px) rotate(4deg); }
-    }
-    .btn-kids-play {
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-      color: #ffffff !important;
-      border: none !important;
-      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35) !important;
-      border-radius: 9999px !important;
-      font-size: 1.05rem !important;
-      padding: 12px 28px !important;
-    }
-    .btn-kids-play:hover {
-      transform: translateY(-2px) scale(1.03) !important;
-      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.45) !important;
     }
     .kids-badge {
       background: #fef08a;
@@ -57,7 +44,7 @@
     }
   </style>
 </head>
-<body>
+<body data-audience="Kids" class="kids-theme">
 
   <!-- Site Header -->
   <header class="site-header">
@@ -94,83 +81,74 @@
         <div>
           <span class="kids-badge">⭐ Joyful Mandarin for Kids (Ages 5-12)</span>
         </div>
-        <h1 style="font-size: clamp(2.4rem, 6vw, 3.5rem); font-weight: 900; margin: 14px 0 16px; color: #065f46;">
+        <h1 style="font-size: clamp(2.3rem, 5.5vw, 3.4rem); font-weight: 900; margin: 12px 0 14px; color: #065f46;">
           Chinese Adventure Park
         </h1>
-        <p style="max-width: 640px; margin: 0 auto 24px; font-size: 1.15rem; color: #047857; font-weight: 600;">
-          Sing songs, play games, and learn characters with friendly pandas, dragons, and animal friends!
+        <p style="max-width: 640px; margin: 0 auto 18px; font-size: 1.12rem; color: #047857; font-weight: 600;">
+          Sing songs, play games, and master characters with friendly pandas, dragons, and animal friends!
         </p>
-        <a href="#kids-modules" class="btn btn-kids-play">
-          🚀 Start Today's Adventure →
-        </a>
+
+        <!-- 3-Category Navigation Bar -->
+        <div class="curriculum-category-bar-wrap">
+          <div class="curriculum-category-bar" id="curriculumCategoryBar" role="tablist" aria-label="Kids Curriculum Categories">
+            <!-- Rendered dynamically by lessons.js -->
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- Kids Lessons Modules -->
-    <section class="section" id="kids-modules" style="padding: 60px 0;">
+    <!-- 1. Kids Lessons Modules List View -->
+    <section class="section" id="curriculumListSection" style="padding: 50px 0 80px;">
       <div class="container">
         <div class="section-heading">
-          <span class="section-label">Fun Learning Cards</span>
-          <h2>Pick a Fun Mission!</h2>
-          <p>Every mission comes with cute illustrations, clear pinyin audio, and star rewards.</p>
+          <span class="section-label">Fun Learning Missions</span>
+          <h2>Pick a Fun Adventure!</h2>
+          <p>Every mission comes with cute illustrations, native audio, fun quizzes, and stroke-by-stroke character drawing!</p>
         </div>
 
-        <div class="lesson-grid">
-          <!-- Card 1 -->
-          <article class="lesson-card" style="border: 2px solid #a7f3d0;">
-            <div class="lesson-card-image">
-              <img src="assets/images/story-01.jpg" alt="Panda Greetings" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';">
-            </div>
-            <div class="lesson-card-content">
-              <span class="lesson-level" style="background: #dcfce7; color: #15803d; border-color: #86efac;">🐼 Mission 1 • Friendly Animals</span>
-              <h3>Say Hello to Little Panda!</h3>
-              <div class="lesson-chinese-title" style="color: #059669;">你好，小熊猫！</div>
-              <div class="lesson-pinyin">Nǐ hǎo, xiǎo xióngmāo!</div>
-              <div class="lesson-meaning">Hello little panda! Friendly greetings &amp; waving</div>
-              <p class="lesson-description">Learn how to say "Hello!", "Good morning!", and "Thank you!" in Chinese while making friends with our panda mascot!</p>
-              <div class="lesson-keywords">
-                <span class="lesson-keyword-badge" style="background: #f0fdf4; color: #166534; border-color: #bbf7d0;">Panda 🐼</span>
-                <span class="lesson-keyword-badge" style="background: #f0fdf4; color: #166534; border-color: #bbf7d0;">Hello 👋</span>
-                <span class="lesson-keyword-badge" style="background: #f0fdf4; color: #166534; border-color: #bbf7d0;">Friends 🌟</span>
-              </div>
-              <div class="lesson-card-actions">
-                <a href="story.html?id=lesson-01" class="btn btn-primary btn-kids-play" style="width: 100%; text-align: center;">Play Mission 1 →</a>
-              </div>
-            </div>
-          </article>
-
-          <!-- Card 2 -->
-          <article class="lesson-card" style="border: 2px solid #fde68a;">
-            <div class="lesson-card-image">
-              <img src="assets/images/story-02.jpg" alt="Fruit Basket and Colors" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';">
-            </div>
-            <div class="lesson-card-content">
-              <span class="lesson-level" style="background: #fef9c3; color: #a16207; border-color: #fde047;">🍎 Mission 2 • Yummy Fruit</span>
-              <h3>Sweet Apples &amp; Bananas!</h3>
-              <div class="lesson-chinese-title" style="color: #d97706;">甜甜的水果乐园</div>
-              <div class="lesson-pinyin">Tián tián de shuǐguǒ lèyuán</div>
-              <div class="lesson-meaning">Sweet delicious fruits &amp; counting 1, 2, 3</div>
-              <p class="lesson-description">Taste sweet red apples (红苹果) and big yellow bananas while counting your favorite snacks in Mandarin!</p>
-              <div class="lesson-keywords">
-                <span class="lesson-keyword-badge" style="background: #fefce8; color: #854d0e; border-color: #fef08a;">Apple 🍎</span>
-                <span class="lesson-keyword-badge" style="background: #fefce8; color: #854d0e; border-color: #fef08a;">Sweet 🍯</span>
-                <span class="lesson-keyword-badge" style="background: #fefce8; color: #854d0e; border-color: #fef08a;">Fruit 🍉</span>
-              </div>
-              <div class="lesson-card-actions">
-                <a href="story.html?id=lesson-02" class="btn btn-primary btn-kids-play" style="width: 100%; text-align: center; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;">Play Mission 2 →</a>
-              </div>
-            </div>
-          </article>
+        <div class="lesson-grid" id="lessonsGrid">
+          <!-- Rendered dynamically from lessons.xlsx by lessons.js -->
         </div>
 
         <div style="text-align: center; margin-top: 50px;">
           <a href="index.html#lessons" class="btn btn-secondary btn-lg" style="margin-right: 12px;">← Back to Portal</a>
-          <a href="games.html" class="btn btn-primary btn-lg">🎮 Play Kids Tone Game →</a>
+          <a href="games.html" class="btn btn-primary btn-lg">🎮 Play Kids Games →</a>
         </div>
+      </div>
+    </section>
+
+    <!-- 2. Dedicated Lesson Workspace (3 Core Sections) -->
+    <section class="lesson-workspace-container" id="lessonWorkspace">
+      <div class="container">
+        <!-- Hero Card populated by lessons.js -->
+        <div id="workspaceHeroHeader" class="workspace-lesson-hero"></div>
+
+        <!-- 3 Core Section Tabs -->
+        <div class="workspace-tabs-bar" role="tablist" aria-label="Kids Lesson Sections">
+          <button type="button" class="workspace-tab-btn active" data-tab="video" role="tab" aria-selected="true">
+            📺 Video Lesson
+          </button>
+          <button type="button" class="workspace-tab-btn" data-tab="exercises" role="tab" aria-selected="false">
+            ✏️ Practice Exercises
+          </button>
+          <button type="button" class="workspace-tab-btn" data-tab="writing" role="tab" aria-selected="false">
+            🖌️ Writing &amp; Stroke Order
+          </button>
+        </div>
+
+        <!-- Section 1: Video Lesson Panel -->
+        <div class="workspace-panel active" id="panel-video" role="tabpanel"></div>
+
+        <!-- Section 2: Exercises Panel -->
+        <div class="workspace-panel" id="panel-exercises" role="tabpanel"></div>
+
+        <!-- Section 3: Writing Panel -->
+        <div class="workspace-panel" id="panel-writing" role="tabpanel"></div>
       </div>
     </section>
   </main>
 
+  <!-- Footer -->
   <footer class="site-footer">
     <div class="container footer-content">
       <div class="footer-brand">
@@ -180,7 +158,7 @@
       <div class="footer-links">
         <h4 class="footer-title">Navigation</h4>
         <a href="index.html#home">Home</a>
-        <a href="index.html#stories-reels">Stories &amp; Reels</a>
+        <a href="story.html">Stories &amp; Reels</a>
         <a href="games.html">Games</a>
         <a href="lessons-kids.html">Kids Lessons</a>
         <a href="lessons-adult.html">Adults Lessons</a>
@@ -193,6 +171,15 @@
     </div>
   </footer>
 
+  <!-- SheetJS with local fallback -->
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script>
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"><\/script>');
+    }
+  </script>
+
+  <!-- Theme Toggle -->
   <script>
     const themeBtn = document.getElementById('themeToggleBtn');
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -206,5 +193,8 @@
       });
     }
   </script>
+
+  <!-- Dynamic Curriculum Controller -->
+  <script src="lessons.js"></script>
 </body>
 </html>
