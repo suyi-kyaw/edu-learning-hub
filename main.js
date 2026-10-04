@@ -11,17 +11,9 @@
 
 let workbook = null;
 
-let demoData = [];
 let lessonData = [];
 let vocabularyData = [];
 let storyData = [];
-
-let pronunciationData = [];
-let everydayChineseData = [];
-let conversationData = [];
-let quickCheckData = [];
-
-let currentToneIndex = 0;
 
 
 /* =========================================================
@@ -46,7 +38,6 @@ document.addEventListener("DOMContentLoaded", () => {
   setupThemeToggle();
   setupMobileMenu();
   setupSearchAndFilter();
-  setupDemoCardsClick();
   setupCompletionModalListeners();
   updateHeaderStreakUI();
   setupStreakBadgeInteractions();
@@ -80,13 +71,6 @@ async function loadWorkbook() {
         });
 
         if (workbook && workbook.SheetNames) {
-          if (workbook.SheetNames.includes("Demo")) {
-            demoData = XLSX.utils.sheet_to_json(
-              workbook.Sheets["Demo"],
-              { defval: "" }
-            );
-          }
-
           if (workbook.SheetNames.includes("Lessons")) {
             lessonData = XLSX.utils.sheet_to_json(
               workbook.Sheets["Lessons"],
@@ -108,7 +92,7 @@ async function loadWorkbook() {
             );
           }
 
-          if (demoData.length > 0 || lessonData.length > 0) {
+          if (lessonData.length > 0) {
             loaded = true;
           }
         }
@@ -127,12 +111,11 @@ async function loadWorkbook() {
         const apiData = await apiResponse.json();
 
         if (apiData.success && apiData.sheets) {
-          demoData = apiData.sheets["Demo"] || [];
           lessonData = apiData.sheets["Lessons"] || [];
           vocabularyData = apiData.sheets["Vocabulary"] || [];
           storyData = apiData.sheets["Story"] || [];
 
-          if (demoData.length > 0 || lessonData.length > 0) {
+          if (lessonData.length > 0) {
             loaded = true;
           }
         }
@@ -151,12 +134,11 @@ async function loadWorkbook() {
         const jsonData = await jsonResponse.json();
 
         if (jsonData.sheets) {
-          demoData = jsonData.sheets["Demo"] || [];
           lessonData = jsonData.sheets["Lessons"] || [];
           vocabularyData = jsonData.sheets["Vocabulary"] || [];
           storyData = jsonData.sheets["Story"] || [];
 
-          if (demoData.length > 0 || lessonData.length > 0) {
+          if (lessonData.length > 0) {
             loaded = true;
           }
         }
@@ -169,7 +151,6 @@ async function loadWorkbook() {
   // Strategy 4: Embedded fallback data matching data/lessons.xlsx
   if (!loaded) {
     console.info("Using embedded lesson dataset.");
-    demoData = getFallbackDemoData();
     lessonData = getFallbackLessonData();
     vocabularyData = getFallbackVocabularyData();
     storyData = getFallbackStoryData();
@@ -186,17 +167,8 @@ async function loadWorkbook() {
 
   if (loaded) {
     /*
-      Prepare Demo sections
+      Render the learning hub
     */
-    prepareDemoData();
-
-    /*
-      Render the page
-    */
-    renderPronunciation();
-    renderEverydayChinese();
-    renderConversation();
-    renderQuickCheck();
     renderLearningHub();
   } else {
     showWorkbookError();
@@ -207,92 +179,7 @@ async function loadWorkbook() {
    FALLBACK DATASETS (mirrors data/lessons.xlsx)
 ========================================================= */
 
-function getFallbackDemoData() {
-  return [
-    {
-      section: "Pronunciation",
-      order: 1,
-      chinese: "妈",
-      pinyin: "mā",
-      english: "mother",
-      audio: "assets/audio/tones/ma-tone-1.mp3"
-    },
-    {
-      section: "Pronunciation",
-      order: 2,
-      chinese: "麻",
-      pinyin: "má",
-      english: "hemp; numb",
-      audio: "assets/audio/tones/ma-tone-2.mp3"
-    },
-    {
-      section: "Pronunciation",
-      order: 3,
-      chinese: "马",
-      pinyin: "mǎ",
-      english: "horse",
-      audio: "assets/audio/tones/ma-tone-3.mp3"
-    },
-    {
-      section: "Pronunciation",
-      order: 4,
-      chinese: "骂",
-      pinyin: "mà",
-      english: "scold",
-      audio: "assets/audio/tones/ma-tone-4.mp3"
-    },
-    {
-      section: "Pronunciation",
-      order: 5,
-      chinese: "吗",
-      pinyin: "ma",
-      english: "question particle",
-      audio: "assets/audio/tones/ma-tone-5.mp3"
-    },
-    {
-      section: "Everyday Chinese",
-      order: 1,
-      chinese: "你好",
-      pinyin: "Nǐ hǎo",
-      english: "Hello",
-      audio: "assets/audio/hello.mp3"
-    },
-    {
-      section: "Conversation",
-      order: 1,
-      chinese: "你好！你好吗？",
-      pinyin: "Nǐ hǎo! Nǐ hǎo ma?",
-      english: "Hello! How are you?",
-      audio: "assets/audio/nihao-conversation.mp3"
-    },
-    {
-      section: "Conversation",
-      order: 2,
-      chinese: "早上好 !",
-      pinyin: "Zǎo Shang hǎo!",
-      english: "Good Morning !",
-      audio: "assets/audio/morning-conversation.mp3"
-    },
-    {
-      section: "Quick Check",
-      order: 1,
-      question: "How do you say “Hello” in Chinese?",
-      optionA: "你好",
-      optionB: "谢谢",
-      optionC: "再见",
-      answer: "你好"
-    },
-    {
-      section: "Quick Check",
-      order: 2,
-      question: "What does “你好吗？” mean?",
-      optionA: "What's your name?",
-      optionB: "How are you?",
-      optionC: "Where are you?",
-      answer: "How are you?"
-    }
-  ];
-}
+
 
 function getFallbackLessonData() {
   return [
@@ -354,1007 +241,19 @@ function getFallbackStoryData() {
 }
 
 
-/* =========================================================
-   PREPARE DEMO DATA
-========================================================= */
 
-function prepareDemoData() {
 
-  pronunciationData = getDemoSection(
-    "Pronunciation"
-  );
 
-  everydayChineseData = getDemoSection(
-    "Everyday Chinese"
-  );
 
-  conversationData = getDemoSection(
-    "Conversation"
-  );
 
-  quickCheckData = getDemoSection(
-    "Quick Check"
-  );
-}
 
 
-/* =========================================================
-   GET DEMO SECTION
-========================================================= */
 
-function getDemoSection(sectionName) {
 
-  return demoData
-    .filter(row => {
-      return normalizeText(row.section) ===
-        normalizeText(sectionName);
-    })
-    .sort((a, b) => {
-      return Number(a.order || 0) -
-        Number(b.order || 0);
-    });
-}
 
 
-/* =========================================================
-   PRONUNCIATION
-========================================================= */
 
-function renderPronunciation() {
 
-  const toneButtons =
-    document.getElementById("toneButtons");
-
-  const toneSyllable =
-    document.getElementById("toneSyllable");
-
-  const toneCharacter =
-    document.getElementById("toneCharacter");
-
-  const toneDescription =
-    document.getElementById("toneDescription");
-
-  const toneAudioButton =
-    document.getElementById("toneAudioButton");
-
-  const currentToneAudio =
-    document.getElementById("currentToneAudio");
-
-
-  if (!toneButtons) {
-    return;
-  }
-
-
-  toneButtons.innerHTML = "";
-
-
-  if (!pronunciationData.length) {
-
-    toneButtons.innerHTML = `
-      <p class="loading-message">
-        No pronunciation data found.
-      </p>
-    `;
-
-    return;
-  }
-
-
-  const toneAriaLabels = [
-    "Tone 1 high flat",
-    "Tone 2 rising",
-    "Tone 3 dipping",
-    "Tone 4 falling",
-    "Neutral tone"
-  ];
-
-  pronunciationData.forEach((row, index) => {
-
-    const button =
-      document.createElement("button");
-
-    button.type = "button";
-
-    button.className = "tone-button";
-
-    button.setAttribute(
-      "aria-label",
-      toneAriaLabels[index] || `Tone ${index + 1}`
-    );
-
-    button.setAttribute(
-      "aria-pressed",
-      index === 0 ? "true" : "false"
-    );
-
-    button.textContent =
-      row.pinyin ||
-      row.chinese ||
-      `Tone ${index + 1}`;
-
-    button.addEventListener(
-      "click",
-      () => {
-        selectTone(index, true);
-      }
-    );
-
-    toneButtons.appendChild(button);
-  });
-
-
-  /*
-    Select first tone automatically (without auto-playing on page load)
-  */
-  selectTone(0, false);
-
-
-  /*
-    Play selected tone
-  */
-  if (toneAudioButton) {
-
-    toneAudioButton.addEventListener(
-      "click",
-      () => {
-
-        const row =
-          pronunciationData[currentToneIndex];
-
-        if (!row) {
-          return;
-        }
-
-        playExcelAudio(
-          row.audio,
-          toneAudioButton,
-          "▶ Play",
-          "⏸ Playing...",
-          row.chinese
-        );
-
-      }
-    );
-
-  }
-
-
-  /*
-    Keep references available
-  */
-  window.currentToneAudio =
-    currentToneAudio;
-}
-
-
-/* =========================================================
-   SELECT TONE
-========================================================= */
-
-function selectTone(index, shouldPlay = false) {
-
-  if (
-    index < 0 ||
-    index >= pronunciationData.length
-  ) {
-    return;
-  }
-
-
-  currentToneIndex = index;
-
-  const row =
-    pronunciationData[index];
-
-
-  const toneSyllable =
-    document.getElementById("toneSyllable");
-
-  const toneCharacter =
-    document.getElementById("toneCharacter");
-
-  const toneDescription =
-    document.getElementById("toneDescription");
-
-
-  /*
-    Update buttons
-  */
-  const buttons =
-    document.querySelectorAll(
-      "#toneButtons .tone-button"
-    );
-
-  buttons.forEach((button, buttonIndex) => {
-
-    const isActive = buttonIndex === index;
-    button.classList.toggle(
-      "active",
-      isActive
-    );
-    button.setAttribute(
-      "aria-pressed",
-      isActive ? "true" : "false"
-    );
-
-  });
-
-
-  /*
-    Update text
-  */
-  if (toneSyllable) {
-
-    toneSyllable.textContent =
-      row.pinyin ||
-      "";
-
-  }
-
-
-  if (toneCharacter) {
-    toneCharacter.textContent =
-      row.chinese ||
-      "";
-  }
-
-  const toneTranslation =
-    document.getElementById("toneTranslation");
-
-  if (toneTranslation) {
-    toneTranslation.textContent =
-      row.english ? `(${row.english})` : "";
-  }
-
-  if (toneDescription) {
-    const toneGuides = [
-      "1st Tone: High & flat pitch contour",
-      "2nd Tone: Rising pitch like asking a question",
-      "3rd Tone: Dipping pitch that drops then rises",
-      "4th Tone: Falling pitch like giving a command",
-      "Neutral Tone: Light and short de-emphasized pitch"
-    ];
-    toneDescription.textContent =
-      toneGuides[index] || "Select a tone to hear the pronunciation.";
-  }
-
-
-  /*
-    Update tone graph
-  */
-  updateToneGraph(index);
-
-  /*
-    Play sound if user explicitly clicked tone button
-  */
-  if (shouldPlay && row) {
-    const toneAudioButton =
-      document.getElementById("toneAudioButton");
-
-    playExcelAudio(
-      row.audio,
-      toneAudioButton,
-      "▶ Play",
-      "⏸ Playing...",
-      row.chinese
-    );
-  }
-
-}
-
-
-/* =========================================================
-   TONE GRAPH
-========================================================= */
-
-function updateToneGraph(index) {
-
-  const tonePath =
-    document.getElementById("tonePath");
-
-  if (!tonePath) {
-    return;
-  }
-
-
-  /*
-    Mandarin tone shapes matching viewBox 0 0 500 100
-    Tone 1 = high flat
-    Tone 2 = rising
-    Tone 3 = dipping
-    Tone 4 = falling
-    Tone 5 = neutral
-  */
-
-  const tonePaths = [
-
-    "M20 30 L480 30",
-
-    "M20 80 Q250 75 480 25",
-
-    "M20 40 Q160 85 250 85 Q350 85 480 30",
-
-    "M20 25 Q240 50 480 85",
-
-    "M180 50 L320 50"
-
-  ];
-
-
-  tonePath.setAttribute(
-    "d",
-    tonePaths[index] ||
-    tonePaths[0]
-  );
-}
-
-
-/* =========================================================
-   EVERYDAY CHINESE
-========================================================= */
-
-function renderEverydayChinese() {
-
-  const container =
-    document.getElementById(
-      "everydayChineseDemo"
-    );
-
-  if (!container) {
-    return;
-  }
-
-
-  container.innerHTML = "";
-
-
-  if (!everydayChineseData.length) {
-
-    container.innerHTML = `
-      <div class="loading-message">
-        No Everyday Chinese data found.
-      </div>
-    `;
-
-    return;
-  }
-
-
-  /*
-    Usually the first row represents
-    the Everyday Chinese demo.
-  */
-
-  const row =
-    everydayChineseData[0];
-
-
-  const wrapper =
-    document.createElement("div");
-
-  wrapper.className =
-    "everyday-demo-content";
-
-
-  /*
-    Chinese
-  */
-
-  const chinese =
-    document.createElement("div");
-
-  chinese.className =
-    "demo-word";
-
-  chinese.textContent =
-    row.chinese || "";
-
-
-  /*
-    Pinyin
-  */
-
-  const pinyin =
-    document.createElement("div");
-
-  pinyin.className =
-    "demo-pinyin";
-
-  pinyin.textContent =
-    row.pinyin || "";
-
-
-  /*
-    English
-  */
-
-  const english =
-    document.createElement("div");
-
-  english.className =
-    "demo-english";
-
-  english.textContent =
-    row.english || "";
-
-
-  wrapper.appendChild(chinese);
-
-  wrapper.appendChild(pinyin);
-
-  wrapper.appendChild(english);
-
-
-  /*
-    Audio button
-
-    IMPORTANT:
-    The audio path comes from the
-    Excel "audio" column.
-  */
-
-  if (hasAudio(row.audio)) {
-
-    const audioButton =
-      document.createElement("button");
-
-    audioButton.type = "button";
-
-    audioButton.className =
-      "audio-button demo-audio-button";
-
-    audioButton.textContent =
-      "▶ Play";
-
-
-    audioButton.addEventListener(
-      "click",
-      () => {
-
-        playExcelAudio(
-          row.audio,
-          audioButton,
-          "▶ Play",
-          "⏸ Playing...",
-          row.chinese
-        );
-
-      }
-    );
-
-
-    wrapper.appendChild(
-      audioButton
-    );
-
-  } else {
-
-    /*
-      If Excel has no audio path,
-      do not create a fake audio path.
-
-      Instead provide browser speech synthesis
-      as a fallback when Chinese text exists.
-    */
-
-    if (row.chinese) {
-
-      const speechButton =
-        document.createElement("button");
-
-      speechButton.type = "button";
-
-      speechButton.className =
-        "audio-button demo-audio-button";
-
-      speechButton.textContent =
-        "▶ Play";
-
-
-      speechButton.addEventListener(
-        "click",
-        () => {
-
-          speakChinese(
-            row.chinese,
-            speechButton
-          );
-
-        }
-      );
-
-
-      wrapper.appendChild(
-        speechButton
-      );
-
-    }
-
-  }
-
-
-  container.appendChild(wrapper);
-}
-
-
-/* =========================================================
-   CONVERSATION
-========================================================= */
-
-function renderConversation() {
-
-  const container =
-    document.getElementById(
-      "conversationDemo"
-    );
-
-  if (!container) {
-    return;
-  }
-
-
-  container.innerHTML = "";
-  container.className = "dynamic-demo-content conversation-list";
-
-
-  if (!conversationData.length) {
-
-    container.innerHTML = `
-      <div class="loading-message">
-        No conversation data found.
-      </div>
-    `;
-
-    return;
-  }
-
-
-  /*
-    Each Excel row becomes one conversation line:
-    Line 1: Chinese text with the play button right beside it
-    Line 2: Pinyin
-    Line 3: English
-  */
-
-  conversationData.forEach((row) => {
-
-    const line =
-      document.createElement("div");
-
-    line.className =
-      "conversation-line";
-
-
-    /*
-      Line 1: Chinese row with Play button beside Chinese
-    */
-
-    const chineseRow =
-      document.createElement("div");
-
-    chineseRow.className =
-      "conversation-chinese-row";
-
-    const chinese =
-      document.createElement("span");
-
-    chinese.className =
-      "conversation-chinese";
-
-    chinese.textContent =
-      row.chinese || "";
-
-    chineseRow.appendChild(chinese);
-
-
-    /*
-      Sound button placed directly beside Chinese
-    */
-
-    if (hasAudio(row.audio)) {
-
-      const audioButton =
-        document.createElement("button");
-
-      audioButton.type = "button";
-
-      audioButton.className =
-        "audio-button conversation-audio-button";
-
-      audioButton.textContent =
-        "▶ Play";
-
-      audioButton.setAttribute("aria-label", `Listen to: ${row.chinese || "phrase"}`);
-
-      audioButton.addEventListener(
-        "click",
-        () => {
-
-          playExcelAudio(
-            row.audio,
-            audioButton,
-            "▶ Play",
-            "⏸ Playing...",
-            row.chinese
-          );
-
-        }
-      );
-
-      chineseRow.appendChild(
-        audioButton
-      );
-
-    } else if (row.chinese) {
-
-      /*
-        Browser speech fallback
-        when audio is blank in Excel.
-      */
-
-      const speechButton =
-        document.createElement("button");
-
-      speechButton.type = "button";
-
-      speechButton.className =
-        "audio-button conversation-audio-button";
-
-      speechButton.textContent =
-        "▶ Play";
-
-      speechButton.setAttribute("aria-label", `Listen to: ${row.chinese}`);
-
-      speechButton.addEventListener(
-        "click",
-        () => {
-
-          speakChinese(
-            row.chinese,
-            speechButton
-          );
-
-        }
-      );
-
-      chineseRow.appendChild(
-        speechButton
-      );
-
-    }
-
-    line.appendChild(chineseRow);
-
-
-    /*
-      Line 2: Pinyin
-    */
-
-    if (row.pinyin) {
-      const pinyin =
-        document.createElement("div");
-
-      pinyin.className =
-        "conversation-pinyin";
-
-      pinyin.textContent =
-        row.pinyin;
-
-      line.appendChild(pinyin);
-    }
-
-
-    /*
-      Line 3: English
-    */
-
-    if (row.english) {
-      const english =
-        document.createElement("div");
-
-      english.className =
-        "conversation-english";
-
-      english.textContent =
-        row.english;
-
-      line.appendChild(english);
-    }
-
-
-    container.appendChild(line);
-
-  });
-
-}
-
-
-/* =========================================================
-   QUICK CHECK
-========================================================= */
-
-function renderQuickCheck() {
-
-  const container =
-    document.getElementById(
-      "quickCheckDemo"
-    );
-
-  if (!container) {
-    return;
-  }
-
-
-  container.innerHTML = "";
-
-
-  if (!quickCheckData.length) {
-
-    container.innerHTML = `
-      <div class="loading-message">
-        No quiz questions found.
-      </div>
-    `;
-
-    return;
-  }
-
-
-  quickCheckData.forEach(
-    (row, questionIndex) => {
-
-      renderQuizQuestion(
-        container,
-        row,
-        questionIndex
-      );
-
-    }
-  );
-
-}
-
-
-/* =========================================================
-   RENDER ONE QUIZ QUESTION
-========================================================= */
-
-function renderQuizQuestion(
-  container,
-  row,
-  questionIndex
-) {
-
-  const block =
-    document.createElement("div");
-
-  block.className =
-    "quiz-block";
-
-
-  /*
-    Question
-  */
-
-  const question =
-    document.createElement("div");
-
-  question.className =
-    "quiz-question";
-
-  question.textContent =
-    row.question ||
-    `Question ${questionIndex + 1}`;
-
-
-  block.appendChild(question);
-
-
-  /*
-    Options
-  */
-
-  const optionsContainer =
-    document.createElement("div");
-
-  optionsContainer.className =
-    "quiz-options";
-
-
-  const optionValues = [
-    row.optionA,
-    row.optionB,
-    row.optionC,
-    row.optionD
-  ].filter(value => {
-    return normalizeText(value) !== "";
-  });
-
-
-  /*
-    Determine answer.
-
-    Preferred:
-    Excel "answer" column.
-
-    Fallback:
-    optionD for compatibility with
-    older workbook data.
-  */
-
-  let correctAnswer =
-    row.answer || "";
-
-
-  if (!correctAnswer && row.optionD) {
-    correctAnswer = row.optionD;
-  }
-
-
-  const feedback =
-    document.createElement("div");
-
-  feedback.className =
-    "quiz-feedback";
-
-  feedback.id =
-    "microQuizFeedback";
-
-  feedback.setAttribute(
-    "aria-live",
-    "polite"
-  );
-
-
-  optionValues.forEach(
-    (optionValue) => {
-
-      const option =
-        document.createElement("button");
-
-      option.type = "button";
-
-      option.className =
-        "quiz-option micro-options";
-
-      option.setAttribute(
-        "aria-pressed",
-        "false"
-      );
-
-      option.textContent =
-        optionValue;
-
-
-      option.addEventListener(
-        "click",
-        () => {
-
-          checkQuizAnswer(
-            option,
-            optionValue,
-            correctAnswer,
-            optionsContainer,
-            feedback
-          );
-
-        }
-      );
-
-
-      optionsContainer.appendChild(
-        option
-      );
-
-    }
-  );
-
-
-  block.appendChild(
-    optionsContainer
-  );
-
-  block.appendChild(
-    feedback
-  );
-
-  container.appendChild(
-    block
-  );
-}
-
-
-/* =========================================================
-   CHECK QUIZ ANSWER
-========================================================= */
-
-function checkQuizAnswer(
-  selectedButton,
-  selectedAnswer,
-  correctAnswer,
-  optionsContainer,
-  feedback
-) {
-
-  /*
-    Prevent repeated selection
-  */
-
-  const buttons =
-    optionsContainer.querySelectorAll(
-      ".quiz-option"
-    );
-
-
-  buttons.forEach(button => {
-    button.disabled = true;
-  });
-
-  if (selectedButton) {
-    selectedButton.setAttribute("aria-pressed", "true");
-  }
-
-
-  /*
-    Compare normalized text
-  */
-
-  const isCorrect =
-    normalizeText(selectedAnswer) ===
-    normalizeText(correctAnswer);
-
-
-  if (isCorrect) {
-
-    selectedButton.classList.add(
-      "correct"
-    );
-
-    feedback.className =
-      "quiz-feedback correct";
-
-    feedback.textContent =
-      "✓ Correct!";
-
-    playFeedbackSound(true);
-
-  } else {
-
-    selectedButton.classList.add(
-      "incorrect"
-    );
-
-    feedback.className =
-      "quiz-feedback incorrect";
-
-    feedback.textContent =
-      `✗ Correct answer: ${correctAnswer}`;
-
-    playFeedbackSound(false);
-
-    /*
-      Highlight correct option
-    */
-
-    buttons.forEach(button => {
-
-      if (
-        normalizeText(button.textContent) ===
-        normalizeText(correctAnswer)
-      ) {
-
-        button.classList.add(
-          "correct"
-        );
-
-      }
-
-    });
-
-  }
-
-}
 
 
 /* =========================================================
@@ -1446,14 +345,14 @@ function playExcelAudio(
     If this button is already playing, clicking it stops audio.
   */
   if (button && button.classList.contains("playing")) {
-    stopAllDemoAudio();
+    stopAllAudio();
     return;
   }
 
   /*
-    Stop currently playing demo audio and cancel speech
+    Stop currently playing audio and cancel speech
   */
-  stopAllDemoAudio();
+  stopAllAudio();
 
   /*
     If there is no audio path, use speech fallback.
@@ -1551,7 +450,7 @@ function playExcelAudio(
     });
 
   /*
-    Store reference so other demo audio can stop it.
+    Store reference so other audio can stop it.
   */
   window.linguaPathCurrentAudio =
     audio;
@@ -1559,10 +458,10 @@ function playExcelAudio(
 
 
 /* =========================================================
-   STOP CURRENT DEMO AUDIO
+   STOP CURRENT AUDIO
 ========================================================= */
 
-function stopAllDemoAudio() {
+function stopAllAudio() {
 
   if ("speechSynthesis" in window) {
     try {
@@ -1602,7 +501,6 @@ function stopAllDemoAudio() {
   document
     .querySelectorAll(
       ".audio-button.playing, " +
-      ".demo-audio-button.playing, " +
       ".conversation-audio-button.playing"
     )
     .forEach(button => {
@@ -1633,7 +531,7 @@ function speakChinese(
   button
 ) {
 
-  stopAllDemoAudio();
+  stopAllAudio();
 
   if (
     !("speechSynthesis" in window)
@@ -3093,32 +1991,7 @@ function renderLearningHub() {
 }
 
 
-/* =========================================================
-   DEMO CARDS CLICK TO CONTINUE
-========================================================= */
 
-function setupDemoCardsClick() {
-  const cards = document.querySelectorAll(".demo-card[data-target]");
-  cards.forEach((card) => {
-    card.addEventListener("click", (e) => {
-      // Do not navigate if user clicked interactive buttons or audio
-      if (
-        e.target.closest("button") ||
-        e.target.closest(".audio-button") ||
-        e.target.closest(".tone-button") ||
-        e.target.closest(".quiz-option") ||
-        e.target.closest("audio")
-      ) {
-        return;
-      }
-
-      const target = card.getAttribute("data-target");
-      if (target) {
-        window.location.href = target;
-      }
-    });
-  });
-}
 
 
 /* =========================================================
@@ -3240,12 +2113,7 @@ function setupThemeToggle() {
 function showWorkbookError() {
 
   const containers = [
-
-    "everydayChineseDemo",
-    "conversationDemo",
-    "quickCheckDemo",
     "lessonGrid"
-
   ];
 
 
@@ -3527,7 +2395,7 @@ function closeReviewModal() {
     modal.setAttribute("aria-hidden", "true");
   }
   document.body.style.overflow = "";
-  stopAllDemoAudio();
+  stopAllAudio();
 
   if (window.location.hash === "#review") {
     if (window.history && window.history.pushState) {
@@ -3915,25 +2783,11 @@ window.linguaPath = {
 
   getWorkbook: () => workbook,
 
-  getDemoData: () => demoData,
-
   getLessonData: () => lessonData,
 
   getVocabularyData: () => vocabularyData,
 
   getStoryData: () => storyData,
-
-  getPronunciationData:
-    () => pronunciationData,
-
-  getEverydayChineseData:
-    () => everydayChineseData,
-
-  getConversationData:
-    () => conversationData,
-
-  getQuickCheckData:
-    () => quickCheckData,
 
   startReviewMode: (forceAll = false) => startReviewMode(forceAll),
 
