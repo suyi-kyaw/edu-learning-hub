@@ -150,7 +150,6 @@ function sortByOrder(
    ========================================================= */
 
 function initializeMobileMenu() {
-
   const menuButton =
     document.getElementById("menuToggle") ||
     document.getElementById("mobileMenuButton");
@@ -159,64 +158,66 @@ function initializeMobileMenu() {
     document.getElementById("mainNav") ||
     document.getElementById("mobileMenu");
 
+  const closeBtn = document.getElementById("hideMenuCloseBtn");
 
   if (!menuButton || !mobileMenu) {
     return;
   }
 
+  function closeMenu() {
+    mobileMenu.classList.remove("active", "open");
+    menuButton.setAttribute("aria-expanded", "false");
+    menuButton.setAttribute("aria-label", "Open navigation");
+  }
 
-  menuButton.addEventListener(
-    "click",
-    () => {
+  function openMenu() {
+    mobileMenu.classList.add("active");
+    menuButton.setAttribute("aria-expanded", "true");
+    menuButton.setAttribute("aria-label", "Close navigation");
+  }
 
-      const isOpen =
-        mobileMenu.classList.toggle("active") ||
-        mobileMenu.classList.toggle("open");
-
-
-      menuButton.setAttribute(
-        "aria-expanded",
-        isOpen
-          ? "true"
-          : "false"
-      );
-
-
-      menuButton.setAttribute(
-        "aria-label",
-        isOpen
-          ? "Close navigation"
-          : "Open navigation"
-      );
-
+  menuButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isOpen = mobileMenu.classList.contains("active") || mobileMenu.classList.contains("open");
+    if (isOpen) {
+      closeMenu();
+    } else {
+      openMenu();
     }
-  );
+  });
 
+  if (closeBtn) {
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeMenu();
+      menuButton.focus();
+    });
+  }
+
+  mobileMenu.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (mobileMenu.classList.contains("active") || mobileMenu.classList.contains("open")) {
+      closeMenu();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && (mobileMenu.classList.contains("active") || mobileMenu.classList.contains("open"))) {
+      closeMenu();
+      menuButton.focus();
+    }
+  });
 
   mobileMenu
     .querySelectorAll("a")
     .forEach(link => {
-
-      link.addEventListener(
-        "click",
-        () => {
-
-          mobileMenu.classList.remove(
-            "active",
-            "open"
-          );
-
-
-          menuButton.setAttribute(
-            "aria-expanded",
-            "false"
-          );
-
-        }
-      );
-
+      link.addEventListener("click", () => {
+        closeMenu();
+      });
     });
-
 }
 
 
@@ -2978,12 +2979,53 @@ function setupReminderUI() {
 
 
 /* =========================================================
+   DARK / LIGHT THEME TOGGLE
+   ========================================================= */
+
+function setupThemeToggle() {
+  const themeToggleBtn = document.getElementById("themeToggleBtn");
+  if (!themeToggleBtn) {
+    return;
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    const isDark = theme === "dark";
+    themeToggleBtn.setAttribute(
+      "aria-label",
+      isDark ? "Switch to light mode" : "Switch to dark mode"
+    );
+    themeToggleBtn.setAttribute(
+      "title",
+      isDark ? "Switch to light mode" : "Switch to dark mode for late-night learning sessions"
+    );
+    themeToggleBtn.setAttribute("aria-pressed", isDark ? "true" : "false");
+    try {
+      localStorage.setItem("linguapath_theme", theme);
+    } catch (e) {}
+  }
+
+  const savedTheme = localStorage.getItem("linguapath_theme");
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
+  applyTheme(initialTheme);
+
+  themeToggleBtn.addEventListener("click", () => {
+    const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+    const nextTheme = currentTheme === "dark" ? "light" : "dark";
+    applyTheme(nextTheme);
+  });
+}
+
+
+/* =========================================================
    START
    ========================================================= */
 
 document.addEventListener(
   "DOMContentLoaded",
   () => {
+    setupThemeToggle();
     initializeMobileMenu();
     setupStoryCompletionModalListeners();
     updateHeaderStreakUI();

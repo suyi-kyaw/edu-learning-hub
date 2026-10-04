@@ -43,6 +43,7 @@ function escapeHTML(value) {
 ========================================================= */
 
 document.addEventListener("DOMContentLoaded", () => {
+  setupThemeToggle();
   setupMobileMenu();
   setupSearchAndFilter();
   setupDemoCardsClick();
@@ -439,6 +440,14 @@ function renderPronunciation() {
   }
 
 
+  const toneAriaLabels = [
+    "Tone 1 high flat",
+    "Tone 2 rising",
+    "Tone 3 dipping",
+    "Tone 4 falling",
+    "Neutral tone"
+  ];
+
   pronunciationData.forEach((row, index) => {
 
     const button =
@@ -447,6 +456,16 @@ function renderPronunciation() {
     button.type = "button";
 
     button.className = "tone-button";
+
+    button.setAttribute(
+      "aria-label",
+      toneAriaLabels[index] || `Tone ${index + 1}`
+    );
+
+    button.setAttribute(
+      "aria-pressed",
+      index === 0 ? "true" : "false"
+    );
 
     button.textContent =
       row.pinyin ||
@@ -548,9 +567,14 @@ function selectTone(index, shouldPlay = false) {
 
   buttons.forEach((button, buttonIndex) => {
 
+    const isActive = buttonIndex === index;
     button.classList.toggle(
       "active",
-      buttonIndex === index
+      isActive
+    );
+    button.setAttribute(
+      "aria-pressed",
+      isActive ? "true" : "false"
     );
 
   });
@@ -634,26 +658,25 @@ function updateToneGraph(index) {
 
 
   /*
-    Standard Mandarin tone shapes.
-
-    1 = high level
-    2 = rising
-    3 = dipping
-    4 = falling
-    5 = neutral
+    Mandarin tone shapes matching viewBox 0 0 500 100
+    Tone 1 = high flat
+    Tone 2 = rising
+    Tone 3 = dipping
+    Tone 4 = falling
+    Tone 5 = neutral
   */
 
   const tonePaths = [
 
-    "M10 28 L290 28",
+    "M20 30 L480 30",
 
-    "M10 72 Q150 72 290 25",
+    "M20 80 Q250 75 480 25",
 
-    "M10 35 Q85 85 150 78 Q220 72 290 30",
+    "M20 40 Q160 85 250 85 Q350 85 480 30",
 
-    "M10 25 Q150 25 290 80",
+    "M20 25 Q240 50 480 85",
 
-    "M10 52 L290 52"
+    "M180 50 L320 50"
 
   ];
 
@@ -661,7 +684,7 @@ function updateToneGraph(index) {
   tonePath.setAttribute(
     "d",
     tonePaths[index] ||
-    tonePaths[4]
+    tonePaths[0]
   );
 }
 
@@ -1174,6 +1197,14 @@ function renderQuizQuestion(
   feedback.className =
     "quiz-feedback";
 
+  feedback.id =
+    "microQuizFeedback";
+
+  feedback.setAttribute(
+    "aria-live",
+    "polite"
+  );
+
 
   optionValues.forEach(
     (optionValue) => {
@@ -1184,7 +1215,12 @@ function renderQuizQuestion(
       option.type = "button";
 
       option.className =
-        "quiz-option";
+        "quiz-option micro-options";
+
+      option.setAttribute(
+        "aria-pressed",
+        "false"
+      );
 
       option.textContent =
         optionValue;
@@ -1253,6 +1289,10 @@ function checkQuizAnswer(
   buttons.forEach(button => {
     button.disabled = true;
   });
+
+  if (selectedButton) {
+    selectedButton.setAttribute("aria-pressed", "true");
+  }
 
 
   /*
@@ -1371,6 +1411,24 @@ function playFeedbackSound(isCorrect) {
 }
 
 
+function showToneAudioFallbackNotice(message, isError = false) {
+  const fallbackEl = document.getElementById("toneAudioFallback");
+  if (!fallbackEl) {
+    return;
+  }
+  fallbackEl.textContent = message;
+  fallbackEl.className = isError
+    ? "tone-audio-fallback tone-audio-error"
+    : "tone-audio-fallback tone-audio-notice";
+  fallbackEl.style.display = "block";
+  setTimeout(() => {
+    if (fallbackEl) {
+      fallbackEl.style.display = "none";
+    }
+  }, 4000);
+}
+
+
 /* =========================================================
    PLAY AUDIO FROM EXCEL
 ========================================================= */
@@ -1392,7 +1450,7 @@ function playExcelAudio(
   }
 
   /*
-    Stop currently playing demo audio.
+    Stop currently playing demo audio and cancel speech
   */
   stopAllDemoAudio();
 
@@ -1401,7 +1459,10 @@ function playExcelAudio(
   */
   if (!hasAudio(audioPath)) {
     if (fallbackText && button) {
+      showToneAudioFallbackNotice("Playing via speech synthesis fallback...");
       speakChinese(fallbackText, button);
+    } else {
+      showToneAudioFallbackNotice("Audio unavailable for this item.", true);
     }
     return;
   }
@@ -1416,24 +1477,36 @@ function playExcelAudio(
     button.classList.add(
       "playing"
     );
+
+    button.setAttribute(
+      "aria-busy",
+      "true"
+    );
   }
+
+  const resetButton = () => {
+    if (button) {
+      button.textContent =
+        defaultText;
+
+      button.classList.remove(
+        "playing"
+      );
+
+      button.removeAttribute(
+        "aria-busy"
+      );
+
+      button.disabled = false;
+    }
+    if (window.linguaPathCurrentAudio === audio) {
+      window.linguaPathCurrentAudio = null;
+    }
+  };
 
   audio.addEventListener(
     "ended",
-    () => {
-      if (button) {
-        button.textContent =
-          defaultText;
-
-        button.classList.remove(
-          "playing"
-        );
-      }
-
-      if (window.linguaPathCurrentAudio === audio) {
-        window.linguaPathCurrentAudio = null;
-      }
-    }
+    resetButton
   );
 
   audio.addEventListener(
@@ -1445,17 +1518,14 @@ function playExcelAudio(
       );
 
       if (fallbackText && button) {
+        showToneAudioFallbackNotice("Audio file missing; switching to speech synthesis...");
         speakChinese(
           fallbackText,
           button
         );
-      } else if (button) {
-        button.textContent =
-          defaultText;
-
-        button.classList.remove(
-          "playing"
-        );
+      } else {
+        resetButton();
+        showToneAudioFallbackNotice("Audio playback failed.", true);
       }
     }
   );
@@ -1468,17 +1538,14 @@ function playExcelAudio(
       );
 
       if (fallbackText && button) {
+        showToneAudioFallbackNotice("Audio playback blocked; using speech synthesis...");
         speakChinese(
           fallbackText,
           button
         );
-      } else if (button) {
-        button.textContent =
-          defaultText;
-
-        button.classList.remove(
-          "playing"
-        );
+      } else {
+        resetButton();
+        showToneAudioFallbackNotice("Audio playback blocked by browser.", true);
       }
     });
 
@@ -1495,6 +1562,12 @@ function playExcelAudio(
 ========================================================= */
 
 function stopAllDemoAudio() {
+
+  if ("speechSynthesis" in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+  }
 
   if (
     window.linguaPathCurrentAudio
@@ -1540,6 +1613,12 @@ function stopAllDemoAudio() {
         "playing"
       );
 
+      button.removeAttribute(
+        "aria-busy"
+      );
+
+      button.disabled = false;
+
     });
 }
 
@@ -1553,26 +1632,21 @@ function speakChinese(
   button
 ) {
 
+  stopAllDemoAudio();
+
   if (
     !("speechSynthesis" in window)
   ) {
-
-    alert(
-      "Audio is not available for this lesson."
-    );
-
+    showToneAudioFallbackNotice("Speech synthesis is not supported in this browser.", true);
     return;
   }
 
-
-  stopAllDemoAudio();
-
-  window.speechSynthesis.cancel();
-
+  try {
+    window.speechSynthesis.cancel();
+  } catch (e) {}
 
   const utterance =
     new SpeechSynthesisUtterance(text);
-
 
   utterance.lang =
     "zh-CN";
@@ -1583,38 +1657,45 @@ function speakChinese(
   utterance.pitch =
     1;
 
-
-  button.textContent =
-    "⏸ Speaking...";
-
-  button.classList.add(
-    "playing"
-  );
-
-
-  utterance.onend = () => {
-
+  if (button) {
     button.textContent =
-      "▶ Play";
+      "⏸ Speaking...";
 
-    button.classList.remove(
+    button.classList.add(
       "playing"
     );
 
-  };
-
-
-  utterance.onerror = () => {
-
-    button.textContent =
-      "▶ Play";
-
-    button.classList.remove(
-      "playing"
+    button.setAttribute(
+      "aria-busy",
+      "true"
     );
 
+    button.disabled = true;
+  }
+
+  const resetSpeechButton = () => {
+    if (button) {
+      button.textContent =
+        "▶ Play";
+
+      button.classList.remove(
+        "playing"
+      );
+
+      button.removeAttribute(
+        "aria-busy"
+      );
+
+      button.disabled = false;
+    }
   };
 
+  utterance.onend = resetSpeechButton;
+
+  utterance.onerror = (err) => {
+    resetSpeechButton();
+    showToneAudioFallbackNotice("Speech synthesis encountered an error.", true);
+  };
 
   window.speechSynthesis.speak(
     utterance
@@ -3044,71 +3125,110 @@ function setupDemoCardsClick() {
 ========================================================= */
 
 function setupMobileMenu() {
+  const menuToggle = document.getElementById("menuToggle");
+  const mainNav = document.getElementById("mainNav");
+  const closeBtn = document.getElementById("hideMenuCloseBtn");
 
-  const menuToggle =
-    document.getElementById(
-      "menuToggle"
-    );
-
-  const mainNav =
-    document.getElementById(
-      "mainNav"
-    );
-
-
-  if (
-    !menuToggle ||
-    !mainNav
-  ) {
+  if (!menuToggle || !mainNav) {
     return;
   }
 
+  function closeMenu() {
+    mainNav.classList.remove("active");
+    menuToggle.setAttribute("aria-expanded", "false");
+  }
 
-  menuToggle.addEventListener(
-    "click",
-    () => {
+  function openMenu() {
+    mainNav.classList.add("active");
+    menuToggle.setAttribute("aria-expanded", "true");
+  }
 
-      const isOpen =
-        mainNav.classList.toggle(
-          "active"
-        );
-
-
-      menuToggle.setAttribute(
-        "aria-expanded",
-        String(isOpen)
-      );
-
+  menuToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isOpen = mainNav.classList.contains("active");
+    if (isOpen) {
+      closeMenu();
+    } else {
+      openMenu();
     }
-  );
+  });
 
+  if (closeBtn) {
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeMenu();
+      menuToggle.focus();
+    });
+  }
+
+  // Prevent clicks inside mainNav from closing it unintentionally
+  mainNav.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
+  // Close when clicking outside
+  document.addEventListener("click", (e) => {
+    if (mainNav.classList.contains("active")) {
+      closeMenu();
+    }
+  });
+
+  // Close on Escape key
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && mainNav.classList.contains("active")) {
+      closeMenu();
+      menuToggle.focus();
+    }
+  });
 
   /*
-    Close menu after clicking a link.
+    Close menu after clicking a navigation link.
   */
-
-  mainNav
-    .querySelectorAll("a")
-    .forEach(link => {
-
-      link.addEventListener(
-        "click",
-        () => {
-
-          mainNav.classList.remove(
-            "active"
-          );
-
-          menuToggle.setAttribute(
-            "aria-expanded",
-            "false"
-          );
-
-        }
-      );
-
+  mainNav.querySelectorAll("a").forEach(link => {
+    link.addEventListener("click", () => {
+      closeMenu();
     });
+  });
+}
 
+
+/* =========================================================
+   DARK / LIGHT THEME TOGGLE
+========================================================= */
+
+function setupThemeToggle() {
+  const themeToggleBtn = document.getElementById("themeToggleBtn");
+  if (!themeToggleBtn) {
+    return;
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    const isDark = theme === "dark";
+    themeToggleBtn.setAttribute(
+      "aria-label",
+      isDark ? "Switch to light mode" : "Switch to dark mode"
+    );
+    themeToggleBtn.setAttribute(
+      "title",
+      isDark ? "Switch to light mode" : "Switch to dark mode for late-night learning sessions"
+    );
+    themeToggleBtn.setAttribute("aria-pressed", isDark ? "true" : "false");
+    try {
+      localStorage.setItem("linguapath_theme", theme);
+    } catch (e) {}
+  }
+
+  const savedTheme = localStorage.getItem("linguapath_theme");
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
+  applyTheme(initialTheme);
+
+  themeToggleBtn.addEventListener("click", () => {
+    const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+    const nextTheme = currentTheme === "dark" ? "light" : "dark";
+    applyTheme(nextTheme);
+  });
 }
 
 

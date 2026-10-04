@@ -13,6 +13,12 @@
   >
   <meta property="og:title" content="LinguaPath - Learn Chinese">
   <meta property="og:description" content="Learn Chinese through pronunciation, everyday conversations, vocabulary, exercises, and interactive lessons.">
+  <meta property="og:image" content="assets/images/story-poster.jpg">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="LinguaPath - Learn Chinese">
+  <meta name="twitter:description" content="Learn Chinese through pronunciation, everyday conversations, vocabulary, exercises, and interactive lessons.">
+  <meta name="twitter:image" content="assets/images/story-poster.jpg">
 
   <!-- Google Fonts with display=swap for high performance rendering -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,69 +56,15 @@
         <span class="logo-text">LinguaPath</span>
       </a>
 
+      <!-- Primary Desktop Navigation Links (Strictly Single Line, Crisp Single Words) -->
+      <nav class="desktop-nav" aria-label="Main Navigation">
+        <a href="#home" class="nav-link">Home</a>
+        <a href="#demos" class="nav-link">Demos</a>
+        <a href="#lessons" class="nav-link">Lessons</a>
+      </nav>
+
+      <!-- Action Controls (Strict Single Line: Dark Mode + Menu Drawer) -->
       <div class="nav-actions">
-        <!-- Daily Streak Counter Badge -->
-        <div
-          class="streak-badge"
-          id="dailyStreakBadge"
-          role="status"
-          aria-label="Daily Streak Counter"
-          tabindex="0"
-          title="Daily Learning Streak"
-        >
-          <span class="streak-flame" aria-hidden="true">🔥</span>
-          <div class="streak-text-wrap">
-            <span class="streak-count" id="dailyStreakCount">0</span>
-            <span class="streak-label">day streak</span>
-          </div>
-          <div class="streak-tooltip" id="streakTooltip">
-            <strong id="streakTooltipTitle">Daily Streak: 0 days</strong>
-            <p id="streakTooltipDesc">Complete a lesson today to start your streak!</p>
-          </div>
-        </div>
-
-        <!-- User Level & Rank Badge (Novice, Scholar, Master) -->
-        <div
-          class="level-badge rank-novice"
-          id="userLevelBadge"
-          role="status"
-          aria-label="User Level: Novice (Level 1)"
-          tabindex="0"
-          title="User Learning Level: Novice"
-        >
-          <span class="level-icon" id="userLevelIcon" aria-hidden="true">🌱</span>
-          <div class="level-text-wrap">
-            <span class="level-rank" id="userLevelRank">Novice</span>
-            <span class="level-label" id="userLevelSubtitle">Lvl 1</span>
-          </div>
-          <div class="level-tooltip" id="levelTooltip">
-            <div class="level-tooltip-header">
-              <strong id="levelTooltipTitle">🌱 Novice (Level 1)</strong>
-              <span class="level-tooltip-chinese" id="levelTooltipChinese">初学者</span>
-            </div>
-            <p id="levelTooltipDesc">Complete 1 lesson to achieve Scholar rank!</p>
-            <div class="level-progress-bar-wrap">
-              <div class="level-progress-bar" id="levelProgressBar" style="width: 0%;"></div>
-            </div>
-            <div class="level-progress-footer">
-              <span id="levelProgressText">0 / 1 completed</span>
-              <span id="levelNextRank">Next: Scholar</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Daily Lesson Reminder Bell -->
-        <button
-          type="button"
-          class="reminder-bell-btn"
-          id="reminderBellBtn"
-          aria-label="Daily Lesson Reminder"
-          title="Daily Lesson Reminder: Get prompted to complete a lesson"
-        >
-          <span class="bell-icon" aria-hidden="true">🔔</span>
-          <span class="reminder-status-dot" id="reminderStatusDot" aria-hidden="true"></span>
-        </button>
-
         <!-- Dark Mode Toggle Button for Late-Night Learning -->
         <button
           type="button"
@@ -125,22 +77,136 @@
           <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
         </button>
 
-        <nav class="main-nav" id="mainNav">
-          <a href="#home">Home</a>
-          <a href="#demos">Demo Lessons</a>
-          <a href="#lessons">Learning Hub</a>
-          <a href="#review" id="navReviewModeBtn">🎴 Review Mode</a>
-        </nav>
-
+        <!-- Menu / Tools Toggle Button (Opens Hide Menu) -->
         <button
           class="menu-toggle"
           id="menuToggle"
           type="button"
-          aria-label="Toggle navigation"
+          aria-label="Toggle menu and learning tools"
           aria-expanded="false"
+          title="Menu & Learning Tools"
         >
-          ☰
+          <span class="menu-toggle-icon" aria-hidden="true">☰</span>
+          <span class="menu-toggle-label">Menu</span>
         </button>
+
+        <!-- =========================
+             HIDE MENU (Drawer / Flyout Panel)
+             Houses secondary tools, streak card, user rank card, reminder tool, and full navigation
+        ========================== -->
+        <nav class="main-nav" id="mainNav" aria-label="Menu and learning tools">
+          <div class="hide-menu-header">
+            <div class="hide-menu-header-top">
+              <span class="hide-menu-title">Menu & Learning Hub</span>
+              <button type="button" class="hide-menu-close-btn" id="hideMenuCloseBtn" aria-label="Close menu" title="Close menu">✕</button>
+            </div>
+            <span class="hide-menu-subtitle">Your progress & study tools</span>
+          </div>
+
+          <!-- Navigation Links in Hide Menu -->
+          <div class="hide-menu-nav-links">
+            <a href="#home" class="hide-menu-link">
+              <span class="menu-link-icon" aria-hidden="true">🏠</span>
+              <span>Home</span>
+            </a>
+            <a href="#demos" class="hide-menu-link">
+              <span class="menu-link-icon" aria-hidden="true">🎧</span>
+              <span>Demo Lessons</span>
+            </a>
+            <a href="#lessons" class="hide-menu-link">
+              <span class="menu-link-icon" aria-hidden="true">📚</span>
+              <span>Learning Hub</span>
+            </a>
+            <a href="#review" id="navReviewModeBtn" class="hide-menu-link hide-menu-review-link">
+              <span class="menu-link-icon" aria-hidden="true">🎴</span>
+              <span>Review Mode (Flashcards)</span>
+            </a>
+          </div>
+
+          <div class="hide-menu-divider" aria-hidden="true"></div>
+
+          <!-- Learning Tools moved into Hide Menu -->
+          <div class="hide-menu-tools">
+            <div class="hide-menu-section-label">Your Daily Streak</div>
+
+            <!-- Daily Streak Counter Badge (Moved into Hide Menu for clean single-line top bar) -->
+            <div
+              class="streak-badge hide-menu-streak-card"
+              id="dailyStreakBadge"
+              role="status"
+              aria-label="Daily Streak Counter"
+              tabindex="0"
+              title="Daily Learning Streak: Click for info"
+            >
+              <span class="streak-flame" aria-hidden="true">🔥</span>
+              <div class="hide-menu-card-body">
+                <div class="streak-text-wrap">
+                  <span class="streak-count" id="dailyStreakCount">0</span>
+                  <span class="streak-label">Day Streak</span>
+                </div>
+                <span class="hide-menu-card-sub" id="streakTooltipDesc">Complete a lesson today to start your streak!</span>
+              </div>
+              <div class="streak-tooltip" id="streakTooltip">
+                <strong id="streakTooltipTitle">Daily Streak: 0 days</strong>
+                <p>Complete any lesson each day to build your streak!</p>
+              </div>
+            </div>
+
+            <div class="hide-menu-section-label">Your Learning Rank</div>
+
+            <!-- User Level & Rank Badge (Novice, Scholar, Master) -->
+            <div
+              class="level-badge rank-novice hide-menu-level-card"
+              id="userLevelBadge"
+              role="status"
+              aria-label="User Level: Novice (Level 1)"
+              tabindex="0"
+              title="User Learning Level: Novice"
+            >
+              <span class="level-icon" id="userLevelIcon" aria-hidden="true">🌱</span>
+              <div class="hide-menu-card-body">
+                <div class="level-text-wrap">
+                  <span class="level-rank" id="userLevelRank">Novice</span>
+                  <span class="level-label" id="userLevelSubtitle">Lvl 1</span>
+                </div>
+                <span class="hide-menu-card-sub" id="levelProgressText">0 / 1 completed</span>
+              </div>
+              <div class="level-tooltip" id="levelTooltip">
+                <div class="level-tooltip-header">
+                  <strong id="levelTooltipTitle">🌱 Novice (Level 1)</strong>
+                  <span class="level-tooltip-chinese" id="levelTooltipChinese">初学者</span>
+                </div>
+                <p id="levelTooltipDesc">Complete 1 lesson to achieve Scholar rank!</p>
+                <div class="level-progress-bar-wrap">
+                  <div class="level-progress-bar" id="levelProgressBar" style="width: 0%;"></div>
+                </div>
+                <div class="level-progress-footer">
+                  <span id="levelNextRank">Next: Scholar</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="hide-menu-section-label">Daily Reminder</div>
+
+            <!-- Daily Lesson Reminder Bell Item -->
+            <div class="hide-menu-reminder-wrap">
+              <button
+                type="button"
+                class="reminder-bell-btn"
+                id="reminderBellBtn"
+                aria-label="Daily Lesson Reminder"
+                title="Daily Lesson Reminder: Get prompted to complete a lesson"
+              >
+                <span class="bell-icon" aria-hidden="true">🔔</span>
+                <span class="reminder-status-dot" id="reminderStatusDot" aria-hidden="true"></span>
+              </button>
+              <div class="hide-menu-reminder-text">
+                <strong class="hide-menu-reminder-title">Daily Practice Alarm</strong>
+                <span class="hide-menu-reminder-sub">Click bell to configure time</span>
+              </div>
+            </div>
+          </div>
+        </nav>
       </div>
 
     </div>
@@ -200,7 +266,7 @@
               <span class="hero-deco-dot">•</span>
               <span class="hero-deco-radical">女 + 子 = 好</span>
             </div>
-            <svg class="hero-deco-contour" viewBox="0 0 200 40" fill="none" preserveAspectRatio="none">
+            <svg class="hero-deco-contour" viewBox="0 0 200 40" fill="none" preserveAspectRatio="none" aria-hidden="true">
               <path d="M 10 30 Q 50 38 75 16 T 130 18 T 190 28" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="3 4" opacity="0.4" />
             </svg>
           </div>
@@ -304,7 +370,7 @@
 
             <div class="tone-display">
 
-              <div class="tone-main tone-word-wrapper" style="display: flex; align-items: center; justify-content: flex-start; gap: 1rem;">
+              <div class="tone-main tone-word-wrapper">
 
                 <div
                   class="tone-syllable"
@@ -364,6 +430,7 @@
                 aria-label="Tone contour"
                 class="tone-contour-svg"
               >
+                <title id="toneGraphTitle">Mandarin Tone Pitch Contour Visualization</title>
 
                 <path
                   id="tonePath"
@@ -382,6 +449,7 @@
             <p
               class="tone-description"
               id="toneDescription"
+              aria-live="polite"
             >
               Select a tone to hear the pronunciation.
             </p>
@@ -573,7 +641,8 @@
         <div class="learning-search-box" id="learningSearchBox" role="search" aria-label="Lesson Search">
           <div class="search-bar-inner">
             <span class="search-icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <title>Search icon</title>
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
               </svg>
