@@ -3019,6 +3019,789 @@ function setupThemeToggle() {
 
 
 /* =========================================================
+   REELS & STORIES SYSTEM (2-TAB SUB-NAV & EXCEL SYNC)
+========================================================= */
+
+const REELS_EXCEL_FILE = "data/reels_stories.xlsx";
+const REELS_STORAGE_FAVORITES_KEY = "linguapath_favorite_reels";
+
+const FALLBACK_REELS_DATA = [
+  {
+    id: "cny_01",
+    type: "reel",
+    holiday_id: "cny",
+    title: "红包拿来 - Red Packet Tradition",
+    video_path: "assets/video/Reels Red Envelope.mp4",
+    thumbnail_path: "assets/images/story-poster.jpg",
+    duration_sec: 15,
+    status: "active",
+    text_cn: "过年好！恭喜发财，红包拿来！祝你新年快乐，身体健康，万事如意！",
+    text_pinyin: "Guònián hǎo! Gōngxǐ fācái, hóngbāo nálái! Zhù nǐ xīnnián kuàilè, shēntǐ jiànkāng, wànshì rúyì!",
+    text_en: "Happy New Year! Wishing you prosperity, hand over the red envelope! Happy New Year, good health, and may all your wishes come true!",
+    text_my: "နှစ်သစ်မှာ မင်္ဂလာပါ! စီးပွားဥစ္စာ တိုးတက်ပါစေ၊ အင်ပါအိုနီပေးပါ! နှစ်သစ်မှာ ပျော်ရွှင်ပါစေ၊ ကျန်းမာပါစေ၊ လိုအင်ဆန္ဒ ပြည့်ဝပါစေ!"
+  },
+  {
+    id: "lantern_01",
+    type: "reel",
+    holiday_id: "lantern",
+    title: "元宵吃汤圆 - Lantern Festival Sweet Dumplings",
+    video_path: "assets/video/lesson-01.mp4",
+    thumbnail_path: "assets/images/story-01.jpg",
+    duration_sec: 12,
+    status: "active",
+    text_cn: "元宵节快乐！我们要吃甜甜的汤圆，猜灯谜，赏花灯，团团圆圆！",
+    text_pinyin: "Yuánxiāojié kuàilè! Wǒmen yào chī tiántián de tāngyuán, cāi dēngmí, shǎng huādēng, tuántuán yuányuán!",
+    text_en: "Happy Lantern Festival! We eat sweet rice balls, guess lantern riddles, and enjoy colorful lanterns with family!",
+    text_my: "မီးထွန်းပွဲတော် မင်္ဂလာပါ! အချိုလုံးစားကြမယ်၊ မီးပဟေဠိ ဖြေကြမယ်၊ မိသားစု စုံစုံလင်လင် ဆုံကြမယ်!"
+  },
+  {
+    id: "dragonboat_01",
+    type: "reel",
+    holiday_id: "dragonboat",
+    title: "端午安康 - Dragon Boat & Zongzi",
+    video_path: "assets/video/Reels Red Envelope.mp4",
+    thumbnail_path: "assets/images/story2-poster.jpg",
+    duration_sec: 18,
+    status: "active",
+    text_cn: "端午节安康！划龙舟，吃香甜的粽子，佩香囊，平平安安！",
+    text_pinyin: "Duānwǔjié ānkāng! Huá lóngzhōu, chī xiāngtián de zòngzi, pèi xiāngnáng, píngpíng ān'ān!",
+    text_en: "Wishing you health on Dragon Boat Festival! Row dragon boats, eat delicious sticky rice dumplings, and stay safe!",
+    text_my: "နဂါးလှေပွဲတော် ကျန်းမာပါစေ! နဂါးလှေပြိုင်ကြမယ်၊ ကောက်ညှင်းထုပ် စားကြမယ်၊ အေးချမ်းသာယာပါစေ!"
+  },
+  {
+    id: "midautumn_01",
+    type: "reel",
+    holiday_id: "midautumn",
+    title: "中秋赏月 - Mid-Autumn Moon Festival",
+    video_path: "assets/video/lesson-01.mp4",
+    thumbnail_path: "assets/images/story2-01.jpg",
+    duration_sec: 15,
+    status: "active",
+    text_cn: "中秋节快乐！但愿人长久，千里共婵娟。一起吃月饼，看明亮的满月。",
+    text_pinyin: "Zhōngqiūjié kuàilè! Dànyuàn rén chángjiǔ, qiānlǐ gòng chánjuān. Yìqǐ chī yuèbǐng, kàn míngliàng de mǎnyuè.",
+    text_en: "Happy Mid-Autumn Festival! May we share the moon's beauty across miles. Let's eat mooncakes and admire the full moon.",
+    text_my: "လပြည့်ညပွဲတော် မင်္ဂလာပါ! လမုန့်စားရင်း လပြည့်ဝန်းကို အတူကြည့်ကြမယ်။ အဝေးရောက် ချစ်ခင်သူများနဲ့အတူ ကြည်နူးရပါစေ။"
+  },
+  {
+    id: "daily_01",
+    type: "reel",
+    holiday_id: "daily",
+    title: "早安打招呼 - Morning Greetings",
+    video_path: "assets/video/lesson-01.mp4",
+    thumbnail_path: "assets/images/story-02.jpg",
+    duration_sec: 10,
+    status: "active",
+    text_cn: "早上好！今天天气真好，你吃早饭了吗？祝你有美好的一天！",
+    text_pinyin: "Zǎoshang hǎo! Jīntiān tiānqì zhēn hǎo, nǐ chī zǎofàn le ma? Zhù nǐ yǒu měihǎo de yì tiān!",
+    text_en: "Good morning! The weather is lovely today, have you eaten breakfast? Have a wonderful day!",
+    text_my: "မင်္ဂလာနံနက်ခင်းပါ! ဒီနေ့ ရာသီဥတု သိပ်ကောင်းတယ်၊ မနက်စာ စားပြီးပြီလား? ကောင်းသောနေ့လေး ဖြစ်ပါစေ!"
+  },
+  {
+    id: "kids_01",
+    type: "reel",
+    holiday_id: "kids",
+    title: "动物朋友 - Animal Names for Kids",
+    video_path: "assets/video/Reels Red Envelope.mp4",
+    thumbnail_path: "assets/images/story-03.jpg",
+    duration_sec: 14,
+    status: "active",
+    text_cn: "小猫喵喵叫，小狗汪汪叫，大熊猫爱吃竹子，小兔子跳呀跳！",
+    text_pinyin: "Xiǎomāo miāomiāo jiào, xiǎogǒu wāngwāng jiào, dàxióngmāo ài chī zhúzi, xiǎotùzi tiào ya tiào!",
+    text_en: "Kittens meow, puppies bark, giant pandas love eating bamboo, and bunnies hop around!",
+    text_my: "ကြောင်ကလေး မြောင်မြောင်အော်၊ ခွေးကလေး ဝုတ်ဝုတ်ဟောင်၊ ပန်ဒါဝက်ဝံ ဝါးပင်စား၊ ယုန်ကလေး ခုန်ဆွခုန်ဆွ!"
+  },
+  {
+    id: "grammar_01",
+    type: "reel",
+    holiday_id: "grammar",
+    title: "四声歌 - Mastering the 4 Chinese Tones",
+    video_path: "assets/video/lesson-01.mp4",
+    thumbnail_path: "assets/images/story2-03.jpg",
+    duration_sec: 20,
+    status: "active",
+    text_cn: "一声高高平又平，二声由低往上升，三声先降然后再扬起，四声重重从高降到低！",
+    text_pinyin: "Yī shēng gāogāo píng yòu píng, èr shēng yóu dī wǎngshàng shēng, sān shēng xiān jiàng ránhòu zài yángqǐ, sì shēng zhòngzhòng cóng gāo jiàng dào dī!",
+    text_en: "1st tone is high and flat, 2nd tone rises, 3rd tone dips then climbs, 4th tone drops sharply!",
+    text_my: "အသံထွက် ၁ က မြင့်ပြီးညီတယ်၊ အသံ ၂ က အောက်ကနေ အပေါ်တက်တယ်၊ အသံ ၃ က ဆင်းပြီးမှ ပြန်တက်တယ်၊ အသံ ၄ က အမြင့်ကနေ ပြတ်ပြတ်ဆင်းတယ်!"
+  },
+  {
+    id: "culture_01",
+    type: "reel",
+    holiday_id: "culture",
+    title: "中国茶道 - Chinese Tea Etiquette",
+    video_path: "assets/video/Reels Red Envelope.mp4",
+    thumbnail_path: "assets/images/story-04.jpg",
+    duration_sec: 16,
+    status: "active",
+    text_cn: "客来敬茶是中国的传统礼节。双手端茶，轻道一声请用茶，充满温情与敬意。",
+    text_pinyin: "Kè lái jìng chá shì Zhōngguó de chuántǒng lǐjié. Shuāngshǒu duān chá, qīng dào yì shēng qǐng yòng chá, chōngmǎn wēnqíng yǔ jìngyì.",
+    text_en: "Serving tea to guests is a cherished Chinese tradition. Present the cup with both hands to show warmth and respect.",
+    text_my: "ဧည့်သည်ကို လက်ဖက်ရည် တည်ခင်းခြင်းသည် တရုတ်ရိုးရာယဉ်ကျေးမှုဖြစ်သည်။ လက်နှစ်ဖက်ဖြင့် ကမ်းပေးပြီး ရိုသေလေးစားမှုကို ပြသသည်။"
+  },
+  {
+    id: "story_01",
+    type: "story",
+    holiday_id: "daily",
+    title: "小明的一天 - Xiaoming's Day",
+    video_path: "assets/video/lesson-01.mp4",
+    thumbnail_path: "assets/images/story-poster.jpg",
+    duration_sec: 45,
+    status: "active",
+    text_cn: "小明早上七点起床。他洗脸刷牙。他吃早饭。然后，他去学校。他很开心。",
+    text_pinyin: "Xiǎomíng zǎoshang qī diǎn qǐchuáng. Tā xǐliǎn shuāyá. Tā chī zǎofàn. Ránhòu, tā qù xuéxiào. Tā hěn kāixīn.",
+    text_en: "Xiaoming gets up at seven in the morning. He washes his face and brushes his teeth. He eats breakfast. Then he goes to school. He is very happy.",
+    text_my: "ရှောင်မင်း မနက် ၇ နာရီမှာ အိပ်ရာထပါတယ်။ မျက်နှာသစ် သွားတိုက်ပြီး မနက်စာ စားပါတယ်။ ပြီးတော့ ကျောင်းသွားပါတယ်။ သူ အရမ်း ပျော်ရွှင်နေပါတယ်။"
+  },
+  {
+    id: "story_02",
+    type: "story",
+    holiday_id: "daily",
+    title: "小明买水果 - Xiaoming Buys Fruit",
+    video_path: "assets/video/lesson-01.mp4",
+    thumbnail_path: "assets/images/story2-poster.jpg",
+    duration_sec: 50,
+    status: "active",
+    text_cn: "今天天气真好！小明去水果市场。市场里有很多新鲜的红苹果。他买了三个大苹果。苹果又甜又好吃，他真开心！",
+    text_pinyin: "Jīntiān tiānqì zhēn hǎo! Xiǎomíng qù shuǐguǒ shìchǎng. Shìchǎng lǐ yǒu hěn duō xīnxiān de hóng píngguǒ. Tā mǎi le sān gè dà píngguǒ. Píngguǒ yòu tián yòu hǎochī, tā zhēn kāixīn!",
+    text_en: "The weather is great today! Xiaoming goes to the fruit market. There are many fresh red apples in the market. He bought three big apples. The apples are sweet and delicious, he is very happy!",
+    text_my: "ဒီနေ့ ရာသီဥတု သိပ်ကောင်းတယ်! ရှောင်မင်း သစ်သီးဈေးကို သွားပါတယ်။ ဈေးထဲမှာ လတ်ဆတ်တဲ့ ပန်းသီးနီတွေ အများကြီးရှိတယ်။ သူ ပန်းသီးကြီး ၃ လုံး ဝယ်ခဲ့ပါတယ်။ ပန်းသီးတွေက ချိုပြီး အရသာရှိလို့ သူ အရမ်း ပျော်ရွှင်နေပါတယ်။"
+  }
+];
+
+let allLoadedVideos = [];
+let currentReelCategory = "all";
+let currentActiveReelItem = null;
+
+const subtitlePreferences = {
+  cn: true,
+  pinyin: true,
+  en: true,
+  my: true
+};
+
+// Category Info & Tag Mapping Helper
+function getHolidayCategoryInfo(holidayId) {
+  const norm = String(holidayId || "").trim().toLowerCase();
+  switch (norm) {
+    case "cny":
+      return { label: "Spring Festival", badgeText: "🏮 CNY", filterGroup: "holidays", bgClass: "badge-cny" };
+    case "lantern":
+      return { label: "Lantern Festival", badgeText: "🏮 Lantern", filterGroup: "holidays", bgClass: "badge-lantern" };
+    case "dragonboat":
+      return { label: "Dragon Boat", badgeText: "🚣 Dragon Boat", filterGroup: "holidays", bgClass: "badge-dragonboat" };
+    case "midautumn":
+      return { label: "Mid-Autumn", badgeText: "🥮 Moon Fest", filterGroup: "holidays", bgClass: "badge-midautumn" };
+    case "qixi":
+      return { label: "Qixi Festival", badgeText: "✨ Qixi", filterGroup: "holidays", bgClass: "badge-qixi" };
+    case "qingming":
+      return { label: "Qingming", badgeText: "🌿 Qingming", filterGroup: "holidays", bgClass: "badge-qingming" };
+    case "daily":
+      return { label: "Daily Chinese", badgeText: "💬 Daily", filterGroup: "daily", bgClass: "badge-daily" };
+    case "kids":
+      return { label: "Kids & Fun", badgeText: "🐼 Kids", filterGroup: "kids", bgClass: "badge-kids" };
+    case "grammar":
+      return { label: "Grammar & Tones", badgeText: "🎼 Grammar", filterGroup: "grammar", bgClass: "badge-grammar" };
+    case "culture":
+      return { label: "Culture & Customs", badgeText: "🍵 Culture", filterGroup: "culture", bgClass: "badge-culture" };
+    default:
+      return { label: "Short Reel", badgeText: "🎬 Reel", filterGroup: "all", bgClass: "badge-default" };
+  }
+}
+
+// Favorite persistence helpers
+function getFavoriteReelIds() {
+  try {
+    const raw = localStorage.getItem(REELS_STORAGE_FAVORITES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function isReelFavorited(id) {
+  const favs = getFavoriteReelIds();
+  return favs.includes(String(id));
+}
+
+function toggleReelFavorite(id) {
+  let favs = getFavoriteReelIds();
+  const idStr = String(id);
+  const isFav = favs.includes(idStr);
+  if (isFav) {
+    favs = favs.filter(x => x !== idStr);
+  } else {
+    favs.push(idStr);
+  }
+  try {
+    localStorage.setItem(REELS_STORAGE_FAVORITES_KEY, JSON.stringify(favs));
+  } catch (e) {}
+  return !isFav;
+}
+
+// Share helper with Clipboard & Toast
+async function shareReelItem(item) {
+  const url = `${window.location.origin}${window.location.pathname}?tab=reels&reel=${encodeURIComponent(item.id)}`;
+  const shareData = {
+    title: `LinguaPath Reel: ${item.title || "Mandarin Short Video"}`,
+    text: `Watch "${item.title || "Chinese Short Reel"}" on LinguaPath!`,
+    url: url
+  };
+
+  if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+    try {
+      await navigator.share(shareData);
+      return;
+    } catch (e) {
+      /* User cancelled or fallback */
+    }
+  }
+
+  // Fallback: Copy to clipboard
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(url);
+      showInAppReminderToast("Link Copied! 🔗", "Reel link copied to your clipboard.");
+    } else {
+      const input = document.createElement("input");
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      showInAppReminderToast("Link Copied! 🔗", "Reel link copied to your clipboard.");
+    }
+  } catch (err) {
+    showInAppReminderToast("Reel Link", url);
+  }
+}
+
+// Tab Switching
+function switchStoriesReelsTab(tabName, updateUrl = true) {
+  const tabBtnStories = document.getElementById("tabBtnStories");
+  const tabBtnReels = document.getElementById("tabBtnReels");
+  const storiesView = document.getElementById("stories-view");
+  const reelsView = document.getElementById("reels-view");
+
+  if (!tabBtnStories || !tabBtnReels || !storiesView || !reelsView) return;
+
+  const isReels = tabName === "reels";
+
+  if (isReels) {
+    tabBtnReels.classList.add("active");
+    tabBtnReels.setAttribute("aria-selected", "true");
+    tabBtnStories.classList.remove("active");
+    tabBtnStories.setAttribute("aria-selected", "false");
+
+    storiesView.style.display = "none";
+    storiesView.classList.remove("active");
+    reelsView.style.display = "block";
+    reelsView.classList.add("active");
+
+    // Pause story video & audio if playing
+    stopCurrentStoryAudio();
+    const storyVideo = document.getElementById("lessonVideo");
+    if (storyVideo && !storyVideo.paused) {
+      storyVideo.pause();
+    }
+  } else {
+    tabBtnStories.classList.add("active");
+    tabBtnStories.setAttribute("aria-selected", "true");
+    tabBtnReels.classList.remove("active");
+    tabBtnReels.setAttribute("aria-selected", "false");
+
+    storiesView.style.display = "block";
+    storiesView.classList.add("active");
+    reelsView.style.display = "none";
+    reelsView.classList.remove("active");
+
+    // Pause reel modal video if playing
+    closeReelModalPlayer();
+  }
+
+  if (updateUrl && window.history && window.history.replaceState) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", isReels ? "reels" : "stories");
+    window.history.replaceState(null, "", url.toString());
+  }
+}
+
+// Category Filter for Reels Grid
+function setReelCategoryFilter(category, updateUrl = true) {
+  currentReelCategory = category || "all";
+
+  // Update active chip
+  const chips = document.querySelectorAll("#reelsFilterChips .filter-chip");
+  chips.forEach(chip => {
+    chip.classList.toggle("active", chip.dataset.filter === currentReelCategory);
+  });
+
+  renderFilteredReelsGrid();
+
+  if (updateUrl && window.history && window.history.replaceState) {
+    const url = new URL(window.location.href);
+    if (currentReelCategory === "all") {
+      url.searchParams.delete("filter");
+    } else {
+      url.searchParams.set("filter", currentReelCategory);
+    }
+    window.history.replaceState(null, "", url.toString());
+  }
+}
+
+function renderFilteredReelsGrid() {
+  const container = document.getElementById("reelsVideoGrid");
+  const countInfo = document.getElementById("reelsCountInfo");
+  const emptyState = document.getElementById("reelsEmptyState");
+  if (!container) return;
+
+  const holidayList = ["cny", "lantern", "dragonboat", "midautumn", "qixi", "qingming"];
+
+  // Filter active reels
+  const reels = allLoadedVideos.filter(item => {
+    const type = String(item.type || "").trim().toLowerCase();
+    const status = String(item.status || "active").trim().toLowerCase();
+    if (type !== "reel" || status !== "active") return false;
+
+    const holId = String(item.holiday_id || "").trim().toLowerCase();
+
+    if (currentReelCategory === "all") return true;
+    if (currentReelCategory === "holidays") return holidayList.includes(holId);
+    if (currentReelCategory === "daily") return holId === "daily";
+    if (currentReelCategory === "kids") return holId === "kids";
+    if (currentReelCategory === "grammar") return holId === "grammar";
+    if (currentReelCategory === "culture") return holId === "culture";
+    return holId === currentReelCategory;
+  });
+
+  if (countInfo) {
+    countInfo.innerHTML = `Showing <strong>${reels.length}</strong> ${currentReelCategory === "all" ? "active reels" : `${currentReelCategory} videos`}`;
+  }
+
+  if (reels.length === 0) {
+    container.innerHTML = "";
+    if (emptyState) emptyState.style.display = "block";
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = "none";
+  container.innerHTML = "";
+
+  reels.forEach(item => {
+    const card = createReelCardElement(item);
+    container.appendChild(card);
+  });
+}
+
+function createReelCardElement(item) {
+  const card = document.createElement("article");
+  card.className = "reel-video-card";
+  card.id = `reel-card-${item.id}`;
+  card.setAttribute("tabindex", "0");
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", `Play short reel: ${item.title || "Mandarin Reel"}`);
+
+  const catInfo = getHolidayCategoryInfo(item.holiday_id);
+  const durationText = item.duration_sec ? `${item.duration_sec}s` : "15s";
+  const isFav = isReelFavorited(item.id);
+
+  const thumbSrc = item.thumbnail_path || "assets/images/story-poster.jpg";
+  const videoSrc = item.video_path || "assets/video/lesson-01.mp4";
+
+  card.innerHTML = `
+    <div class="reel-card-thumb-wrap">
+      <img
+        src="${escapeHTML(thumbSrc)}"
+        alt="${escapeHTML(item.title || "Reel thumbnail")}"
+        class="reel-card-thumb-img"
+        loading="lazy"
+        onerror="this.onerror=null;this.src='assets/images/story-poster.jpg';"
+      />
+
+      <div class="reel-card-overlay-gradient"></div>
+
+      <!-- Floating Badges -->
+      <div class="reel-card-top-badges">
+        <span class="reel-card-category-badge ${catInfo.bgClass}">${escapeHTML(catInfo.badgeText)}</span>
+        <span class="reel-card-duration-badge">⏱ ${escapeHTML(durationText)}</span>
+      </div>
+
+      <!-- Center Play Icon with Animation -->
+      <div class="reel-card-play-btn" aria-hidden="true">
+        <span class="play-triangle">▶</span>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="reel-card-quick-actions">
+        <button
+          type="button"
+          class="btn-reel-mini-action btn-reel-like ${isFav ? "active" : ""}"
+          data-reel-id="${escapeHTML(item.id)}"
+          aria-label="${isFav ? "Remove from Favorites" : "Add to Favorites"}"
+          title="Favorite"
+        >
+          <span class="like-heart">${isFav ? "❤️" : "🤍"}</span>
+        </button>
+
+        <button
+          type="button"
+          class="btn-reel-mini-action btn-reel-share"
+          data-reel-id="${escapeHTML(item.id)}"
+          aria-label="Share this reel"
+          title="Share"
+        >
+          <span>🔗</span>
+        </button>
+      </div>
+
+      <!-- Card Caption Info at Bottom -->
+      <div class="reel-card-bottom-info">
+        <h3 class="reel-card-title">${escapeHTML(item.title || "Mandarin Short")}</h3>
+        <p class="reel-card-pinyin">${escapeHTML(item.text_pinyin || "")}</p>
+        <p class="reel-card-snippet">${escapeHTML(item.text_en || item.text_cn || "")}</p>
+      </div>
+    </div>
+  `;
+
+  // Open modal on card click (unless clicking mini actions)
+  card.addEventListener("click", (e) => {
+    if (e.target.closest(".btn-reel-mini-action")) return;
+    openReelModalPlayer(item);
+  });
+
+  card.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      if (e.target.closest(".btn-reel-mini-action")) return;
+      e.preventDefault();
+      openReelModalPlayer(item);
+    }
+  });
+
+  // Like button
+  const likeBtn = card.querySelector(".btn-reel-like");
+  if (likeBtn) {
+    likeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const newStatus = toggleReelFavorite(item.id);
+      likeBtn.classList.toggle("active", newStatus);
+      const heart = likeBtn.querySelector(".like-heart");
+      if (heart) heart.textContent = newStatus ? "❤️" : "🤍";
+      showInAppReminderToast(
+        newStatus ? "Added to Favorites ❤️" : "Removed from Favorites",
+        `"${item.title}" saved to your personal study list.`
+      );
+    });
+  }
+
+  // Share button
+  const shareBtn = card.querySelector(".btn-reel-share");
+  if (shareBtn) {
+    shareBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      shareReelItem(item);
+    });
+  }
+
+  return card;
+}
+
+// Modal Video Player with Quad-Language Subtitles
+function openReelModalPlayer(item) {
+  if (!item) return;
+  currentActiveReelItem = item;
+
+  const modal = document.getElementById("reelPlayerModal");
+  const video = document.getElementById("reelModalVideo");
+  const title = document.getElementById("reelModalTitle");
+  const badge = document.getElementById("reelModalBadge");
+  const duration = document.getElementById("reelModalDuration");
+  const subCn = document.getElementById("reelSubCn");
+  const subPinyin = document.getElementById("reelSubPinyin");
+  const subEn = document.getElementById("reelSubEn");
+  const subMy = document.getElementById("reelSubMy");
+  const likeBtn = document.getElementById("reelModalLikeBtn");
+  const likeIcon = document.getElementById("reelModalLikeIcon");
+  const likeLabel = document.getElementById("reelModalLikeLabel");
+
+  if (!modal || !video) return;
+
+  // Stop background narration / audio
+  stopCurrentStoryAudio();
+
+  const catInfo = getHolidayCategoryInfo(item.holiday_id);
+  if (title) title.textContent = item.title || "Mandarin Short Reel";
+  if (badge) {
+    badge.textContent = catInfo.badgeText;
+    badge.className = `reel-badge-pill ${catInfo.bgClass}`;
+  }
+  if (duration) duration.textContent = item.duration_sec ? `${item.duration_sec}s` : "15s";
+
+  // Subtitles
+  if (subCn) subCn.textContent = item.text_cn || "";
+  if (subPinyin) subPinyin.textContent = item.text_pinyin || "";
+  if (subEn) subEn.textContent = item.text_en || "";
+  if (subMy) subMy.textContent = item.text_my || "";
+
+  applySubtitleToggles();
+
+  // Favorite button state
+  const isFav = isReelFavorited(item.id);
+  if (likeBtn) {
+    likeBtn.classList.toggle("active", isFav);
+    if (likeIcon) likeIcon.textContent = isFav ? "❤️" : "🤍";
+    if (likeLabel) likeLabel.textContent = isFav ? "Favorited" : "Favorite";
+  }
+
+  // Set video source and play
+  const videoSrc = item.video_path || "assets/video/lesson-01.mp4";
+  const posterSrc = item.thumbnail_path || "assets/images/story-poster.jpg";
+
+  video.poster = posterSrc;
+  if (video.src !== videoSrc && !video.src.endsWith(videoSrc)) {
+    video.src = videoSrc;
+  }
+  video.currentTime = 0;
+  video.play().catch(() => {});
+
+  modal.classList.add("active");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+}
+
+function closeReelModalPlayer() {
+  const modal = document.getElementById("reelPlayerModal");
+  const video = document.getElementById("reelModalVideo");
+  if (!modal) return;
+
+  if (video) {
+    video.pause();
+  }
+
+  modal.classList.remove("active");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+}
+
+function applySubtitleToggles() {
+  const subCn = document.getElementById("reelSubCn");
+  const subPinyin = document.getElementById("reelSubPinyin");
+  const subEn = document.getElementById("reelSubEn");
+  const subMy = document.getElementById("reelSubMy");
+
+  if (subCn) subCn.style.display = subtitlePreferences.cn ? "block" : "none";
+  if (subPinyin) subPinyin.style.display = subtitlePreferences.pinyin ? "block" : "none";
+  if (subEn) subEn.style.display = subtitlePreferences.en ? "block" : "none";
+  if (subMy) subMy.style.display = subtitlePreferences.my ? "block" : "none";
+
+  document.querySelectorAll(".sub-chip").forEach(chip => {
+    const lang = chip.dataset.lang;
+    if (lang && typeof subtitlePreferences[lang] !== "undefined") {
+      chip.classList.toggle("active", subtitlePreferences[lang]);
+    }
+  });
+}
+
+// Load Videos from Excel (Sheet: Videos in data/reels_stories.xlsx)
+async function loadReelsAndStoriesWorkbook() {
+  let loaded = false;
+
+  // Strategy 1: Direct Excel parsing via SheetJS (XLSX)
+  if (typeof XLSX !== "undefined") {
+    try {
+      const response = await fetch(`${REELS_EXCEL_FILE}?t=${Date.now()}`);
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const wb = XLSX.read(arrayBuffer, { type: "array" });
+        if (wb && wb.SheetNames && wb.SheetNames.includes("Videos")) {
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets["Videos"], { defval: "" });
+          if (rows && rows.length > 0) {
+            allLoadedVideos = rows;
+            loaded = true;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Client XLSX parse for reels_stories.xlsx note:", e);
+    }
+  }
+
+  // Strategy 2: Server API endpoint /api/reels-stories-data
+  if (!loaded) {
+    try {
+      const apiRes = await fetch(`/api/reels-stories-data?t=${Date.now()}`);
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        if (data && data.sheets && data.sheets.Videos && data.sheets.Videos.length > 0) {
+          allLoadedVideos = data.sheets.Videos;
+          loaded = true;
+        }
+      }
+    } catch (e) {
+      console.warn("Server API fallback for reels_stories note:", e);
+    }
+  }
+
+  // Strategy 3: Static JSON file data/reels_stories.json
+  if (!loaded) {
+    try {
+      const jsonRes = await fetch(`data/reels_stories.json?t=${Date.now()}`);
+      if (jsonRes.ok) {
+        const jsonData = await jsonRes.json();
+        if (jsonData && jsonData.sheets && jsonData.sheets.Videos && jsonData.sheets.Videos.length > 0) {
+          allLoadedVideos = jsonData.sheets.Videos;
+          loaded = true;
+        }
+      }
+    } catch (e) {
+      console.warn("Static JSON fallback for reels_stories note:", e);
+    }
+  }
+
+  // Strategy 4: Embedded Fallback Dataset
+  if (!loaded || !allLoadedVideos.length) {
+    allLoadedVideos = FALLBACK_REELS_DATA;
+    loaded = true;
+  }
+
+  renderFilteredReelsGrid();
+
+  // Check URL parameters for deep linking
+  handleUrlDeepLinking();
+}
+
+function handleUrlDeepLinking() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const tabParam = urlParams.get("tab");
+  const filterParam = urlParams.get("filter");
+  const reelParam = urlParams.get("reel");
+
+  if (tabParam === "reels" || filterParam || reelParam || window.location.hash === "#reels") {
+    switchStoriesReelsTab("reels", false);
+
+    if (filterParam) {
+      setReelCategoryFilter(filterParam, false);
+    }
+
+    if (reelParam) {
+      const foundReel = allLoadedVideos.find(x => String(x.id).toLowerCase() === String(reelParam).toLowerCase());
+      if (foundReel) {
+        setTimeout(() => openReelModalPlayer(foundReel), 200);
+      }
+    }
+  } else {
+    switchStoriesReelsTab("stories", false);
+  }
+}
+
+function initStoriesAndReelsSystem() {
+  // Tab switch buttons
+  const tabBtnStories = document.getElementById("tabBtnStories");
+  const tabBtnReels = document.getElementById("tabBtnReels");
+
+  if (tabBtnStories) {
+    tabBtnStories.addEventListener("click", () => switchStoriesReelsTab("stories"));
+  }
+  if (tabBtnReels) {
+    tabBtnReels.addEventListener("click", () => switchStoriesReelsTab("reels"));
+  }
+
+  // Category filter chips
+  const chips = document.querySelectorAll("#reelsFilterChips .filter-chip");
+  chips.forEach(chip => {
+    chip.addEventListener("click", () => {
+      setReelCategoryFilter(chip.dataset.filter || "all");
+    });
+  });
+
+  const resetBtn = document.getElementById("resetFilterBtn");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      setReelCategoryFilter("all");
+    });
+  }
+
+  // Modal player event handlers
+  const closeReelModalBtn = document.getElementById("closeReelModalBtn");
+  const reelPlayerModal = document.getElementById("reelPlayerModal");
+  const reelLikeBtn = document.getElementById("reelModalLikeBtn");
+  const reelShareBtn = document.getElementById("reelModalShareBtn");
+  const reelReplayBtn = document.getElementById("reelModalReplayBtn");
+  const reelVideo = document.getElementById("reelModalVideo");
+
+  if (closeReelModalBtn) {
+    closeReelModalBtn.addEventListener("click", closeReelModalPlayer);
+  }
+
+  if (reelPlayerModal) {
+    reelPlayerModal.addEventListener("click", (e) => {
+      if (e.target === reelPlayerModal) {
+        closeReelModalPlayer();
+      }
+    });
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && reelPlayerModal && reelPlayerModal.classList.contains("active")) {
+      closeReelModalPlayer();
+    }
+  });
+
+  if (reelLikeBtn) {
+    reelLikeBtn.addEventListener("click", () => {
+      if (!currentActiveReelItem) return;
+      const isFav = toggleReelFavorite(currentActiveReelItem.id);
+      reelLikeBtn.classList.toggle("active", isFav);
+      const icon = document.getElementById("reelModalLikeIcon");
+      const label = document.getElementById("reelModalLikeLabel");
+      if (icon) icon.textContent = isFav ? "❤️" : "🤍";
+      if (label) label.textContent = isFav ? "Favorited" : "Favorite";
+
+      // Also update any card in background
+      const cardLike = document.querySelector(`#reel-card-${currentActiveReelItem.id} .btn-reel-like`);
+      if (cardLike) {
+        cardLike.classList.toggle("active", isFav);
+        const heart = cardLike.querySelector(".like-heart");
+        if (heart) heart.textContent = isFav ? "❤️" : "🤍";
+      }
+
+      showInAppReminderToast(
+        isFav ? "Saved to Favorites ❤️" : "Removed from Favorites",
+        `"${currentActiveReelItem.title}" updated in your collection.`
+      );
+    });
+  }
+
+  if (reelShareBtn) {
+    reelShareBtn.addEventListener("click", () => {
+      if (currentActiveReelItem) {
+        shareReelItem(currentActiveReelItem);
+      }
+    });
+  }
+
+  if (reelReplayBtn && reelVideo) {
+    reelReplayBtn.addEventListener("click", () => {
+      reelVideo.currentTime = 0;
+      reelVideo.play().catch(() => {});
+    });
+  }
+
+  // Subtitle Language toggle chips
+  document.querySelectorAll(".sub-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const lang = chip.dataset.lang;
+      if (lang && typeof subtitlePreferences[lang] !== "undefined") {
+        subtitlePreferences[lang] = !subtitlePreferences[lang];
+        applySubtitleToggles();
+      }
+    });
+  });
+
+  // Load workbook data
+  loadReelsAndStoriesWorkbook();
+}
+
+
+/* =========================================================
    START
    ========================================================= */
 
@@ -3035,5 +3818,6 @@ document.addEventListener(
     setupReminderUI();
     startDailyReminderScheduler();
     loadStoryLesson();
+    initStoriesAndReelsSystem();
   }
 );

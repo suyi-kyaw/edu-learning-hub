@@ -1,0 +1,149 @@
+{
+  "sheetNames": [
+    "Videos"
+  ],
+  "sheets": {
+    "Videos": [
+      {
+        "id": "cny_01",
+        "type": "reel",
+        "holiday_id": "cny",
+        "title": "红包拿来 - Red Packet Tradition",
+        "video_path": "assets/video/Reels Red Envelope.mp4",
+        "thumbnail_path": "assets/images/story-poster.jpg",
+        "duration_sec": 15,
+        "status": "active",
+        "text_cn": "过年好！恭喜发财，红包拿来！祝你新年快乐，身体健康，万事如意！",
+        "text_pinyin": "Guònián hǎo! Gōngxǐ fācái, hóngbāo nálái! Zhù nǐ xīnnián kuàilè, shēntǐ jiànkāng, wànshì rúyì!",
+        "text_en": "Happy New Year! Wishing you prosperity, hand over the red envelope! Happy New Year, good health, and may all your wishes come true!",
+        "text_my": "နှစ်သစ်မှာ မင်္ဂလာပါ! စီးပွားဥစ္စာ တိုးတက်ပါစေ၊ အင်ပါအိုနီပေးပါ! နှစ်သစ်မှာ ပျော်ရွှင်ပါစေ၊ ကျန်းမာပါစေ၊ လိုအင်ဆန္ဒ ပြည့်ဝပါစေ!"
+      },
+      {
+        "id": "lantern_01",
+        "type": "reel",
+        "holiday_id": "lantern",
+        "title": "元宵吃汤圆 - Lantern Festival Sweet Dumplings",
+        "video_path": "assets/video/lesson-01.mp4",
+        "thumbnail_path": "assets/images/story-01.jpg",
+        "duration_sec": 12,
+        "status": "active",
+        "text_cn": "元宵节快乐！我们要吃甜甜的汤圆，猜灯谜，赏花灯，团团圆圆！",
+        "text_pinyin": "Yuánxiāojié kuàilè! Wǒmen yào chī tiántián de tāngyuán, cāi dēngmí, shǎng huādēng, tuántuán yuányuán!",
+        "text_en": "Happy Lantern Festival! We eat sweet rice balls, guess lantern riddles, and enjoy colorful lanterns with family!",
+        "text_my": "မီးထွန်းပွဲတော် မင်္ဂလာပါ! အချိုလုံးစားကြမယ်၊ မီးပဟေဠိ ဖြေကြမယ်၊ မိသားစု စုံစုံလင်လင် ဆုံကြမယ်!"
+      },
+      {
+        "id": "dragonboat_01",
+        "type": "reel",
+        "holiday_id": "dragonboat",
+        "title": "端午安康 - Dragon Boat & Zongzi",
+        "video_path": "assets/video/Reels Red Envelope.mp4",
+        "thumbnail_path": "assets/images/story2-poster.jpg",
+        "duration_sec": 18,
+        "status": "active",
+        "text_cn": "端午节安康！划龙舟，吃香甜的粽子，佩香囊，平平安安！",
+        "text_pinyin": "Duānwǔjié ānkāng! Huá lóngzhōu, chī xiāngtián de zòngzi, pèi xiāngnáng, píngpíng ān'ān!",
+        "text_en": "Wishing you health on Dragon Boat Festival! Row dragon boats, eat delicious sticky rice dumplings, and stay safe!",
+        "text_my": "နဂါးလှေပွဲတော် ကျန်းမာပါစေ! နဂါးလှေပြိုင်ကြမယ်၊ ကောက်ညှင်းထုပ် စားကြမယ်၊ အေးချမ်းသာယာပါစေ!"
+      },
+      {
+        "id": "midautumn_01",
+        "type": "reel",
+        "holiday_id": "midautumn",
+        "title": "中秋赏月 - Mid-Autumn Moon Festival",
+        "video_path": "assets/video/lesson-01.mp4",
+        "thumbnail_path": "assets/images/story2-01.jpg",
+        "duration_sec": 15,
+        "status": "active",
+        "text_cn": "中秋节快乐！但愿人长久，千里共婵娟。一起吃月饼，看明亮的满月。",
+        "text_pinyin": "Zhōngqiūjié kuàilè! Dànyuàn rén chángjiǔ, qiānlǐ gòng chánjuān. Yìqǐ chī yuèbǐng, kàn míngliàng de mǎnyuè.",
+        "text_en": "Happy Mid-Autumn Festival! May we share the moon's beauty across miles. Let's eat mooncakes and admire the full moon.",
+        "text_my": "လပြည့်ညပွဲတော် မင်္ဂလာပါ! လမုန့်စားရင်း လပြည့်ဝန်းကို အတူကြည့်ကြမယ်။ အဝေးရောက် ချစ်ခင်သူများနဲ့အတူ ကြည်နူးရပါစေ။"
+      },
+      {
+        "id": "daily_01",
+        "type": "reel",
+        "holiday_id": "daily",
+        "title": "早安打招呼 - Morning Greetings",
+        "video_path": "assets/video/lesson-01.mp4",
+        "thumbnail_path": "assets/images/story-02.jpg",
+        "duration_sec": 10,
+        "status": "active",
+        "text_cn": "早上好！今天天气真好，你吃早饭了吗？祝你有美好的一天！",
+        "text_pinyin": "Zǎoshang hǎo! Jīntiān tiānqì zhēn hǎo, nǐ chī zǎofàn le ma? Zhù nǐ yǒu měihǎo de yì tiān!",
+        "text_en": "Good morning! The weather is lovely today, have you eaten breakfast? Have a wonderful day!",
+        "text_my": "မင်္ဂလာနံနက်ခင်းပါ! ဒီနေ့ ရာသီဥတု သိပ်ကောင်းတယ်၊ မနက်စာ စားပြီးပြီလား? ကောင်းသောနေ့လေး ဖြစ်ပါစေ!"
+      },
+      {
+        "id": "kids_01",
+        "type": "reel",
+        "holiday_id": "kids",
+        "title": "动物朋友 - Animal Names for Kids",
+        "video_path": "assets/video/Reels Red Envelope.mp4",
+        "thumbnail_path": "assets/images/story-03.jpg",
+        "duration_sec": 14,
+        "status": "active",
+        "text_cn": "小猫喵喵叫，小狗汪汪叫，大熊猫爱吃竹子，小兔子跳呀跳！",
+        "text_pinyin": "Xiǎomāo miāomiāo jiào, xiǎogǒu wāngwāng jiào, dàxióngmāo ài chī zhúzi, xiǎotùzi tiào ya tiào!",
+        "text_en": "Kittens meow, puppies bark, giant pandas love eating bamboo, and bunnies hop around!",
+        "text_my": "ကြောင်ကလေး မြောင်မြောင်အော်၊ ခွေးကလေး ဝုတ်ဝုတ်ဟောင်၊ ပန်ဒါဝက်ဝံ ဝါးပင်စား၊ ယုန်ကလေး ခုန်ဆွခုန်ဆွ!"
+      },
+      {
+        "id": "grammar_01",
+        "type": "reel",
+        "holiday_id": "grammar",
+        "title": "四声歌 - Mastering the 4 Chinese Tones",
+        "video_path": "assets/video/lesson-01.mp4",
+        "thumbnail_path": "assets/images/story2-03.jpg",
+        "duration_sec": 20,
+        "status": "active",
+        "text_cn": "一声高高平又平，二声由低往上升，三声先降然后再扬起，四声重重从高降到低！",
+        "text_pinyin": "Yī shēng gāogāo píng yòu píng, èr shēng yóu dī wǎngshàng shēng, sān shēng xiān jiàng ránhòu zài yángqǐ, sì shēng zhòngzhòng cóng gāo jiàng dào dī!",
+        "text_en": "1st tone is high and flat, 2nd tone rises, 3rd tone dips then climbs, 4th tone drops sharply!",
+        "text_my": "အသံထွက် ၁ က မြင့်ပြီးညီတယ်၊ အသံ ၂ က အောက်ကနေ အပေါ်တက်တယ်၊ အသံ ၃ က ဆင်းပြီးမှ ပြန်တက်တယ်၊ အသံ ၄ က အမြင့်ကနေ ပြတ်ပြတ်ဆင်းတယ်!"
+      },
+      {
+        "id": "culture_01",
+        "type": "reel",
+        "holiday_id": "culture",
+        "title": "中国茶道 - Chinese Tea Etiquette",
+        "video_path": "assets/video/Reels Red Envelope.mp4",
+        "thumbnail_path": "assets/images/story-04.jpg",
+        "duration_sec": 16,
+        "status": "active",
+        "text_cn": "客来敬茶是中国的传统礼节。双手端茶，轻道一声请用茶，充满温情与敬意。",
+        "text_pinyin": "Kè lái jìng chá shì Zhōngguó de chuántǒng lǐjié. Shuāngshǒu duān chá, qīng dào yì shēng qǐng yòng chá, chōngmǎn wēnqíng yǔ jìngyì.",
+        "text_en": "Serving tea to guests is a cherished Chinese tradition. Present the cup with both hands to show warmth and respect.",
+        "text_my": "ဧည့်သည်ကို လက်ဖက်ရည် တည်ခင်းခြင်းသည် တရုတ်ရိုးရာယဉ်ကျေးမှုဖြစ်သည်။ လက်နှစ်ဖက်ဖြင့် ကမ်းပေးပြီး ရိုသေလေးစားမှုကို ပြသသည်။"
+      },
+      {
+        "id": "story_01",
+        "type": "story",
+        "holiday_id": "daily",
+        "title": "小明的一天 - Xiaoming's Day",
+        "video_path": "assets/video/lesson-01.mp4",
+        "thumbnail_path": "assets/images/story-poster.jpg",
+        "duration_sec": 45,
+        "status": "active",
+        "text_cn": "小明早上七点起床。他洗脸刷牙。他吃早饭。然后，他去学校。他很开心。",
+        "text_pinyin": "Xiǎomíng zǎoshang qī diǎn qǐchuáng. Tā xǐliǎn shuāyá. Tā chī zǎofàn. Ránhòu, tā qù xuéxiào. Tā hěn kāixīn.",
+        "text_en": "Xiaoming gets up at seven in the morning. He washes his face and brushes his teeth. He eats breakfast. Then he goes to school. He is very happy.",
+        "text_my": "ရှောင်မင်း မနက် ၇ နာရီမှာ အိပ်ရာထပါတယ်။ မျက်နှာသစ် သွားတိုက်ပြီး မနက်စာ စားပါတယ်။ ပြီးတော့ ကျောင်းသွားပါတယ်။ သူ အရမ်း ပျော်ရွှင်နေပါတယ်။"
+      },
+      {
+        "id": "story_02",
+        "type": "story",
+        "holiday_id": "daily",
+        "title": "小明买水果 - Xiaoming Buys Fruit",
+        "video_path": "assets/video/lesson-01.mp4",
+        "thumbnail_path": "assets/images/story2-poster.jpg",
+        "duration_sec": 50,
+        "status": "active",
+        "text_cn": "今天天气真好！小明去水果市场。市场里有很多新鲜的红苹果。他买了三个大苹果。苹果又甜又好吃，他真开心！",
+        "text_pinyin": "Jīntiān tiānqì zhēn hǎo! Xiǎomíng qù shuǐguǒ shìchǎng. Shìchǎng lǐ yǒu hěn duō xīnxiān de hóng píngguǒ. Tā mǎi le sān gè dà píngguǒ. Píngguǒ yòu tián yòu hǎochī, tā zhēn kāixīn!",
+        "text_en": "The weather is great today! Xiaoming goes to the fruit market. There are many fresh red apples in the market. He bought three big apples. The apples are sweet and delicious, he is very happy!",
+        "text_my": "ဒီနေ့ ရာသီဥတု သိပ်ကောင်းတယ်! ရှောင်မင်း သစ်သီးဈေးကို သွားပါတယ်။ ဈေးထဲမှာ လတ်ဆတ်တဲ့ ပန်းသီးနီတွေ အများကြီးရှိတယ်။ သူ ပန်းသီးကြီး ၃ လုံး ဝယ်ခဲ့ပါတယ်။ ပန်းသီးတွေက ချိုပြီး အရသာရှိလို့ သူ အရမ်း ပျော်ရွှင်နေပါတယ်။"
+      }
+    ]
+  }
+}

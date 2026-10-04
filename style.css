@@ -5991,17 +5991,6 @@ a {
   color: #38bdf8;
 }
 
-[data-theme="dark"] .demo-continue-link {
-  color: #38bdf8;
-}
-
-[data-theme="dark"] .demo-card-action {
-  border-top-color: #334155;
-}
-
-[data-theme="dark"] .dynamic-demo-content {
-  color: #f8fafc;
-}
 
 [data-theme="dark"] .everyday-item,
 [data-theme="dark"] .conversation-item {

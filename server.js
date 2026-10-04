@@ -38,6 +38,30 @@ function parseLessonsWorkbook() {
   };
 }
 
+// Helper to parse data/reels_stories.xlsx
+function parseReelsStoriesWorkbook() {
+  const excelPath = path.join(__dirname, 'data', 'reels_stories.xlsx');
+  if (!fs.existsSync(excelPath)) {
+    throw new Error('data/reels_stories.xlsx not found');
+  }
+
+  const fileBuffer = fs.readFileSync(excelPath);
+  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+  const sheets = {};
+
+  for (const sheetName of workbook.SheetNames) {
+    sheets[sheetName] = XLSX.utils.sheet_to_json(
+      workbook.Sheets[sheetName],
+      { defval: '' }
+    );
+  }
+
+  return {
+    sheetNames: workbook.SheetNames,
+    sheets
+  };
+}
+
 // Generate static data/lessons.json as a fallback cache
 function syncLessonsJson() {
   try {
@@ -50,8 +74,21 @@ function syncLessonsJson() {
   }
 }
 
+// Generate static data/reels_stories.json as a fallback cache
+function syncReelsStoriesJson() {
+  try {
+    const data = parseReelsStoriesWorkbook();
+    const jsonPath = path.join(__dirname, 'data', 'reels_stories.json');
+    fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2), 'utf8');
+    console.log('Synchronized data/reels_stories.json successfully');
+  } catch (err) {
+    console.error('Failed to sync reels_stories.json:', err.message);
+  }
+}
+
 // Initial sync
 syncLessonsJson();
+syncReelsStoriesJson();
 
 // Serve image assets with automatic SVG fallback and proper content-type
 app.use('/assets/images', (req, res, next) => {
@@ -91,6 +128,24 @@ app.get('/api/lessons-data', (req, res) => {
     });
   } catch (err) {
     console.error('API lessons-data error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
+// Serve API for Reels & Stories parsed directly from data/reels_stories.xlsx
+app.get('/api/reels-stories-data', (req, res) => {
+  try {
+    const data = parseReelsStoriesWorkbook();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.json({
+      success: true,
+      ...data
+    });
+  } catch (err) {
+    console.error('API reels-stories-data error:', err);
     res.status(500).json({
       success: false,
       error: err.message

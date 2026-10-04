@@ -240,10 +240,48 @@
 
 
   <!-- =========================
-       LESSON NAVIGATION
+       SUB-NAVIGATION TAB BAR (Stories / Reels)
   ========================== -->
+  <div class="stories-reels-tab-bar-wrap">
+    <div class="container">
+      <div class="tab-switcher" role="tablist" aria-label="Stories and Reels switcher">
+        <button
+          type="button"
+          class="tab-switch-btn active"
+          id="tabBtnStories"
+          role="tab"
+          aria-selected="true"
+          aria-controls="stories-view"
+        >
+          <span class="tab-icon" aria-hidden="true">📖</span>
+          <span class="tab-label">Stories</span>
+        </button>
+        <button
+          type="button"
+          class="tab-switch-btn"
+          id="tabBtnReels"
+          role="tab"
+          aria-selected="false"
+          aria-controls="reels-view"
+        >
+          <span class="tab-icon" aria-hidden="true">🎬</span>
+          <span class="tab-label">Short Reels</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
-  <div class="lesson-navigation">
+  <main id="mainContent">
+    <!-- =========================
+         TAB 1: STORIES VIEW
+    ========================== -->
+    <div id="stories-view" class="tab-view-panel active" role="tabpanel" aria-labelledby="tabBtnStories">
+
+      <!-- =========================
+           LESSON NAVIGATION
+      ========================== -->
+
+      <div class="lesson-navigation">
 
     <div class="container lesson-navigation-inner">
 
@@ -575,14 +613,161 @@
   </section>
 
 
-  <!-- =========================
-       STORY PAGINATION & LESSON SELECTOR
-  ========================== -->
-  <section class="story-pagination-section" id="storyPaginationSection">
-    <div class="container">
-      <div class="story-pagination-card" id="storyPaginationCard"></div>
+      <!-- =========================
+           STORY PAGINATION & LESSON SELECTOR
+      ========================== -->
+      <section class="story-pagination-section" id="storyPaginationSection">
+        <div class="container">
+          <div class="story-pagination-card" id="storyPaginationCard"></div>
+        </div>
+      </section>
+
     </div>
-  </section>
+    <!-- End of #stories-view -->
+
+
+    <!-- =========================
+         TAB 2: REELS VIEW
+    ========================== -->
+    <div id="reels-view" class="tab-view-panel" role="tabpanel" aria-labelledby="tabBtnReels" style="display: none;">
+      <!-- Reels Hero / Intro -->
+      <section class="reels-hero-section section-light">
+        <div class="container">
+          <span class="section-label">Bite-Sized Immersion</span>
+          <h1 class="reels-hero-title">Short Mandarin Reels &amp; Holiday Specials</h1>
+          <p class="reels-hero-desc">
+            Watch, listen, and repeat real-life Mandarin expressions, holiday traditions, and tone hacks in high-definition vertical video.
+          </p>
+
+          <!-- Horizontal Filter Chip Bar -->
+          <div class="reels-filter-bar-wrap" role="toolbar" aria-label="Filter Reels by category">
+            <div class="reels-filter-chips" id="reelsFilterChips">
+              <button type="button" class="filter-chip active" data-filter="all">
+                <span class="filter-chip-icon">✨</span>
+                <span>All Reels</span>
+              </button>
+              <button type="button" class="filter-chip" data-filter="holidays">
+                <span class="filter-chip-icon">🏮</span>
+                <span>Holidays &amp; Festivals</span>
+              </button>
+              <button type="button" class="filter-chip" data-filter="daily">
+                <span class="filter-chip-icon">💬</span>
+                <span>Daily Conversation</span>
+              </button>
+              <button type="button" class="filter-chip" data-filter="kids">
+                <span class="filter-chip-icon">🐼</span>
+                <span>Kids &amp; Fun</span>
+              </button>
+              <button type="button" class="filter-chip" data-filter="grammar">
+                <span class="filter-chip-icon">🎼</span>
+                <span>Grammar &amp; Tones</span>
+              </button>
+              <button type="button" class="filter-chip" data-filter="culture">
+                <span class="filter-chip-icon">🍵</span>
+                <span>Culture &amp; Customs</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Reels Video Grid Section -->
+      <section class="reels-grid-section">
+        <div class="container">
+          <div class="reels-grid-header">
+            <div class="reels-count-info" id="reelsCountInfo">Showing active reels</div>
+            <div class="reels-sync-pill">
+              <span class="sync-dot">●</span>
+              <span>data/reels_stories.xlsx</span>
+            </div>
+          </div>
+
+          <!-- 9:16 Vertical Video Grid -->
+          <div class="reels-video-grid" id="reelsVideoGrid">
+            <!-- Dynamic Reel Cards rendered by story.js -->
+          </div>
+
+          <div id="reelsEmptyState" class="reels-empty-state" style="display: none;">
+            <div class="empty-icon">🎬</div>
+            <h3>No reels found for this category</h3>
+            <p>Try selecting "All Reels" or check that your Excel file has active rows.</p>
+            <button type="button" class="btn btn-secondary btn-sm" id="resetFilterBtn">View All Reels</button>
+          </div>
+        </div>
+      </section>
+    </div>
+    <!-- End of #reels-view -->
+  </main>
+
+
+  <!-- =========================
+       REEL MODAL OVERLAY PLAYER (Quad-Language Subtitles)
+  ========================== -->
+  <div id="reelPlayerModal" class="reel-modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="reelModalTitle">
+    <div class="reel-modal-container">
+      <button type="button" class="reel-modal-close" id="closeReelModalBtn" aria-label="Close Reel Player">✕</button>
+
+      <!-- 9:16 Vertical Video Player Stage -->
+      <div class="reel-modal-stage">
+        <video
+          id="reelModalVideo"
+          class="reel-vertical-video"
+          playsinline
+          preload="auto"
+          controls
+        >
+          Your browser does not support HTML5 video.
+        </video>
+
+        <!-- Floating Category & Duration Badges -->
+        <div class="reel-modal-floating-badges">
+          <span class="reel-badge-pill" id="reelModalBadge">Holiday</span>
+          <span class="reel-duration-pill" id="reelModalDuration">15s</span>
+        </div>
+      </div>
+
+      <!-- Reel Content & Quad-Language Subtitles Box -->
+      <div class="reel-modal-content">
+        <div class="reel-modal-header">
+          <h2 id="reelModalTitle" class="reel-modal-heading">Reel Title</h2>
+          
+          <div class="reel-modal-actions-bar">
+            <button type="button" class="btn-reel-action" id="reelModalLikeBtn" aria-label="Like this reel" title="Like / Save to Favorites">
+              <span class="action-icon" id="reelModalLikeIcon">🤍</span>
+              <span class="action-label" id="reelModalLikeLabel">Favorite</span>
+            </button>
+
+            <button type="button" class="btn-reel-action" id="reelModalShareBtn" aria-label="Share this reel" title="Share Reel Link">
+              <span class="action-icon">🔗</span>
+              <span class="action-label">Share</span>
+            </button>
+
+            <button type="button" class="btn-reel-action" id="reelModalReplayBtn" aria-label="Replay Video" title="Replay">
+              <span class="action-icon">↺</span>
+              <span class="action-label">Replay</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Subtitle Language Toggles -->
+        <div class="reel-sub-toggle-bar">
+          <span class="sub-toggle-label">Subtitles:</span>
+          <button type="button" class="sub-chip active" id="toggleSubCn" data-lang="cn">🇨🇳 Hanzi</button>
+          <button type="button" class="sub-chip active" id="toggleSubPinyin" data-lang="pinyin">🔤 Pinyin</button>
+          <button type="button" class="sub-chip active" id="toggleSubEn" data-lang="en">🇬🇧 English</button>
+          <button type="button" class="sub-chip active" id="toggleSubMy" data-lang="my">🇲🇲 Myanmar</button>
+        </div>
+
+        <!-- Quad-Language Subtitle Display Box -->
+        <div class="reel-quad-subtitles" id="reelSubtitlesBox">
+          <div class="sub-line sub-line-cn" id="reelSubCn"></div>
+          <div class="sub-line sub-line-pinyin" id="reelSubPinyin"></div>
+          <div class="sub-line sub-line-en" id="reelSubEn"></div>
+          <div class="sub-line sub-line-my" id="reelSubMy"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
 
   <!-- =========================
