@@ -98,6 +98,39 @@ app.get('/api/lessons-data', (req, res) => {
   }
 });
 
+// Endpoint to upload and update data/lessons.xlsx
+app.post('/api/upload-excel', express.raw({ type: '*/*', limit: '25mb' }), (req, res) => {
+  try {
+    const excelPath = path.join(__dirname, 'data', 'lessons.xlsx');
+    if (!req.body || req.body.length === 0) {
+      return res.status(400).json({ success: false, error: 'No Excel file provided.' });
+    }
+
+    // Verify it's valid Excel data with XLSX
+    const testWorkbook = XLSX.read(req.body, { type: 'buffer' });
+    if (!testWorkbook.SheetNames || !testWorkbook.SheetNames.length) {
+      return res.status(400).json({ success: false, error: 'Invalid Excel workbook.' });
+    }
+
+    fs.writeFileSync(excelPath, req.body);
+    syncLessonsJson();
+    const data = parseLessonsWorkbook();
+
+    res.json({
+      success: true,
+      message: 'data/lessons.xlsx updated successfully!',
+      sheetNames: data.sheetNames,
+      sheets: data.sheets
+    });
+  } catch (err) {
+    console.error('API upload-excel error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
 // Serve static files from root directory
 app.use(express.static(__dirname));
 

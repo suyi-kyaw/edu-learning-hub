@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Games Arcade - LinguaPath Mandarin</title>
+  <meta name="description" content="Play interactive Mandarin games dynamically loaded from Excel. Practice Chinese tones, character recognition, pinyin, and vocabulary.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .games-hero {
+      padding: 60px 0 36px;
+      text-align: center;
+      background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 50%, #fef3c7 100%);
+      border-bottom: 1.5px solid #fed7aa;
+    }
+    [data-theme="dark"] .games-hero {
+      background: linear-gradient(135deg, #0b1120 0%, #1e1b4b 50%, #0f172a 100%);
+      border-bottom-color: #334155;
+    }
+
+    /* Excel Sync Status Toolbar */
+    .excel-sync-bar {
+      margin: 24px auto 0;
+      max-width: 820px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1.5px solid #fed7aa;
+      border-radius: 18px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      box-shadow: 0 4px 16px rgba(249, 115, 22, 0.08);
+    }
+    [data-theme="dark"] .excel-sync-bar {
+      background: rgba(30, 41, 59, 0.85);
+      border-color: #334155;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+
+    .excel-status-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #334155;
+    }
+    [data-theme="dark"] .excel-status-info {
+      color: #e2e8f0;
+    }
+
+    .excel-tag-pill {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #86efac;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    [data-theme="dark"] .excel-tag-pill {
+      background: #064e3b;
+      color: #6ee7b7;
+      border-color: #059669;
+    }
+
+    .excel-bar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-sync-action {
+      background: #ffffff;
+      border: 1.5px solid #fed7aa;
+      color: #ea580c;
+      padding: 6px 14px;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+    [data-theme="dark"] .btn-sync-action {
+      background: #1e293b;
+      border-color: #475569;
+      color: #fdba74;
+    }
+    .btn-sync-action:hover {
+      background: #ea580c;
+      color: #ffffff;
+      border-color: #ea580c;
+      transform: translateY(-1px);
+    }
+    [data-theme="dark"] .btn-sync-action:hover {
+      background: #f97316;
+      color: #ffffff;
+      border-color: #f97316;
+    }
+
+    /* Embedded Games Section & Grid */
+    .embedded-games-section {
+      padding: 50px 0 70px;
+    }
+
+    .embedded-games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      gap: 36px;
+      margin-top: 36px;
+    }
+    @media (max-width: 600px) {
+      .embedded-games-grid {
+        grid-template-columns: 1fr;
+        gap: 28px;
+      }
+    }
+
+    .embedded-game-card {
+      background: #ffffff;
+      border: 2px solid #fed7aa;
+      border-radius: 26px;
+      padding: 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      box-shadow: 0 12px 35px rgba(15, 23, 42, 0.08);
+      transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+    }
+    [data-theme="dark"] .embedded-game-card {
+      background: #1e293b;
+      border-color: #334155;
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.45);
+    }
+    .embedded-game-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 48px rgba(249, 115, 22, 0.16);
+      border-color: #f97316;
+    }
+    [data-theme="dark"] .embedded-game-card:hover {
+      border-color: #fb923c;
+      box-shadow: 0 20px 48px rgba(251, 146, 60, 0.2);
+    }
+
+    .game-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1.5px solid #ffedd5;
+      padding-bottom: 14px;
+    }
+    [data-theme="dark"] .game-card-header {
+      border-bottom-color: #334155;
+    }
+
+    .game-badge-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .game-num-badge {
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+      color: #ffffff;
+      font-size: 0.74rem;
+      font-weight: 900;
+      padding: 4px 10px;
+      border-radius: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .game-cat-badge {
+      background: #fff7ed;
+      color: #ea580c;
+      border: 1px solid #fed7aa;
+      font-size: 0.74rem;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 8px;
+    }
+    [data-theme="dark"] .game-cat-badge {
+      background: #334155;
+      color: #fdba74;
+      border-color: #475569;
+    }
+
+    .game-card-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 8px 0 4px;
+      line-height: 1.3;
+    }
+    [data-theme="dark"] .game-card-title {
+      color: #f8fafc;
+    }
+
+    .game-card-desc {
+      font-size: 0.92rem;
+      color: #64748b;
+      line-height: 1.55;
+      margin: 0;
+    }
+    [data-theme="dark"] .game-card-desc {
+      color: #94a3b8;
+    }
+
+    /* Embedded Iframe Stage */
+    .embedded-frame-stage {
+      position: relative;
+      width: 100%;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1.5px solid #fed7aa;
+      background: #0f172a;
+      min-height: 380px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+    }
+    [data-theme="dark"] .embedded-frame-stage {
+      border-color: #334155;
+      background: #0b1120;
+    }
+
+    .embedded-frame-stage iframe {
+      width: 100%;
+      max-width: 100%;
+      height: 380px;
+      border: none;
+      display: block;
+    }
+
+    /* Game Controls Footer */
+    .game-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding-top: 6px;
+    }
+
+    .game-footer-info {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    .game-footer-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-frame-tool {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      color: #475569;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.18s ease;
+      text-decoration: none;
+    }
+    [data-theme="dark"] .btn-frame-tool {
+      background: #334155;
+      border-color: #475569;
+      color: #cbd5e1;
+    }
+    .btn-frame-tool:hover {
+      background: #ea580c;
+      color: #ffffff;
+      border-color: #ea580c;
+    }
+
+    /* Modal dialogs */
+    .game-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 10020;
+    }
+    .game-modal-backdrop.active {
+      display: flex;
+    }
+    .game-modal-box {
+      background: #ffffff;
+      border-radius: 24px;
+      border: 2px solid #fed7aa;
+      max-width: 620px;
+      width: 100%;
+      padding: 32px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+      position: relative;
+    }
+    [data-theme="dark"] .game-modal-box {
+      background: #1e293b;
+      border-color: #475569;
+      color: #f8fafc;
+    }
+    .modal-close-btn {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 1px solid #cbd5e1;
+      background: #f1f5f9;
+      color: #475569;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-size: 1rem;
+      font-weight: 800;
+    }
+    [data-theme="dark"] .modal-close-btn {
+      background: #334155;
+      border-color: #475569;
+      color: #e2e8f0;
+    }
+
+    .dropzone-box {
+      border: 2px dashed #ea580c;
+      background: #fffaf5;
+      border-radius: 16px;
+      padding: 36px 20px;
+      text-align: center;
+      margin: 20px 0;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    [data-theme="dark"] .dropzone-box {
+      background: #0f172a;
+      border-color: #f97316;
+    }
+    .dropzone-box:hover, .dropzone-box.dragover {
+      background: #ffedd5;
+      border-color: #c2410c;
+    }
+    [data-theme="dark"] .dropzone-box:hover, [data-theme="dark"] .dropzone-box.dragover {
+      background: #1e293b;
+    }
+
+    .code-preview-block {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 14px 16px;
+      border-radius: 12px;
+      font-family: monospace;
+      font-size: 0.84rem;
+      overflow-x: auto;
+      margin: 12px 0;
+      border: 1px solid #334155;
+    }
+
+    /* Toast notification */
+    .sync-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0f172a;
+      color: #ffffff;
+      border: 1.5px solid #fed7aa;
+      padding: 12px 20px;
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      z-index: 10050;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 0.92rem;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .sync-toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header class="site-header">
+    <div class="container nav-container">
+      <a href="index.html" class="logo">
+        <span class="logo-chinese">语</span>
+        <span class="logo-text">LinguaPath</span>
+      </a>
+
+      <nav class="desktop-nav" aria-label="Main Navigation">
+        <a href="index.html#home" class="nav-link">Home</a>
+        <a href="index.html#stories-reels" class="nav-link">Stories &amp; Reels</a>
+        <a href="games.html" class="nav-link active">Games</a>
+        <a href="index.html#lessons" class="nav-link">Lessons</a>
+      </nav>
+
+      <div class="nav-actions">
+        <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" title="Toggle light / dark mode">
+          <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+          <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
+        </button>
+
+        <a href="index.html" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.88rem;">
+          ← Home
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Games Hero -->
+    <section class="games-hero">
+      <div class="container">
+        <span class="eyebrow">Interactive Play &amp; Recall</span>
+        <h1 style="font-size: clamp(2.3rem, 5.5vw, 3.3rem); font-weight: 900; margin: 12px 0 14px; color: #0f172a;">
+          Interactive Mandarin Games Arcade
+        </h1>
+        <p style="max-width: 680px; margin: 0 auto; font-size: 1.08rem; color: #475569; line-height: 1.6;">
+          Sharpen your Chinese pronunciation, tone recognition, and quick character recall with live interactive challenges. All embedded games are synchronized dynamically from your Excel workbook (<strong>data/lessons.xlsx</strong>).
+        </p>
+
+        <!-- Excel Sync Toolbar -->
+        <div class="excel-sync-bar">
+          <div class="excel-status-info">
+            <span class="excel-tag-pill">
+              <span>●</span> Excel Synced
+            </span>
+            <span id="excelLoadedCountText">Loading games from sheet: <strong>Games</strong>...</span>
+          </div>
+
+          <div class="excel-bar-actions">
+            <button type="button" class="btn-sync-action" id="btnRefreshExcel" title="Re-read data/lessons.xlsx from server">
+              🔄 Refresh from Excel
+            </button>
+            <button type="button" class="btn-sync-action" id="btnUploadExcelModal" title="Upload an updated lessons.xlsx">
+              📁 Replace Excel File
+            </button>
+            <button type="button" class="btn-sync-action" id="btnExcelHelpModal" title="Learn how to add embeds in Excel">
+              ℹ️ Excel Format Guide
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Embedded Games Live Section -->
+    <section class="embedded-games-section">
+      <div class="container">
+        <div class="section-heading">
+          <span class="section-label">Live Embedded Challenges</span>
+          <h2>Play &amp; Practice Wordwall Games</h2>
+          <p>
+            Engage with interactive games configured in your workbook. Edit embed links or add new ones in <code>data/lessons.xlsx</code> to update this arcade.
+          </p>
+        </div>
+
+        <!-- Dynamic Embedded Games Grid -->
+        <div class="embedded-games-grid" id="embeddedGamesContainer">
+          <!-- Game 1 (Pre-rendered fallback & default) -->
+          <article class="embedded-game-card" id="game-card-1">
+            <div class="game-card-header">
+              <div>
+                <div class="game-badge-group">
+                  <span class="game-num-badge">Game 1</span>
+                  <span class="game-cat-badge">Tone Recognition</span>
+                </div>
+                <h3 class="game-card-title">Tone Hunter — Character &amp; Tone Matcher</h3>
+                <p class="game-card-desc">Match Mandarin characters to their correct tone mark and phonetic pitch. Practice tonal accuracy and ear training.</p>
+              </div>
+            </div>
+
+            <div class="embedded-frame-stage">
+              <iframe
+                style="max-width:100%"
+                src="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0"
+                width="500"
+                height="380"
+                frameborder="0"
+                allowfullscreen
+                title="Tone Hunter Character & Tone Matcher"
+                loading="lazy"
+              ></iframe>
+            </div>
+
+            <div class="game-card-footer">
+              <span class="game-footer-info">Wordwall Interactive • Standard 500×380</span>
+              <div class="game-footer-actions">
+                <button type="button" class="btn-frame-tool btn-fs-toggle" data-target="game-card-1">⛶ Fullscreen</button>
+                <button type="button" class="btn-frame-tool btn-reload-frame" data-target="game-card-1">↺ Reload</button>
+                <a href="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0" target="_blank" rel="noopener noreferrer" class="btn-frame-tool">↗ New Tab</a>
+              </div>
+            </div>
+          </article>
+
+          <!-- Game 2 (Pre-rendered fallback & default) -->
+          <article class="embedded-game-card" id="game-card-2">
+            <div class="game-card-header">
+              <div>
+                <div class="game-badge-group">
+                  <span class="game-num-badge">Game 2</span>
+                  <span class="game-cat-badge">Rapid Recall</span>
+                </div>
+                <h3 class="game-card-title">Word Speed Quiz — Vocabulary Match</h3>
+                <p class="game-card-desc">Fast-paced Mandarin vocabulary identification. Test your speed recognition of characters, pinyin, and definitions.</p>
+              </div>
+            </div>
+
+            <div class="embedded-frame-stage">
+              <iframe
+                style="max-width:100%"
+                src="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0"
+                width="500"
+                height="380"
+                frameborder="0"
+                allowfullscreen
+                title="Word Speed Quiz Vocabulary Match"
+                loading="lazy"
+              ></iframe>
+            </div>
+
+            <div class="game-card-footer">
+              <span class="game-footer-info">Wordwall Interactive • Standard 500×380</span>
+              <div class="game-footer-actions">
+                <button type="button" class="btn-frame-tool btn-fs-toggle" data-target="game-card-2">⛶ Fullscreen</button>
+                <button type="button" class="btn-frame-tool btn-reload-frame" data-target="game-card-2">↺ Reload</button>
+                <a href="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0" target="_blank" rel="noopener noreferrer" class="btn-frame-tool">↗ New Tab</a>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div style="text-align: center; margin-top: 50px;">
+          <a href="index.html#stories-reels" class="btn btn-secondary btn-lg" style="margin-right: 12px;">← Back to Stories &amp; Reels</a>
+          <a href="index.html#lessons" class="btn btn-primary btn-lg">Explore Lessons →</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Upload / Replace Excel Modal -->
+  <div class="game-modal-backdrop" id="uploadModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
+    <div class="game-modal-box">
+      <button type="button" class="modal-close-btn" id="closeUploadModalBtn" aria-label="Close modal">✕</button>
+      <h2 id="uploadModalTitle" style="margin-top: 0; font-size: 1.5rem; font-weight: 800;">Update Excel Workbook</h2>
+      <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 16px;">
+        Upload your updated <strong>lessons.xlsx</strong> file. The app will replace <code>data/lessons.xlsx</code> on the server and immediately re-render all games from the <strong>Games</strong> sheet.
+      </p>
+
+      <div class="dropzone-box" id="excelDropzone">
+        <div style="font-size: 2.5rem; margin-bottom: 8px;">📊</div>
+        <strong style="display: block; font-size: 1.05rem; margin-bottom: 4px;">Click to select file or drag &amp; drop here</strong>
+        <span style="font-size: 0.85rem; color: #64748b;">Supports .xlsx or .xls files</span>
+        <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display: none;">
+      </div>
+
+      <div id="uploadStatusMessage" style="font-size: 0.9rem; font-weight: 700; margin-bottom: 16px; min-height: 22px;"></div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <a href="data/lessons.xlsx" download="lessons.xlsx" class="btn btn-secondary" style="font-size: 0.88rem;">
+          📥 Download Current Excel File
+        </a>
+        <button type="button" class="btn btn-secondary" id="cancelUploadBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Excel Format Guide Modal -->
+  <div class="game-modal-backdrop" id="guideModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="guideModalTitle">
+    <div class="game-modal-box" style="max-width: 680px;">
+      <button type="button" class="modal-close-btn" id="closeGuideModalBtn" aria-label="Close modal">✕</button>
+      <h2 id="guideModalTitle" style="margin-top: 0; font-size: 1.5rem; font-weight: 800;">Excel Sheet: Games</h2>
+      <p style="color: #64748b; font-size: 0.95rem;">
+        To add or edit embedded games without touching code, simply update the <strong>Games</strong> sheet in <code>data/lessons.xlsx</code>.
+      </p>
+
+      <div style="margin: 16px 0;">
+        <h4 style="margin: 0 0 8px; font-size: 1rem; color: #ea580c;">Sheet Columns:</h4>
+        <ul style="font-size: 0.9rem; color: #475569; padding-left: 20px; line-height: 1.7;">
+          <li><strong>id:</strong> Unique identifier (e.g. <code>game-01</code>, <code>game-02</code>)</li>
+          <li><strong>order:</strong> Sequence number (e.g. <code>1</code>, <code>2</code>, <code>3</code>)</li>
+          <li><strong>title:</strong> Game title displayed in the card header</li>
+          <li><strong>category:</strong> Skill tag (e.g. <code>Tone Practice</code>, <code>Vocabulary</code>)</li>
+          <li><strong>description:</strong> Short overview for the learner</li>
+          <li><strong>embed_code:</strong> Full iframe snippet (e.g. <code>&lt;iframe src="..." ...&gt;&lt;/iframe&gt;</code>)</li>
+          <li><strong>embed_url:</strong> Or raw URL (e.g. <code>https://wordwall.net/embed/...</code>)</li>
+          <li><strong>active:</strong> Set to <code>TRUE</code> to show, <code>FALSE</code> to hide</li>
+        </ul>
+      </div>
+
+      <div class="code-preview-block">
+&lt;iframe style="max-width:100%" src="https://wordwall.net/embed/..." width="500" height="380" frameborder="0" allowfullscreen&gt;&lt;/iframe&gt;
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+        <button type="button" class="btn btn-primary" id="closeGuideBtn">Got It</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="syncToast" class="sync-toast" role="status" aria-live="polite">
+    <span id="toastIcon">✅</span>
+    <span id="toastMessage">Workbook refreshed</span>
+  </div>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container footer-content">
+      <div class="footer-brand">
+        <div class="footer-logo"><span>语</span> LinguaPath</div>
+        <p>A practical path to learning Chinese.</p>
+      </div>
+      <div class="footer-links">
+        <h4 class="footer-title">Navigation</h4>
+        <a href="index.html#home">Home</a>
+        <a href="index.html#stories-reels">Stories &amp; Reels</a>
+        <a href="games.html">Games</a>
+        <a href="index.html#lessons">Lessons</a>
+        <a href="story.html">Story Lessons</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="container">
+        <p>© 2026 LinguaPath. Excel-Driven Interactive Games.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- SheetJS with local fallback -->
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script>
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"><\/script>');
+    }
+  </script>
+
+  <!-- Interactive Games & Excel Sync Logic -->
+  <script>
+    // Theme toggle
+    const themeBtn = document.getElementById('themeToggleBtn');
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    if (themeBtn) {
+      themeBtn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || 'light';
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+      });
+    }
+
+    // Toast helper
+    function showToast(message, icon = '✅') {
+      const toast = document.getElementById('syncToast');
+      const msg = document.getElementById('toastMessage');
+      const ic = document.getElementById('toastIcon');
+      if (!toast) return;
+      msg.textContent = message;
+      ic.textContent = icon;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+
+    // Helper: Extract valid src from embed_code or embed_url
+    function extractIframeSrc(codeOrUrl) {
+      if (!codeOrUrl) return '';
+      const str = String(codeOrUrl).trim();
+      if (str.startsWith('<iframe') || str.includes('<iframe')) {
+        const match = str.match(/src=["']([^"']+)["']/i);
+        if (match && match[1]) return match[1];
+      }
+      return str;
+    }
+
+    // Default Fallback Games in case Excel file is unreachable
+    const DEFAULT_GAMES = [
+      {
+        id: 'game-01',
+        order: 1,
+        title: 'Tone Hunter — Character & Tone Matcher',
+        category: 'Tone Recognition',
+        badge: 'Wordwall Challenge 1',
+        description: 'Match Mandarin characters to their correct tone mark and phonetic pitch. Practice tonal accuracy and ear training.',
+        embed_code: '<iframe style="max-width:100%" src="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0" width="500" height="380" frameborder="0" allowfullscreen></iframe>',
+        embed_url: 'https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0',
+        width: 500,
+        height: 380,
+        active: 'TRUE'
+      },
+      {
+        id: 'game-02',
+        order: 2,
+        title: 'Word Speed Quiz — Vocabulary Match',
+        category: 'Rapid Recall',
+        badge: 'Wordwall Challenge 2',
+        description: 'Fast-paced Mandarin vocabulary identification. Test your speed recognition of characters, pinyin, and definitions.',
+        embed_code: '<iframe style="max-width:100%" src="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0" width="500" height="380" frameborder="0" allowfullscreen></iframe>',
+        embed_url: 'https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0',
+        width: 500,
+        height: 380,
+        active: 'TRUE'
+      }
+    ];
+
+    // Render games into DOM
+    function renderGames(gamesList) {
+      const container = document.getElementById('embeddedGamesContainer');
+      const countText = document.getElementById('excelLoadedCountText');
+      if (!container) return;
+
+      const activeGames = gamesList.filter(g => {
+        const act = String(g.active || g.Active || 'TRUE').toUpperCase();
+        return act !== 'FALSE' && act !== '0';
+      });
+
+      if (!activeGames.length) {
+        container.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 40px; background: #fff7ed; border: 1.5px dashed #fed7aa; border-radius: 20px;">
+            <h3>No active games found in Excel</h3>
+            <p>Ensure the <strong>Games</strong> sheet in <code>data/lessons.xlsx</code> has rows with <code>active = TRUE</code>.</p>
+          </div>
+        `;
+        if (countText) countText.innerHTML = 'Sheet: <strong>Games</strong> (0 active games)';
+        return;
+      }
+
+      container.innerHTML = '';
+
+      activeGames.forEach((game, idx) => {
+        const num = idx + 1;
+        const title = game.title || game.Title || `Mandarin Practice Game ${num}`;
+        const cat = game.category || game.Category || 'Interactive Game';
+        const badge = game.badge || game.Badge || `Game ${num}`;
+        const desc = game.description || game.Description || 'Interactive Mandarin challenge from your Excel workbook.';
+        const rawCode = game.embed_code || game.embedCode || game.embed || '';
+        const rawUrl = game.embed_url || game.embedUrl || game.url || '';
+        const src = extractIframeSrc(rawCode || rawUrl);
+        const cardId = `game-card-${game.id || num}`;
+
+        const card = document.createElement('article');
+        card.className = 'embedded-game-card';
+        card.id = cardId;
+
+        card.innerHTML = `
+          <div class="game-card-header">
+            <div>
+              <div class="game-badge-group">
+                <span class="game-num-badge">${escapeHtml(badge)}</span>
+                <span class="game-cat-badge">${escapeHtml(cat)}</span>
+              </div>
+              <h3 class="game-card-title">${escapeHtml(title)}</h3>
+              <p class="game-card-desc">${escapeHtml(desc)}</p>
+            </div>
+          </div>
+
+          <div class="embedded-frame-stage" id="stage-${cardId}">
+            <iframe
+              style="max-width:100%"
+              src="${escapeHtml(src)}"
+              width="500"
+              height="380"
+              frameborder="0"
+              allowfullscreen
+              title="${escapeHtml(title)}"
+              loading="lazy"
+            ></iframe>
+          </div>
+
+          <div class="game-card-footer">
+            <span class="game-footer-info">Wordwall Embed • Responsive 500×380</span>
+            <div class="game-footer-actions">
+              <button type="button" class="btn-frame-tool btn-fs-toggle" data-target="${cardId}">⛶ Fullscreen</button>
+              <button type="button" class="btn-frame-tool btn-reload-frame" data-target="${cardId}">↺ Reload</button>
+              <a href="${escapeHtml(src)}" target="_blank" rel="noopener noreferrer" class="btn-frame-tool">↗ New Tab</a>
+            </div>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+
+      if (countText) {
+        countText.innerHTML = `Loaded <strong>${activeGames.length}</strong> live games from <strong>data/lessons.xlsx</strong> (Sheet: Games)`;
+      }
+
+      bindCardActions();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text || '';
+      return div.innerHTML;
+    }
+
+    function bindCardActions() {
+      // Reload buttons
+      document.querySelectorAll('.btn-reload-frame').forEach(btn => {
+        btn.onclick = () => {
+          const targetCard = document.getElementById(btn.dataset.target);
+          if (!targetCard) return;
+          const iframe = targetCard.querySelector('iframe');
+          if (iframe) {
+            const currentSrc = iframe.src;
+            iframe.src = 'about:blank';
+            setTimeout(() => { iframe.src = currentSrc; }, 100);
+            showToast('Game reloaded', '↺');
+          }
+        };
+      });
+
+      // Fullscreen buttons
+      document.querySelectorAll('.btn-fs-toggle').forEach(btn => {
+        btn.onclick = () => {
+          const targetCard = document.getElementById(btn.dataset.target);
+          if (!targetCard) return;
+          const stage = targetCard.querySelector('.embedded-frame-stage');
+          if (!stage) return;
+
+          if (!document.fullscreenElement) {
+            if (stage.requestFullscreen) {
+              stage.requestFullscreen();
+            } else if (stage.webkitRequestFullscreen) {
+              stage.webkitRequestFullscreen();
+            }
+          } else {
+            if (document.exitFullscreen) {
+              document.exitFullscreen();
+            }
+          }
+        };
+      });
+    }
+
+    // Load Games from Excel (via /api/lessons-data or direct binary read)
+    async function fetchGamesFromExcel() {
+      const countText = document.getElementById('excelLoadedCountText');
+      if (countText) countText.textContent = 'Reading data/lessons.xlsx...';
+
+      // Strategy 1: Call API (which reads data/lessons.xlsx fresh on every request)
+      try {
+        const res = await fetch('/api/lessons-data?t=' + Date.now());
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sheets && data.sheets.Games && data.sheets.Games.length) {
+            renderGames(data.sheets.Games);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('API /api/lessons-data fetch error, falling back to direct Excel file:', e);
+      }
+
+      // Strategy 2: Direct Excel binary parsing via SheetJS
+      if (typeof XLSX !== 'undefined') {
+        try {
+          const res = await fetch('data/lessons.xlsx?t=' + Date.now());
+          if (res.ok) {
+            const buf = await res.arrayBuffer();
+            const wb = XLSX.read(buf, { type: 'array' });
+            if (wb.SheetNames.includes('Games')) {
+              const rows = XLSX.utils.sheet_to_json(wb.Sheets['Games'], { defval: '' });
+              if (rows.length) {
+                renderGames(rows);
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Direct XLSX fetch error, falling back to static json:', e);
+        }
+      }
+
+      // Strategy 3: Static lessons.json fallback
+      try {
+        const res = await fetch('data/lessons.json?t=' + Date.now());
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sheets && data.sheets.Games && data.sheets.Games.length) {
+            renderGames(data.sheets.Games);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Static json fetch error, using default user embeds:', e);
+      }
+
+      // Final fallback: Use user-provided default embeds
+      renderGames(DEFAULT_GAMES);
+    }
+
+    // Manual Refresh button
+    const btnRefresh = document.getElementById('btnRefreshExcel');
+    if (btnRefresh) {
+      btnRefresh.addEventListener('click', async () => {
+        btnRefresh.disabled = true;
+        btnRefresh.textContent = '⏳ Refreshing...';
+        await fetchGamesFromExcel();
+        btnRefresh.disabled = false;
+        btnRefresh.textContent = '🔄 Refresh from Excel';
+        showToast('Games refreshed from data/lessons.xlsx!', '🔄');
+      });
+    }
+
+    // Modal Handlers
+    const uploadModal = document.getElementById('uploadModalBackdrop');
+    const guideModal = document.getElementById('guideModalBackdrop');
+
+    document.getElementById('btnUploadExcelModal')?.addEventListener('click', () => {
+      uploadModal.classList.add('active');
+    });
+    document.getElementById('closeUploadModalBtn')?.addEventListener('click', () => {
+      uploadModal.classList.remove('active');
+    });
+    document.getElementById('cancelUploadBtn')?.addEventListener('click', () => {
+      uploadModal.classList.remove('active');
+    });
+
+    document.getElementById('btnExcelHelpModal')?.addEventListener('click', () => {
+      guideModal.classList.add('active');
+    });
+    document.getElementById('closeGuideModalBtn')?.addEventListener('click', () => {
+      guideModal.classList.remove('active');
+    });
+    document.getElementById('closeGuideBtn')?.addEventListener('click', () => {
+      guideModal.classList.remove('active');
+    });
+
+    window.addEventListener('click', (e) => {
+      if (e.target === uploadModal) uploadModal.classList.remove('active');
+      if (e.target === guideModal) guideModal.classList.remove('active');
+    });
+
+    // File Upload / Replace Handling
+    const dropzone = document.getElementById('excelDropzone');
+    const fileInput = document.getElementById('excelFileInput');
+    const uploadStatus = document.getElementById('uploadStatusMessage');
+
+    if (dropzone && fileInput) {
+      dropzone.addEventListener('click', () => fileInput.click());
+
+      dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+      });
+
+      dropzone.addEventListener('dragleave', () => {
+        dropzone.classList.remove('dragover');
+      });
+
+      dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleExcelFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files && fileInput.files[0]) {
+          handleExcelFile(fileInput.files[0]);
+        }
+      });
+    }
+
+    async function handleExcelFile(file) {
+      if (!file.name.match(/\.(xlsx|xls)$/i)) {
+        uploadStatus.style.color = '#ef4444';
+        uploadStatus.textContent = 'Please choose a valid Excel (.xlsx) file.';
+        return;
+      }
+
+      uploadStatus.style.color = '#ea580c';
+      uploadStatus.textContent = `Uploading and parsing "${file.name}"...`;
+
+      try {
+        const arrayBuf = await file.arrayBuffer();
+
+        // Immediate client preview with SheetJS
+        if (typeof XLSX !== 'undefined') {
+          const wb = XLSX.read(arrayBuf, { type: 'array' });
+          if (wb.SheetNames.includes('Games')) {
+            const clientRows = XLSX.utils.sheet_to_json(wb.Sheets['Games'], { defval: '' });
+            if (clientRows.length) {
+              renderGames(clientRows);
+            }
+          }
+        }
+
+        // Upload to server to persist in data/lessons.xlsx
+        const res = await fetch('/api/upload-excel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: arrayBuf
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          uploadStatus.style.color = '#16a34a';
+          uploadStatus.textContent = 'Workbook updated successfully!';
+          showToast('data/lessons.xlsx updated successfully!', '🎉');
+          setTimeout(() => {
+            uploadModal.classList.remove('active');
+            uploadStatus.textContent = '';
+            fetchGamesFromExcel();
+          }, 1200);
+        } else {
+          const err = await res.json();
+          throw new Error(err.error || 'Server error saving file');
+        }
+      } catch (err) {
+        uploadStatus.style.color = '#ef4444';
+        uploadStatus.textContent = 'Upload failed: ' + err.message;
+        console.error('File upload error:', err);
+      }
+    }
+
+    // Initial load
+    document.addEventListener('DOMContentLoaded', () => {
+      fetchGamesFromExcel();
+    });
+  </script>
+</body>
+</html>

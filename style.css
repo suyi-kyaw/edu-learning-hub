@@ -935,7 +935,7 @@ a {
 
 .hide-menu-streak-card {
   flex-shrink: 0 !important;
-  min-width: 0 !important;
+  min-width: 220px !important;
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
@@ -957,7 +957,7 @@ a {
 
 .hide-menu-level-card {
   flex-shrink: 0 !important;
-  min-width: 0 !important;
+  min-width: 220px !important;
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
@@ -2506,6 +2506,576 @@ a {
 
 
 /* =========================================================
+   SECTION 1: HERO IMAGE BANNER
+========================================================= */
+
+.hero-image-container {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  min-height: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.hero-upload-img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(249, 115, 22, 0.08);
+  border: 2px solid #fed7aa;
+  display: block;
+  object-fit: cover;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hero-upload-img:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 22px 50px rgba(249, 115, 22, 0.18);
+}
+
+
+/* =========================================================
+   SECTION 2: STORIES & REELS (9:16 VERTICAL PREVIEWS)
+========================================================= */
+
+.stories-reels-section {
+  background: linear-gradient(180deg, #ffffff 0%, #fffaf5 100%);
+  border-bottom: 1.5px solid #ffedd5;
+}
+
+.reels-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  margin-bottom: 30px;
+}
+
+.reel-card {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #0f172a;
+  border: 1.5px solid #fed7aa;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.09);
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s ease, border-color 0.28s ease;
+}
+
+.reel-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 48px rgba(249, 115, 22, 0.2);
+  border-color: #f97316;
+}
+
+.reel-thumbnail-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  background: #0b1120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reel-preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.reel-card:hover .reel-preview-video {
+  transform: scale(1.05);
+}
+
+.reel-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.5) 0%,
+    rgba(15, 23, 42, 0) 30%,
+    rgba(15, 23, 42, 0.3) 60%,
+    rgba(15, 23, 42, 0.95) 100%
+  );
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px;
+  color: #ffffff;
+  pointer-events: none;
+}
+
+.reel-meta-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  z-index: 2;
+}
+
+.reel-badge-pill {
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.reel-tag-culture {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.reel-tag-daily {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.reel-tag-market {
+  background: #d97706;
+  color: #ffffff;
+}
+
+.reel-duration {
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.reel-play-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(249, 115, 22, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: grid;
+  place-items: center;
+  font-size: 1.25rem;
+  color: #ffffff;
+  box-shadow: 0 8px 24px rgba(249, 115, 22, 0.45);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  z-index: 3;
+}
+
+.reel-play-btn .play-icon {
+  margin-left: 3px;
+  line-height: 1;
+}
+
+.reel-card:hover .reel-play-btn {
+  transform: translate(-50%, -50%) scale(1.15);
+  background: #ea580c;
+  box-shadow: 0 12px 30px rgba(249, 115, 22, 0.6);
+}
+
+.reel-meta-bottom {
+  z-index: 2;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
+.reel-card-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 2px;
+  line-height: 1.25;
+}
+
+.reel-card-chinese {
+  font-family: "Noto Serif SC", serif;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #fdba74;
+  margin-bottom: 4px;
+}
+
+.reel-card-desc {
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  line-height: 1.35;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+
+/* =========================================================
+   SECTION 3: GAMES (EMBEDDED IFRAME & ACTION)
+========================================================= */
+
+.games-section {
+  background: #ffffff;
+  border-bottom: 1.5px solid #ffedd5;
+}
+
+.game-featured-container {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+}
+
+.game-iframe-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 540px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 2px solid #fed7aa;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 380px;
+}
+
+.game-iframe {
+  width: 100%;
+  max-width: 100%;
+  height: 390px;
+  border: none;
+  display: block;
+}
+
+
+/* =========================================================
+   SECTION 4: LESSONS (2 CATEGORY SELECTION CARDS)
+========================================================= */
+
+.lessons-portal-section {
+  background: linear-gradient(180deg, #fffaf5 0%, #fff7ed 100%);
+  border-bottom: 1.5px solid #ffedd5;
+}
+
+.lesson-categories-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+  margin-top: 10px;
+}
+
+.category-card {
+  border-radius: 28px;
+  padding: 38px 34px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.07);
+}
+
+.category-card-adult {
+  background: linear-gradient(145deg, #ffffff 0%, #fffaf5 60%, #fff7ed 100%);
+  border: 2px solid #fed7aa;
+}
+
+.category-card-adult:hover {
+  transform: translateY(-6px);
+  border-color: #f97316;
+  box-shadow: 0 22px 55px rgba(249, 115, 22, 0.18);
+}
+
+.category-card-kids {
+  background: linear-gradient(145deg, #ffffff 0%, #f0fdf4 60%, #ecfdf5 100%);
+  border: 2px solid #a7f3d0;
+}
+
+.category-card-kids:hover {
+  transform: translateY(-6px);
+  border-color: #10b981;
+  box-shadow: 0 22px 55px rgba(16, 185, 129, 0.2);
+}
+
+.category-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  background: #ffedd5;
+  color: #ea580c;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  align-self: flex-start;
+  margin-bottom: 18px;
+}
+
+.category-card-badge.badge-kids {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.category-card-visual {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.category-icon-bg {
+  font-family: "Noto Serif SC", serif;
+  font-size: 5.5rem;
+  font-weight: 900;
+  color: #fed7aa;
+  opacity: 0.45;
+  line-height: 1;
+}
+
+.visual-kids .category-icon-bg {
+  color: #a7f3d0;
+  opacity: 0.55;
+}
+
+.category-art-emoji {
+  position: absolute;
+  font-size: 2.2rem;
+  top: 14px;
+  right: 14px;
+}
+
+.category-card-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.category-card-content h3 {
+  font-size: 1.55rem;
+  font-weight: 900;
+  color: #0f172a;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.category-subtitle {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #ea580c;
+  margin-bottom: 14px;
+}
+
+.category-card-kids .category-subtitle {
+  color: #059669;
+}
+
+.category-card-content p {
+  color: #475569;
+  font-size: 0.96rem;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  flex-grow: 1;
+}
+
+.category-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.category-features li {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.category-features li span {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffedd5;
+  color: #ea580c;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.features-kids li span {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.category-card-footer {
+  margin-top: auto;
+}
+
+.category-btn {
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+  padding: 14px 24px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  border-radius: 14px;
+}
+
+.btn-kids {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35) !important;
+}
+
+.btn-kids:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.45) !important;
+}
+
+.section-action-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 36px;
+}
+
+
+/* =========================================================
+   REEL VIDEO PLAYER MODAL
+========================================================= */
+
+.reel-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10005;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.reel-modal-backdrop.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.reel-modal-card {
+  background: #0f172a;
+  border-radius: 24px;
+  border: 2px solid #fed7aa;
+  max-width: 440px;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 25px 65px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(20px) scale(0.96);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reel-modal-backdrop.active .reel-modal-card {
+  transform: translateY(0) scale(1);
+}
+
+.reel-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  color: #ffffff;
+  font-size: 1.15rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s ease;
+}
+
+.reel-modal-close:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  transform: scale(1.1);
+}
+
+.reel-modal-video-wrap {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  background: #000000;
+  overflow: hidden;
+}
+
+.reel-modal-video-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.reel-modal-info {
+  padding: 18px 22px;
+  color: #ffffff;
+  background: #1e293b;
+  border-top: 1px solid #334155;
+}
+
+.reel-modal-info h3 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0 0 4px;
+}
+
+.reel-modal-info p {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.4;
+}
+
+
+/* =========================================================
    STORY LESSON PAGE (story.html) - BRIGHT & INSPIRING
 ========================================================= */
 
@@ -3309,7 +3879,7 @@ a {
 @media (max-width: 960px) {
   .hero-content {
     grid-template-columns: 1fr;
-    gap: 45px;
+    gap: 40px;
   }
 
   .hero-text {
@@ -3326,9 +3896,38 @@ a {
   }
 
   .hero-visual {
-    max-width: 580px;
+    max-width: 520px;
     width: 100%;
     margin: 0 auto;
+  }
+
+  /* Section 2: Stories & Reels on Tablet */
+  .reels-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  /* Section 3: Games on Tablet */
+  .game-featured-container {
+    max-width: 600px;
+  }
+
+  .game-iframe-wrapper {
+    max-width: 520px;
+    min-height: 380px;
+  }
+
+  .game-iframe {
+    height: 380px;
+  }
+
+  /* Section 4: Lessons on Tablet */
+  .lesson-categories-grid {
+    gap: 20px;
+  }
+
+  .category-card {
+    padding: 30px 24px;
   }
 
   .lesson-grid {
@@ -3409,9 +4008,49 @@ a {
   }
 
   .hero-visual {
-    min-height: 290px;
-    padding: 26px;
-    border-radius: 28px;
+    min-height: auto;
+    padding: 10px;
+    border-radius: 24px;
+  }
+
+  /* Section 2: Stories & Reels on Mobile */
+  .reels-grid {
+    grid-template-columns: 1fr;
+    max-width: 360px;
+    margin: 0 auto 24px;
+    gap: 22px;
+  }
+
+  /* Section 3: Games on Mobile */
+  .game-featured-container {
+    width: 100%;
+  }
+
+  .game-iframe-wrapper {
+    border-radius: 18px;
+    max-width: 100%;
+    min-height: 380px;
+  }
+
+  .game-iframe {
+    height: 380px;
+  }
+
+  /* Section 4: Lessons Category Cards on Mobile */
+  .lesson-categories-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  .category-card {
+    padding: 28px 22px;
+    border-radius: 24px;
+  }
+
+  .category-card-content h3 {
+    font-size: 1.35rem;
   }
 
   /* Demo grid becomes 1 column */
@@ -3610,6 +4249,56 @@ a {
 
   .section-heading h2 {
     font-size: 2rem;
+  }
+
+  /* Section 1: Hero on Small Mobile */
+  .hero-upload-img {
+    border-radius: 14px;
+  }
+
+  /* Section 2: Stories & Reels on Small Mobile */
+  .reels-grid {
+    max-width: 100%;
+    gap: 18px;
+  }
+
+  /* Section 3: Games on Small Mobile */
+  .game-iframe-wrapper,
+  .game-iframe {
+    height: 380px;
+    min-height: 380px;
+    border-radius: 14px;
+  }
+
+  /* Section 4: Lessons Category Cards on Small Mobile */
+  .category-card {
+    padding: 24px 18px;
+    border-radius: 20px;
+  }
+
+  .category-card-content h3 {
+    font-size: 1.25rem;
+  }
+
+  .category-subtitle {
+    font-size: 0.88rem;
+    margin-bottom: 10px;
+  }
+
+  .category-card-content p {
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+  }
+
+  .category-features {
+    margin-bottom: 20px;
+    gap: 8px;
+  }
+
+  .category-btn {
+    padding: 12px 18px;
+    font-size: 0.96rem;
+    border-radius: 12px;
   }
 
   .demo-card-header {
@@ -5286,9 +5975,110 @@ a {
 }
 
 [data-theme="dark"] .hero-visual {
-  background: #1e293b;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .hero-upload-img {
+  border-color: #334155;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .stories-reels-section {
+  background: linear-gradient(180deg, #0b1120 0%, #0f172a 100%);
+  border-bottom-color: #334155;
+}
+
+[data-theme="dark"] .reel-card {
+  border-color: #334155;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .reel-card:hover {
+  border-color: #fb923c;
+  box-shadow: 0 20px 48px rgba(251, 146, 60, 0.25);
+}
+
+[data-theme="dark"] .games-section {
+  background: #0f172a;
+  border-bottom-color: #334155;
+}
+
+[data-theme="dark"] .game-iframe-wrapper {
   border-color: #334155;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .lessons-portal-section {
+  background: linear-gradient(180deg, #0f172a 0%, #0b1120 100%);
+  border-bottom-color: #334155;
+}
+
+[data-theme="dark"] .category-card-adult {
+  background: linear-gradient(145deg, #1e293b 0%, #172033 60%, #1e1b4b 100%);
+  border-color: #475569;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .category-card-adult:hover {
+  border-color: #fb923c;
+  box-shadow: 0 22px 55px rgba(251, 146, 60, 0.22);
+}
+
+[data-theme="dark"] .category-card-adult .category-icon-bg {
+  color: #334155;
+  opacity: 0.35;
+}
+
+[data-theme="dark"] .category-card-adult h3 {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .category-card-adult p {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .category-card-adult .category-features li {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .category-card-adult .category-features li span {
+  background: #334155;
+  color: #fb923c;
+}
+
+[data-theme="dark"] .category-card-kids {
+  background: linear-gradient(145deg, #1e293b 0%, #142a24 60%, #064e3b 100%);
+  border-color: #065f46;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .category-card-kids:hover {
+  border-color: #34d399;
+  box-shadow: 0 22px 55px rgba(52, 211, 153, 0.22);
+}
+
+[data-theme="dark"] .category-card-kids .category-icon-bg {
+  color: #064e3b;
+  opacity: 0.4;
+}
+
+[data-theme="dark"] .category-card-kids h3 {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .category-card-kids p {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .category-card-kids .category-features li {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .category-card-kids .category-features li span {
+  background: #064e3b;
+  color: #34d399;
 }
 
 [data-theme="dark"] .hero-card-decoration {

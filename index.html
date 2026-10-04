@@ -56,12 +56,12 @@
         <span class="logo-text">LinguaPath</span>
       </a>
 
-      <!-- Primary Desktop Navigation Links -->
+      <!-- Primary Desktop Navigation Links (4-Section Structure: Intro, Stories & Reels, Games, Lessons) -->
       <nav class="desktop-nav" aria-label="Main Navigation">
         <a href="#home" class="nav-link">Home</a>
-        <a href="#demos" class="nav-link">Demos</a>
+        <a href="#stories-reels" class="nav-link">Stories &amp; Reels</a>
+        <a href="#games" class="nav-link">Games</a>
         <a href="#lessons" class="nav-link">Lessons</a>
-        <a href="#review" class="nav-link nav-item-additional">Review</a>
       </nav>
 
       <!-- Action Controls (Strict Single Line: Dark Mode + Menu Drawer) -->
@@ -113,16 +113,21 @@
           <span class="menu-link-icon" aria-hidden="true">🏠</span>
           <span class="hide-menu-link-text">Home</span>
         </a>
+        <a href="#stories-reels" class="hide-menu-link">
+          <span class="menu-link-icon" aria-hidden="true">🎬</span>
+          <span class="hide-menu-link-text">Stories &amp; Reels</span>
+          <span class="hide-menu-tag">Watch</span>
+        </a>
+        <a href="#games" class="hide-menu-link">
+          <span class="menu-link-icon" aria-hidden="true">🎮</span>
+          <span class="hide-menu-link-text">Interactive Games</span>
+          <span class="hide-menu-tag">Play</span>
+        </a>
         <a href="#lessons" class="hide-menu-link">
           <span class="menu-link-icon" aria-hidden="true">📚</span>
-          <span class="hide-menu-link-text">Lessons & Curriculum</span>
+          <span class="hide-menu-link-text">Lessons &amp; Pathways</span>
         </a>
-        <a href="#demos" class="hide-menu-link">
-          <span class="menu-link-icon" aria-hidden="true">🎧</span>
-          <span class="hide-menu-link-text">Demo Lessons</span>
-          <span class="hide-menu-tag">More</span>
-        </a>
-        <a href="#review" id="navReviewModeBtn" class="hide-menu-link hide-menu-review-link">
+        <a href="story.html" id="navReviewModeBtn" class="hide-menu-link hide-menu-review-link">
           <span class="menu-link-icon" aria-hidden="true">🎴</span>
           <span class="hide-menu-link-text">Review Mode</span>
           <span class="hide-menu-tag hide-menu-tag-review">Flashcards</span>
@@ -246,52 +251,24 @@
           </p>
 
           <div class="hero-buttons">
-
-            <a href="#demos" class="btn btn-primary">
-              Explore Demo Lessons
+            <a href="#stories-reels" class="btn btn-primary">
+              Explore Stories &amp; Reels
             </a>
-
             <a href="#lessons" class="btn btn-secondary">
               Learning Hub
             </a>
-
           </div>
 
         </div>
 
-
-        <div class="hero-visual">
-
-          <!-- Subtle decorative background elements -->
-          <div class="hero-card-decoration" aria-hidden="true">
-            <div class="hero-deco-radical-wrap">
-              <span class="hero-deco-radical">亻 + 尔 = 你</span>
-              <span class="hero-deco-dot">•</span>
-              <span class="hero-deco-radical">女 + 子 = 好</span>
-            </div>
-            <svg class="hero-deco-contour" viewBox="0 0 200 40" fill="none" preserveAspectRatio="none" aria-hidden="true">
-              <path d="M 10 30 Q 50 38 75 16 T 130 18 T 190 28" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="3 4" opacity="0.4" />
-            </svg>
-          </div>
-
-          <div class="hero-character">
-            你好
-          </div>
-
-          <div class="hero-pinyin">
-            Nǐ hǎo
-          </div>
-
-          <div class="hero-translation">
-            Hello
-          </div>
-
-          <!-- Subtle tone contour preview pill -->
-          <div class="hero-tone-preview" aria-hidden="true">
-            <span class="tone-tag">3rd Tone ˇ</span>
-            <span class="tone-sandhi-hint">Tone Sandhi: 2nd + 3rd Tone</span>
-          </div>
-
+        <div class="hero-visual hero-image-container">
+          <img
+            src="assets/hero-banner.png"
+            alt="Learning Chinese Banner"
+            class="hero-upload-img"
+            loading="eager"
+            onerror="this.onerror=null; this.src='src/assets/images/hero_banner_1791110647638.jpg';"
+          />
         </div>
 
       </div>
@@ -300,477 +277,221 @@
 
 
     <!-- =========================
-         DEMO LESSONS
+         SECTION 2: STORY & REELS
     ========================== -->
-    <section class="section demos-section" id="demos">
-
+    <section class="section stories-reels-section" id="stories-reels">
       <div class="container">
-
         <div class="section-heading">
+          <span class="section-label">
+            Featured Stories &amp; Reels
+          </span>
+          <h2>
+            Story &amp; Reels
+          </h2>
+          <p>
+            Watch bite-sized vertical video reels and engaging cultural narratives crafted for modern Mandarin learners.
+          </p>
+        </div>
 
+        <div class="reels-grid">
+          <!-- Reel 1: Red Envelope Tradition -->
+          <article class="reel-card" data-video="assets/video/Reels Red Envelope.mp4" data-title="Red Envelope Tradition (红包故事)" data-desc="Discover the fascinating tradition of New Year lucky money and festive blessings.">
+            <div class="reel-thumbnail-wrap">
+              <video class="reel-preview-video" muted loop playsinline preload="metadata" poster="assets/images/story-poster.jpg">
+                <source src="assets/video/Reels Red Envelope.mp4" type="video/mp4">
+              </video>
+              <div class="reel-overlay">
+                <div class="reel-meta-top">
+                  <span class="reel-badge-pill reel-tag-culture">🧧 Culture</span>
+                  <span class="reel-duration">0:45</span>
+                </div>
+                <div class="reel-play-btn" aria-label="Play Reel: Red Envelope Tradition">
+                  <span class="play-icon" aria-hidden="true">▶</span>
+                </div>
+                <div class="reel-meta-bottom">
+                  <h3 class="reel-card-title">Red Envelope Tradition</h3>
+                  <div class="reel-card-chinese">新年发红包故事</div>
+                  <p class="reel-card-desc">The meaning and blessings of Lucky Red Envelopes.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Reel 2: Saying Hello & Daily Greetings -->
+          <article class="reel-card" data-video="assets/video/lesson-01.mp4" data-title="First Chinese Greetings (日常问候)" data-desc="Mastering 'Nǐ Hǎo' and everyday greeting tone rhythms.">
+            <div class="reel-thumbnail-wrap">
+              <video class="reel-preview-video" muted loop playsinline preload="metadata" poster="assets/images/story-01.jpg">
+                <source src="assets/video/lesson-01.mp4" type="video/mp4">
+              </video>
+              <div class="reel-overlay">
+                <div class="reel-meta-top">
+                  <span class="reel-badge-pill reel-tag-daily">🗣️ Daily Talk</span>
+                  <span class="reel-duration">0:50</span>
+                </div>
+                <div class="reel-play-btn" aria-label="Play Reel: First Chinese Greetings">
+                  <span class="play-icon" aria-hidden="true">▶</span>
+                </div>
+                <div class="reel-meta-bottom">
+                  <h3 class="reel-card-title">First Chinese Greetings</h3>
+                  <div class="reel-card-chinese">你好！日常问候</div>
+                  <p class="reel-card-desc">Master third-tone sandhi and friendly morning greetings.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Reel 3: Market Day & Fruit Shopping -->
+          <article class="reel-card" data-video="assets/video/Reels Red Envelope.mp4" data-title="Fresh Market Bargaining (买水果与问价)" data-desc="Essential vocabulary and dialogue for navigating local markets in China.">
+            <div class="reel-thumbnail-wrap">
+              <video class="reel-preview-video" muted loop playsinline preload="metadata" poster="assets/images/story-02.jpg">
+                <source src="assets/video/Reels Red Envelope.mp4" type="video/mp4">
+              </video>
+              <div class="reel-overlay">
+                <div class="reel-meta-top">
+                  <span class="reel-badge-pill reel-tag-market">🍎 Real Life</span>
+                  <span class="reel-duration">1:15</span>
+                </div>
+                <div class="reel-play-btn" aria-label="Play Reel: Fresh Market Bargaining">
+                  <span class="play-icon" aria-hidden="true">▶</span>
+                </div>
+                <div class="reel-meta-bottom">
+                  <h3 class="reel-card-title">Fresh Fruit &amp; Market</h3>
+                  <div class="reel-card-chinese">买水果与市场购物</div>
+                  <p class="reel-card-desc">Ask prices and navigate fresh produce markets in Chinese.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="section-action-center">
+          <a href="story.html" class="btn btn-primary btn-lg">
+            View More Reels &amp; Stories
+          </a>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- =========================
+         SECTION 3: GAMES
+    ========================== -->
+    <section class="section games-section" id="games">
+      <div class="container">
+        <div class="section-heading">
           <span class="section-label">
             Interactive Practice
           </span>
-
           <h2>
-            Demo Lessons
+            Play &amp; Practice Games
           </h2>
-
           <p>
-            Explore a few interactive examples from the
-            LinguaPath learning experience.
+            Reinforce your Chinese tones, character recognition, and rapid recall through interactive gameplay.
           </p>
-
         </div>
 
-
-        <!--
-          Desktop layout:
-
-          ┌───────────────────────┬───────────────────────┐
-          │ Pronunciation         │ Everyday Chinese      │
-          ├───────────────────────┼───────────────────────┤
-          │ Conversation          │ Quick Check           │
-          └───────────────────────┴───────────────────────┘
-
-          Content is loaded from the Demo sheet
-          in data/lessons.xlsx.
-        -->
-        <div class="demos-grid">
-
-
-          <!-- =========================
-               01. PRONUNCIATION
-          ========================== -->
-          <article class="demo-card pronunciation-card" data-target="story.html?id=lesson-01#watch">
-
-            <div class="demo-card-header">
-
-              <div>
-                <span class="card-label">
-                  01
-                </span>
-
-                <h3>
-                  Pronunciation
-                </h3>
-              </div>
-
-              <span class="card-icon">
-                声
-              </span>
-
-            </div>
-
-
-            <div
-              class="tone-buttons"
-              id="toneButtons"
-            >
-              <!-- Generated from Excel by main.js -->
-            </div>
-
-
-            <div class="tone-display">
-
-              <div class="tone-main tone-word-wrapper">
-
-                <div
-                  class="tone-syllable"
-                  id="toneSyllable"
-                >
-                  mā
-                </div>
-
-                <div class="tone-character-wrap">
-                  <span
-                    class="tone-character"
-                    id="toneCharacter"
-                  >
-                    妈
-                  </span>
-                  <span
-                    class="tone-translation"
-                    id="toneTranslation"
-                  >
-                    (mother)
-                  </span>
-                </div>
-
-              </div>
-
-
-              <button
-                class="audio-button"
-                id="toneAudioButton"
-                type="button"
-                aria-label="Play tone pronunciation"
-              >
-                ▶ Play
-              </button>
-
-            </div>
-
-            <!-- Inline error / synthesis fallback status banner -->
-            <div
-              class="tone-audio-fallback"
-              id="toneAudioFallback"
-              role="status"
-              aria-live="polite"
-              style="display: none;"
-            ></div>
-
-
-            <div
-              class="tone-graph"
-              id="toneGraphContainer"
-              aria-hidden="true"
-            >
-
-              <svg
-                viewBox="0 0 500 100"
-                role="img"
-                aria-label="Tone contour"
-                class="tone-contour-svg"
-              >
-                <title id="toneGraphTitle">Mandarin Tone Pitch Contour Visualization</title>
-
-                <path
-                  id="tonePath"
-                  d="M20 30 L480 30"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="5"
-                  stroke-linecap="round"
-                />
-
-              </svg>
-
-            </div>
-
-
-            <p
-              class="tone-description"
-              id="toneDescription"
-              aria-live="polite"
-            >
-              Select a tone to hear the pronunciation.
-            </p>
-
-            <audio
-              id="currentToneAudio"
-              preload="none"
-            ></audio>
-
-            <div class="demo-card-action">
-              <span class="demo-continue-link">Continue to Lesson →</span>
-            </div>
-
-          </article>
-
-
-          <!-- =========================
-               02. EVERYDAY CHINESE
-          ========================== -->
-          <article class="demo-card everyday-card" data-target="story.html?id=lesson-01#reading">
-
-            <div class="demo-card-header">
-
-              <div>
-
-                <span class="card-label">
-                  02
-                </span>
-
-                <h3>
-                  Everyday Chinese
-                </h3>
-
-              </div>
-
-              <span class="card-icon">
-                日
-              </span>
-
-            </div>
-
-            <!--
-              main.js loads this content from Excel.
-            -->
-            <div
-              class="dynamic-demo-content"
-              id="everydayChineseDemo"
-            >
-
-              <div class="loading-message">
-                Loading lesson...
-              </div>
-
-            </div>
-
-            <div class="demo-card-action">
-              <span class="demo-continue-link">Continue to Lesson →</span>
-            </div>
-
-          </article>
-
-
-          <!-- =========================
-               03. CONVERSATION
-          ========================== -->
-          <article class="demo-card conversation-card" data-target="story.html?id=lesson-01#reading">
-
-            <div class="demo-card-header">
-
-              <div>
-
-                <span class="card-label">
-                  03
-                </span>
-
-                <h3>
-                  Conversation
-                </h3>
-
-              </div>
-
-              <span class="card-icon">
-                对
-              </span>
-
-            </div>
-
-            <!--
-              main.js loads conversation content
-              and its sound button from Excel.
-            -->
-            <div
-              class="dynamic-demo-content conversation-list"
-              id="conversationDemo"
-            >
-
-              <div class="loading-message">
-                Loading conversation...
-              </div>
-
-            </div>
-
-            <div class="demo-card-action">
-              <span class="demo-continue-link">Continue to Lesson →</span>
-            </div>
-
-          </article>
-
-
-          <!-- =========================
-               04. QUICK CHECK
-          ========================== -->
-          <article class="demo-card quick-check-card" data-target="story.html?id=lesson-01#exercises">
-
-            <div class="demo-card-header">
-
-              <div>
-
-                <span class="card-label">
-                  04
-                </span>
-
-                <h3>
-                  Quick Check
-                </h3>
-
-              </div>
-
-              <span class="card-icon">
-                ✓
-              </span>
-
-            </div>
-
-            <div
-              class="dynamic-demo-content"
-              id="quickCheckDemo"
-            >
-
-              <div class="loading-message">
-                Loading questions...
-              </div>
-
-            </div>
-
-            <div class="demo-card-action">
-              <span class="demo-continue-link">Continue to Lesson →</span>
-            </div>
-
-          </article>
-
+        <div class="game-featured-container">
+          <div class="game-iframe-wrapper">
+            <iframe
+              style="max-width:100%"
+              src="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0"
+              width="500"
+              height="380"
+              frameborder="0"
+              allowfullscreen
+              class="game-iframe"
+              title="Wordwall Interactive Chinese Practice Game"
+              loading="lazy"
+            ></iframe>
+          </div>
         </div>
 
+        <div class="section-action-center">
+          <a href="games.html" class="btn btn-secondary btn-lg">
+            More Games
+          </a>
+        </div>
       </div>
-
     </section>
 
 
     <!-- =========================
-         LEARNING HUB
+         SECTION 4: LESSONS
     ========================== -->
-    <section
-      class="section learning-section"
-      id="lessons"
-    >
-
+    <section class="section lessons-portal-section" id="lessons">
       <div class="container">
-
         <div class="section-heading">
-
           <span class="section-label">
-            Continue Learning
+            Curriculum Pathways
           </span>
-
           <h2>
-            Learning Hub
+            Choose Your Learning Pathway
           </h2>
-
           <p>
-            Choose a lesson and continue building your
-            Chinese skills.
+            Select your track to access structured lessons, native voice recordings, dialogues, and practice exercises.
           </p>
-
         </div>
 
-        <!-- =========================
-             LEARNING HUB SEARCH BAR
-        ========================== -->
-        <div class="learning-search-box" id="learningSearchBox" role="search" aria-label="Lesson Search">
-          <div class="search-bar-inner">
-            <span class="search-icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <title>Search icon</title>
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-            </span>
-
-            <input
-              type="search"
-              id="lessonSearchInput"
-              class="lesson-search-input"
-              placeholder="Search lessons by title, keyword, pinyin, or Chinese (e.g. fruit, morning, school)..."
-              autocomplete="off"
-              spellcheck="false"
-              aria-label="Search lessons by title or keyword"
-            />
-
-            <button
-              type="button"
-              id="clearSearchBtn"
-              class="clear-search-btn"
-              aria-label="Clear search"
-              style="display: none;"
-            >
-              ✕
-            </button>
-          </div>
-
-          <!-- Quick Keyword Filter Chips & Review Mode Button -->
-          <div class="search-keywords-bar" id="searchKeywordsBar">
-            <div class="keywords-chips-group">
-              <span class="keywords-label">Filter by topic:</span>
-              <div class="keywords-chips">
-                <button type="button" class="keyword-chip active" data-filter="all">All Lessons</button>
-                <button type="button" class="keyword-chip favorite-filter-chip" data-filter="favorites" id="favoriteFilterBtn">❤️ Saved (<span id="favoriteCount">0</span>)</button>
-                <button type="button" class="keyword-chip" data-filter="morning">🌅 Morning &amp; Routine</button>
-                <button type="button" class="keyword-chip" data-filter="fruit">🍎 Fruit &amp; Market</button>
-                <button type="button" class="keyword-chip" data-filter="school">🏫 School</button>
-                <button type="button" class="keyword-chip" data-filter="beginner">⭐ Beginner</button>
+        <div class="lesson-categories-grid">
+          <!-- 1. Adult Lessons Card -->
+          <article class="category-card category-card-adult">
+            <div class="category-card-badge">
+              <span class="badge-icon">💼</span>
+              <span>Adults • Comprehensive</span>
+            </div>
+            <div class="category-card-visual" aria-hidden="true">
+              <span class="category-icon-bg">大</span>
+              <span class="category-art-emoji">🏙️</span>
+            </div>
+            <div class="category-card-content">
+              <h3>Mandarin for Adults &amp; Professionals</h3>
+              <span class="category-subtitle">实用成人汉语 • Practical Proficiency</span>
+              <p>
+                Master practical conversation for career, travel, dining, and HSK test preparation with real-world scenarios and cultural nuance.
+              </p>
+              <ul class="category-features">
+                <li><span>✓</span> Everyday Living &amp; Socializing</li>
+                <li><span>✓</span> Business Meetings &amp; Travel Mandarin</li>
+                <li><span>✓</span> Sentence Patterns &amp; HSK Vocabulary</li>
+              </ul>
+              <div class="category-card-footer">
+                <a href="lessons-adult.html" class="btn btn-primary category-btn">
+                  Start Learning (Adults) →
+                </a>
               </div>
             </div>
+          </article>
 
-            <!-- Review Mode Button: gathers favorite lessons for shuffled flashcard practice -->
-            <button
-              type="button"
-              class="btn-review-mode"
-              id="startReviewModeBtn"
-              title="Practice all your favorited lessons in a shuffled flashcard queue"
-              aria-label="Start Review Mode with favorite lessons"
-            >
-              <span class="review-btn-icon" aria-hidden="true">🎴</span>
-              <span class="review-btn-text">Review Mode</span>
-              <span class="review-badge-count" id="reviewFavoritesBadge">0 saved</span>
-            </button>
-          </div>
-
-          <!-- Real-time search status indicator -->
-          <div class="search-results-info" id="searchResultsInfo" aria-live="polite">
-            <span id="searchResultsCount">Showing all lessons</span>
-          </div>
+          <!-- 2. Kids Lessons Card -->
+          <article class="category-card category-card-kids">
+            <div class="category-card-badge badge-kids">
+              <span class="badge-icon">🎨</span>
+              <span>Kids • Playful Immersion</span>
+            </div>
+            <div class="category-card-visual visual-kids" aria-hidden="true">
+              <span class="category-icon-bg">小</span>
+              <span class="category-art-emoji">🐼</span>
+            </div>
+            <div class="category-card-content">
+              <h3>Chinese for Kids &amp; Young Learners</h3>
+              <span class="category-subtitle">少儿趣味中文 • Joyful Adventures</span>
+              <p>
+                Discover the joy of Mandarin through colorful stories, playful pinyin songs, animal adventures, and interactive challenges that inspire confidence.
+              </p>
+              <ul class="category-features features-kids">
+                <li><span>★</span> Animals, Colors &amp; Family Adventures</li>
+                <li><span>★</span> Cheerful Pinyin Songs &amp; Animations</li>
+                <li><span>★</span> Reward Badges &amp; Interactive Quizzes</li>
+              </ul>
+              <div class="category-card-footer">
+                <a href="lessons-kids.html" class="btn btn-primary btn-kids category-btn">
+                  Start Learning (Kids) →
+                </a>
+              </div>
+            </div>
+          </article>
         </div>
-
-
-        <div
-          class="lesson-grid"
-          id="lessonGrid"
-        >
-
-          <!-- 3-Card Skeleton Loader prior to script execution -->
-          <div class="lesson-card skeleton-card" aria-hidden="true">
-            <div class="skeleton-shimmer"></div>
-            <div class="skeleton-header">
-              <div class="skeleton-box skeleton-badge"></div>
-              <div class="skeleton-box skeleton-action"></div>
-            </div>
-            <div class="skeleton-box skeleton-title"></div>
-            <div class="skeleton-box skeleton-subtitle"></div>
-            <div class="skeleton-tags">
-              <div class="skeleton-box skeleton-tag"></div>
-              <div class="skeleton-box skeleton-tag"></div>
-            </div>
-            <div class="skeleton-footer">
-              <div class="skeleton-box skeleton-progress-bar"></div>
-              <div class="skeleton-box skeleton-btn"></div>
-            </div>
-          </div>
-
-          <div class="lesson-card skeleton-card" aria-hidden="true">
-            <div class="skeleton-shimmer"></div>
-            <div class="skeleton-header">
-              <div class="skeleton-box skeleton-badge"></div>
-              <div class="skeleton-box skeleton-action"></div>
-            </div>
-            <div class="skeleton-box skeleton-title"></div>
-            <div class="skeleton-box skeleton-subtitle"></div>
-            <div class="skeleton-tags">
-              <div class="skeleton-box skeleton-tag"></div>
-              <div class="skeleton-box skeleton-tag"></div>
-            </div>
-            <div class="skeleton-footer">
-              <div class="skeleton-box skeleton-progress-bar"></div>
-              <div class="skeleton-box skeleton-btn"></div>
-            </div>
-          </div>
-
-          <div class="lesson-card skeleton-card" aria-hidden="true">
-            <div class="skeleton-shimmer"></div>
-            <div class="skeleton-header">
-              <div class="skeleton-box skeleton-badge"></div>
-              <div class="skeleton-box skeleton-action"></div>
-            </div>
-            <div class="skeleton-box skeleton-title"></div>
-            <div class="skeleton-box skeleton-subtitle"></div>
-            <div class="skeleton-tags">
-              <div class="skeleton-box skeleton-tag"></div>
-              <div class="skeleton-box skeleton-tag"></div>
-            </div>
-            <div class="skeleton-footer">
-              <div class="skeleton-box skeleton-progress-bar"></div>
-              <div class="skeleton-box skeleton-btn"></div>
-            </div>
-          </div>
-
-        </div>
-
       </div>
-
     </section>
 
   </main>
@@ -801,17 +522,14 @@
 
         <h4 class="footer-title">Navigation</h4>
 
-        <a href="#home">
-          Home
-        </a>
-
-        <a href="#demos">
-          Demo Lessons
-        </a>
-
-        <a href="#lessons">
-          Learning Hub
-        </a>
+        <a href="#home">Home</a>
+        <a href="#stories-reels">Stories &amp; Reels</a>
+        <a href="#games">Games</a>
+        <a href="#lessons">Lessons</a>
+        <a href="story.html">Story Library</a>
+        <a href="games.html">Games Arcade</a>
+        <a href="lessons-adult.html">Adult Lessons</a>
+        <a href="lessons-kids.html">Kids Lessons</a>
 
       </div>
 
@@ -870,6 +588,23 @@
     </div>
 
   </footer>
+
+
+  <!-- =========================
+       REEL VIDEO MODAL
+  ========================== -->
+  <div id="reelModal" class="reel-modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="reelModalTitle">
+    <div class="reel-modal-card">
+      <button type="button" class="reel-modal-close" id="closeReelModalBtn" aria-label="Close Reel">✕</button>
+      <div class="reel-modal-video-wrap">
+        <video id="reelModalVideo" controls playsinline></video>
+      </div>
+      <div class="reel-modal-info">
+        <h3 id="reelModalTitle">Reel Video</h3>
+        <p id="reelModalDesc">Cultural Chinese Reel</p>
+      </div>
+    </div>
+  </div>
 
 
   <!-- =========================

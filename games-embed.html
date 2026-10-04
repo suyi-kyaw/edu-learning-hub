@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mandarin Tone & Character Matcher - Interactive Game</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #172554 100%);
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      overflow-x: hidden;
+      user-select: none;
+    }
+
+    .game-board {
+      width: 100%;
+      max-width: 620px;
+      background: rgba(30, 41, 59, 0.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1.5px solid rgba(254, 215, 170, 0.35);
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      position: relative;
+    }
+
+    .game-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 14px;
+    }
+
+    .game-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .game-logo-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+      color: #ffffff;
+      display: grid;
+      place-items: center;
+      font-size: 1.15rem;
+      font-family: 'Noto Serif SC', serif;
+      font-weight: 900;
+      box-shadow: 0 4px 12px rgba(234, 88, 12, 0.4);
+    }
+
+    .game-title {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+
+    .game-subtitle {
+      font-size: 0.76rem;
+      color: #94a3b8;
+      display: block;
+    }
+
+    .game-stats {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .stat-pill {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 5px 12px;
+      border-radius: 9999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-val {
+      color: #fdba74;
+      font-weight: 900;
+    }
+
+    /* Target Word Card */
+    .target-card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+      border: 1.5px solid rgba(251, 146, 60, 0.4);
+      border-radius: 20px;
+      padding: 24px 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      transition: all 0.25s ease;
+    }
+
+    .target-hanzi {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 3.4rem;
+      font-weight: 900;
+      color: #ffedd5;
+      line-height: 1.1;
+      text-shadow: 0 4px 18px rgba(249, 115, 22, 0.35);
+      letter-spacing: 0.02em;
+    }
+
+    .target-meaning {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    .target-prompt {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 3px 12px;
+      border-radius: 9999px;
+    }
+
+    .audio-hint-btn {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(251, 146, 60, 0.2);
+      border: 1px solid rgba(251, 146, 60, 0.5);
+      color: #fed7aa;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 1.05rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .audio-hint-btn:hover {
+      background: rgba(251, 146, 60, 0.4);
+      transform: scale(1.1);
+    }
+
+    /* Options Grid */
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .option-btn {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1.5px solid rgba(255, 255, 255, 0.16);
+      border-radius: 16px;
+      padding: 16px 14px;
+      color: #ffffff;
+      font-family: inherit;
+      font-size: 1.15rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      outline: none;
+    }
+
+    .option-btn:hover:not(:disabled) {
+      background: rgba(251, 146, 60, 0.18);
+      border-color: #fb923c;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(249, 115, 22, 0.2);
+    }
+
+    .option-pinyin {
+      font-size: 1.25rem;
+      font-weight: 900;
+      color: #ffffff;
+    }
+
+    .option-tone-tag {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+
+    /* Feedback states */
+    .option-btn.correct {
+      background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+      border-color: #34d399 !important;
+      color: #ffffff !important;
+      transform: scale(1.02);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4) !important;
+    }
+
+    .option-btn.wrong {
+      background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%) !important;
+      border-color: #fca5a5 !important;
+      color: #ffffff !important;
+      animation: shake 0.35s ease;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-6px); }
+      40%, 80% { transform: translateX(6px); }
+    }
+
+    /* Feedback Message Banner */
+    .feedback-banner {
+      min-height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      font-weight: 800;
+      text-align: center;
+      transition: all 0.2s ease;
+    }
+
+    .feedback-banner.success {
+      color: #34d399;
+    }
+
+    .feedback-banner.error {
+      color: #f87171;
+    }
+
+    /* Footer Controls */
+    .game-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-game {
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+      color: #ffffff;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-game:hover {
+      transform: translateY(-1.5px);
+      box-shadow: 0 6px 18px rgba(234, 88, 12, 0.35);
+    }
+
+    .btn-skip {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #cbd5e1;
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+
+    .btn-skip:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+
+    @media (max-width: 480px) {
+      .game-board {
+        padding: 16px;
+        gap: 14px;
+      }
+      .target-hanzi {
+        font-size: 2.8rem;
+      }
+      .options-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .option-btn {
+        padding: 12px 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="game-board" role="region" aria-label="Mandarin Tone Matcher Game">
+    
+    <!-- Header -->
+    <div class="game-header">
+      <div class="game-title-group">
+        <div class="game-logo-badge">调</div>
+        <div>
+          <h1 class="game-title">Tone Hunter</h1>
+          <span class="game-subtitle">Match the character to its correct tone</span>
+        </div>
+      </div>
+      <div class="game-stats">
+        <div class="stat-pill" title="Current Score">
+          <span>🏆</span>
+          <span class="stat-val" id="scoreVal">0</span>
+        </div>
+        <div class="stat-pill" title="Combo Streak">
+          <span>🔥</span>
+          <span class="stat-val" id="streakVal">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Target Hanzi Card -->
+    <div class="target-card" id="targetCard">
+      <button type="button" class="audio-hint-btn" id="audioHintBtn" title="Play pronunciation hint" aria-label="Play pronunciation hint">
+        🔊
+      </button>
+      <div class="target-hanzi" id="targetHanzi">好</div>
+      <div class="target-meaning" id="targetMeaning">good / well</div>
+      <span class="target-prompt">Which tone is correct?</span>
+    </div>
+
+    <!-- 4 Tone Options -->
+    <div class="options-grid" id="optionsGrid">
+      <!-- Options injected by JS -->
+    </div>
+
+    <!-- Status Feedback -->
+    <div class="feedback-banner" id="feedbackBanner" aria-live="polite">
+      Select the matching pinyin tone!
+    </div>
+
+    <!-- Footer Controls -->
+    <div class="game-footer">
+      <button type="button" class="btn-skip" id="skipBtn">Skip Word ↷</button>
+      <button type="button" class="btn-game" id="nextBtn" style="display: none;">Next Word ➔</button>
+    </div>
+
+  </div>
+
+  <script>
+    // Chinese Tone Match Data Deck
+    const GAME_QUESTIONS = [
+      {
+        hanzi: "你",
+        meaning: "you",
+        correct: "nǐ",
+        toneName: "3rd Tone (Dipping ˇ)",
+        options: [
+          { pinyin: "nī", tone: "1st Tone (Flat ¯)" },
+          { pinyin: "ní", tone: "2nd Tone (Rising ˊ)" },
+          { pinyin: "nǐ", tone: "3rd Tone (Dipping ˇ)" },
+          { pinyin: "nì", tone: "4th Tone (Falling ˋ)" }
+        ]
+      },
+      {
+        hanzi: "好",
+        meaning: "good / fine",
+        correct: "hǎo",
+        toneName: "3rd Tone (Dipping ˇ)",
+        options: [
+          { pinyin: "hāo", tone: "1st Tone (Flat ¯)" },
+          { pinyin: "háo", tone: "2nd Tone (Rising ˊ)" },
+          { pinyin: "hǎo", tone: "3rd Tone (Dipping ˇ)" },
+          { pinyin: "hào", tone: "4th Tone (Falling ˋ)" }
+        ]
+      },
+      {
+        hanzi: "妈",
+        meaning: "mother",
+        correct: "mā",
+        toneName: "1st Tone (Flat ¯)",
+        options: [
+          { pinyin: "mā", tone: "1st Tone (Flat ¯)" },
+          { pinyin: "má", tone: "2nd Tone (Rising ˊ)" },
+          { pinyin: "mǎ", tone: "3rd Tone (Dipping ˇ)" },
+          { pinyin: "mà", tone: "4th Tone (Falling ˋ)" }
+        ]
+      },
+      {
+        hanzi: "水",
+        meaning: "water",
+        correct: "shuǐ",
+        toneName: "3rd Tone (Dipping ˇ)",
+        options: [
+          { pinyin: "shuī", tone: "1st Tone (Flat ¯)" },
+          { pinyin: "shuí", tone: "2nd Tone (Rising ˊ)" },
+          { pinyin: "shuǐ", tone: "3rd Tone (Dipping ˇ)" },
+          { pinyin: "shuì", tone: "4th Tone (Falling ˋ)" }
+        ]
+      },
+      {
+        hanzi: "学",
+        meaning: "to study / learn",
+        correct: "xué",
+        toneName: "2nd Tone (Rising ˊ)",
+        options: [
+          { pinyin: "xuē", tone: "1st Tone (Flat ¯)" },
+          { pinyin: "xué", tone: "2nd Tone (Rising ˊ)" },
+          { pinyin: "xuě", tone: "3rd Tone (Dipping ˇ)" },
+          { pinyin: "xuè", tone: "4th Tone (Falling ˋ)" }
+        ]
+      },
+      {
+        hanzi: "谢",
+        meaning: "to thank",
+        correct: "xiè",
+        toneName: "4th Tone (Falling ˋ)",
+        options: [
+          { pinyin: "xiē", tone: "1st Tone (Flat ¯)" },
+          { pinyin: "xié", tone: "2nd Tone (Rising ˊ)" },
+          { pinyin: "xiě", tone: "3rd Tone (Dipping ˇ)" },
+          { pinyin: "xiè", tone: "4th Tone (Falling ˋ)" }
+        ]
+      },
+      {
+        hanzi: "茶",
+        meaning: "tea",
+        correct: "chá",
+        toneName: "2nd Tone (Rising ˊ)",
+        options: [
+          { pinyin: "chā", tone: "1st Tone (Flat ¯)" },
+          { pinyin: "chá", tone: "2nd Tone (Rising ˊ)" },
+          { pinyin: "chǎ", tone: "3rd Tone (Dipping ˇ)" },
+          { pinyin: "chà", tone: "4th Tone (Falling ˋ)" }
+        ]
+      },
+      {
+        hanzi: "吃",
+        meaning: "to eat",
+        correct: "chī",
+        toneName: "1st Tone (Flat ¯)",
+        options: [
+          { pinyin: "chī", tone: "1st Tone (Flat ¯)" },
+          { pinyin: "chí", tone: "2nd Tone (Rising ˊ)" },
+          { pinyin: "chǐ", tone: "3rd Tone (Dipping ˇ)" },
+          { pinyin: "chì", tone: "4th Tone (Falling ˋ)" }
+        ]
+      }
+    ];
+
+    let currentQuestionIndex = 0;
+    let score = 0;
+    let streak = 0;
+    let hasAnswered = false;
+
+    // Web Audio Sound Chimes
+    const audioCtx = (window.AudioContext || window.webkitAudioContext) ? new (window.AudioContext || window.webkitAudioContext)() : null;
+
+    function playToneChime(isCorrect) {
+      if (!audioCtx) return;
+      try {
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+        if (isCorrect) {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(523.25, now); // C5
+          osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.12); // E5
+          osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.24); // G5
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        } else {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(280, now);
+          osc.frequency.exponentialRampToValueAtTime(200, now + 0.2);
+          gain.gain.setValueAtTime(0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        }
+      } catch (e) {
+        // silent fallback
+      }
+    }
+
+    function speakWord(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'zh-CN';
+        utterance.rate = 0.85;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+
+    function loadQuestion(index) {
+      hasAnswered = false;
+      const q = GAME_QUESTIONS[index % GAME_QUESTIONS.length];
+
+      document.getElementById('targetHanzi').textContent = q.hanzi;
+      document.getElementById('targetMeaning').textContent = q.meaning;
+      document.getElementById('nextBtn').style.display = 'none';
+      document.getElementById('skipBtn').style.display = 'inline-flex';
+
+      const feedback = document.getElementById('feedbackBanner');
+      feedback.textContent = 'Which tone pronunciation matches ' + q.hanzi + '?';
+      feedback.className = 'feedback-banner';
+
+      const optionsGrid = document.getElementById('optionsGrid');
+      optionsGrid.innerHTML = '';
+
+      q.options.forEach((opt) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'option-btn';
+        btn.innerHTML = `
+          <span class="option-pinyin">${opt.pinyin}</span>
+          <span class="option-tone-tag">${opt.tone}</span>
+        `;
+        btn.addEventListener('click', () => handleAnswer(opt, btn, q));
+        optionsGrid.appendChild(btn);
+      });
+    }
+
+    function handleAnswer(selectedOpt, btnElement, currentQ) {
+      if (hasAnswered) return;
+      hasAnswered = true;
+
+      const isCorrect = selectedOpt.pinyin === currentQ.correct;
+      const feedback = document.getElementById('feedbackBanner');
+      const allButtons = document.querySelectorAll('.option-btn');
+
+      allButtons.forEach(btn => btn.disabled = true);
+
+      if (isCorrect) {
+        btnElement.classList.add('correct');
+        score += 10 + (streak * 2);
+        streak += 1;
+        playToneChime(true);
+        speakWord(currentQ.hanzi);
+
+        feedback.textContent = `🎉 Correct! ${currentQ.hanzi} is pronounced "${currentQ.correct}" (${currentQ.toneName})!`;
+        feedback.className = 'feedback-banner success';
+
+        setTimeout(() => {
+          currentQuestionIndex++;
+          loadQuestion(currentQuestionIndex);
+        }, 1200);
+
+      } else {
+        btnElement.classList.add('wrong');
+        streak = 0;
+        playToneChime(false);
+
+        // Highlight correct button
+        allButtons.forEach(btn => {
+          if (btn.querySelector('.option-pinyin').textContent.trim() === currentQ.correct) {
+            btn.classList.add('correct');
+          }
+        });
+
+        feedback.textContent = `Not quite! ${currentQ.hanzi} is "${currentQ.correct}" (${currentQ.toneName}).`;
+        feedback.className = 'feedback-banner error';
+
+        document.getElementById('nextBtn').style.display = 'inline-flex';
+        document.getElementById('skipBtn').style.display = 'none';
+      }
+
+      document.getElementById('scoreVal').textContent = score;
+      document.getElementById('streakVal').textContent = streak;
+    }
+
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      currentQuestionIndex++;
+      loadQuestion(currentQuestionIndex);
+    });
+
+    document.getElementById('skipBtn').addEventListener('click', () => {
+      currentQuestionIndex++;
+      loadQuestion(currentQuestionIndex);
+    });
+
+    document.getElementById('audioHintBtn').addEventListener('click', () => {
+      const q = GAME_QUESTIONS[currentQuestionIndex % GAME_QUESTIONS.length];
+      speakWord(q.hanzi);
+    });
+
+    // Start game
+    loadQuestion(0);
+  </script>
+</body>
+</html>

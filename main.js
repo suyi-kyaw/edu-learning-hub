@@ -55,6 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupReminderUI();
   startDailyReminderScheduler();
   setupReviewMode();
+  setupReelsInteractions();
   loadWorkbook();
 });
 
@@ -3820,6 +3821,89 @@ function handleReviewKeyboardShortcuts(e) {
     const targetAudioBtn = isReviewFlipped ? backAudioBtn : frontAudioBtn;
     playCurrentReviewAudio(targetAudioBtn);
   }
+}
+
+
+/* =========================================================
+   FEATURED REELS & VIDEO MODAL INTERACTIONS
+========================================================= */
+
+function setupReelsInteractions() {
+  const reelCards = document.querySelectorAll(".reel-card");
+  const modal = document.getElementById("reelModal");
+  const modalVideo = document.getElementById("reelModalVideo");
+  const modalTitle = document.getElementById("reelModalTitle");
+  const modalDesc = document.getElementById("reelModalDesc");
+  const closeBtn = document.getElementById("closeReelModalBtn");
+
+  if (!reelCards.length) return;
+
+  reelCards.forEach((card) => {
+    const previewVideo = card.querySelector(".reel-preview-video");
+
+    // Desktop hover preview (muted playback)
+    card.addEventListener("mouseenter", () => {
+      if (previewVideo && previewVideo.paused) {
+        previewVideo.play().catch(() => {});
+      }
+    });
+
+    card.addEventListener("mouseleave", () => {
+      if (previewVideo && !previewVideo.paused) {
+        previewVideo.pause();
+      }
+    });
+
+    // Click to open Reel Video Player Modal
+    card.addEventListener("click", () => {
+      const videoSrc = card.dataset.video || (previewVideo && previewVideo.querySelector("source") ? previewVideo.querySelector("source").src : "");
+      const title = card.dataset.title || "Chinese Reel Video";
+      const desc = card.dataset.desc || "Bite-sized culture and Mandarin dialogue.";
+
+      if (modal && modalVideo) {
+        modalVideo.src = videoSrc;
+        if (modalTitle) modalTitle.textContent = title;
+        if (modalDesc) modalDesc.textContent = desc;
+
+        modal.classList.add("active");
+        modal.setAttribute("aria-hidden", "false");
+        modalVideo.currentTime = 0;
+        modalVideo.play().catch(() => {});
+      }
+    });
+  });
+
+  function closeReelModal() {
+    if (!modal) return;
+    modal.classList.remove("active");
+    modal.setAttribute("aria-hidden", "true");
+    if (modalVideo) {
+      modalVideo.pause();
+      modalVideo.removeAttribute("src");
+      modalVideo.load();
+    }
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeReelModal();
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        closeReelModal();
+      }
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal && modal.classList.contains("active")) {
+      closeReelModal();
+    }
+  });
 }
 
 

@@ -4,7 +4,8 @@
     "Story",
     "Vocabulary",
     "Exercises",
-    "Demo"
+    "Demo",
+    "Games"
   ],
   "sheets": {
     "Lessons": [
@@ -369,6 +370,34 @@
         "optionB": "",
         "optionC": "",
         "answer": ""
+      }
+    ],
+    "Games": [
+      {
+        "id": "game-01",
+        "order": 1,
+        "title": "Tone Hunter — Character & Tone Matcher",
+        "category": "Tone Recognition",
+        "badge": "Wordwall Challenge 1",
+        "description": "Match Mandarin characters to their correct tone mark and phonetic pitch. Practice tonal accuracy and ear training.",
+        "embed_code": "<iframe style=\"max-width:100%\" src=\"https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0\" width=\"500\" height=\"380\" frameborder=\"0\" allowfullscreen></iframe>",
+        "embed_url": "https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0",
+        "width": 500,
+        "height": 380,
+        "active": "TRUE"
+      },
+      {
+        "id": "game-02",
+        "order": 2,
+        "title": "Word Speed Quiz — Vocabulary Match",
+        "category": "Rapid Recall",
+        "badge": "Wordwall Challenge 2",
+        "description": "Fast-paced Mandarin vocabulary identification. Test your speed recognition of characters, pinyin, and definitions.",
+        "embed_code": "<iframe style=\"max-width:100%\" src=\"https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0\" width=\"500\" height=\"380\" frameborder=\"0\" allowfullscreen></iframe>",
+        "embed_url": "https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0",
+        "width": 500,
+        "height": 380,
+        "active": "TRUE"
       }
     ]
   }
