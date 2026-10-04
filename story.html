@@ -29,20 +29,12 @@
 
 
   <!-- Google Fonts -->
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
-
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    rel="preconnect"
-    href="https://fonts.gstatic.com"
-    crossorigin
-  >
-
-  <link
-    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Roboto:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   >
-
 
   <link rel="stylesheet" href="style.css">
   <!-- Early dark theme application to avoid white-flash on reload -->
@@ -59,9 +51,7 @@
   </script>
 </head>
 
-
 <body>
-
 
   <!-- =========================
        HEADER / NAVIGATION
@@ -82,7 +72,7 @@
         <a href="index.html#lessons" class="nav-link">Lessons</a>
       </nav>
 
-      <!-- Action Controls (Strict Single Line: Dark Mode + Menu Drawer) -->
+      <!-- Action Controls (Strict Single Line: Dark Mode + Quick Home + Menu Drawer) -->
       <div class="nav-actions">
         <!-- Dark Mode Toggle Button for Late-Night Learning -->
         <button
@@ -95,6 +85,10 @@
           <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
           <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
         </button>
+
+        <a href="index.html" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.85rem;">
+          ← Home
+        </a>
 
         <!-- Menu / Tools Toggle Button (Opens Hide Menu) -->
         <button
@@ -239,39 +233,44 @@
   </header>
 
 
-  <!-- =========================
-       SUB-NAVIGATION TAB BAR (Stories / Reels)
-  ========================== -->
-  <div class="stories-reels-tab-bar-wrap">
-    <div class="container">
-      <div class="tab-switcher" role="tablist" aria-label="Stories and Reels switcher">
-        <button
-          type="button"
-          class="tab-switch-btn active"
-          id="tabBtnStories"
-          role="tab"
-          aria-selected="true"
-          aria-controls="stories-view"
-        >
-          <span class="tab-icon" aria-hidden="true">📖</span>
-          <span class="tab-label">Stories</span>
-        </button>
-        <button
-          type="button"
-          class="tab-switch-btn"
-          id="tabBtnReels"
-          role="tab"
-          aria-selected="false"
-          aria-controls="reels-view"
-        >
-          <span class="tab-icon" aria-hidden="true">🎬</span>
-          <span class="tab-label">Short Reels</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
   <main id="mainContent">
+    <!-- =========================
+         PAGE HERO & SUB-PAGE SWITCHER (Matching lessons.html & games.html)
+    ========================== -->
+    <section class="story-page-hero">
+      <div class="container">
+        <span class="eyebrow">Interactive Media &amp; Immersion</span>
+        <h1>Chinese Stories &amp; Short Reels</h1>
+        <p>
+          Master Chinese reading, vocabulary, and natural dialogue through full interactive story lessons and bite-sized short video reels.
+        </p>
+
+        <!-- Prominent Pill Sub-Page Switcher (Matching lessons.html) -->
+        <div class="audience-tab-bar" role="tablist" aria-label="Stories and Reels switcher">
+          <button
+            type="button"
+            class="audience-tab active"
+            id="tabBtnStories"
+            role="tab"
+            aria-selected="true"
+            aria-controls="stories-view"
+          >
+            📖 Stories &amp; Reading
+          </button>
+          <button
+            type="button"
+            class="audience-tab"
+            id="tabBtnReels"
+            role="tab"
+            aria-selected="false"
+            aria-controls="reels-view"
+          >
+            🎬 Short Reels
+          </button>
+        </div>
+      </div>
+    </section>
+
     <!-- =========================
          TAB 1: STORIES VIEW
     ========================== -->
@@ -627,71 +626,58 @@
 
 
     <!-- =========================
-         TAB 2: REELS VIEW
+         TAB 2: REELS VIEW (Matching Layout of Other Pages)
     ========================== -->
     <div id="reels-view" class="tab-view-panel" role="tabpanel" aria-labelledby="tabBtnReels" style="display: none;">
-      <!-- Reels Hero / Intro -->
-      <section class="reels-hero-section section-light">
+      <section class="section" style="padding: 40px 0 80px;">
         <div class="container">
-          <span class="section-label">Bite-Sized Immersion</span>
-          <h1 class="reels-hero-title">Short Mandarin Reels &amp; Holiday Specials</h1>
-          <p class="reels-hero-desc">
-            Watch, listen, and repeat real-life Mandarin expressions, holiday traditions, and tone hacks in high-definition vertical video.
-          </p>
+          <div class="section-heading">
+            <span class="section-label">Bite-Sized Video Immersion</span>
+            <h2>Short Mandarin Reels &amp; Holiday Specials</h2>
+            <p>
+              Watch high-definition vertical video shorts with synchronized quad-language subtitles in Chinese Hanzi, Pinyin, English, and Myanmar (Burmese).
+            </p>
+          </div>
 
-          <!-- Horizontal Filter Chip Bar -->
-          <div class="reels-filter-bar-wrap" role="toolbar" aria-label="Filter Reels by category">
-            <div class="reels-filter-chips" id="reelsFilterChips">
-              <button type="button" class="filter-chip active" data-filter="all">
-                <span class="filter-chip-icon">✨</span>
-                <span>All Reels</span>
-              </button>
-              <button type="button" class="filter-chip" data-filter="holidays">
-                <span class="filter-chip-icon">🏮</span>
-                <span>Holidays &amp; Festivals</span>
-              </button>
-              <button type="button" class="filter-chip" data-filter="daily">
-                <span class="filter-chip-icon">💬</span>
-                <span>Daily Conversation</span>
-              </button>
-              <button type="button" class="filter-chip" data-filter="kids">
-                <span class="filter-chip-icon">🐼</span>
-                <span>Kids &amp; Fun</span>
-              </button>
-              <button type="button" class="filter-chip" data-filter="grammar">
-                <span class="filter-chip-icon">🎼</span>
-                <span>Grammar &amp; Tones</span>
-              </button>
-              <button type="button" class="filter-chip" data-filter="culture">
-                <span class="filter-chip-icon">🍵</span>
-                <span>Culture &amp; Customs</span>
-              </button>
+          <!-- Horizontal Filter Chip Bar (Matching track-pills) -->
+          <div class="track-pills" id="reelsFilterChips" role="toolbar" aria-label="Filter Reels by category">
+            <button type="button" class="track-pill active filter-chip" data-filter="all">
+              <span>✨ All Reels</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="holidays">
+              <span>🏮 Holidays &amp; Festivals</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="daily">
+              <span>💬 Daily Conversation</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="kids">
+              <span>🐼 Kids &amp; Fun</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="grammar">
+              <span>🎼 Grammar &amp; Tones</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="culture">
+              <span>🍵 Culture &amp; Customs</span>
+            </button>
+          </div>
+
+          <!-- Reels Video Grid Section -->
+          <div class="reels-grid-section" style="padding-top: 30px;">
+            <div class="reels-grid-header">
+              <div class="reels-count-info" id="reelsCountInfo">Showing active reels</div>
             </div>
-          </div>
-        </div>
-      </section>
 
-      <!-- Reels Video Grid Section -->
-      <section class="reels-grid-section">
-        <div class="container">
-          <div class="reels-grid-header">
-            <div class="reels-count-info" id="reelsCountInfo">Showing active reels</div>
-            <div class="reels-sync-pill">
-              <span class="sync-dot">●</span>
-              <span>data/reels_stories.xlsx</span>
+            <!-- 9:16 Vertical Video Grid -->
+            <div class="reels-video-grid" id="reelsVideoGrid">
+              <!-- Dynamic Reel Cards rendered by story.js -->
             </div>
-          </div>
 
-          <!-- 9:16 Vertical Video Grid -->
-          <div class="reels-video-grid" id="reelsVideoGrid">
-            <!-- Dynamic Reel Cards rendered by story.js -->
-          </div>
-
-          <div id="reelsEmptyState" class="reels-empty-state" style="display: none;">
-            <div class="empty-icon">🎬</div>
-            <h3>No reels found for this category</h3>
-            <p>Try selecting "All Reels" or check that your Excel file has active rows.</p>
-            <button type="button" class="btn btn-secondary btn-sm" id="resetFilterBtn">View All Reels</button>
+            <div id="reelsEmptyState" class="reels-empty-state" style="display: none;">
+              <div class="empty-icon">🎬</div>
+              <h3>No reels found for this category</h3>
+              <p>Try selecting "All Reels" or check that your Excel file has active rows.</p>
+              <button type="button" class="btn btn-secondary btn-sm" id="resetFilterBtn">View All Reels</button>
+            </div>
           </div>
         </div>
       </section>

@@ -3705,7 +3705,7 @@ function initStoriesAndReelsSystem() {
   }
 
   // Category filter chips
-  const chips = document.querySelectorAll("#reelsFilterChips .filter-chip");
+  const chips = document.querySelectorAll("#reelsFilterChips .filter-chip, #reelsFilterChips .track-pill");
   chips.forEach(chip => {
     chip.addEventListener("click", () => {
       setReelCategoryFilter(chip.dataset.filter || "all");

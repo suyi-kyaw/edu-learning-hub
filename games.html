@@ -21,98 +21,6 @@
       border-bottom-color: #334155;
     }
 
-    /* Excel Sync Status Toolbar */
-    .excel-sync-bar {
-      margin: 24px auto 0;
-      max-width: 820px;
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      border: 1.5px solid #fed7aa;
-      border-radius: 18px;
-      padding: 12px 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      flex-wrap: wrap;
-      box-shadow: 0 4px 16px rgba(249, 115, 22, 0.08);
-    }
-    [data-theme="dark"] .excel-sync-bar {
-      background: rgba(30, 41, 59, 0.85);
-      border-color: #334155;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-    }
-
-    .excel-status-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: #334155;
-    }
-    [data-theme="dark"] .excel-status-info {
-      color: #e2e8f0;
-    }
-
-    .excel-tag-pill {
-      background: #dcfce7;
-      color: #15803d;
-      border: 1px solid #86efac;
-      padding: 4px 10px;
-      border-radius: 9999px;
-      font-size: 0.78rem;
-      font-weight: 800;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-    }
-    [data-theme="dark"] .excel-tag-pill {
-      background: #064e3b;
-      color: #6ee7b7;
-      border-color: #059669;
-    }
-
-    .excel-bar-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .btn-sync-action {
-      background: #ffffff;
-      border: 1.5px solid #fed7aa;
-      color: #ea580c;
-      padding: 6px 14px;
-      border-radius: 10px;
-      font-size: 0.82rem;
-      font-weight: 800;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s ease;
-      text-decoration: none;
-    }
-    [data-theme="dark"] .btn-sync-action {
-      background: #1e293b;
-      border-color: #475569;
-      color: #fdba74;
-    }
-    .btn-sync-action:hover {
-      background: #ea580c;
-      color: #ffffff;
-      border-color: #ea580c;
-      transform: translateY(-1px);
-    }
-    [data-theme="dark"] .btn-sync-action:hover {
-      background: #f97316;
-      color: #ffffff;
-      border-color: #f97316;
-    }
-
     /* Embedded Games Section & Grid */
     .embedded-games-section {
       padding: 50px 0 70px;
@@ -423,9 +331,9 @@
 
       <nav class="desktop-nav" aria-label="Main Navigation">
         <a href="index.html#home" class="nav-link">Home</a>
-        <a href="index.html#stories-reels" class="nav-link">Stories &amp; Reels</a>
+        <a href="story.html" class="nav-link">Stories &amp; Reels</a>
         <a href="games.html" class="nav-link active">Games</a>
-        <a href="index.html#lessons" class="nav-link">Lessons</a>
+        <a href="lessons.html" class="nav-link">Lessons</a>
       </nav>
 
       <div class="nav-actions">
@@ -450,30 +358,8 @@
           Interactive Mandarin Games Arcade
         </h1>
         <p style="max-width: 680px; margin: 0 auto; font-size: 1.08rem; color: #475569; line-height: 1.6;">
-          Sharpen your Chinese pronunciation, tone recognition, and quick character recall with live interactive challenges. All embedded games are synchronized dynamically from your Excel workbook (<strong>data/lessons.xlsx</strong>).
+          Sharpen your Chinese pronunciation, tone recognition, and quick character recall with live interactive Wordwall challenges.
         </p>
-
-        <!-- Excel Sync Toolbar -->
-        <div class="excel-sync-bar">
-          <div class="excel-status-info">
-            <span class="excel-tag-pill">
-              <span>●</span> Excel Synced
-            </span>
-            <span id="excelLoadedCountText">Loading games from sheet: <strong>Games</strong>...</span>
-          </div>
-
-          <div class="excel-bar-actions">
-            <button type="button" class="btn-sync-action" id="btnRefreshExcel" title="Re-read data/lessons.xlsx from server">
-              🔄 Refresh from Excel
-            </button>
-            <button type="button" class="btn-sync-action" id="btnUploadExcelModal" title="Upload an updated lessons.xlsx">
-              📁 Replace Excel File
-            </button>
-            <button type="button" class="btn-sync-action" id="btnExcelHelpModal" title="Learn how to add embeds in Excel">
-              ℹ️ Excel Format Guide
-            </button>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -484,7 +370,7 @@
           <span class="section-label">Live Embedded Challenges</span>
           <h2>Play &amp; Practice Wordwall Games</h2>
           <p>
-            Engage with interactive games configured in your workbook. Edit embed links or add new ones in <code>data/lessons.xlsx</code> to update this arcade.
+            Engage with interactive games to master tone recognition, quick character recall, and vocabulary speed matching.
           </p>
         </div>
 
@@ -565,69 +451,12 @@
 
         <!-- Navigation Buttons -->
         <div style="text-align: center; margin-top: 50px;">
-          <a href="index.html#stories-reels" class="btn btn-secondary btn-lg" style="margin-right: 12px;">← Back to Stories &amp; Reels</a>
-          <a href="index.html#lessons" class="btn btn-primary btn-lg">Explore Lessons →</a>
+          <a href="story.html" class="btn btn-secondary btn-lg" style="margin-right: 12px;">← Back to Stories &amp; Reels</a>
+          <a href="lessons.html" class="btn btn-primary btn-lg">Explore Lessons →</a>
         </div>
       </div>
     </section>
   </main>
-
-  <!-- Upload / Replace Excel Modal -->
-  <div class="game-modal-backdrop" id="uploadModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
-    <div class="game-modal-box">
-      <button type="button" class="modal-close-btn" id="closeUploadModalBtn" aria-label="Close modal">✕</button>
-      <h2 id="uploadModalTitle" style="margin-top: 0; font-size: 1.5rem; font-weight: 800;">Update Excel Workbook</h2>
-      <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 16px;">
-        Upload your updated <strong>lessons.xlsx</strong> file. The app will replace <code>data/lessons.xlsx</code> on the server and immediately re-render all games from the <strong>Games</strong> sheet.
-      </p>
-
-      <div class="dropzone-box" id="excelDropzone">
-        <div style="font-size: 2.5rem; margin-bottom: 8px;">📊</div>
-        <strong style="display: block; font-size: 1.05rem; margin-bottom: 4px;">Click to select file or drag &amp; drop here</strong>
-        <span style="font-size: 0.85rem; color: #64748b;">Supports .xlsx or .xls files</span>
-        <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display: none;">
-      </div>
-
-      <div id="uploadStatusMessage" style="font-size: 0.9rem; font-weight: 700; margin-bottom: 16px; min-height: 22px;"></div>
-
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-        <a href="data/lessons.xlsx" download="lessons.xlsx" class="btn btn-secondary" style="font-size: 0.88rem;">
-          📥 Download Current Excel File
-        </a>
-        <button type="button" class="btn btn-secondary" id="cancelUploadBtn">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Excel Format Guide Modal -->
-  <div class="game-modal-backdrop" id="guideModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="guideModalTitle">
-    <div class="game-modal-box" style="max-width: 680px;">
-      <button type="button" class="modal-close-btn" id="closeGuideModalBtn" aria-label="Close modal">✕</button>
-      <h2 id="guideModalTitle" style="margin-top: 0; font-size: 1.5rem; font-weight: 800;">Excel Sheet: Games</h2>
-      <p style="color: #64748b; font-size: 0.95rem;">
-        To add or edit embedded games without touching code, simply update the <strong>Games</strong> sheet in <code>data/lessons.xlsx</code>.
-      </p>
-
-      <div style="margin: 16px 0;">
-        <h4 style="margin: 0 0 8px; font-size: 1rem; color: #ea580c;">Sheet Columns:</h4>
-        <ul style="font-size: 0.9rem; color: #475569; padding-left: 20px; line-height: 1.7;">
-          <li><strong>id:</strong> Unique identifier (e.g. <code>game-01</code>, <code>game-02</code>)</li>
-          <li><strong>order:</strong> Sequence number (e.g. <code>1</code>, <code>2</code>, <code>3</code>)</li>
-          <li><strong>title:</strong> Game title displayed in the card header</li>
-          <li><strong>category:</strong> Skill tag (e.g. <code>Tone Practice</code>, <code>Vocabulary</code>)</li>
-          <li><strong>description:</strong> Short overview for the learner</li>
-          <li><strong>embed_code:</strong> Full iframe snippet (e.g. <code>&lt;iframe src="..." ...&gt;&lt;/iframe&gt;</code>)</li>
-          <li><strong>embed_url:</strong> Or raw URL (e.g. <code>https://wordwall.net/embed/...</code>)</li>
-          <li><strong>active:</strong> Set to <code>TRUE</code> to show, <code>FALSE</code> to hide</li>
-        </ul>
-      </div>
-
-      <div class="code-preview-block">
-&lt;iframe style="max-width:100%" src="https://wordwall.net/embed/..." width="500" height="380" frameborder="0" allowfullscreen&gt;&lt;/iframe&gt;
-      </div>
-
-      <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
-        <button type="button" class="btn btn-primary" id="closeGuideBtn">Got It</button>
       </div>
     </div>
   </div>
@@ -741,7 +570,6 @@
     // Render games into DOM
     function renderGames(gamesList) {
       const container = document.getElementById('embeddedGamesContainer');
-      const countText = document.getElementById('excelLoadedCountText');
       if (!container) return;
 
       const activeGames = gamesList.filter(g => {
@@ -752,11 +580,10 @@
       if (!activeGames.length) {
         container.innerHTML = `
           <div style="grid-column: 1/-1; text-align: center; padding: 40px; background: #fff7ed; border: 1.5px dashed #fed7aa; border-radius: 20px;">
-            <h3>No active games found in Excel</h3>
-            <p>Ensure the <strong>Games</strong> sheet in <code>data/lessons.xlsx</code> has rows with <code>active = TRUE</code>.</p>
+            <h3>Interactive Games Loading</h3>
+            <p>Please check back shortly or explore our lessons.</p>
           </div>
         `;
-        if (countText) countText.innerHTML = 'Sheet: <strong>Games</strong> (0 active games)';
         return;
       }
 
@@ -767,7 +594,7 @@
         const title = game.title || game.Title || `Mandarin Practice Game ${num}`;
         const cat = game.category || game.Category || 'Interactive Game';
         const badge = game.badge || game.Badge || `Game ${num}`;
-        const desc = game.description || game.Description || 'Interactive Mandarin challenge from your Excel workbook.';
+        const desc = game.description || game.Description || 'Interactive Mandarin challenge.';
         const rawCode = game.embed_code || game.embedCode || game.embed || '';
         const rawUrl = game.embed_url || game.embedUrl || game.url || '';
         const src = extractIframeSrc(rawCode || rawUrl);
@@ -814,10 +641,6 @@
 
         container.appendChild(card);
       });
-
-      if (countText) {
-        countText.innerHTML = `Loaded <strong>${activeGames.length}</strong> live games from <strong>data/lessons.xlsx</strong> (Sheet: Games)`;
-      }
 
       bindCardActions();
     }
@@ -867,12 +690,9 @@
       });
     }
 
-    // Load Games from Excel (via /api/lessons-data or direct binary read)
+    // Load Games from server API / cached data
     async function fetchGamesFromExcel() {
-      const countText = document.getElementById('excelLoadedCountText');
-      if (countText) countText.textContent = 'Reading data/lessons.xlsx...';
-
-      // Strategy 1: Call API (which reads data/lessons.xlsx fresh on every request)
+      // Strategy 1: Call API (which reads lessons data)
       try {
         const res = await fetch('/api/lessons-data?t=' + Date.now());
         if (res.ok) {
@@ -883,10 +703,10 @@
           }
         }
       } catch (e) {
-        console.warn('API /api/lessons-data fetch error, falling back to direct Excel file:', e);
+        console.warn('API /api/lessons-data fetch note:', e);
       }
 
-      // Strategy 2: Direct Excel binary parsing via SheetJS
+      // Strategy 2: Direct binary parsing via SheetJS
       if (typeof XLSX !== 'undefined') {
         try {
           const res = await fetch('data/lessons.xlsx?t=' + Date.now());
@@ -902,7 +722,7 @@
             }
           }
         } catch (e) {
-          console.warn('Direct XLSX fetch error, falling back to static json:', e);
+          console.warn('Direct XLSX fetch note:', e);
         }
       }
 
@@ -917,137 +737,11 @@
           }
         }
       } catch (e) {
-        console.warn('Static json fetch error, using default user embeds:', e);
+        console.warn('Static json fetch note:', e);
       }
 
       // Final fallback: Use user-provided default embeds
       renderGames(DEFAULT_GAMES);
-    }
-
-    // Manual Refresh button
-    const btnRefresh = document.getElementById('btnRefreshExcel');
-    if (btnRefresh) {
-      btnRefresh.addEventListener('click', async () => {
-        btnRefresh.disabled = true;
-        btnRefresh.textContent = '⏳ Refreshing...';
-        await fetchGamesFromExcel();
-        btnRefresh.disabled = false;
-        btnRefresh.textContent = '🔄 Refresh from Excel';
-        showToast('Games refreshed from data/lessons.xlsx!', '🔄');
-      });
-    }
-
-    // Modal Handlers
-    const uploadModal = document.getElementById('uploadModalBackdrop');
-    const guideModal = document.getElementById('guideModalBackdrop');
-
-    document.getElementById('btnUploadExcelModal')?.addEventListener('click', () => {
-      uploadModal.classList.add('active');
-    });
-    document.getElementById('closeUploadModalBtn')?.addEventListener('click', () => {
-      uploadModal.classList.remove('active');
-    });
-    document.getElementById('cancelUploadBtn')?.addEventListener('click', () => {
-      uploadModal.classList.remove('active');
-    });
-
-    document.getElementById('btnExcelHelpModal')?.addEventListener('click', () => {
-      guideModal.classList.add('active');
-    });
-    document.getElementById('closeGuideModalBtn')?.addEventListener('click', () => {
-      guideModal.classList.remove('active');
-    });
-    document.getElementById('closeGuideBtn')?.addEventListener('click', () => {
-      guideModal.classList.remove('active');
-    });
-
-    window.addEventListener('click', (e) => {
-      if (e.target === uploadModal) uploadModal.classList.remove('active');
-      if (e.target === guideModal) guideModal.classList.remove('active');
-    });
-
-    // File Upload / Replace Handling
-    const dropzone = document.getElementById('excelDropzone');
-    const fileInput = document.getElementById('excelFileInput');
-    const uploadStatus = document.getElementById('uploadStatusMessage');
-
-    if (dropzone && fileInput) {
-      dropzone.addEventListener('click', () => fileInput.click());
-
-      dropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropzone.classList.add('dragover');
-      });
-
-      dropzone.addEventListener('dragleave', () => {
-        dropzone.classList.remove('dragover');
-      });
-
-      dropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropzone.classList.remove('dragover');
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-          handleExcelFile(e.dataTransfer.files[0]);
-        }
-      });
-
-      fileInput.addEventListener('change', () => {
-        if (fileInput.files && fileInput.files[0]) {
-          handleExcelFile(fileInput.files[0]);
-        }
-      });
-    }
-
-    async function handleExcelFile(file) {
-      if (!file.name.match(/\.(xlsx|xls)$/i)) {
-        uploadStatus.style.color = '#ef4444';
-        uploadStatus.textContent = 'Please choose a valid Excel (.xlsx) file.';
-        return;
-      }
-
-      uploadStatus.style.color = '#ea580c';
-      uploadStatus.textContent = `Uploading and parsing "${file.name}"...`;
-
-      try {
-        const arrayBuf = await file.arrayBuffer();
-
-        // Immediate client preview with SheetJS
-        if (typeof XLSX !== 'undefined') {
-          const wb = XLSX.read(arrayBuf, { type: 'array' });
-          if (wb.SheetNames.includes('Games')) {
-            const clientRows = XLSX.utils.sheet_to_json(wb.Sheets['Games'], { defval: '' });
-            if (clientRows.length) {
-              renderGames(clientRows);
-            }
-          }
-        }
-
-        // Upload to server to persist in data/lessons.xlsx
-        const res = await fetch('/api/upload-excel', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: arrayBuf
-        });
-
-        if (res.ok) {
-          const result = await res.json();
-          uploadStatus.style.color = '#16a34a';
-          uploadStatus.textContent = 'Workbook updated successfully!';
-          showToast('data/lessons.xlsx updated successfully!', '🎉');
-          setTimeout(() => {
-            uploadModal.classList.remove('active');
-            uploadStatus.textContent = '';
-            fetchGamesFromExcel();
-          }, 1200);
-        } else {
-          const err = await res.json();
-          throw new Error(err.error || 'Server error saving file');
-        }
-      } catch (err) {
-        uploadStatus.style.color = '#ef4444';
-        uploadStatus.textContent = 'Upload failed: ' + err.message;
-        console.error('File upload error:', err);
-      }
     }
 
     // Initial load
