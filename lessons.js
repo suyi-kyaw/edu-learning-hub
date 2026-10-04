@@ -18,7 +18,7 @@
   let allVocabulary = [];
 
   let currentAudience = 'Adult'; // 'Adult' or 'Kids'
-  let activeCategoryKey = 'all'; // 'all' or category key
+  let activeCategoryKey = 'basics'; // 'basics' or 'travel' or 'business' / 'pinyin' etc.
   let activeLesson = null;
   let activeWorkspaceTab = 'video'; // 'video', 'exercises', 'writing'
   let activeWritingCharIndex = 0;
@@ -303,16 +303,14 @@
     }
   ];
 
-  // --- Category Definitions ---
+  // --- Category Definitions (Without 'all' filter option) ---
   const ADULT_CATEGORIES = [
-    { key: "all", name: "All Modules", icon: "📚", desc: "Full Adult Curriculum" },
     { key: "basics", name: "Beginner & Everyday Basics", icon: "⭐", num: "Category 1", desc: "Greetings, Self-Introduction, Numbers, Pinyin" },
     { key: "travel", name: "Travel & Daily Life", icon: "✈️", num: "Category 2", desc: "Dining, Directions, Shopping, HSK 1–2 Vocab" },
     { key: "business", name: "Business & Workplace", icon: "💼", num: "Category 3", desc: "Workplace Etiquette, Emails, Meetings, Networking" }
   ];
 
   const KIDS_CATEGORIES = [
-    { key: "all", name: "All Missions", icon: "🐼", desc: "All Kids Adventures" },
     { key: "pinyin", name: "Fun with Pinyin & Tones", icon: "🎵", num: "Category 1", desc: "Pinyin Songs, Four Tones Audio Cards, Easy Sounds" },
     { key: "colors", name: "Colors, Animals & Family", icon: "🌈", num: "Category 2", desc: "Flashcards, Word Matching, Picture Vocab" },
     { key: "rhymes", name: "Nursery Rhymes & Short Stories", icon: "📖", num: "Category 3", desc: "Animated Songs, Simple Dialogues, Story Time" }
@@ -337,7 +335,7 @@
     if (cat.includes("pinyin") || cat.includes("tone")) return "pinyin";
     if (cat.includes("color") || cat.includes("animal") || cat.includes("family")) return "colors";
     if (cat.includes("rhyme") || cat.includes("song") || cat.includes("story")) return "rhymes";
-    return "basics";
+    return currentAudience === 'Kids' ? 'pinyin' : 'basics';
   }
 
   // Speak Chinese speech synthesis
@@ -470,14 +468,13 @@
     const categories = currentAudience === 'Kids' ? KIDS_CATEGORIES : ADULT_CATEGORIES;
     const audienceLessons = allLessons.filter(l => String(l.audience || 'Adult').toLowerCase() === currentAudience.toLowerCase());
 
-    container.innerHTML = categories.map(cat => {
-      let count = 0;
-      if (cat.key === 'all') {
-        count = audienceLessons.length;
-      } else {
-        count = audienceLessons.filter(l => getCategoryKey(l) === cat.key).length;
-      }
+    // Ensure activeCategoryKey is valid
+    if (!categories.some(c => c.key === activeCategoryKey)) {
+      activeCategoryKey = categories[0].key;
+    }
 
+    container.innerHTML = categories.map(cat => {
+      const count = audienceLessons.filter(l => getCategoryKey(l) === cat.key).length;
       const isActive = activeCategoryKey === cat.key;
       return `
         <button type="button" class="cat-pill-btn ${isActive ? 'active' : ''}" data-category="${cat.key}">
@@ -507,11 +504,7 @@
 
     if (updateUrl) {
       const url = new URL(window.location);
-      if (catKey === 'all') {
-        url.searchParams.delete('category');
-      } else {
-        url.searchParams.set('category', catKey);
-      }
+      url.searchParams.set('category', catKey);
       url.searchParams.delete('lesson');
       window.history.pushState({}, '', url);
     }
@@ -524,7 +517,6 @@
 
     const audienceLessons = allLessons.filter(l => String(l.audience || 'Adult').toLowerCase() === currentAudience.toLowerCase());
     const filtered = audienceLessons.filter(l => {
-      if (activeCategoryKey === 'all') return true;
       return getCategoryKey(l) === activeCategoryKey;
     });
 
@@ -533,7 +525,6 @@
         <div style="grid-column: 1/-1; text-align: center; padding: 50px 20px; background: #fff7ed; border: 1.5px dashed #fed7aa; border-radius: 20px;">
           <h3>No lessons found in this category</h3>
           <p>Please select another category above to view lessons.</p>
-          <button type="button" class="btn btn-secondary" onclick="window.LinguaLessons.switchCategory('all')">View All Lessons</button>
         </div>
       `;
       return;
@@ -574,7 +565,7 @@
 
             <div class="lesson-card-actions" style="margin-top: auto;">
               <button type="button" class="btn ${isKids ? 'btn-kids-play' : 'btn-primary'} lesson-button" style="width: 100%; text-align: center;" data-lesson-id="${escapeHTML(lessonId)}">
-                ${isKids ? '🚀 Play Mission →' : 'Start 3-Section Lesson →'}
+                🚀 Start 3-Section Lesson →
               </button>
             </div>
           </div>
@@ -662,7 +653,7 @@
     hero.innerHTML = `
       <div class="workspace-top-bar">
         <button type="button" class="btn-back-to-curriculum" id="btnBackToCurriculum">
-          ← Back to ${isKids ? 'Adventures' : 'Curriculum Modules'}
+          ← Back to Curriculum Lessons
         </button>
         <div class="workspace-breadcrumbs">
           <span>${isKids ? '🐼 Kids Track' : '💼 Adult Track'}</span>
@@ -967,7 +958,6 @@
     const chars = allWriting.filter(w => String(w.lessonId) === String(lesson.id));
 
     if (!chars.length) {
-      // Create characters from lesson Chinese title or default
       const defaultChars = [
         { character: "早", pinyin: "zǎo", meaning: "morning", strokeCount: 6, radical: "日", strokeOrderSteps: "1.丨 2.𠃍 3.一 4.一 5.一 6.丨" },
         { character: "好", pinyin: "hǎo", meaning: "good", strokeCount: 6, radical: "女", strokeOrderSteps: "1.ㄑ 2.ノ 3.一 4.乛 5.亅 6.一" }
@@ -1076,7 +1066,6 @@
     canvas = document.getElementById('strokeDrawCanvas');
     if (!canvas) return;
 
-    // Adjust canvas resolution for high-DPI displays
     const rect = canvas.parentElement.getBoundingClientRect();
     const size = Math.min(rect.width || 320, 320);
 
@@ -1092,13 +1081,11 @@
     ctx.lineWidth = brushSizes[currentBrushIndex];
     ctx.strokeStyle = currentColor;
 
-    // Remove old event listeners
     canvas.onmousedown = handleMouseDown;
     canvas.onmousemove = handleMouseMove;
     canvas.onmouseup = handleMouseUp;
     canvas.onmouseleave = handleMouseUp;
 
-    // Touch events for mobile/tablet
     canvas.ontouchstart = handleTouchStart;
     canvas.ontouchmove = handleTouchMove;
     canvas.ontouchend = handleTouchEnd;
@@ -1185,8 +1172,12 @@
     const categoryParam = params.get('category');
     const lessonParam = params.get('lesson');
 
-    if (categoryParam) {
+    const categories = currentAudience === 'Kids' ? KIDS_CATEGORIES : ADULT_CATEGORIES;
+
+    if (categoryParam && categories.some(c => c.key === categoryParam)) {
       activeCategoryKey = categoryParam;
+    } else {
+      activeCategoryKey = categories[0].key;
     }
 
     renderCategoryBar();
@@ -1199,18 +1190,18 @@
 
   // --- Initialization ---
   async function init() {
-    // Detect audience from page or document body
     if (window.location.pathname.includes('kids') || document.body.classList.contains('kids-theme') || document.body.dataset.audience === 'Kids') {
       currentAudience = 'Kids';
+      activeCategoryKey = 'pinyin';
     } else {
       currentAudience = 'Adult';
+      activeCategoryKey = 'basics';
     }
 
     setupWorkspaceTabs();
     await loadLessonsWorkbook();
     handleUrlParams();
 
-    // Handle browser back/forward buttons
     window.addEventListener('popstate', () => {
       handleUrlParams();
     });
