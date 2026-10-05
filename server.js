@@ -38,6 +38,30 @@ function parseLessonsWorkbook() {
   };
 }
 
+// Helper to parse data/stories.xlsx
+function parseStoriesWorkbook() {
+  const excelPath = path.join(__dirname, 'data', 'stories.xlsx');
+  if (!fs.existsSync(excelPath)) {
+    throw new Error('data/stories.xlsx not found');
+  }
+
+  const fileBuffer = fs.readFileSync(excelPath);
+  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+  const sheets = {};
+
+  for (const sheetName of workbook.SheetNames) {
+    sheets[sheetName] = XLSX.utils.sheet_to_json(
+      workbook.Sheets[sheetName],
+      { defval: '' }
+    );
+  }
+
+  return {
+    sheetNames: workbook.SheetNames,
+    sheets
+  };
+}
+
 // Helper to parse data/reels_stories.xlsx
 function parseReelsStoriesWorkbook() {
   const excelPath = path.join(__dirname, 'data', 'reels_stories.xlsx');
@@ -74,6 +98,18 @@ function syncLessonsJson() {
   }
 }
 
+// Generate static data/stories.json as a fallback cache
+function syncStoriesJson() {
+  try {
+    const data = parseStoriesWorkbook();
+    const jsonPath = path.join(__dirname, 'data', 'stories.json');
+    fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2), 'utf8');
+    console.log('Synchronized data/stories.json successfully');
+  } catch (err) {
+    console.error('Failed to sync stories.json:', err.message);
+  }
+}
+
 // Generate static data/reels_stories.json as a fallback cache
 function syncReelsStoriesJson() {
   try {
@@ -88,6 +124,7 @@ function syncReelsStoriesJson() {
 
 // Initial sync
 syncLessonsJson();
+syncStoriesJson();
 syncReelsStoriesJson();
 
 // Serve image assets with automatic SVG fallback and proper content-type
@@ -128,6 +165,24 @@ app.get('/api/lessons-data', (req, res) => {
     });
   } catch (err) {
     console.error('API lessons-data error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
+// Serve API for Stories parsed directly from data/stories.xlsx
+app.get('/api/stories-data', (req, res) => {
+  try {
+    const data = parseStoriesWorkbook();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.json({
+      success: true,
+      ...data
+    });
+  } catch (err) {
+    console.error('API stories-data error:', err);
     res.status(500).json({
       success: false,
       error: err.message

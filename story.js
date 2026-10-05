@@ -7,8 +7,7 @@
    CONFIGURATION
    ========================================================= */
 
-const EXCEL_FILE =
-  "data/lessons.xlsx";
+const EXCEL_FILE = "data/stories.xlsx";
 
 let currentLoadedLessonId = "lesson-01";
 let currentLoadedLesson = null;
@@ -1646,10 +1645,10 @@ async function loadStoryLesson() {
       }
     }
 
-    // Strategy 2: Server API endpoint /api/lessons-data
+    // Strategy 2: Server API endpoint /api/stories-data
     if (!loaded) {
       try {
-        const apiResponse = await fetch("/api/lessons-data", { cache: "no-cache" });
+        const apiResponse = await fetch("/api/stories-data", { cache: "no-cache" });
         if (apiResponse.ok) {
           const apiData = await apiResponse.json();
           if (apiData.success && apiData.sheets) {
@@ -1667,10 +1666,10 @@ async function loadStoryLesson() {
       }
     }
 
-    // Strategy 3: Static JSON file data/lessons.json
+    // Strategy 3: Static JSON file data/stories.json
     if (!loaded) {
       try {
-        const jsonResponse = await fetch("data/lessons.json", { cache: "no-cache" });
+        const jsonResponse = await fetch("data/stories.json", { cache: "no-cache" });
         if (jsonResponse.ok) {
           const jsonData = await jsonResponse.json();
           if (jsonData.sheets) {

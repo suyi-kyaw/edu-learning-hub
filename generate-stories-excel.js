@@ -1,0 +1,86 @@
+const fs = require('fs');
+const path = require('path');
+const XLSX = require('xlsx');
+
+const lessonsData = [
+  {
+    id: "lesson-01",
+    title: "Xiaoming's Day",
+    chineseTitle: "小明的一天",
+    pinyin: "Xiǎomíng de yì tiān",
+    meaning: "Xiaoming's Day",
+    level: "Beginner",
+    description: "Learn Chinese through a simple story about Xiaoming's daily routine.",
+    video: "assets/video/lesson-01.mp4",
+    poster: "assets/images/story-poster.jpg"
+  },
+  {
+    id: "lesson-02",
+    title: "Xiaoming Buys Fruit",
+    chineseTitle: "小明买水果",
+    pinyin: "Xiǎomíng mǎi shuǐguǒ",
+    meaning: "Xiaoming Buys Fruit",
+    level: "Beginner",
+    description: "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
+    video: "assets/video/lesson-02.mp4",
+    poster: "assets/images/story2-poster.jpg"
+  }
+];
+
+const storyData = [
+  { lessonId: "lesson-01", order: 1, chinese: "早上好！", pinyin: "Zǎoshang hǎo!", english: "Good morning!", image: "assets/images/story-01.jpg", audio: "assets/audio/story-01.mp3" },
+  { lessonId: "lesson-01", order: 2, chinese: "小明起床了。", pinyin: "Xiǎomíng qǐchuáng le.", english: "Xiaoming gets up.", image: "assets/images/story-02.jpg", audio: "assets/audio/story-02.mp3" },
+  { lessonId: "lesson-01", order: 3, chinese: "他吃早饭。", pinyin: "Tā chī zǎofàn.", english: "He eats breakfast.", image: "assets/images/story-03.jpg", audio: "assets/audio/story-03.mp3" },
+  { lessonId: "lesson-01", order: 4, chinese: "然后，他去学校。", pinyin: "Ránhòu, tā qù xuéxiào.", english: "Then, he goes to school.", image: "assets/images/story-04.jpg", audio: "assets/audio/story-04.mp3" },
+  { lessonId: "lesson-01", order: 5, chinese: "他很开心。", pinyin: "Tā hěn kāixīn.", english: "He is very happy.", image: "assets/images/story-05.jpg", audio: "assets/audio/story-05.mp3" },
+
+  { lessonId: "lesson-02", order: 1, chinese: "今天天气真好！", pinyin: "Jīntiān tiānqì zhēn hǎo!", english: "The weather is really nice today!", image: "assets/images/story2-01.jpg", audio: "assets/audio/story2-01.mp3" },
+  { lessonId: "lesson-02", order: 2, chinese: "小明去水果市场。", pinyin: "Xiǎomíng qù shuǐguǒ shìchǎng.", english: "Xiaoming goes to the fruit market.", image: "assets/images/story2-02.jpg", audio: "assets/audio/story2-02.mp3" },
+  { lessonId: "lesson-02", order: 3, chinese: "市场里有很多新鲜的红苹果。", pinyin: "Shìchǎng lǐ yǒu hěn duō xīnxiān de hóng píngguǒ.", english: "There are many fresh red apples in the market.", image: "assets/images/story2-03.jpg", audio: "assets/audio/story2-03.mp3" },
+  { lessonId: "lesson-02", order: 4, chinese: "他买了三个大苹果。", pinyin: "Tā mǎi le sān gè dà píngguǒ.", english: "He bought three big apples.", image: "assets/images/story2-04.jpg", audio: "assets/audio/story2-04.mp3" },
+  { lessonId: "lesson-02", order: 5, chinese: "苹果又甜又好吃，他真开心！", pinyin: "Píngguǒ yòu tián yòu hǎochī, tā zhēn kāixīn!", english: "The apples are sweet and delicious, he is really happy!", image: "assets/images/story2-05.jpg", audio: "assets/audio/story2-05.mp3" }
+];
+
+const vocabularyData = [
+  { lessonId: "lesson-01", order: 1, character: "早上", pinyin: "zǎoshang", meaning: "morning", audio: "assets/audio/zaoshang.mp3" },
+  { lessonId: "lesson-01", order: 2, character: "起床", pinyin: "qǐchuáng", meaning: "get up", audio: "assets/audio/qichuang.mp3" },
+  { lessonId: "lesson-01", order: 3, character: "学校", pinyin: "xuéxiào", meaning: "school", audio: "assets/audio/xuexiao.mp3" },
+  { lessonId: "lesson-01", order: 4, character: "开心", pinyin: "kāixīn", meaning: "happy", audio: "assets/audio/kaixin.mp3" },
+
+  { lessonId: "lesson-02", order: 1, character: "水果", pinyin: "shuǐguǒ", meaning: "fruit", audio: "assets/audio/shuiguo.mp3" },
+  { lessonId: "lesson-02", order: 2, character: "市场", pinyin: "shìchǎng", meaning: "market", audio: "assets/audio/shichang.mp3" },
+  { lessonId: "lesson-02", order: 3, character: "苹果", pinyin: "píngguǒ", meaning: "apple", audio: "assets/audio/pingguo.mp3" },
+  { lessonId: "lesson-02", order: 4, character: "新鲜", pinyin: "xīnxiān", meaning: "fresh", audio: "assets/audio/xinxian.mp3" }
+];
+
+const exercisesData = [
+  { lessonId: "lesson-01", order: 1, type: "multiple-choice", question: "Where does Xiaoming go?", optionA: "家 — Home", optionB: "学校 — School", optionC: "商店 — Shop", answer: "学校 — School" },
+
+  { lessonId: "lesson-02", order: 1, type: "multiple-choice", question: "Where does Xiaoming go today?", optionA: "水果市场 — Fruit market", optionB: "学校 — School", optionC: "电影院 — Cinema", answer: "水果市场 — Fruit market" },
+  { lessonId: "lesson-02", order: 2, type: "multiple-choice", question: "What fruit did Xiaoming buy?", optionA: "苹果 — Apples", optionB: "香蕉 — Bananas", optionC: "西瓜 — Watermelon", answer: "苹果 — Apples" },
+  { lessonId: "lesson-02", order: 3, type: "multiple-choice", question: "How do the apples taste?", optionA: "又甜又好吃 — Sweet and delicious", optionB: "很酸 — Very sour", optionC: "不新鲜 — Not fresh", answer: "又甜又好吃 — Sweet and delicious" }
+];
+
+const wb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lessonsData), 'Lessons');
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(storyData), 'Story');
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vocabularyData), 'Vocabulary');
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exercisesData), 'Exercises');
+
+const excelPath = path.join(__dirname, 'data', 'stories.xlsx');
+XLSX.writeFile(wb, excelPath);
+console.log('Successfully generated data/stories.xlsx');
+
+const jsonData = {
+  sheetNames: ['Lessons', 'Story', 'Vocabulary', 'Exercises'],
+  sheets: {
+    Lessons: lessonsData,
+    Story: storyData,
+    Vocabulary: vocabularyData,
+    Exercises: exercisesData
+  }
+};
+
+const jsonPath = path.join(__dirname, 'data', 'stories.json');
+fs.writeFileSync(jsonPath, JSON.stringify(jsonData, null, 2), 'utf8');
+console.log('Successfully generated data/stories.json');
