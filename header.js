@@ -1,0 +1,199 @@
+/**
+ * =========================================================
+ * LINGUAPATH - SHARED HEADER LOADER (header.js)
+ * Automatically loads and injects header.html into all pages
+ * =========================================================
+ */
+
+(function () {
+  'use strict';
+
+  const FALLBACK_HEADER_HTML = `
+  <header class="site-header">
+    <div class="container nav-container">
+      <a href="index.html" class="logo">
+        <span class="logo-chinese">语</span>
+        <span class="logo-text">LinguaPath</span>
+      </a>
+
+      <nav class="desktop-nav" aria-label="Main Navigation">
+        <a href="index.html#home" class="nav-link">Home</a>
+        <a href="index.html#stories-reels" class="nav-link">Stories &amp; Reels</a>
+        <a href="index.html#games" class="nav-link">Games</a>
+        <a href="index.html#lessons" class="nav-link">Lessons</a>
+      </nav>
+
+      <div class="nav-actions">
+        <button
+          type="button"
+          class="theme-toggle-btn"
+          id="themeToggleBtn"
+          aria-label="Toggle dark mode"
+          title="Toggle light / dark mode for late-night learning sessions"
+        >
+          <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+          <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
+        </button>
+
+        <button
+          class="menu-toggle"
+          id="menuToggle"
+          type="button"
+          aria-label="Toggle menu and learning tools"
+          aria-expanded="false"
+          title="Menu & Learning Tools"
+        >
+          <span class="menu-toggle-icon" aria-hidden="true">☰</span>
+          <span class="menu-toggle-label">Menu</span>
+        </button>
+      </div>
+    </div>
+
+    <nav class="main-nav" id="mainNav" aria-label="Menu and learning tools">
+      <div class="hide-menu-header">
+        <div class="hide-menu-header-top">
+          <span class="hide-menu-title">Menu & Learning Hub</span>
+          <button type="button" class="hide-menu-close-btn" id="hideMenuCloseBtn" aria-label="Close menu" title="Close menu">✕</button>
+        </div>
+        <span class="hide-menu-subtitle">Your progress & study tools</span>
+      </div>
+
+      <div class="hide-menu-nav-links">
+        <a href="index.html#home" class="hide-menu-link">
+          <span class="menu-link-icon" aria-hidden="true">🏠</span>
+          <span class="hide-menu-link-text">Home</span>
+        </a>
+        <a href="index.html#stories-reels" class="hide-menu-link">
+          <span class="menu-link-icon" aria-hidden="true">🎬</span>
+          <span class="hide-menu-link-text">Stories &amp; Reels</span>
+          <span class="hide-menu-tag">Watch</span>
+        </a>
+        <a href="index.html#games" class="hide-menu-link">
+          <span class="menu-link-icon" aria-hidden="true">🎮</span>
+          <span class="hide-menu-link-text">Interactive Games</span>
+          <span class="hide-menu-tag">Play</span>
+        </a>
+        <a href="index.html#lessons" class="hide-menu-link">
+          <span class="menu-link-icon" aria-hidden="true">📚</span>
+          <span class="hide-menu-link-text">Lessons &amp; Pathways</span>
+        </a>
+        <a href="story.html" id="navReviewModeBtn" class="hide-menu-link hide-menu-review-link">
+          <span class="menu-link-icon" aria-hidden="true">🎴</span>
+          <span class="hide-menu-link-text">Review Mode</span>
+          <span class="hide-menu-tag hide-menu-tag-review">Flashcards</span>
+        </a>
+      </div>
+
+      <div class="hide-menu-divider" aria-hidden="true"></div>
+
+      <div class="hide-menu-tools">
+        <div class="hide-menu-section-label">Your Daily Streak</div>
+        <div
+          class="streak-badge hide-menu-streak-card"
+          id="dailyStreakBadge"
+          role="status"
+          aria-label="Daily Streak Counter"
+          tabindex="0"
+          title="Daily Learning Streak: Click for info"
+        >
+          <span class="streak-flame" aria-hidden="true">🔥</span>
+          <div class="hide-menu-card-body">
+            <div class="streak-text-wrap">
+              <span class="streak-count" id="dailyStreakCount">0</span>
+              <span class="streak-label">Daily Streak</span>
+            </div>
+            <span class="hide-menu-card-sub" id="streakTooltipDesc">Complete a lesson today to start your streak!</span>
+          </div>
+          <div class="streak-tooltip" id="streakTooltip">
+            <strong id="streakTooltipTitle">Daily Streak: 0 days</strong>
+            <p>Complete any lesson each day to build your streak!</p>
+          </div>
+        </div>
+
+        <div class="hide-menu-section-label">Your Learning Rank</div>
+        <div
+          class="level-badge rank-novice hide-menu-level-card"
+          id="userLevelBadge"
+          role="status"
+          aria-label="User Level: Novice (Level 1)"
+          tabindex="0"
+          title="User Learning Level: Novice"
+        >
+          <span class="level-icon" id="userLevelIcon" aria-hidden="true">🌱</span>
+          <div class="hide-menu-card-body">
+            <div class="level-text-wrap">
+              <span class="level-rank" id="userLevelRank">Novice</span>
+              <span class="level-label" id="userLevelSubtitle">Lvl 1</span>
+            </div>
+            <span class="hide-menu-card-sub" id="levelProgressText">0 / 1 completed</span>
+          </div>
+          <div class="level-tooltip" id="levelTooltip">
+            <div class="level-tooltip-header">
+              <strong id="levelTooltipTitle">🌱 Novice (Level 1)</strong>
+              <span class="level-tooltip-chinese" id="levelTooltipChinese">初学者</span>
+            </div>
+            <p id="levelTooltipDesc">Complete 1 lesson to achieve Scholar rank!</p>
+            <div class="level-progress-bar-wrap">
+              <div class="level-progress-bar" id="levelProgressBar" style="width: 0%;"></div>
+            </div>
+            <div class="level-progress-footer">
+              <span id="levelNextRank">Next: Scholar</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hide-menu-section-label">Daily Reminder</div>
+        <div class="hide-menu-reminder-wrap">
+          <button
+            type="button"
+            class="reminder-bell-btn"
+            id="reminderBellBtn"
+            aria-label="Daily Lesson Reminder"
+            title="Daily Lesson Reminder: Get prompted to complete a lesson"
+          >
+            <span class="bell-icon" aria-hidden="true">🔔</span>
+            <span class="reminder-status-dot" id="reminderStatusDot" aria-hidden="true"></span>
+          </button>
+          <div class="hide-menu-reminder-text">
+            <strong class="hide-menu-reminder-title">Daily Practice Alarm</strong>
+            <span class="hide-menu-reminder-sub">Click bell to configure time</span>
+          </div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  `;
+
+  async function injectHeader() {
+    let htmlContent = FALLBACK_HEADER_HTML;
+    try {
+      const res = await fetch('header.html?t=' + Date.now());
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.trim().includes('<header')) {
+          htmlContent = text;
+        }
+      }
+    } catch (e) {
+      console.warn('Header fetch note (using fallback):', e);
+    }
+
+    const container = document.getElementById('sharedHeader');
+    if (container) {
+      container.innerHTML = htmlContent;
+    } else {
+      const existing = document.querySelector('header.site-header');
+      if (existing) {
+        existing.outerHTML = htmlContent;
+      } else {
+        document.body.insertAdjacentHTML('afterbegin', htmlContent);
+      }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectHeader);
+  } else {
+    injectHeader();
+  }
+})();

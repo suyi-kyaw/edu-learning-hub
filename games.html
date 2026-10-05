@@ -231,33 +231,8 @@
 </head>
 <body>
 
-  <!-- Top Header Navigation -->
-  <header class="site-header">
-    <div class="container nav-container">
-      <a href="index.html" class="logo">
-        <span class="logo-chinese">语</span>
-        <span class="logo-text">LinguaPath</span>
-      </a>
-
-      <nav class="desktop-nav" aria-label="Main Navigation">
-        <a href="index.html#home" class="nav-link">Home</a>
-        <a href="story.html" class="nav-link">Stories &amp; Reels</a>
-        <a href="games.html" class="nav-link active">Games</a>
-        <a href="lessons.html" class="nav-link">Lessons</a>
-      </nav>
-
-      <div class="nav-actions">
-        <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" title="Toggle light / dark mode">
-          <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
-          <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
-        </button>
-
-        <a href="index.html" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.88rem;">
-          ← Home
-        </a>
-      </div>
-    </div>
-  </header>
+  <!-- Shared Header Container -->
+  <div id="sharedHeader"></div>
 
   <main>
     <!-- Games Hero -->
@@ -374,6 +349,9 @@
 
   <!-- Shared Footer Container -->
   <div id="sharedFooter"></div>
+
+  <!-- Shared Header Script -->
+  <script src="header.js" defer></script>
 
   <!-- Shared Footer Script -->
   <script src="footer.js" defer></script>
