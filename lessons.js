@@ -390,21 +390,40 @@
   async function loadLessonsWorkbook() {
     let loaded = false;
 
-    // Strategy 1: Fetch API /api/lessons-data
+    // Strategy 0: Check localStorage custom lessons saved from Excel upload
     try {
-      const res = await fetch('/api/lessons-data?t=' + Date.now());
-      if (res.ok) {
-        const data = await res.json();
-        if (data.sheets) {
-          if (data.sheets.Lessons && data.sheets.Lessons.length) allLessons = data.sheets.Lessons;
-          if (data.sheets.Exercises && data.sheets.Exercises.length) allExercises = data.sheets.Exercises;
-          if (data.sheets.Writing && data.sheets.Writing.length) allWriting = data.sheets.Writing;
-          if (data.sheets.Vocabulary && data.sheets.Vocabulary.length) allVocabulary = data.sheets.Vocabulary;
-          if (allLessons.length) loaded = true;
+      const rawCustom = localStorage.getItem('linguapath_custom_lessons');
+      if (rawCustom) {
+        const parsed = JSON.parse(rawCustom);
+        if (parsed.sheets && parsed.sheets.Lessons && parsed.sheets.Lessons.length) {
+          allLessons = parsed.sheets.Lessons;
+          if (parsed.sheets.Exercises) allExercises = parsed.sheets.Exercises;
+          if (parsed.sheets.Writing) allWriting = parsed.sheets.Writing;
+          if (parsed.sheets.Vocabulary) allVocabulary = parsed.sheets.Vocabulary;
+          loaded = true;
         }
       }
-    } catch (err) {
-      console.warn("API /api/lessons-data load note:", err);
+    } catch (e) {
+      console.warn("localStorage custom lessons load note:", e);
+    }
+
+    // Strategy 1: Fetch API /api/lessons-data
+    if (!loaded) {
+      try {
+        const res = await fetch('/api/lessons-data?t=' + Date.now());
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sheets) {
+            if (data.sheets.Lessons && data.sheets.Lessons.length) allLessons = data.sheets.Lessons;
+            if (data.sheets.Exercises && data.sheets.Exercises.length) allExercises = data.sheets.Exercises;
+            if (data.sheets.Writing && data.sheets.Writing.length) allWriting = data.sheets.Writing;
+            if (data.sheets.Vocabulary && data.sheets.Vocabulary.length) allVocabulary = data.sheets.Vocabulary;
+            if (allLessons.length) loaded = true;
+          }
+        }
+      } catch (err) {
+        console.warn("API /api/lessons-data load note:", err);
+      }
     }
 
     // Strategy 2: Direct Binary Excel Parsing via SheetJS (XLSX)
@@ -591,6 +610,20 @@
     activeWorkspaceTab = 'video';
     activeWritingCharIndex = 0;
     exerciseAnswersState = {};
+
+    // Track active lesson in localStorage for "Continue Lesson" banner
+    try {
+      localStorage.setItem('linguapath_active_lesson', JSON.stringify({
+        id: lesson.id,
+        audience: lesson.audience || currentAudience,
+        title: lesson.title,
+        chineseTitle: lesson.chineseTitle || '',
+        pinyin: lesson.pinyin || '',
+        level: lesson.level || '',
+        category: lesson.category || '',
+        timestamp: Date.now()
+      }));
+    } catch (e) {}
 
     const workspace = document.getElementById('lessonWorkspace');
     const curriculumSection = document.getElementById('curriculumListSection');
@@ -955,6 +988,10 @@
   let strokeScores = [];
   let currentStrokePoints = [];
   let strokeOrderDemoTimer = null;
+  let currentHanziWriter = null;
+  let activeWritingChar = null;
+  let activeWritingLesson = null;
+  let activeWritingChars = [];
 
   function renderWritingSection(lesson) {
     const panel = document.getElementById('panel-writing');
@@ -975,6 +1012,9 @@
     }
 
     const currentChar = chars[activeWritingCharIndex] || chars[0];
+    activeWritingChar = currentChar;
+    activeWritingLesson = lesson;
+    activeWritingChars = chars;
 
     panel.innerHTML = `
       <div class="writing-workspace">
@@ -1023,10 +1063,8 @@
 
             <div class="canvas-mizige-box" id="canvasContainer">
               <div class="canvas-grid-lines"></div>
-              <div class="canvas-ghost-character ${showGhostChar ? '' : 'hidden'}" id="canvasGhostChar">
-                ${escapeHTML(currentChar.character)}
-              </div>
-              <canvas id="strokeDrawCanvas" width="320" height="320"></canvas>
+              <div id="hanziWriterTarget" class="${showGhostChar ? '' : 'hidden'}"></div>
+              <canvas id="strokeDrawCanvas" width="320" height="320" style="z-index: 5; touch-action: none; position: absolute; inset: 0;"></canvas>
             </div>
 
             <div class="canvas-toolbar">
@@ -1053,7 +1091,6 @@
       btn.onclick = () => {
         activeWritingCharIndex = parseInt(btn.dataset.index, 10) || 0;
         renderWritingSection(lesson);
-        setTimeout(() => initWritingCanvas(currentChar, lesson, chars), 50);
       };
     });
 
@@ -1071,8 +1108,16 @@
     if (toggleGhostBtn) {
       toggleGhostBtn.onclick = () => {
         showGhostChar = !showGhostChar;
-        const ghost = document.getElementById('canvasGhostChar');
-        if (ghost) ghost.classList.toggle('hidden', !showGhostChar);
+        const target = document.getElementById('hanziWriterTarget');
+        if (target) target.classList.toggle('hidden', !showGhostChar);
+
+        if (currentHanziWriter) {
+          if (showGhostChar) {
+            currentHanziWriter.showOutline();
+          } else {
+            currentHanziWriter.hideOutline();
+          }
+        }
         toggleGhostBtn.textContent = showGhostChar ? '👁️ Hide Guide' : '👁️ Show Guide';
       };
     }
@@ -1090,14 +1135,136 @@
     initWritingCanvas(currentChar, lesson, chars);
   }
 
-  // --- HTML5 Canvas Writing & Real-Time Evaluation Engine ---
+  // Exact Character Stroke Animation Engine
+  function getCharacterStrokeVectors(currentChar) {
+    const char = currentChar.character;
+    const count = currentChar.strokeCount || 4;
+
+    const charMap = {
+      "早": [
+        { type: "vertical", x1: 115, y1: 80, x2: 115, y2: 170, label: "1.丨 Left Vertical of 日" },
+        { type: "corner", x1: 115, y1: 80, x2: 205, y2: 80, x3: 205, y3: 170, label: "2.𠃍 Top-Right Corner of 日" },
+        { type: "horizontal", x1: 115, y1: 125, x2: 205, y2: 125, label: "3.一 Middle Bar of 日" },
+        { type: "horizontal", x1: 115, y1: 170, x2: 205, y2: 170, label: "4.一 Bottom Bar of 日" },
+        { type: "horizontal", x1: 85, y1: 215, x2: 235, y2: 215, label: "5.一 Lower Cross Bar" },
+        { type: "vertical", x1: 160, y1: 125, x2: 160, y2: 275, label: "6.丨 Central Vertical Drop" }
+      ],
+      "好": [
+        { type: "slant_angle", x1: 100, y1: 70, x2: 70, y2: 140, x3: 130, y3: 180, label: "1.ㄑ Slant Angle" },
+        { type: "left_fall", x1: 130, y1: 90, x2: 60, y2: 250, label: "2.ノ Left Falling" },
+        { type: "horizontal", x1: 40, y1: 150, x2: 140, y2: 150, label: "3.一 Cross Bar" },
+        { type: "corner", x1: 180, y1: 80, x2: 250, y2: 80, x3: 220, y3: 120, label: "4.乛 Top Hook" },
+        { type: "v_hook", x1: 215, y1: 120, x2: 215, y2: 260, x3: 190, y3: 240, label: "5.亅 Vertical Hook" },
+        { type: "horizontal", x1: 150, y1: 160, x2: 270, y2: 160, label: "6.一 Center Bar" }
+      ],
+      "水": [
+        { type: "v_hook", x1: 160, y1: 50, x2: 160, y2: 270, x3: 130, y3: 240, label: "1.亅 Center Hook" },
+        { type: "corner_slant", x1: 70, y1: 120, x2: 120, y2: 120, x3: 80, y3: 170, label: "2.㇇ Horizontal Slant" },
+        { type: "left_fall", x1: 120, y1: 170, x2: 50, y2: 260, label: "3.ノ Left Fall" },
+        { type: "right_fall", x1: 180, y1: 130, x2: 270, y2: 260, label: "4.㇏ Right Fall" }
+      ],
+      "大": [
+        { type: "horizontal", x1: 60, y1: 120, x2: 260, y2: 120, label: "1.一 Main Horizontal" },
+        { type: "left_fall", x1: 160, y1: 70, x2: 60, y2: 270, label: "2.ノ Left Falling" },
+        { type: "right_fall", x1: 160, y1: 120, x2: 260, y2: 270, label: "3.㇏ Right Falling" }
+      ],
+      "小": [
+        { type: "v_hook", x1: 160, y1: 60, x2: 160, y2: 260, x3: 130, y3: 235, label: "1.亅 Center Hook" },
+        { type: "dot", x1: 90, y1: 120, x2: 60, y2: 180, label: "2.丶 Left Dot" },
+        { type: "dot", x1: 230, y1: 120, x2: 260, y2: 180, label: "3.丶 Right Dot" }
+      ],
+      "人": [
+        { type: "left_fall", x1: 160, y1: 60, x2: 60, y2: 270, label: "1.ノ Left Falling" },
+        { type: "right_fall", x1: 130, y1: 120, x2: 260, y2: 270, label: "2.㇏ Right Falling" }
+      ],
+      "一": [
+        { type: "horizontal", x1: 50, y1: 160, x2: 270, y2: 160, label: "1.一 Horizontal Bar" }
+      ],
+      "二": [
+        { type: "horizontal", x1: 80, y1: 110, x2: 240, y2: 110, label: "1.一 Top Bar" },
+        { type: "horizontal", x1: 50, y1: 210, x2: 270, y2: 210, label: "2.一 Bottom Bar" }
+      ],
+      "三": [
+        { type: "horizontal", x1: 80, y1: 90, x2: 240, y2: 90, label: "1.一 Top Bar" },
+        { type: "horizontal", x1: 100, y1: 160, x2: 220, y2: 160, label: "2.一 Middle Bar" },
+        { type: "horizontal", x1: 50, y1: 230, x2: 270, y2: 230, label: "3.一 Bottom Bar" }
+      ],
+      "坐": [
+        { type: "left_fall", x1: 100, y1: 60, x2: 70, y2: 120, label: "1.ノ Left Person" },
+        { type: "dot", x1: 110, y1: 85, x2: 130, y2: 120, label: "2.丶 Person Dot" },
+        { type: "left_fall", x1: 220, y1: 60, x2: 190, y2: 120, label: "3.ノ Right Person" },
+        { type: "dot", x1: 230, y1: 85, x2: 250, y2: 120, label: "4.丶 Person Dot" },
+        { type: "horizontal", x1: 80, y1: 150, x2: 240, y2: 150, label: "5.一 Middle Bar" },
+        { type: "vertical", x1: 160, y1: 40, x2: 160, y2: 270, label: "6.丨 Center Vertical" },
+        { type: "horizontal", x1: 40, y1: 270, x2: 280, y2: 270, label: "7.一 Ground Bar" }
+      ],
+      "做": [
+        { type: "left_fall", x1: 70, y1: 60, x2: 40, y2: 130, label: "1.ノ Person Slant" },
+        { type: "vertical", x1: 55, y1: 130, x2: 55, y2: 270, label: "2.丨 Person Drop" },
+        { type: "left_fall", x1: 130, y1: 60, x2: 100, y2: 100, label: "3.ノ Middle Slant" },
+        { type: "horizontal", x1: 90, y1: 100, x2: 160, y2: 100, label: "4.一 Top Bar" },
+        { type: "vertical", x1: 125, y1: 100, x2: 125, y2: 190, label: "5.丨 Center Bar" },
+        { type: "corner", x1: 95, y1: 140, x2: 155, y2: 140, x3: 155, y3: 190, label: "6.𠃍 Corner" },
+        { type: "horizontal", x1: 95, y1: 190, x2: 155, y2: 190, label: "7.一 Box Bottom" },
+        { type: "left_fall", x1: 125, y1: 200, x2: 90, y2: 260, label: "8.ノ Lower Left" },
+        { type: "right_fall", x1: 125, y1: 210, x2: 165, y2: 260, label: "9.㇏ Lower Right" },
+        { type: "left_fall", x1: 220, y1: 60, x2: 190, y2: 130, label: "10.ノ Right Top Slant" },
+        { type: "right_fall", x1: 190, y1: 130, x2: 270, y2: 260, label: "11.㇏ Right Falling" }
+      ],
+      "爱": [
+        { type: "left_fall", x1: 160, y1: 40, x2: 120, y2: 80, label: "1.ノ Top Slant" },
+        { type: "dot", x1: 80, y1: 80, x2: 100, y2: 110, label: "2.丶 Left Dot" },
+        { type: "dot", x1: 140, y1: 80, x2: 160, y2: 110, label: "3.丶 Middle Dot" },
+        { type: "left_fall", x1: 220, y1: 80, x2: 190, y2: 110, label: "4.ノ Right Slant" },
+        { type: "corner", x1: 60, y1: 130, x2: 260, y2: 130, x3: 240, y3: 160, label: "5.冖 Crown" },
+        { type: "left_fall", x1: 130, y1: 160, x2: 90, y2: 210, label: "6.ノ Heart Slant" },
+        { type: "corner", x1: 90, y1: 190, x2: 230, y2: 190, x3: 210, y3: 230, label: "7.乛 Heart Hook" },
+        { type: "left_fall", x1: 150, y1: 200, x2: 80, y2: 280, label: "8.ノ Lower Left" },
+        { type: "right_fall", x1: 150, y1: 210, x2: 270, y2: 280, label: "9.㇏ Lower Right" }
+      ]
+    };
+
+    if (charMap[char]) {
+      return charMap[char];
+    }
+
+    const strokes = [];
+    for (let i = 0; i < count; i++) {
+      const t = i / Math.max(1, count - 1);
+      const y = 65 + t * 170;
+      if (i % 2 === 0) {
+        strokes.push({
+          type: "horizontal",
+          x1: 60, y1: y, x2: 260, y2: y,
+          label: `${i + 1}.一 Horizontal Stroke`
+        });
+      } else {
+        strokes.push({
+          type: "vertical",
+          x1: 60 + ((i * 45) % 180), y1: Math.max(40, y - 50),
+          x2: 60 + ((i * 45) % 180), y2: Math.min(280, y + 60),
+          label: `${i + 1}.丨 Vertical Stroke`
+        });
+      }
+    }
+    return strokes;
+  }
+
+  // --- HTML5 Canvas Writing & Pointer Events Engine ---
   let currentColor = '#ea580c';
   let brushSizes = [6, 10, 16];
   let currentBrushIndex = 1;
+  let isDrawing = false;
+  let lastX = 0;
+  let lastY = 0;
 
   function initWritingCanvas(currentChar, lesson, chars) {
     canvas = document.getElementById('strokeDrawCanvas');
     if (!canvas) return;
+
+    activeWritingChar = currentChar;
+    activeWritingLesson = lesson;
+    activeWritingChars = chars;
 
     const rect = canvas.parentElement.getBoundingClientRect();
     const size = Math.min(rect.width || 320, 320);
@@ -1114,14 +1281,41 @@
     ctx.lineWidth = brushSizes[currentBrushIndex];
     ctx.strokeStyle = currentColor;
 
-    canvas.onmousedown = (e) => handleMouseDown(e, currentChar, lesson, chars);
-    canvas.onmousemove = handleMouseMove;
-    canvas.onmouseup = (e) => handleMouseUp(e, currentChar, lesson, chars);
-    canvas.onmouseleave = (e) => handleMouseUp(e, currentChar, lesson, chars);
+    canvas.style.touchAction = 'none';
 
-    canvas.ontouchstart = (e) => handleTouchStart(e, currentChar, lesson, chars);
-    canvas.ontouchmove = handleTouchMove;
-    canvas.ontouchend = (e) => handleTouchEnd(e, currentChar, lesson, chars);
+    // Direct pointer event binding on the canvas for reliable stroke start & stop
+    canvas.onpointerdown = handlePointerDown;
+    canvas.onpointermove = handlePointerMove;
+    canvas.onpointerup = handlePointerUp;
+    canvas.onpointercancel = handlePointerCancel;
+    canvas.onpointerleave = handlePointerCancel;
+
+    // Initialize single, high-precision HanziWriter instance
+    const targetElement = document.getElementById('hanziWriterTarget');
+    if (targetElement) {
+      targetElement.innerHTML = '';
+      if (window.HanziWriter) {
+        try {
+          currentHanziWriter = HanziWriter.create(targetElement, currentChar.character, {
+            width: 290,
+            height: 290,
+            padding: 10,
+            showOutline: showGhostChar,
+            showCharacter: false,
+            strokeColor: '#ea580c',
+            outlineColor: 'rgba(234, 88, 12, 0.28)',
+            drawingWidth: 16,
+            strokeAnimationSpeed: 1.2,
+            delayBetweenStrokes: 250
+          });
+        } catch (err) {
+          console.warn('HanziWriter init error:', err);
+          targetElement.innerHTML = `<div class="fallback-ghost-char ${showGhostChar ? '' : 'hidden'}">${escapeHTML(currentChar.character)}</div>`;
+        }
+      } else {
+        targetElement.innerHTML = `<div class="fallback-ghost-char ${showGhostChar ? '' : 'hidden'}">${escapeHTML(currentChar.character)}</div>`;
+      }
+    }
   }
 
   function getCanvasCoords(e) {
@@ -1132,8 +1326,13 @@
     };
   }
 
-  function handleMouseDown(e, currentChar, lesson, chars) {
+  function handlePointerDown(e) {
+    e.preventDefault();
     isDrawing = true;
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch (err) {}
+
     const { x, y } = getCanvasCoords(e);
     lastX = x;
     lastY = y;
@@ -1145,8 +1344,9 @@
     ctx.fill();
   }
 
-  function handleMouseMove(e) {
+  function handlePointerMove(e) {
     if (!isDrawing) return;
+    e.preventDefault();
     const { x, y } = getCanvasCoords(e);
     currentStrokePoints.push({ x, y });
 
@@ -1158,80 +1358,37 @@
     lastY = y;
   }
 
-  function handleMouseUp(e, currentChar, lesson, chars) {
-    if (isDrawing && currentStrokePoints.length > 2) {
+  function handlePointerUp(e) {
+    if (!isDrawing) return;
+    isDrawing = false;
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+
+    if (currentStrokePoints.length > 1) {
       drawnStrokes.push([...currentStrokePoints]);
       const strokeIdx = drawnStrokes.length - 1;
-      const score = evaluateSingleStroke(currentStrokePoints, strokeIdx, currentChar);
+      const score = evaluateSingleStroke(currentStrokePoints, strokeIdx, activeWritingChar);
       strokeScores.push(score);
 
-      updateStrokeBadgesUI(currentChar);
+      updateStrokeBadgesUI(activeWritingChar);
 
-      // Auto check when all expected strokes are completed
-      const totalExpected = currentChar.strokeCount || 4;
+      const totalExpected = activeWritingChar?.strokeCount || 4;
       if (drawnStrokes.length >= totalExpected) {
         setTimeout(() => {
-          openPracticeResultModal(currentChar, lesson, chars);
-        }, 550);
+          openPracticeResultModal(activeWritingChar, activeWritingLesson, activeWritingChars);
+        }, 500);
       }
     }
-    isDrawing = false;
     currentStrokePoints = [];
   }
 
-  function handleTouchStart(e, currentChar, lesson, chars) {
-    e.preventDefault();
-    if (!e.touches.length) return;
-    const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    isDrawing = true;
-    lastX = x;
-    lastY = y;
-    currentStrokePoints = [{ x, y }];
-
-    ctx.beginPath();
-    ctx.arc(x, y, ctx.lineWidth / 2, 0, Math.PI * 2);
-    ctx.fillStyle = ctx.strokeStyle;
-    ctx.fill();
-  }
-
-  function handleTouchMove(e) {
-    e.preventDefault();
-    if (!isDrawing || !e.touches.length) return;
-    const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    currentStrokePoints.push({ x, y });
-
-    ctx.beginPath();
-    ctx.moveTo(lastX, lastY);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    lastX = x;
-    lastY = y;
-  }
-
-  function handleTouchEnd(e, currentChar, lesson, chars) {
-    e.preventDefault();
-    if (isDrawing && currentStrokePoints.length > 2) {
-      drawnStrokes.push([...currentStrokePoints]);
-      const strokeIdx = drawnStrokes.length - 1;
-      const score = evaluateSingleStroke(currentStrokePoints, strokeIdx, currentChar);
-      strokeScores.push(score);
-
-      updateStrokeBadgesUI(currentChar);
-
-      const totalExpected = currentChar.strokeCount || 4;
-      if (drawnStrokes.length >= totalExpected) {
-        setTimeout(() => {
-          openPracticeResultModal(currentChar, lesson, chars);
-        }, 550);
-      }
-    }
+  function handlePointerCancel(e) {
+    if (!isDrawing) return;
     isDrawing = false;
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch (err) {}
     currentStrokePoints = [];
   }
 
@@ -1325,54 +1482,41 @@
     strokeScores = [];
     currentStrokePoints = [];
 
-    if (strokeOrderDemoTimer) clearInterval(strokeOrderDemoTimer);
+    if (currentHanziWriter) {
+      currentHanziWriter.hideCharacter();
+      if (showGhostChar) {
+        currentHanziWriter.showOutline();
+      } else {
+        currentHanziWriter.hideOutline();
+      }
+    }
 
     if (currentChar) {
       updateStrokeBadgesUI(currentChar);
     }
   }
 
-  // Demo Stroke Order Animation
+  // Demo Authentic Stroke Order Animation with HanziWriter
   function demoStrokeOrder(currentChar) {
     clearCanvas(currentChar);
-    const strokeCount = currentChar.strokeCount || 4;
-    let step = 0;
-
-    if (strokeOrderDemoTimer) clearInterval(strokeOrderDemoTimer);
-
     const stepBadge = document.getElementById('strokeStepBadge');
     const stepHint = document.getElementById('strokeOrderHintText');
 
-    strokeOrderDemoTimer = setInterval(() => {
-      step++;
-      if (step > strokeCount) {
-        clearInterval(strokeOrderDemoTimer);
-        if (stepHint) stepHint.textContent = 'Demo complete! Now try drawing yourself.';
-        return;
-      }
+    if (currentHanziWriter) {
+      if (stepBadge) stepBadge.textContent = `Demoing ${currentChar.character}...`;
+      if (stepHint) stepHint.textContent = `Watch real stroke order & direction!`;
 
-      if (ctx && canvas) {
-        ctx.lineWidth = brushSizes[currentBrushIndex] + 2;
-        ctx.strokeStyle = '#22c55e'; // Green guide ink
-
-        const x1 = 50 + ((step - 1) * 40) % 220;
-        const y1 = 50 + Math.floor(((step - 1) * 40) / 220) * 80;
-        const x2 = x1 + 60;
-        const y2 = y1 + (step % 2 === 0 ? 40 : 0);
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-
-        ctx.fillStyle = '#ea580c';
-        ctx.font = '800 16px "Plus Jakarta Sans", sans-serif';
-        ctx.fillText(String(step), x1 - 8, y1 - 8);
-      }
-
-      if (stepBadge) stepBadge.textContent = `Demo Stroke ${step} / ${strokeCount}`;
-      if (stepHint) stepHint.textContent = `Stroke #${step} direction guide`;
-    }, 500);
+      currentHanziWriter.showOutline();
+      currentHanziWriter.animateCharacter({
+        onComplete: () => {
+          if (stepBadge) stepBadge.textContent = `Demo Complete`;
+          if (stepHint) stepHint.textContent = `Now draw ${currentChar.character} yourself on canvas!`;
+        }
+      });
+    } else {
+      if (stepBadge) stepBadge.textContent = `Demo Complete`;
+      if (stepHint) stepHint.textContent = `Now practice ${currentChar.character} on canvas!`;
+    }
   }
 
   // --- PRACTICE RESULT MODAL (Matching Uploaded Screenshot Design) ---
@@ -1603,6 +1747,315 @@
     link.click();
   }
 
+  // --- Active "Continue Lesson" Banner ---
+  function renderContinueLessonBanner() {
+    const container = document.getElementById('curriculumListSection') || document.querySelector('.container.section');
+    if (!container) return;
+
+    const existingBanner = document.getElementById('continueLessonBanner');
+    if (existingBanner) existingBanner.remove();
+
+    let activeLessonState = null;
+    try {
+      const raw = localStorage.getItem('linguapath_active_lesson');
+      if (raw) activeLessonState = JSON.parse(raw);
+    } catch (e) {}
+
+    if (!activeLessonState || !activeLessonState.id) return;
+
+    const lessonObj = allLessons.find(l => String(l.id) === String(activeLessonState.id)) || activeLessonState;
+
+    const banner = document.createElement('div');
+    banner.id = 'continueLessonBanner';
+    banner.className = 'continue-lesson-card';
+    banner.innerHTML = `
+      <div>
+        <div class="continue-badge-tag">⚡ Active Lesson in Progress</div>
+        <div class="continue-title-group">
+          <h3 class="continue-title">${escapeHTML(lessonObj.title || 'Lesson in Progress')}</h3>
+          ${lessonObj.chineseTitle ? `<span class="continue-chinese-title">${escapeHTML(lessonObj.chineseTitle)}</span>` : ''}
+        </div>
+        <div class="continue-meta">
+          ${escapeHTML(lessonObj.audience || 'Adult')} Track • ${escapeHTML(lessonObj.level || 'Beginner')} • ${escapeHTML(lessonObj.category || 'Basics')}
+        </div>
+      </div>
+      <div class="continue-action-btns">
+        <button type="button" class="btn-continue-primary" id="btnContinueActiveLesson">
+          🚀 Continue Lesson Now →
+        </button>
+        <button type="button" class="btn-continue-clear" id="btnDismissContinueBanner" title="Dismiss active lesson banner">
+          ✕
+        </button>
+      </div>
+    `;
+
+    const grid = document.getElementById('lessonsGrid') || container.querySelector('.lesson-grid');
+    if (grid) {
+      grid.parentNode.insertBefore(banner, grid);
+    } else {
+      container.prepend(banner);
+    }
+
+    const continueBtn = document.getElementById('btnContinueActiveLesson');
+    if (continueBtn) {
+      continueBtn.onclick = () => {
+        const targetAudience = (lessonObj.audience || '').toLowerCase() === 'kids' ? 'Kids' : 'Adult';
+        const isCurrentKidsPage = window.location.pathname.includes('kids');
+        if (targetAudience === 'Kids' && !isCurrentKidsPage) {
+          window.location.href = `lessons-kids.html?lesson=${encodeURIComponent(lessonObj.id)}`;
+        } else if (targetAudience === 'Adult' && isCurrentKidsPage) {
+          window.location.href = `lessons-adult.html?lesson=${encodeURIComponent(lessonObj.id)}`;
+        } else {
+          openLessonWorkspace(lessonObj.id);
+        }
+      };
+    }
+
+    const dismissBtn = document.getElementById('btnDismissContinueBanner');
+    if (dismissBtn) {
+      dismissBtn.onclick = () => {
+        banner.remove();
+        localStorage.removeItem('linguapath_active_lesson');
+      };
+    }
+  }
+
+  // --- Excel Data Management Toolbar & Modal ---
+  function renderExcelManagerToolbar() {
+    const targetParent = document.querySelector('.curriculum-category-bar-wrap') || document.querySelector('.section-heading');
+    if (!targetParent) return;
+
+    const existingToolbar = document.getElementById('excelManagerToolbar');
+    if (existingToolbar) existingToolbar.remove();
+
+    const toolbar = document.createElement('div');
+    toolbar.id = 'excelManagerToolbar';
+    toolbar.className = 'data-manager-toolbar';
+    toolbar.innerHTML = `
+      <button type="button" class="btn-excel-manager" id="btnOpenExcelManager">
+        📊 Manage Lessons via Excel / CSV (Export &amp; Update)
+      </button>
+    `;
+
+    targetParent.after(toolbar);
+
+    const btn = document.getElementById('btnOpenExcelManager');
+    if (btn) {
+      btn.onclick = () => openExcelManagerModal();
+    }
+  }
+
+  function openExcelManagerModal() {
+    const existingModal = document.getElementById('excelManagerModal');
+    if (existingModal) existingModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'excelManagerModal';
+    modal.className = 'excel-modal-backdrop';
+    modal.innerHTML = `
+      <div class="excel-modal-card">
+        <div class="excel-modal-header">
+          <div class="excel-modal-title">
+            <span>📊 Lesson Data Management Center</span>
+          </div>
+          <button type="button" class="excel-modal-close-btn" id="btnCloseExcelModal" aria-label="Close">✕</button>
+        </div>
+
+        <p style="font-size: 0.92rem; color: #64748b; margin-bottom: 16px; line-height: 1.5;">
+          Easily export all Adult &amp; Kids Mandarin lessons to an Excel workbook (.xlsx) or CSV file. Edit lesson titles, pinyin, practice characters, and descriptions in Excel, then upload to update the app in real time!
+        </p>
+
+        <div class="excel-grid-cards">
+          <!-- Download Option -->
+          <div class="excel-option-box">
+            <div class="excel-option-title">📥 1. Export Lessons Data to Excel / CSV</div>
+            <div class="excel-option-desc">
+              Download the complete curriculum dataset (Lessons, Practice Exercises, Stroke Writing, Vocabulary) as an edit-ready Excel file (.xlsx) or CSV.
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button type="button" class="btn-excel-action btn-excel-download" id="btnExportExcelFile">
+                📥 Download Lessons.xlsx
+              </button>
+              <button type="button" class="btn-excel-action btn-excel-download" id="btnExportCsvFile" style="background: #0284c7;">
+                📄 Download Lessons.csv
+              </button>
+            </div>
+          </div>
+
+          <!-- Upload Option -->
+          <div class="excel-option-box">
+            <div class="excel-option-title">📤 2. Upload Updated Excel / CSV File</div>
+            <div class="excel-option-desc">
+              Select your updated Excel file (.xlsx or .csv) to refresh all lesson cards, titles, categories, practice exercises, and stroke writing across the entire site instantly.
+            </div>
+            <input type="file" id="excelFileInput" class="excel-file-input" accept=".xlsx, .xls, .csv" />
+            <button type="button" class="btn-excel-action btn-excel-upload" id="btnUploadExcelFile">
+              📤 Upload &amp; Update Lessons Data
+            </button>
+          </div>
+
+          <!-- Reset Option -->
+          <div class="excel-option-box" style="padding: 14px 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+              <div>
+                <div class="excel-option-title" style="font-size: 0.95rem; margin: 0;">🔄 Reset to Default Lessons</div>
+                <div class="excel-option-desc" style="margin: 0; font-size: 0.82rem;">Revert any uploaded changes back to default curriculum data.</div>
+              </div>
+              <button type="button" class="btn-excel-action btn-excel-reset" id="btnResetDefaultLessons" style="width: auto; padding: 8px 16px; font-size: 0.85rem;">
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeBtn = document.getElementById('btnCloseExcelModal');
+    if (closeBtn) closeBtn.onclick = () => modal.remove();
+
+    const exportBtn = document.getElementById('btnExportExcelFile');
+    if (exportBtn) exportBtn.onclick = () => exportLessonsToExcel('xlsx');
+
+    const exportCsvBtn = document.getElementById('btnExportCsvFile');
+    if (exportCsvBtn) exportCsvBtn.onclick = () => exportLessonsToExcel('csv');
+
+    const uploadBtn = document.getElementById('btnUploadExcelFile');
+    if (uploadBtn) {
+      uploadBtn.onclick = () => {
+        const fileInput = document.getElementById('excelFileInput');
+        if (!fileInput || !fileInput.files.length) {
+          alert('Please select an Excel file (.xlsx) or CSV file first.');
+          return;
+        }
+        importLessonsFromExcel(fileInput.files[0]);
+      };
+    }
+
+    const resetBtn = document.getElementById('btnResetDefaultLessons');
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        if (confirm('Are you sure you want to reset custom lesson data to default?')) {
+          localStorage.removeItem('linguapath_custom_lessons');
+          alert('Custom lesson data reset. Reloading defaults...');
+          window.location.reload();
+        }
+      };
+    }
+  }
+
+  // --- Export Lessons to Excel / CSV ---
+  function exportLessonsToExcel(format = 'xlsx') {
+    if (typeof XLSX === 'undefined') {
+      alert('SheetJS (XLSX) library is loading. Please try again in a moment.');
+      return;
+    }
+
+    const exportLessonsList = allLessons.length ? allLessons : FALLBACK_LESSONS;
+    const exportExercisesList = allExercises.length ? allExercises : FALLBACK_EXERCISES;
+    const exportWritingList = allWriting.length ? allWriting : FALLBACK_WRITING;
+
+    const wb = XLSX.utils.book_new();
+
+    const lessonsSheet = XLSX.utils.json_to_sheet(exportLessonsList);
+    XLSX.utils.book_append_sheet(wb, lessonsSheet, 'Lessons');
+
+    const exercisesSheet = XLSX.utils.json_to_sheet(exportExercisesList);
+    XLSX.utils.book_append_sheet(wb, exercisesSheet, 'Exercises');
+
+    const writingSheet = XLSX.utils.json_to_sheet(exportWritingList);
+    XLSX.utils.book_append_sheet(wb, writingSheet, 'Writing');
+
+    if (allVocabulary && allVocabulary.length) {
+      const vocabSheet = XLSX.utils.json_to_sheet(allVocabulary);
+      XLSX.utils.book_append_sheet(wb, vocabSheet, 'Vocabulary');
+    }
+
+    if (format === 'csv') {
+      const csvContent = XLSX.utils.sheet_to_csv(lessonsSheet);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'Linguapath_Mandarin_Lessons.csv';
+      link.click();
+    } else {
+      XLSX.writeFile(wb, 'Linguapath_Mandarin_Lessons.xlsx');
+    }
+  }
+
+  // --- Import Lessons from Excel / CSV ---
+  function importLessonsFromExcel(file) {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        if (typeof XLSX === 'undefined') {
+          alert('SheetJS library is not loaded.');
+          return;
+        }
+
+        const workbook = XLSX.read(data, { type: 'array' });
+        if (!workbook.SheetNames.includes('Lessons') && !workbook.SheetNames.length) {
+          alert('Error: Uploaded file does not contain valid lesson data.');
+          return;
+        }
+
+        const mainSheetName = workbook.SheetNames.includes('Lessons') ? 'Lessons' : workbook.SheetNames[0];
+        const newLessons = XLSX.utils.sheet_to_json(workbook.Sheets[mainSheetName], { defval: '' });
+
+        if (!newLessons.length) {
+          alert('Error: Uploaded file contains 0 lesson rows.');
+          return;
+        }
+
+        const newExercises = workbook.SheetNames.includes('Exercises') ? XLSX.utils.sheet_to_json(workbook.Sheets['Exercises'], { defval: '' }) : allExercises;
+        const newWriting = workbook.SheetNames.includes('Writing') ? XLSX.utils.sheet_to_json(workbook.Sheets['Writing'], { defval: '' }) : allWriting;
+        const newVocabulary = workbook.SheetNames.includes('Vocabulary') ? XLSX.utils.sheet_to_json(workbook.Sheets['Vocabulary'], { defval: '' }) : allVocabulary;
+
+        allLessons = newLessons;
+        allExercises = newExercises;
+        allWriting = newWriting;
+        allVocabulary = newVocabulary;
+
+        const customPayload = {
+          sheets: {
+            Lessons: allLessons,
+            Exercises: allExercises,
+            Writing: allWriting,
+            Vocabulary: allVocabulary
+          }
+        };
+
+        localStorage.setItem('linguapath_custom_lessons', JSON.stringify(customPayload));
+
+        try {
+          await fetch('/api/upload-excel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: data
+          });
+        } catch (err) {
+          console.warn('Server upload note:', err);
+        }
+
+        alert(`✅ Successfully imported ${allLessons.length} lessons from ${file.name}!`);
+
+        const modal = document.getElementById('excelManagerModal');
+        if (modal) modal.remove();
+
+        renderCategoryBar();
+        renderLessonGrid();
+        renderContinueLessonBanner();
+      } catch (err) {
+        alert('Failed to parse file: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
   // --- Deep Linking Handler ---
   function handleUrlParams() {
     const params = new URLSearchParams(window.location.search);
@@ -1619,6 +2072,8 @@
 
     renderCategoryBar();
     renderLessonGrid();
+    renderContinueLessonBanner();
+    renderExcelManagerToolbar();
 
     if (lessonParam) {
       openLessonWorkspace(lessonParam, false);
@@ -1651,7 +2106,10 @@
     openLessonWorkspace,
     closeLessonWorkspace,
     switchWorkspaceTab,
-    speakChinese
+    speakChinese,
+    exportLessonsToExcel,
+    importLessonsFromExcel,
+    openExcelManagerModal
   };
 
   document.addEventListener('DOMContentLoaded', () => {

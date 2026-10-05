@@ -8433,6 +8433,20 @@ a {
   opacity: 0;
 }
 
+#hanziWriterTarget {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+#hanziWriterTarget svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 #strokeDrawCanvas {
   position: absolute;
   inset: 0;
@@ -8879,4 +8893,351 @@ a {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25);
 }
+
+/* =========================================================
+   CONTINUE LESSON ACTIVE BANNER & EXCEL DATA MANAGER STYLES
+   ========================================================= */
+
+/* Continue Active Lesson Hero Card */
+.continue-lesson-card {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 2px solid #fdba74;
+  border-radius: 20px;
+  padding: 20px 24px;
+  margin: 0 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  box-shadow: 0 8px 24px rgba(234, 88, 12, 0.12);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+[data-theme="dark"] .continue-lesson-card {
+  background: linear-gradient(135deg, #1e1b4b 0%, #1e293b 100%);
+  border-color: #4f46e5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.continue-badge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ea580c;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.continue-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.continue-title {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: #7c2d12;
+  margin: 0;
+}
+
+[data-theme="dark"] .continue-title {
+  color: #e0e7ff;
+}
+
+.continue-chinese-title {
+  font-family: "Noto Serif SC", serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #c2410c;
+}
+
+[data-theme="dark"] .continue-chinese-title {
+  color: #818cf8;
+}
+
+.continue-meta {
+  font-size: 0.88rem;
+  color: #9a3412;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .continue-meta {
+  color: #93c5fd;
+}
+
+.continue-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.btn-continue-primary {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  color: #ffffff !important;
+  font-weight: 800;
+  font-size: 0.95rem;
+  padding: 12px 22px;
+  border-radius: 12px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-continue-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(234, 88, 12, 0.5);
+}
+
+.btn-continue-clear {
+  background: rgba(0, 0, 0, 0.06);
+  color: #78716c;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.btn-continue-clear:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* Excel Data Manager Button & Bar */
+.data-manager-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 16px 0 24px;
+}
+
+.btn-excel-manager {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 10px 22px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-excel-manager:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(5, 150, 105, 0.45);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+/* Excel Manager Modal Backdrop & Card */
+.excel-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeInModal 0.25s ease-out forwards;
+}
+
+.excel-modal-card {
+  background: #ffffff;
+  border-radius: 24px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border: 1.5px solid #e2e8f0;
+  padding: 28px;
+}
+
+[data-theme="dark"] .excel-modal-card {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.excel-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1.5px solid #f1f5f9;
+}
+
+[data-theme="dark"] .excel-modal-header {
+  border-bottom-color: #334155;
+}
+
+.excel-modal-title {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+[data-theme="dark"] .excel-modal-title {
+  color: #f8fafc;
+}
+
+.excel-modal-close-btn {
+  background: #f1f5f9;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #64748b;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s ease;
+}
+
+.excel-modal-close-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.excel-grid-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.excel-option-box {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  transition: all 0.2s ease;
+}
+
+[data-theme="dark"] .excel-option-box {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+.excel-option-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-bottom: 6px;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-theme="dark"] .excel-option-title {
+  color: #f8fafc;
+}
+
+.excel-option-desc {
+  font-size: 0.88rem;
+  color: #64748b;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+[data-theme="dark"] .excel-option-desc {
+  color: #94a3b8;
+}
+
+.excel-file-input {
+  width: 100%;
+  padding: 10px;
+  background: #ffffff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+[data-theme="dark"] .excel-file-input {
+  background: #1e293b;
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.btn-excel-action {
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.btn-excel-download {
+  background: #059669;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+}
+
+.btn-excel-download:hover {
+  background: #047857;
+  transform: translateY(-1px);
+}
+
+.btn-excel-upload {
+  background: #ea580c;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
+}
+
+.btn-excel-upload:hover {
+  background: #c2410c;
+  transform: translateY(-1px);
+}
+
+.btn-excel-reset {
+  background: #64748b;
+  color: #ffffff;
+}
+
+.btn-excel-reset:hover {
+  background: #475569;
+}
+
 
