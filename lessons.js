@@ -326,6 +326,22 @@
       .replace(/'/g, "&#039;");
   }
 
+  // Render Chinese text output inside an HTML block styled with 楷体
+  function renderChineseKaitiBlock(text, extraClass = '', extraStyle = '') {
+    if (!text) return '';
+    return `<div class="chinese-kaiti-block chinese-kaiti ${extraClass}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'KaiTi_GB2312', 'BiauKai', 'Ma Shan Zheng', 'Noto Serif SC', serif; ${extraStyle}">${escapeHTML(text)}</div>`;
+  }
+
+  function renderChineseKaitiInline(text, extraClass = '', extraStyle = '') {
+    if (!text) return '';
+    return `<span class="chinese-kaiti ${extraClass}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'KaiTi_GB2312', 'BiauKai', 'Ma Shan Zheng', 'Noto Serif SC', serif; ${extraStyle}">${escapeHTML(text)}</span>`;
+  }
+
+  function wrapChineseInKaiti(str) {
+    if (!str) return '';
+    return String(str).replace(/([\u4e00-\u9fa5\u3400-\u4dbf\u2e80-\u2eff\u31c0-\u31ef\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]+)/g, '<span class="chinese-kaiti" style="font-family: \'KaiTi\', \'STKaiti\', \'楷体\', \'Kaiti SC\', \'Ma Shan Zheng\', serif;">$1</span>');
+  }
+
   function getCategoryKey(lesson) {
     if (lesson.categoryKey) return lesson.categoryKey;
     const cat = String(lesson.category || "").toLowerCase();
@@ -571,7 +587,7 @@
             <div class="lesson-category-tag">${escapeHTML(categoryName)}</div>
             <span class="lesson-level">⭐ ${escapeHTML(level)}</span>
             <h3>${escapeHTML(title)}</h3>
-            ${cnTitle ? `<div class="lesson-chinese-title">${escapeHTML(cnTitle)}</div>` : ''}
+            ${cnTitle ? `<div class="lesson-chinese-title chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(cnTitle)}</div>` : ''}
             ${pinyin ? `<div class="lesson-pinyin">${escapeHTML(pinyin)}</div>` : ''}
             ${meaning ? `<div class="lesson-meaning">${escapeHTML(meaning)}</div>` : ''}
             <p class="lesson-description">${escapeHTML(desc)}</p>
@@ -722,7 +738,7 @@
 
       ${lesson.chineseTitle ? `
         <div class="workspace-chinese-block">
-          <span class="workspace-chinese-text">${escapeHTML(lesson.chineseTitle)}</span>
+          <span class="workspace-chinese-text chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(lesson.chineseTitle)}</span>
           ${lesson.pinyin ? `<span class="workspace-pinyin-text">${escapeHTML(lesson.pinyin)}</span>` : ''}
           ${lesson.meaning ? `<span class="workspace-meaning-text">• "${escapeHTML(lesson.meaning)}"</span>` : ''}
           <button type="button" class="btn-speak-line" title="Listen" id="btnSpeakLessonTitle" style="width: 32px; height: 32px; font-size: 0.9rem;">🔊</button>
@@ -931,12 +947,12 @@
             return `
               <div class="quiz-card-item" id="quizCard-${num}">
                 <div class="quiz-question-number">Question ${num} • ${qType === 'fill-blank' ? 'Fill in the Blank' : 'Multiple Choice'}</div>
-                <h4 class="quiz-question-text">${escapeHTML(ex.question)}</h4>
+                <h4 class="quiz-question-text">${wrapChineseInKaiti(escapeHTML(ex.question))}</h4>
 
                 <div class="quiz-options-grid">
                   ${options.map(opt => `
                     <button type="button" class="quiz-option-btn" data-question-index="${num}" data-option="${escapeHTML(opt)}" data-answer="${escapeHTML(ex.answer || '')}" data-explanation="${escapeHTML(ex.explanation || '')}">
-                      <span>${escapeHTML(opt)}</span>
+                      <span>${wrapChineseInKaiti(escapeHTML(opt))}</span>
                       <span class="quiz-opt-icon"></span>
                     </button>
                   `).join('')}
@@ -1018,10 +1034,10 @@
         playSound('correct');
       } else {
         statusEl.className = 'quiz-feedback-status incorrect';
-        statusEl.innerHTML = `<span>❌ Incorrect. The correct answer is: <strong>${escapeHTML(correct)}</strong></span>`;
+        statusEl.innerHTML = `<span>❌ Incorrect. The correct answer is: <strong>${wrapChineseInKaiti(escapeHTML(correct))}</strong></span>`;
         playSound('incorrect');
       }
-      textEl.textContent = explanation || (isCorrect ? 'Well done!' : 'Keep practicing!');
+      textEl.innerHTML = wrapChineseInKaiti(escapeHTML(explanation || (isCorrect ? 'Well done!' : 'Keep practicing!')));
     }
 
     exerciseAnswersState[qNum] = isCorrect;
@@ -1121,7 +1137,7 @@
       <div class="practice-modal-card" style="max-width: 680px; text-align: left;">
         <div class="practice-modal-header">
           <div class="practice-modal-title">
-            <span>📜 7 Core Rules of Chinese Stroke Order (汉字笔顺规则)</span>
+            <span>📜 7 Core Rules of Chinese Stroke Order (<span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">汉字笔顺规则</span>)</span>
           </div>
           <button type="button" class="practice-modal-close-btn" id="btnCloseRulesModal" aria-label="Close">✕</button>
         </div>
@@ -1132,45 +1148,45 @@
 
         <div class="stroke-rules-grid">
           <div class="stroke-rule-card">
-            <div class="stroke-rule-card-title">1. Top to Bottom (先上后下)</div>
+            <div class="stroke-rule-card-title">1. Top to Bottom (<span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', serif;">先上后下</span>)</div>
             <div class="stroke-rule-card-desc">Upper components or strokes are written before lower ones.</div>
-            <div class="stroke-rule-card-example">Examples: <strong>三, 言, 早</strong></div>
+            <div class="stroke-rule-card-example">Examples: <strong class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', serif; font-size: 1.2rem; letter-spacing: 0.1em;">三, 言, 早</strong></div>
           </div>
 
           <div class="stroke-rule-card">
-            <div class="stroke-rule-card-title">2. Left to Right (先左后右)</div>
+            <div class="stroke-rule-card-title">2. Left to Right (<span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', serif;">先左后右</span>)</div>
             <div class="stroke-rule-card-desc">Left components are written before right components.</div>
-            <div class="stroke-rule-card-example">Examples: <strong>好, 明, 做, 你</strong></div>
+            <div class="stroke-rule-card-example">Examples: <strong class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', serif; font-size: 1.2rem; letter-spacing: 0.1em;">好, 明, 做, 你</strong></div>
           </div>
 
           <div class="stroke-rule-card">
-            <div class="stroke-rule-card-title">3. Horizontal Before Vertical (先横后竖)</div>
+            <div class="stroke-rule-card-title">3. Horizontal Before Vertical (<span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', serif;">先横后竖</span>)</div>
             <div class="stroke-rule-card-desc">When strokes cross, write horizontal strokes before vertical strokes.</div>
-            <div class="stroke-rule-card-example">Examples: <strong>十, 干, 木</strong></div>
+            <div class="stroke-rule-card-example">Examples: <strong class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', serif; font-size: 1.2rem; letter-spacing: 0.1em;">十, 干, 木</strong></div>
           </div>
 
           <div class="stroke-rule-card">
-            <div class="stroke-rule-card-title">4. Left-Falling Before Right-Falling (先撇后捺)</div>
+            <div class="stroke-rule-card-title">4. Left-Falling Before Right-Falling (<span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', serif;">先撇后捺</span>)</div>
             <div class="stroke-rule-card-desc">Draw left-falling diagonal strokes (撇) before right-falling ones (捺).</div>
-            <div class="stroke-rule-card-example">Examples: <strong>人, 八, 大</strong></div>
+            <div class="stroke-rule-card-example">Examples: <strong class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', serif; font-size: 1.2rem; letter-spacing: 0.1em;">人, 八, 大</strong></div>
           </div>
 
           <div class="stroke-rule-card Highlight">
-            <div class="stroke-rule-card-title">5. Center Before Sides (先中间后两边) ⭐</div>
+            <div class="stroke-rule-card-title">5. Center Before Sides (<span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', serif;">先中间后两边</span>) ⭐</div>
             <div class="stroke-rule-card-desc">For symmetrical characters, write the central vertical spine first, then left and right sides.</div>
-            <div class="stroke-rule-card-example">Examples: <strong>水, 小, 办</strong></div>
+            <div class="stroke-rule-card-example">Examples: <strong class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', serif; font-size: 1.2rem; letter-spacing: 0.1em;">水, 小, 办</strong></div>
           </div>
 
           <div class="stroke-rule-card">
-            <div class="stroke-rule-card-title">6. Outside Before Inside (先外后内)</div>
+            <div class="stroke-rule-card-title">6. Outside Before Inside (<span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', serif;">先外后内</span>)</div>
             <div class="stroke-rule-card-desc">Draw outer surrounding frame strokes before writing inside contents.</div>
-            <div class="stroke-rule-card-example">Examples: <strong>月, 同, 风</strong></div>
+            <div class="stroke-rule-card-example">Examples: <strong class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', serif; font-size: 1.2rem; letter-spacing: 0.1em;">月, 同, 风</strong></div>
           </div>
 
           <div class="stroke-rule-card">
-            <div class="stroke-rule-card-title">7. Inside Before Closing (先内后封口)</div>
+            <div class="stroke-rule-card-title">7. Inside Before Closing (<span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', serif;">先内后封口</span>)</div>
             <div class="stroke-rule-card-desc">For full enclosures, fill the inner contents before drawing the bottom closing stroke.</div>
-            <div class="stroke-rule-card-example">Examples: <strong>国, 日, 回</strong></div>
+            <div class="stroke-rule-card-example">Examples: <strong class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', serif; font-size: 1.2rem; letter-spacing: 0.1em;">国, 日, 回</strong></div>
           </div>
         </div>
       </div>
@@ -1228,8 +1244,8 @@
         <div class="writing-char-picker">
           <span class="writing-char-picker-label">Select Character to Practice:</span>
           ${chars.map((c, i) => `
-            <button type="button" class="writing-char-chip ${i === activeWritingCharIndex ? 'active' : ''}" data-index="${i}">
-              ${escapeHTML(c.character)}
+            <button type="button" class="writing-char-chip chinese-kaiti ${i === activeWritingCharIndex ? 'active' : ''}" data-index="${i}" title="${escapeHTML(c.pinyin || '')}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">
+              <span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif; font-size: 1.45rem;">${escapeHTML(c.character)}</span>
             </button>
           `).join('')}
         </div>
@@ -1238,35 +1254,37 @@
           <!-- Left Column: Character Breakdown & Stroke Rules -->
           <div class="writing-info-col">
             <div class="writing-character-hero-card">
-              <div class="char-giant-display" id="charBigDisplay">${escapeHTML(currentChar.character)}</div>
+              <div class="char-giant-display chinese-kaiti" id="charBigDisplay" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(currentChar.character)}</div>
               <div class="char-pinyin-badge" id="charPinyinDisplay">${escapeHTML(currentChar.pinyin || '')}</div>
               <div class="char-meaning-badge" id="charMeaningDisplay">"${escapeHTML(currentChar.meaning || '')}"</div>
               
               <div class="char-meta-row">
                 <span class="char-stat-pill" id="charStrokeCountDisplay">✏️ ${currentChar.strokeCount || '?'} Strokes</span>
-                ${currentChar.radical ? `<span class="char-stat-pill" id="charRadicalDisplay">Radical: ${escapeHTML(currentChar.radical)}</span>` : ''}
+                ${currentChar.radical ? `<span class="char-stat-pill" id="charRadicalDisplay">Radical: <span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif; font-size: 1.15em; font-weight: bold; margin-left: 2px;">${escapeHTML(currentChar.radical)}</span></span>` : ''}
                 <button type="button" class="btn-canvas-action" id="btnSpeakWritingChar">🔊 Pronounce</button>
               </div>
             </div>
 
             <div class="stroke-steps-card">
               <div class="stroke-rule-header-row">
-                <span class="stroke-rule-badge-pill">📌 Rule: ${escapeHTML(ruleInfo.name)}</span>
+                <span class="stroke-rule-badge-pill">📌 Rule: <span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', serif;">${escapeHTML(ruleInfo.name)}</span></span>
                 <button type="button" class="btn-stroke-rules-trigger" id="btnOpenStrokeRulesModal">
                   📜 All 7 Rules
                 </button>
               </div>
 
-              <div class="stroke-rule-explanation">
-                ${escapeHTML(ruleInfo.explanation)}
+              <div class="stroke-rule-explanation chinese-kaiti-block" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">
+                ${wrapChineseInKaiti(ruleInfo.explanation)}
               </div>
 
               <h4 style="margin-top: 10px; margin-bottom: 6px; font-size: 0.88rem; color: #1e293b;">
                 🖌️ Stroke-by-Stroke Sequence
               </h4>
-              <p class="stroke-steps-text" id="charStepsDisplay">
-                ${escapeHTML(currentChar.strokeOrderSteps || ruleInfo.steps)}
-              </p>
+              <div class="stroke-steps-wrapper chinese-kaiti-block" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif; background: #fff7ed; border: 1.5px solid #fed7aa; border-radius: 12px; padding: 12px 14px; margin-top: 6px;">
+                <p class="stroke-steps-text chinese-kaiti" id="charStepsDisplay" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif; margin: 0; color: #1e293b; font-size: 0.98rem; line-height: 1.75; font-weight: 600;">
+                  ${wrapChineseInKaiti(currentChar.strokeOrderSteps || ruleInfo.steps)}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -1284,7 +1302,7 @@
             <div class="canvas-mizige-box" id="canvasContainer">
               <div class="canvas-grid-lines"></div>
               <div id="hanziWriterTarget" class="${showGhostChar ? '' : 'hidden'}"></div>
-              <div class="canvas-ghost-character ${showGhostChar ? '' : 'hidden'}" id="canvasGhostChar">
+              <div class="canvas-ghost-character chinese-kaiti ${showGhostChar ? '' : 'hidden'}" id="canvasGhostChar" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">
                 ${escapeHTML(currentChar.character)}
               </div>
               <canvas id="strokeDrawCanvas" width="320" height="320" style="z-index: 5; touch-action: none; position: absolute; inset: 0;"></canvas>
@@ -1553,10 +1571,10 @@
           });
         } catch (err) {
           console.warn('HanziWriter init error:', err);
-          targetElement.innerHTML = `<div class="fallback-ghost-char ${showGhostChar ? '' : 'hidden'}">${escapeHTML(currentChar.character)}</div>`;
+          targetElement.innerHTML = `<div class="fallback-ghost-char chinese-kaiti ${showGhostChar ? '' : 'hidden'}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(currentChar.character)}</div>`;
         }
       } else {
-        targetElement.innerHTML = `<div class="fallback-ghost-char ${showGhostChar ? '' : 'hidden'}">${escapeHTML(currentChar.character)}</div>`;
+        targetElement.innerHTML = `<div class="fallback-ghost-char chinese-kaiti ${showGhostChar ? '' : 'hidden'}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(currentChar.character)}</div>`;
       }
     }
   }
@@ -1704,9 +1722,14 @@
     }
     if (stepHint) {
       if (drawnStrokes.length >= totalExpected) {
-        stepHint.textContent = 'All strokes drawn! Click Grade below.';
+        stepHint.innerHTML = 'All strokes drawn! Click Grade below.';
       } else {
-        stepHint.textContent = `Draw stroke #${nextStrokeNum}`;
+        const nextVector = strokeVectors[nextStrokeNum - 1];
+        if (nextVector && nextVector.label) {
+          stepHint.innerHTML = `Draw stroke #${nextStrokeNum}: <span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif; font-weight: 700; color: #ea580c;">${escapeHTML(nextVector.label)}</span>`;
+        } else {
+          stepHint.textContent = `Draw stroke #${nextStrokeNum}`;
+        }
       }
     }
 
@@ -1804,13 +1827,13 @@
       <div class="practice-modal-card">
         <div class="practice-modal-header">
           <div class="practice-modal-title">
-            <span>Practice ${escapeHTML(currentChar.character)}</span>
+            <span>Practice <span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif; font-size: 1.3em;">${escapeHTML(currentChar.character)}</span></span>
           </div>
           <button type="button" class="practice-modal-close-btn" id="btnClosePracticeModal" aria-label="Close">✕</button>
         </div>
 
         <div class="practice-modal-inner-frame">
-          <div class="practice-inner-watermark">${escapeHTML(currentChar.character)}</div>
+          <div class="practice-inner-watermark chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(currentChar.character)}</div>
           
           <div class="practice-stroke-badges-top">
             ${badgesHtml}
@@ -1852,8 +1875,8 @@
           <div class="practice-try-another-label">Try another</div>
           <div class="practice-try-another-grid">
             ${tryAnotherChars.slice(0, 4).map(c => `
-              <div class="try-another-char-box" data-char="${escapeHTML(c.character)}">
-                ${escapeHTML(c.character)}
+              <div class="try-another-char-box chinese-kaiti" data-char="${escapeHTML(c.character)}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">
+                <span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif; font-size: 1.45rem;">${escapeHTML(c.character)}</span>
               </div>
             `).join('')}
           </div>
@@ -1928,11 +1951,11 @@
     ectx.textAlign = 'center';
     ectx.textBaseline = 'middle';
 
-    ectx.font = '900 240px "Noto Serif SC", serif';
+    ectx.font = '700 240px "KaiTi", "STKaiti", "楷体", "Kaiti SC", "Ma Shan Zheng", "Noto Serif SC", serif';
     ectx.fillStyle = 'rgba(28, 25, 23, 0.05)';
     ectx.fillText(currentChar.character, 300, 320);
 
-    ectx.font = '700 22px "Plus Jakarta Sans", sans-serif';
+    ectx.font = '700 22px "KaiTi", "STKaiti", "楷体", "Plus Jakarta Sans", sans-serif';
     ectx.fillStyle = '#292524';
     ectx.fillText(`LinguaPath Practice: ${currentChar.character} (${currentChar.pinyin || ''})`, 300, 95);
 
@@ -2003,7 +2026,7 @@
         <div class="continue-badge-tag">⚡ Active Lesson in Progress</div>
         <div class="continue-title-group">
           <h3 class="continue-title">${escapeHTML(lessonObj.title || 'Lesson in Progress')}</h3>
-          ${lessonObj.chineseTitle ? `<span class="continue-chinese-title">${escapeHTML(lessonObj.chineseTitle)}</span>` : ''}
+          ${lessonObj.chineseTitle ? `<span class="continue-chinese-title chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(lessonObj.chineseTitle)}</span>` : ''}
         </div>
         <div class="continue-meta">
           ${escapeHTML(lessonObj.audience || 'Adult')} Track • ${escapeHTML(lessonObj.level || 'Beginner')} • ${escapeHTML(lessonObj.category || 'Basics')}

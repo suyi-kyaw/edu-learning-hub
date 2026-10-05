@@ -959,7 +959,7 @@ function renderStoryReading(
 
             <div class="reading-content">
 
-              <div class="chinese-sentence">
+              <div class="chinese-sentence chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">
                 ${escapeHTML(chinese)}
               </div>
 
@@ -1120,7 +1120,7 @@ function renderVocabulary(
             </div>
 
 
-            <div class="vocabulary-character">
+            <div class="vocabulary-character chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">
               ${escapeHTML(character)}
             </div>
 

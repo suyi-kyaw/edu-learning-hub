@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap');
+
 /* =========================================================
    LINGUAPATH - VIBRANT EDUCATIONAL THEME
    Main Stylesheet
@@ -47,6 +49,93 @@
   --shadow-sm: 0 4px 12px rgba(249, 115, 22, 0.05);
   --shadow-md: 0 10px 28px rgba(249, 115, 22, 0.09);
   --shadow-lg: 0 18px 45px rgba(249, 115, 22, 0.14);
+  
+  /* Authentic 楷体 (KaiTi) Regular Script Font Stack */
+  --font-kaiti: "KaiTi", "STKaiti", "楷体", "Kaiti SC", "KaiTi_GB2312", "BiauKai", "Ma Shan Zheng", "Noto Serif SC", serif;
+}
+
+/* =========================================================
+   AUTHENTIC 楷体 (KAITI) CHINESE TEXT & WRITING STROKE STYLES
+   Ensures all Chinese text output renders inside HTML blocks
+   styled with 楷体, especially for character stroke writing.
+   ========================================================= */
+
+.chinese-kaiti,
+.chinese-kaiti-block,
+.kaiti-block,
+.kaiti-text,
+[lang="zh"],
+.char-giant-display,
+.canvas-ghost-character,
+.fallback-ghost-char,
+.writing-char-chip,
+.try-another-char-box,
+.practice-inner-watermark,
+.stroke-steps-text,
+.stroke-rule-explanation,
+.stroke-rule-card-title,
+.stroke-rule-card-example,
+.stroke-rule-card-example strong,
+.stroke-rule-badge-pill,
+.stroke-order-indicator-bar,
+.hero-character,
+.hero-pinyin-cn,
+.reading-item .chinese-sentence,
+.chinese-sentence,
+.vocabulary-character,
+.card-character,
+.card-character-sub,
+.sub-line-cn,
+.workspace-chinese-text,
+.dialogue-chinese,
+.continue-chinese-title,
+.lesson-cover-character,
+.lesson-chinese-title,
+.tone-character,
+.conversation-chinese,
+.reel-card-chinese,
+.category-icon-bg,
+.story-hero h1,
+.story-image-content h3 {
+  font-family: var(--font-kaiti) !important;
+}
+
+/* Specific enhancements for Writing & Stroke Order sections */
+.writing-character-hero-card .char-giant-display {
+  font-family: var(--font-kaiti) !important;
+  font-weight: 700;
+  letter-spacing: normal;
+}
+
+.canvas-mizige-box .canvas-ghost-character,
+.canvas-mizige-box .fallback-ghost-char {
+  font-family: var(--font-kaiti) !important;
+  font-weight: 700;
+}
+
+.stroke-steps-text {
+  font-family: var(--font-kaiti) !important;
+  font-size: 1.05rem;
+  line-height: 1.8;
+  letter-spacing: 0.02em;
+}
+
+.stroke-rule-card-example strong {
+  font-family: var(--font-kaiti) !important;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.writing-char-chip {
+  font-family: var(--font-kaiti) !important;
+}
+
+.practice-inner-watermark {
+  font-family: var(--font-kaiti) !important;
+}
+
+.try-another-char-box {
+  font-family: var(--font-kaiti) !important;
 }
 
 /* =========================================================
