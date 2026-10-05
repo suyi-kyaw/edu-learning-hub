@@ -2982,38 +2982,10 @@ function setupReminderUI() {
    ========================================================= */
 
 function setupThemeToggle() {
-  const themeToggleBtn = document.getElementById("themeToggleBtn");
-  if (!themeToggleBtn) {
+  if (window.getLinguaTheme && window.setLinguaTheme) {
+    window.setLinguaTheme(window.getLinguaTheme(), false);
     return;
   }
-
-  function applyTheme(theme) {
-    document.documentElement.setAttribute("data-theme", theme);
-    const isDark = theme === "dark";
-    themeToggleBtn.setAttribute(
-      "aria-label",
-      isDark ? "Switch to light mode" : "Switch to dark mode"
-    );
-    themeToggleBtn.setAttribute(
-      "title",
-      isDark ? "Switch to light mode" : "Switch to dark mode for late-night learning sessions"
-    );
-    themeToggleBtn.setAttribute("aria-pressed", isDark ? "true" : "false");
-    try {
-      localStorage.setItem("linguapath_theme", theme);
-    } catch (e) {}
-  }
-
-  const savedTheme = localStorage.getItem("linguapath_theme");
-  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
-  applyTheme(initialTheme);
-
-  themeToggleBtn.addEventListener("click", () => {
-    const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
-    const nextTheme = currentTheme === "dark" ? "light" : "dark";
-    applyTheme(nextTheme);
-  });
 }
 
 

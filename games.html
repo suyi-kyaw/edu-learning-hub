@@ -9,6 +9,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Noto+Serif+SC:wght@600;700;900&family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <!-- Early dark theme application to avoid white-flash on reload -->
+  <script>
+    (function () {
+      try {
+        var savedTheme = localStorage.getItem("linguapath_theme") || localStorage.getItem("theme");
+        var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var activeTheme = savedTheme || (prefersDark ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", activeTheme);
+      } catch (e) {}
+    })();
+  </script>
   <style>
     .games-hero {
       padding: 60px 0 36px;
@@ -366,20 +377,6 @@
 
   <!-- Interactive Games Logic -->
   <script>
-    // Theme toggle
-    const themeBtn = document.getElementById('themeToggleBtn');
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-
-    if (themeBtn) {
-      themeBtn.addEventListener('click', () => {
-        const current = document.documentElement.getAttribute('data-theme') || 'light';
-        const next = current === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('theme', next);
-      });
-    }
-
     // Toast helper
     function showToast(message, icon = '✅') {
       const toast = document.getElementById('syncToast');

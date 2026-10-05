@@ -1,13 +1,146 @@
 /**
  * =========================================================
- * LINGUAPATH - SHARED HEADER LOADER (header.js)
+ * LINGUAPATH - SHARED HEADER LOADER & THEME CONTROLLER (header.js)
  * Automatically loads and injects header.html into all pages
+ * Provides unified, bulletproof Dark/Light Mode toggle & navigation
  * =========================================================
  */
 
 (function () {
   'use strict';
 
+  // --- Theme Management ---
+  function getStoredTheme() {
+    try {
+      const saved = localStorage.getItem('linguapath_theme') || localStorage.getItem('theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return prefersDark ? 'dark' : 'light';
+    } catch (e) {
+      return 'light';
+    }
+  }
+
+  function setStoredTheme(theme) {
+    try {
+      localStorage.setItem('linguapath_theme', theme);
+      localStorage.setItem('theme', theme);
+    } catch (e) {}
+  }
+
+  function updateThemeButtonUI(theme) {
+    const isDark = theme === 'dark';
+    const buttons = document.querySelectorAll('#themeToggleBtn, .theme-toggle-btn');
+    buttons.forEach(btn => {
+      btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+      btn.setAttribute('title', isDark ? 'Switch to light mode' : 'Switch to dark mode for late-night learning sessions');
+      btn.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+    });
+  }
+
+  function applyTheme(theme, save = true) {
+    const validTheme = (theme === 'dark') ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', validTheme);
+    if (save) {
+      setStoredTheme(validTheme);
+    }
+    updateThemeButtonUI(validTheme);
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: validTheme } }));
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || getStoredTheme();
+    const next = current === 'dark' ? 'light' : 'dark';
+    applyTheme(next, true);
+  }
+
+  // Expose global theme functions
+  window.toggleLinguaTheme = toggleTheme;
+  window.setLinguaTheme = applyTheme;
+  window.getLinguaTheme = getStoredTheme;
+
+  // Apply initial theme immediately to prevent white flashes
+  applyTheme(getStoredTheme(), false);
+
+  // --- Mobile Menu Drawer ---
+  function toggleMobileMenu() {
+    const mainNav = document.getElementById('mainNav');
+    const menuBtn = document.getElementById('menuToggle');
+    if (!mainNav) return;
+    const isOpen = mainNav.classList.toggle('is-open');
+    if (menuBtn) {
+      menuBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      menuBtn.classList.toggle('active', isOpen);
+    }
+    document.body.classList.toggle('menu-open', isOpen);
+  }
+
+  function closeMobileMenu() {
+    const mainNav = document.getElementById('mainNav');
+    const menuBtn = document.getElementById('menuToggle');
+    if (mainNav) mainNav.classList.remove('is-open');
+    if (menuBtn) {
+      menuBtn.setAttribute('aria-expanded', 'false');
+      menuBtn.classList.remove('active');
+    }
+    document.body.classList.remove('menu-open');
+  }
+
+  // --- Global Event Delegation (Works even before/after dynamic header injection) ---
+  document.addEventListener('click', function (e) {
+    const themeBtn = e.target.closest('#themeToggleBtn, .theme-toggle-btn');
+    if (themeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTheme();
+      return;
+    }
+
+    const menuBtn = e.target.closest('#menuToggle, .menu-toggle');
+    if (menuBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMobileMenu();
+      return;
+    }
+
+    const closeBtn = e.target.closest('#hideMenuCloseBtn, .hide-menu-close-btn');
+    if (closeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMobileMenu();
+      return;
+    }
+
+    // Close menu when clicking outside
+    const mainNav = document.getElementById('mainNav');
+    if (mainNav && mainNav.classList.contains('is-open')) {
+      if (!mainNav.contains(e.target) && !e.target.closest('#menuToggle, .menu-toggle')) {
+        closeMobileMenu();
+      }
+    }
+  });
+
+  // Close menu on Escape key
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closeMobileMenu();
+    }
+  });
+
+  // Listen to OS system color scheme changes if user hasn't explicitly set one
+  try {
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        const hasManualSetting = localStorage.getItem('linguapath_theme') || localStorage.getItem('theme');
+        if (!hasManualSetting) {
+          applyTheme(e.matches ? 'dark' : 'light', false);
+        }
+      });
+    }
+  } catch (err) {}
+
+  // Fallback Header Template
   const FALLBACK_HEADER_HTML = `
   <header class="site-header">
     <div class="container nav-container">
@@ -175,7 +308,7 @@
         }
       }
     } catch (e) {
-      console.warn('Header fetch note (using fallback):', e);
+      // Use fallback
     }
 
     const container = document.getElementById('sharedHeader');
@@ -189,6 +322,22 @@
         document.body.insertAdjacentHTML('afterbegin', htmlContent);
       }
     }
+
+    // Mark current active link
+    const currentPath = window.location.pathname.split('/').pop() || 'index.html';
+    document.querySelectorAll('.desktop-nav .nav-link, .hide-menu-nav-links .hide-menu-link').forEach(link => {
+      const href = link.getAttribute('href');
+      if (href) {
+        if (href === currentPath || (currentPath === '' && href === 'index.html')) {
+          link.classList.add('active');
+        } else if (currentPath.includes('lessons') && href.includes('lessons')) {
+          link.classList.add('active');
+        }
+      }
+    });
+
+    // Sync theme UI on injected button
+    updateThemeButtonUI(document.documentElement.getAttribute('data-theme') || getStoredTheme());
   }
 
   if (document.readyState === 'loading') {
