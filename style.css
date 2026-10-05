@@ -8416,17 +8416,18 @@ a {
   display: grid;
   place-items: center;
   font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 200px;
+  font-size: 210px;
   font-weight: 900;
-  color: rgba(234, 88, 12, 0.15);
+  color: rgba(234, 88, 12, 0.25);
   pointer-events: none;
   user-select: none;
   line-height: 1;
   transition: opacity 0.2s ease;
+  z-index: 2;
 }
 
 [data-theme="dark"] .canvas-ghost-character {
-  color: rgba(251, 146, 60, 0.2);
+  color: rgba(251, 146, 60, 0.35);
 }
 
 .canvas-ghost-character.hidden {

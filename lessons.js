@@ -603,7 +603,7 @@
 
   // --- Open Lesson Workspace (3 Core Sections) ---
   function openLessonWorkspace(lessonId, updateUrl = true) {
-    const lesson = allLessons.find(l => String(l.id) === String(lessonId)) || allLessons[0];
+    const lesson = allLessons.find(l => String(l.id || '').trim().toLowerCase() === String(lessonId || '').trim().toLowerCase()) || allLessons[0];
     if (!lesson) return;
 
     activeLesson = lesson;
@@ -628,20 +628,30 @@
     const workspace = document.getElementById('lessonWorkspace');
     const curriculumSection = document.getElementById('curriculumListSection');
 
-    if (workspace && curriculumSection) {
-      curriculumSection.style.display = 'none';
-      workspace.classList.add('active');
-    }
-
-    renderWorkspaceHeader(lesson);
-    renderVideoSection(lesson);
-    renderExercisesSection(lesson);
-    renderWritingSection(lesson);
-    switchWorkspaceTab('video');
-
-    // Scroll to top of workspace smoothly
     if (workspace) {
+      if (curriculumSection) curriculumSection.style.display = 'none';
+      const adultView = document.getElementById('adultView');
+      if (adultView) adultView.style.display = 'none';
+      const kidsView = document.getElementById('kidsView');
+      if (kidsView) kidsView.style.display = 'none';
+
+      workspace.classList.add('active');
+      workspace.style.display = 'block';
+
+      renderWorkspaceHeader(lesson);
+      renderVideoSection(lesson);
+      renderExercisesSection(lesson);
+      renderWritingSection(lesson);
+      switchWorkspaceTab('video');
+
+      // Scroll to top of workspace smoothly
       workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      // If workspace container is not on this page, redirect to the correct track page with query param
+      const targetAudience = (lesson.audience || currentAudience).toLowerCase() === 'kids' ? 'Kids' : 'Adult';
+      const targetPage = targetAudience === 'Kids' ? 'lessons-kids.html' : 'lessons-adult.html';
+      window.location.href = `${targetPage}?lesson=${encodeURIComponent(lesson.id)}`;
+      return;
     }
 
     if (updateUrl) {
@@ -657,10 +667,16 @@
     const workspace = document.getElementById('lessonWorkspace');
     const curriculumSection = document.getElementById('curriculumListSection');
 
-    if (workspace && curriculumSection) {
+    if (workspace) {
       workspace.classList.remove('active');
-      curriculumSection.style.display = 'block';
+      workspace.style.display = 'none';
     }
+
+    if (curriculumSection) curriculumSection.style.display = 'block';
+    const adultView = document.getElementById('adultView');
+    if (adultView) adultView.style.display = 'block';
+    const kidsView = document.getElementById('kidsView');
+    if (kidsView) kidsView.style.display = 'none';
 
     // Pause any playing video
     const video = document.getElementById('workspaceVideoPlayer');
@@ -747,7 +763,7 @@
 
     // If writing tab is opened, initialize canvas
     if (tabName === 'writing' && activeLesson) {
-      setTimeout(() => initWritingCanvas(), 50);
+      setTimeout(() => initWritingCanvas(activeLesson), 50);
     }
   }
 
@@ -760,7 +776,7 @@
     const poster = lesson.posterUrl || lesson.poster || 'assets/images/story-poster.jpg';
 
     // Find vocabulary or story lines for this lesson
-    const vocabItems = allVocabulary.filter(v => String(v.lessonId) === String(lesson.id));
+    const vocabItems = allVocabulary.filter(v => String(v.lessonId || '').trim().toLowerCase() === String(lesson.id || '').trim().toLowerCase());
 
     panel.innerHTML = `
       <div class="video-lesson-grid">
@@ -847,16 +863,51 @@
     const panel = document.getElementById('panel-exercises');
     if (!panel) return;
 
-    const exercises = allExercises.filter(ex => String(ex.lessonId) === String(lesson.id));
+    let exercises = allExercises.filter(ex => String(ex.lessonId || '').trim().toLowerCase() === String(lesson.id || '').trim().toLowerCase());
 
     if (!exercises.length) {
-      panel.innerHTML = `
-        <div class="exercises-workspace" style="text-align: center; padding: 50px;">
-          <h3>✏️ Practice Quiz Loading</h3>
-          <p>Interactive practice questions are loading from lessons.xlsx for this lesson.</p>
-        </div>
-      `;
-      return;
+      const lessonTitle = lesson.title || 'Mandarin Practice';
+      const cnTitle = lesson.chineseTitle || '汉语练习';
+      const pinyinStr = lesson.pinyin || 'Hànyǔ liànxí';
+
+      exercises = [
+        {
+          lessonId: lesson.id,
+          order: 1,
+          type: "multiple-choice",
+          question: `What is the correct Chinese expression for "${lessonTitle}"?`,
+          optionA: `${cnTitle} (${pinyinStr})`,
+          optionB: `你好 (Nǐ hǎo)`,
+          optionC: `谢谢 (Xièxie)`,
+          optionD: `再见 (Zàijiàn)`,
+          answer: `${cnTitle} (${pinyinStr})`,
+          explanation: `"${cnTitle}" is the authentic Chinese phrase for ${lessonTitle}.`
+        },
+        {
+          lessonId: lesson.id,
+          order: 2,
+          type: "multiple-choice",
+          question: `Which Pinyin pronunciation matches "${cnTitle}"?`,
+          optionA: pinyinStr,
+          optionB: "Zǎoshang hǎo",
+          optionC: "Mǎi shuǐguǒ",
+          optionD: "Wènlù dǎoháng",
+          answer: pinyinStr,
+          explanation: `The Pinyin for "${cnTitle}" is "${pinyinStr}".`
+        },
+        {
+          lessonId: lesson.id,
+          order: 3,
+          type: "multiple-choice",
+          question: `How do you express polite communication or greeting in this lesson topic?`,
+          optionA: "非常感谢 (Fēicháng gǎnxiè - Thank you very much)",
+          optionB: "不客气 (Bú kèqì - You're welcome)",
+          optionC: "对不起 (Duìbuqǐ - Sorry)",
+          optionD: "没关系 (Méi guānxi - No problem)",
+          answer: "非常感谢 (Fēicháng gǎnxiè - Thank you very much)",
+          explanation: "Polite expressions enrich natural Chinese conversations."
+        }
+      ];
     }
 
     panel.innerHTML = `
@@ -1001,14 +1052,30 @@
     strokeScores = [];
     currentStrokePoints = [];
 
-    const chars = allWriting.filter(w => String(w.lessonId) === String(lesson.id));
+    let chars = allWriting.filter(w => String(w.lessonId || '').trim().toLowerCase() === String(lesson.id || '').trim().toLowerCase());
 
     if (!chars.length) {
-      const defaultChars = [
-        { character: "早", pinyin: "zǎo", meaning: "morning", strokeCount: 6, radical: "日", strokeOrderSteps: "1.丨 2.𠃍 3.一 4.一 5.一 6.丨" },
-        { character: "好", pinyin: "hǎo", meaning: "good", strokeCount: 6, radical: "女", strokeOrderSteps: "1.ㄑ 2.ノ 3.一 4.乛 5.亅 6.一" }
-      ];
-      chars.push(...defaultChars);
+      if (lesson.chineseTitle) {
+        const extracted = Array.from(lesson.chineseTitle).filter(c => /[\u4e00-\u9fa5]/.test(c));
+        extracted.forEach((char, idx) => {
+          chars.push({
+            lessonId: lesson.id,
+            order: idx + 1,
+            character: char,
+            pinyin: lesson.pinyin ? (lesson.pinyin.split(' ')[idx] || 'zǎo') : 'zǎo',
+            meaning: `Character from ${lesson.title}`,
+            strokeCount: 6,
+            radical: "Key Radical",
+            strokeOrderSteps: `Follow standard stroke order for character ${char}: top to bottom, left to right.`
+          });
+        });
+      }
+      if (!chars.length) {
+        chars.push(
+          { character: "早", pinyin: "zǎo", meaning: "morning", strokeCount: 6, radical: "日", strokeOrderSteps: "1.丨 2.𠃍 3.一 4.一 5.一 6.丨" },
+          { character: "好", pinyin: "hǎo", meaning: "good", strokeCount: 6, radical: "女", strokeOrderSteps: "1.ㄑ 2.ノ 3.一 4.乛 5.亅 6.一" }
+        );
+      }
     }
 
     const currentChar = chars[activeWritingCharIndex] || chars[0];
@@ -1064,15 +1131,15 @@
             <div class="canvas-mizige-box" id="canvasContainer">
               <div class="canvas-grid-lines"></div>
               <div id="hanziWriterTarget" class="${showGhostChar ? '' : 'hidden'}"></div>
+              <div class="canvas-ghost-character ${showGhostChar ? '' : 'hidden'}" id="canvasGhostChar">
+                ${escapeHTML(currentChar.character)}
+              </div>
               <canvas id="strokeDrawCanvas" width="320" height="320" style="z-index: 5; touch-action: none; position: absolute; inset: 0;"></canvas>
             </div>
 
             <div class="canvas-toolbar">
               <button type="button" class="btn-canvas-action" id="btnGradeWriting" style="background: #ea580c; color: #ffffff; border-color: #ea580c;">
                 ✨ Grade &amp; Check Writing
-              </button>
-              <button type="button" class="btn-canvas-action" id="btnDemoStrokeOrder">
-                ▶️ Demo Stroke Order
               </button>
               <button type="button" class="btn-canvas-action" id="btnClearCanvas">
                 🧹 Clear Canvas
@@ -1108,9 +1175,10 @@
     if (toggleGhostBtn) {
       toggleGhostBtn.onclick = () => {
         showGhostChar = !showGhostChar;
-        const target = document.getElementById('hanziWriterTarget');
-        if (target) target.classList.toggle('hidden', !showGhostChar);
-
+        const ghost = document.getElementById('canvasGhostChar');
+        if (ghost) ghost.classList.toggle('hidden', !showGhostChar);
+        const hwTarget = document.getElementById('hanziWriterTarget');
+        if (hwTarget) hwTarget.classList.toggle('hidden', !showGhostChar);
         if (currentHanziWriter) {
           if (showGhostChar) {
             currentHanziWriter.showOutline();
@@ -1127,11 +1195,6 @@
       gradeBtn.onclick = () => openPracticeResultModal(currentChar, lesson, chars);
     }
 
-    const demoBtn = document.getElementById('btnDemoStrokeOrder');
-    if (demoBtn) {
-      demoBtn.onclick = () => demoStrokeOrder(currentChar);
-    }
-
     initWritingCanvas(currentChar, lesson, chars);
   }
 
@@ -1141,6 +1204,31 @@
     const count = currentChar.strokeCount || 4;
 
     const charMap = {
+      "我": [
+        { type: "left_fall", x1: 150, y1: 50, x2: 100, y2: 90, label: "1.ノ Top Left Fall" },
+        { type: "horizontal", x1: 70, y1: 110, x2: 240, y2: 110, label: "2.一 Main Horizontal" },
+        { type: "v_hook", x1: 120, y1: 90, x2: 120, y2: 260, x3: 95, y3: 240, label: "3.亅 Vertical Hook" },
+        { type: "rising", x1: 60, y1: 220, x2: 140, y2: 170, label: "4.提 Lower Rising Stroke" },
+        { type: "slant_hook", x1: 170, y1: 60, x2: 240, y2: 250, x3: 265, y3: 230, label: "5.㇂ Slant Hook" },
+        { type: "left_fall", x1: 210, y1: 140, x2: 160, y2: 210, label: "6.撇 Middle Left Fall" },
+        { type: "dot", x1: 220, y1: 70, x2: 250, y2: 100, label: "7.丶 Top Right Dot" }
+      ],
+      "你": [
+        { type: "left_fall", x1: 90, y1: 60, x2: 60, y2: 140, label: "1.ノ Person Slant" },
+        { type: "vertical", x1: 75, y1: 130, x2: 75, y2: 270, label: "2.丨 Person Vertical" },
+        { type: "left_fall", x1: 200, y1: 60, x2: 170, y2: 100, label: "3.ノ Top Slant" },
+        { type: "v_hook", x1: 150, y1: 100, x2: 250, y2: 100, x3: 230, y3: 140, label: "4.乛 Hook" },
+        { type: "v_hook", x1: 195, y1: 110, x2: 195, y2: 260, x3: 170, y3: 240, label: "5.亅 Center Hook" },
+        { type: "dot", x1: 140, y1: 150, x2: 120, y2: 210, label: "6.丶 Left Dot" },
+        { type: "dot", x1: 230, y1: 150, x2: 260, y2: 210, label: "7.丶 Right Dot" }
+      ],
+      "他": [
+        { type: "left_fall", x1: 90, y1: 60, x2: 60, y2: 140, label: "1.ノ Person Slant" },
+        { type: "vertical", x1: 75, y1: 130, x2: 75, y2: 270, label: "2.丨 Person Vertical" },
+        { type: "horizontal", x1: 140, y1: 120, x2: 260, y2: 120, label: "3.乛 Top Horizontal Hook" },
+        { type: "vertical", x1: 170, y1: 80, x2: 170, y2: 240, label: "4.丨 Center Vertical" },
+        { type: "v_hook", x1: 220, y1: 80, x2: 220, y2: 260, x3: 250, y3: 220, label: "5.乚 Curved Hook" }
+      ],
       "早": [
         { type: "vertical", x1: 115, y1: 80, x2: 115, y2: 170, label: "1.丨 Left Vertical of 日" },
         { type: "corner", x1: 115, y1: 80, x2: 205, y2: 80, x3: 205, y3: 170, label: "2.𠃍 Top-Right Corner of 日" },
@@ -1254,9 +1342,6 @@
   let currentColor = '#ea580c';
   let brushSizes = [6, 10, 16];
   let currentBrushIndex = 1;
-  let isDrawing = false;
-  let lastX = 0;
-  let lastY = 0;
 
   function initWritingCanvas(currentChar, lesson, chars) {
     canvas = document.getElementById('strokeDrawCanvas');
@@ -1373,7 +1458,8 @@
 
       updateStrokeBadgesUI(activeWritingChar);
 
-      const totalExpected = activeWritingChar?.strokeCount || 4;
+      const strokeVectors = getCharacterStrokeVectors(activeWritingChar);
+      const totalExpected = activeWritingChar?.strokeCount || strokeVectors.length || 4;
       if (drawnStrokes.length >= totalExpected) {
         setTimeout(() => {
           openPracticeResultModal(activeWritingChar, activeWritingLesson, activeWritingChars);
@@ -1392,64 +1478,63 @@
     currentStrokePoints = [];
   }
 
-  // Evaluate single stroke accuracy (0-100%)
+  // Evaluate single stroke accuracy (0-100%) against expected stroke vector
   function evaluateSingleStroke(points, strokeIdx, currentChar) {
-    if (!points || points.length < 2) return 65;
+    if (!points || points.length < 2) return 0;
 
-    const totalExpected = currentChar.strokeCount || 4;
-    const cSize = 320;
+    const strokeVectors = getCharacterStrokeVectors(currentChar);
+    const totalExpected = currentChar.strokeCount || strokeVectors.length || 4;
 
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    points.forEach(p => {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    });
+    // Extra strokes beyond character limit get 0 points
+    if (strokeIdx >= totalExpected) return 0;
 
-    const midY = (minY + maxY) / 2;
+    const expected = strokeVectors[strokeIdx];
     const startP = points[0];
     const endP = points[points.length - 1];
     const dx = endP.x - startP.x;
     const dy = endP.y - startP.y;
     const len = Math.hypot(dx, dy);
 
-    // Heuristic stroke position matching
-    const expectedZoneY = (strokeIdx / Math.max(1, totalExpected)) * cSize * 0.75 + 40;
-    const posDiffY = Math.abs(midY - expectedZoneY);
-    const posScore = Math.max(50, 100 - (posDiffY / cSize) * 85);
+    if (len < 10) return 0; // scribble penalty
 
-    let dirScore = 88;
-    if (len < 12) {
-      dirScore = 52; // scribble penalty
+    if (expected) {
+      const userAngle = Math.atan2(dy, dx);
+      const expDx = (expected.x2 || 0) - (expected.x1 || 0);
+      const expDy = (expected.y2 || 0) - (expected.y1 || 0);
+      const expAngle = Math.atan2(expDy, expDx);
+
+      let angleDiff = Math.abs(userAngle - expAngle);
+      if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      points.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      });
+      const drawnMidX = (minX + maxX) / 2;
+      const drawnMidY = (minY + maxY) / 2;
+
+      const expMidX = ((expected.x1 || 0) + (expected.x2 || 0)) / 2;
+      const expMidY = ((expected.y1 || 0) + (expected.y2 || 0)) / 2;
+
+      const distErr = Math.hypot(drawnMidX - expMidX, drawnMidY - expMidY);
+
+      const dirFactor = Math.max(0, 1 - angleDiff / (Math.PI / 1.5));
+      const posFactor = Math.max(0, 1 - distErr / 180);
+
+      const strokeScore = Math.round((dirFactor * 0.6 + posFactor * 0.4) * 100);
+      return Math.min(98, Math.max(0, strokeScore));
     }
 
-    // Hit coverage estimate
-    let validSampleCount = 0;
-    const sampleStep = Math.max(1, Math.floor(points.length / 10));
-    for (let i = 0; i < points.length; i += sampleStep) {
-      const pt = points[i];
-      if (pt.x >= 20 && pt.x <= 300 && pt.y >= 20 && pt.y <= 300) {
-        validSampleCount++;
-      }
-    }
-    const sampleTotal = Math.ceil(points.length / sampleStep);
-    const coverageRatio = sampleTotal > 0 ? validSampleCount / sampleTotal : 0.8;
-    const coverageScore = 60 + coverageRatio * 35;
-
-    let totalScore = Math.round(posScore * 0.35 + dirScore * 0.35 + coverageScore * 0.30);
-
-    // Sequence order penalty if user exceeds stroke count
-    if (strokeIdx >= totalExpected) {
-      totalScore = Math.max(45, totalScore - 15);
-    }
-
-    return Math.min(98, Math.max(51, totalScore));
+    return 40;
   }
 
   // Update stroke live scores row & step indicator
   function updateStrokeBadgesUI(currentChar) {
-    const totalExpected = currentChar.strokeCount || 4;
+    const strokeVectors = getCharacterStrokeVectors(currentChar);
+    const totalExpected = currentChar.strokeCount || strokeVectors.length || 4;
     const stepBadge = document.getElementById('strokeStepBadge');
     const stepHint = document.getElementById('strokeOrderHintText');
     const liveScoresRow = document.getElementById('strokeLiveScoresRow');
@@ -1496,37 +1581,21 @@
     }
   }
 
-  // Demo Authentic Stroke Order Animation with HanziWriter
-  function demoStrokeOrder(currentChar) {
-    clearCanvas(currentChar);
-    const stepBadge = document.getElementById('strokeStepBadge');
-    const stepHint = document.getElementById('strokeOrderHintText');
-
-    if (currentHanziWriter) {
-      if (stepBadge) stepBadge.textContent = `Demoing ${currentChar.character}...`;
-      if (stepHint) stepHint.textContent = `Watch real stroke order & direction!`;
-
-      currentHanziWriter.showOutline();
-      currentHanziWriter.animateCharacter({
-        onComplete: () => {
-          if (stepBadge) stepBadge.textContent = `Demo Complete`;
-          if (stepHint) stepHint.textContent = `Now draw ${currentChar.character} yourself on canvas!`;
-        }
-      });
-    } else {
-      if (stepBadge) stepBadge.textContent = `Demo Complete`;
-      if (stepHint) stepHint.textContent = `Now practice ${currentChar.character} on canvas!`;
-    }
-  }
-
-  // --- PRACTICE RESULT MODAL (Matching Uploaded Screenshot Design) ---
+  // --- PRACTICE RESULT MODAL ---
   function openPracticeResultModal(currentChar, lesson, chars) {
-    if (!strokeScores.length) {
-      const defaultCount = currentChar.strokeCount || 4;
-      strokeScores = Array.from({ length: defaultCount }, () => Math.floor(Math.random() * 20 + 72));
+    const strokeVectors = getCharacterStrokeVectors(currentChar);
+    const totalExpected = currentChar.strokeCount || strokeVectors.length || 4;
+
+    const fullStrokeScores = [];
+    for (let i = 0; i < totalExpected; i++) {
+      if (i < drawnStrokes.length) {
+        fullStrokeScores.push(strokeScores[i] !== undefined ? strokeScores[i] : evaluateSingleStroke(drawnStrokes[i], i, currentChar));
+      } else {
+        fullStrokeScores.push(0); // Un-drawn strokes score 0
+      }
     }
 
-    const totalScore = Math.round(strokeScores.reduce((a, b) => a + b, 0) / strokeScores.length);
+    const totalScore = Math.round(fullStrokeScores.reduce((a, b) => a + b, 0) / totalExpected);
 
     let starCount = 3;
     let verdict = 'Good';
@@ -1539,9 +1608,12 @@
     } else if (totalScore >= 60) {
       starCount = 3;
       verdict = 'Good';
-    } else {
+    } else if (totalScore >= 35) {
       starCount = 2;
       verdict = 'Keep Trying!';
+    } else {
+      starCount = 1;
+      verdict = 'Needs Practice!';
     }
 
     let starsHtml = '';
@@ -1553,7 +1625,7 @@
       }
     }
 
-    const badgesHtml = strokeScores.map(s => `<span class="stroke-badge-pill">${s}</span>`).join('');
+    const badgesHtml = fullStrokeScores.map(s => `<span class="stroke-badge-pill">${s}</span>`).join('');
 
     const tryAnotherChars = chars.filter(c => c.character !== currentChar.character);
     if (!tryAnotherChars.length) {
@@ -1659,7 +1731,7 @@
     if (saveBtn) {
       saveBtn.onclick = () => {
         const userName = document.getElementById('practiceUserName')?.value.trim() || 'Learner';
-        exportPracticeCardImage(currentChar, userName, totalScore, starCount, strokeScores);
+        exportPracticeCardImage(currentChar, userName, totalScore, starCount, fullStrokeScores);
       };
     }
 
@@ -1822,27 +1894,8 @@
 
   // --- Excel Data Management Toolbar & Modal ---
   function renderExcelManagerToolbar() {
-    const targetParent = document.querySelector('.curriculum-category-bar-wrap') || document.querySelector('.section-heading');
-    if (!targetParent) return;
-
     const existingToolbar = document.getElementById('excelManagerToolbar');
     if (existingToolbar) existingToolbar.remove();
-
-    const toolbar = document.createElement('div');
-    toolbar.id = 'excelManagerToolbar';
-    toolbar.className = 'data-manager-toolbar';
-    toolbar.innerHTML = `
-      <button type="button" class="btn-excel-manager" id="btnOpenExcelManager">
-        📊 Manage Lessons via Excel / CSV (Export &amp; Update)
-      </button>
-    `;
-
-    targetParent.after(toolbar);
-
-    const btn = document.getElementById('btnOpenExcelManager');
-    if (btn) {
-      btn.onclick = () => openExcelManagerModal();
-    }
   }
 
   function openExcelManagerModal() {
@@ -2073,7 +2126,6 @@
     renderCategoryBar();
     renderLessonGrid();
     renderContinueLessonBanner();
-    renderExcelManagerToolbar();
 
     if (lessonParam) {
       openLessonWorkspace(lessonParam, false);
