@@ -51,7 +51,7 @@
   --shadow-lg: 0 18px 45px rgba(249, 115, 22, 0.14);
   
   /* Authentic 楷体 (KaiTi) Regular Script Font Stack */
-  --font-kaiti: "KaiTi", "STKaiti", "楷体", "Kaiti SC", "KaiTi_GB2312", "BiauKai", "Ma Shan Zheng", "Noto Serif SC", serif;
+  --font-kaiti: "KaiTi", "STKaiti", "楷体", "Kaiti SC", "KaiTi_GB2312", "BiauKai", "Ma Shan Zheng", serif;
 }
 
 /* =========================================================
@@ -1273,10 +1273,7 @@ a {
   position: relative;
   z-index: 2;
   color: #ea580c;
-  font-family:
-    "Noto Serif SC",
-    "Songti SC",
-    serif;
+  font-family: var(--font-kaiti);
   font-size: clamp(3rem, 8vw, 6rem);
   font-weight: 700;
   line-height: 1.1;
@@ -1477,10 +1474,7 @@ a {
 
 .tone-character {
   color: #ea580c;
-  font-family:
-    "Noto Serif SC",
-    "Songti SC",
-    serif;
+  font-family: var(--font-kaiti);
   font-size: clamp(2rem, 5vw, 2.8rem);
   font-weight: 700;
   line-height: 1.1;
@@ -1640,10 +1634,7 @@ a {
 
 .conversation-chinese {
   color: #0f172a;
-  font-family:
-    "Noto Serif SC",
-    "Songti SC",
-    serif;
+  font-family: var(--font-kaiti);
   font-size: 1.65rem;
   font-weight: 800;
   line-height: 1.25;
@@ -2320,7 +2311,7 @@ a {
   place-items: center;
   color: #ea580c;
   background: #ffedd5;
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 3.8rem;
 }
 
@@ -2357,7 +2348,7 @@ a {
 
 .lesson-chinese-title {
   color: #ea580c;
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.45rem;
   font-weight: 700;
   margin-bottom: 4px;
@@ -2610,7 +2601,7 @@ a {
 }
 
 .reel-card-chinese {
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 0.98rem;
   font-weight: 700;
   color: #fdba74;
@@ -2751,7 +2742,7 @@ a {
 }
 
 .category-icon-bg {
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 5.5rem;
   font-weight: 900;
   color: #fed7aa;
@@ -3084,7 +3075,7 @@ a {
 
 .story-hero h1 {
   font-size: clamp(2.4rem, 5.5vw, 4rem);
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   margin: 0 0 10px;
   color: #0f172a;
   line-height: 1.15;
@@ -3366,7 +3357,7 @@ a {
   margin: 0 0 6px;
   font-size: 1.3rem;
   color: #0f172a;
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-weight: 700;
 }
 
@@ -3415,7 +3406,7 @@ a {
 }
 
 .chinese-sentence {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.65rem;
   font-weight: 700;
   color: #0f172a;
@@ -3472,7 +3463,7 @@ a {
 }
 
 .vocabulary-character {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 3.4rem;
   font-weight: 700;
   color: #ea580c;
@@ -3642,10 +3633,7 @@ a {
   border-radius: 11px;
   background: linear-gradient(135deg, #ff7849 0%, #f97316 100%);
   color: #ffffff;
-  font-family:
-    "Noto Serif SC",
-    "Songti SC",
-    serif;
+  font-family: var(--font-kaiti);
   font-size: 1.3rem;
 }
 
@@ -5294,7 +5282,7 @@ a {
 }
 
 .card-character {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: clamp(3.2rem, 9vw, 5.2rem);
   font-weight: 800;
   color: #ea580c;
@@ -5304,7 +5292,7 @@ a {
 }
 
 .card-character-sub {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: clamp(2.2rem, 6vw, 3.2rem);
   font-weight: 800;
   color: #4338ca;
@@ -7232,7 +7220,7 @@ a {
 }
 
 .sub-line-cn {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.45rem;
   font-weight: 800;
   color: #ea580c;
@@ -7479,7 +7467,7 @@ a {
 }
 
 .lesson-chinese-title {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.15rem;
   font-weight: 800;
   color: #ea580c;
@@ -7698,7 +7686,7 @@ a {
 }
 
 .workspace-chinese-text {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.45rem;
   font-weight: 800;
   color: #ea580c;
@@ -7976,7 +7964,7 @@ a {
 }
 
 .dialogue-chinese {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.25rem;
   font-weight: 800;
   color: #ea580c;
@@ -8298,7 +8286,7 @@ a {
 }
 
 .writing-char-chip {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.35rem;
   font-weight: 800;
   width: 52px;
@@ -8369,7 +8357,7 @@ a {
 }
 
 .char-giant-display {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 4.8rem;
   font-weight: 900;
   color: #ea580c;
@@ -8504,7 +8492,7 @@ a {
   inset: 0;
   display: grid;
   place-items: center;
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 210px;
   font-weight: 900;
   color: rgba(234, 88, 12, 0.25);
@@ -8696,7 +8684,7 @@ a {
 }
 
 .practice-modal-title {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.25rem;
   font-weight: 700;
   color: #f5f5f4;
@@ -8742,7 +8730,7 @@ a {
   inset: 0;
   display: grid;
   place-items: center;
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 210px;
   font-weight: 900;
   color: rgba(28, 25, 23, 0.04);
@@ -8956,7 +8944,7 @@ a {
   border-radius: 12px;
   display: grid;
   place-items: center;
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.4rem;
   font-weight: 800;
   color: #e7e5e4;
@@ -9045,7 +9033,7 @@ a {
 }
 
 .continue-chinese-title {
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--font-kaiti);
   font-size: 1.1rem;
   font-weight: 700;
   color: #c2410c;
