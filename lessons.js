@@ -565,7 +565,7 @@
 
             <div class="lesson-card-actions" style="margin-top: auto;">
               <button type="button" class="btn ${isKids ? 'btn-kids-play' : 'btn-primary'} lesson-button" style="width: 100%; text-align: center;" data-lesson-id="${escapeHTML(lessonId)}">
-                🚀 Start 3-Section Lesson →
+                🚀 Start Lesson →
               </button>
             </div>
           </div>

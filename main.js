@@ -1970,10 +1970,10 @@ function renderLearningHub() {
 
         <div class="lesson-card-actions">
           <a
-            href="story.html?id=${encodeURIComponent(lessonId)}"
+            href="${lessonId.toLowerCase().includes('kids') || (row.audience && row.audience.toLowerCase() === 'kids') ? 'lessons-kids.html' : 'lessons-adult.html'}?lesson=${encodeURIComponent(lessonId)}"
             class="btn btn-primary lesson-button"
           >
-            ${isCompleted ? 'Review Lesson →' : (progressPercent > 0 ? 'Continue Lesson →' : 'Start Lesson →')}
+            Start Lesson →
           </a>
         </div>
       </div>
@@ -1999,10 +1999,11 @@ function renderLearningHub() {
       });
     }
 
-    // Card click redirects to respective story page to continue
+    // Card click redirects to respective 3-section lesson page
     card.addEventListener("click", (e) => {
       if (!e.target.closest("button")) {
-        window.location.href = `story.html?id=${encodeURIComponent(lessonId)}`;
+        const isK = lessonId.toLowerCase().includes('kids') || (row.audience && row.audience.toLowerCase() === 'kids');
+        window.location.href = `${isK ? 'lessons-kids.html' : 'lessons-adult.html'}?lesson=${encodeURIComponent(lessonId)}`;
       }
     });
 
