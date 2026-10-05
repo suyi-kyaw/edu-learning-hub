@@ -1044,6 +1044,144 @@
   let activeWritingLesson = null;
   let activeWritingChars = [];
 
+  // --- STROKE ORDER RULES ENGINE (HanziStroke Standard) ---
+  function getCharacterStrokeRule(char) {
+    const rules = {
+      "水": {
+        name: "Center Before Sides (先中间后两边)",
+        explanation: "In vertically symmetrical characters like 水, write the central vertical hook (亅) first to establish character structure and balance, then draw the left side (㇇ノ), and finally the right side (㇏).",
+        steps: "1. 亅 Center Vertical Hook  2. ㇇ Left Horizontal Slant  3. ノ Left Fall  4. ㇏ Right Fall"
+      },
+      "小": {
+        name: "Center Before Sides (先中间后两边)",
+        explanation: "Write the central vertical hook (亅) first, followed by the left dot (丶) and right dot (丶).",
+        steps: "1. 亅 Center Vertical Hook  2. 丶 Left Dot  3. 丶 Right Dot"
+      },
+      "十": {
+        name: "Horizontal Before Vertical (先横后竖)",
+        explanation: "When horizontal and vertical strokes cross, draw horizontal strokes before vertical strokes.",
+        steps: "1. 一 Main Horizontal  2. 丨 Center Vertical"
+      },
+      "人": {
+        name: "Left-Falling Before Right-Falling (先撇后捺)",
+        explanation: "When left-falling (撇) and right-falling (捺) strokes cross, write the left-falling stroke first.",
+        steps: "1. ノ Left Falling  2. ㇏ Right Falling"
+      },
+      "大": {
+        name: "Horizontal First & Left-Falling Before Right-Falling",
+        explanation: "Write the top horizontal stroke (一) first, then the left-falling stroke (ノ), and finally the right-falling stroke (㇏).",
+        steps: "1. 一 Main Horizontal  2. ノ Left Falling  3. ㇏ Right Falling"
+      },
+      "日": {
+        name: "Inside Before Closing (先内后封口)",
+        explanation: "Draw the outer frame top & left, fill the inside content, then seal the enclosure with the bottom horizontal stroke.",
+        steps: "1. 丨 Left Vertical  2. 𠃍 Top-Right Corner  3. 一 Middle Bar  4. 一 Bottom Closing Bar"
+      },
+      "早": {
+        name: "Top to Bottom (先上后下)",
+        explanation: "Write the top component (日) first following inside-before-closing, then write the lower component (十).",
+        steps: "1. 丨 Left Vertical  2. 𠃍 Top-Right Corner  3. 一 Middle Bar  4. 一 Bottom Bar  5. 一 Cross Bar  6. 丨 Central Vertical"
+      },
+      "好": {
+        name: "Left to Right (先左后右)",
+        explanation: "For side-by-side structures, write the left radical component (女) first, then write the right component (子).",
+        steps: "1. ㄑ Slant Angle  2. ノ Left Falling  3. 一 Cross Bar  4. 乛 Top Hook  5. 亅 Vertical Hook  6. 一 Center Bar"
+      },
+      "三": {
+        name: "Top to Bottom (先上后下)",
+        explanation: "Write horizontal strokes sequentially from top to bottom.",
+        steps: "1. 一 Top Bar  2. 一 Middle Bar  3. 一 Bottom Bar"
+      },
+      "我": {
+        name: "Left to Right & Top to Bottom (先左后右，先上后下)",
+        explanation: "Follow standard stroke order sequence: left top slant (丿), main horizontal (一), vertical hook (亅), lower rising stroke (提), slant hook (㇂), middle slant (撇), and top-right dot (点).",
+        steps: "1. 丿 Top Left Fall  2. 一 Main Horizontal  3. 亅 Vertical Hook  4. 提 Lower Rising  5. ㇂ Slant Hook  6. 撇 Middle Left Fall  7. 丶 Top Right Dot"
+      }
+    };
+
+    if (rules[char]) {
+      return rules[char];
+    }
+
+    return {
+      name: "Standard Stroke Rules (先上后下，先左后右)",
+      explanation: "Follow standard Chinese stroke order guidelines: top to bottom, left to right, horizontal before vertical, and center before sides.",
+      steps: `Follow standard stroke order for ${char}: top to bottom, left to right, outside to inside.`
+    };
+  }
+
+  function openStrokeRulesModal() {
+    const existing = document.getElementById("strokeRulesModal");
+    if (existing) existing.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "strokeRulesModal";
+    modal.className = "practice-modal-backdrop";
+    modal.innerHTML = `
+      <div class="practice-modal-card" style="max-width: 680px; text-align: left;">
+        <div class="practice-modal-header">
+          <div class="practice-modal-title">
+            <span>📜 7 Core Rules of Chinese Stroke Order (汉字笔顺规则)</span>
+          </div>
+          <button type="button" class="practice-modal-close-btn" id="btnCloseRulesModal" aria-label="Close">✕</button>
+        </div>
+
+        <p style="font-size: 0.92rem; color: #64748b; margin-bottom: 12px; line-height: 1.5;">
+          Mastering stroke order ensures correct character balance, aesthetics, and writing speed. Refer to these 7 fundamental rules from Hanzi stroke standards:
+        </p>
+
+        <div class="stroke-rules-grid">
+          <div class="stroke-rule-card">
+            <div class="stroke-rule-card-title">1. Top to Bottom (先上后下)</div>
+            <div class="stroke-rule-card-desc">Upper components or strokes are written before lower ones.</div>
+            <div class="stroke-rule-card-example">Examples: <strong>三, 言, 早</strong></div>
+          </div>
+
+          <div class="stroke-rule-card">
+            <div class="stroke-rule-card-title">2. Left to Right (先左后右)</div>
+            <div class="stroke-rule-card-desc">Left components are written before right components.</div>
+            <div class="stroke-rule-card-example">Examples: <strong>好, 明, 做, 你</strong></div>
+          </div>
+
+          <div class="stroke-rule-card">
+            <div class="stroke-rule-card-title">3. Horizontal Before Vertical (先横后竖)</div>
+            <div class="stroke-rule-card-desc">When strokes cross, write horizontal strokes before vertical strokes.</div>
+            <div class="stroke-rule-card-example">Examples: <strong>十, 干, 木</strong></div>
+          </div>
+
+          <div class="stroke-rule-card">
+            <div class="stroke-rule-card-title">4. Left-Falling Before Right-Falling (先撇后捺)</div>
+            <div class="stroke-rule-card-desc">Draw left-falling diagonal strokes (撇) before right-falling ones (捺).</div>
+            <div class="stroke-rule-card-example">Examples: <strong>人, 八, 大</strong></div>
+          </div>
+
+          <div class="stroke-rule-card Highlight">
+            <div class="stroke-rule-card-title">5. Center Before Sides (先中间后两边) ⭐</div>
+            <div class="stroke-rule-card-desc">For symmetrical characters, write the central vertical spine first, then left and right sides.</div>
+            <div class="stroke-rule-card-example">Examples: <strong>水, 小, 办</strong></div>
+          </div>
+
+          <div class="stroke-rule-card">
+            <div class="stroke-rule-card-title">6. Outside Before Inside (先外后内)</div>
+            <div class="stroke-rule-card-desc">Draw outer surrounding frame strokes before writing inside contents.</div>
+            <div class="stroke-rule-card-example">Examples: <strong>月, 同, 风</strong></div>
+          </div>
+
+          <div class="stroke-rule-card">
+            <div class="stroke-rule-card-title">7. Inside Before Closing (先内后封口)</div>
+            <div class="stroke-rule-card-desc">For full enclosures, fill the inner contents before drawing the bottom closing stroke.</div>
+            <div class="stroke-rule-card-example">Examples: <strong>国, 日, 回</strong></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeBtn = document.getElementById("btnCloseRulesModal");
+    if (closeBtn) closeBtn.onclick = () => modal.remove();
+  }
+
   function renderWritingSection(lesson) {
     const panel = document.getElementById('panel-writing');
     if (!panel) return;
@@ -1083,6 +1221,8 @@
     activeWritingLesson = lesson;
     activeWritingChars = chars;
 
+    const ruleInfo = getCharacterStrokeRule(currentChar.character);
+
     panel.innerHTML = `
       <div class="writing-workspace">
         <div class="writing-char-picker">
@@ -1095,7 +1235,7 @@
         </div>
 
         <div class="writing-stage-grid">
-          <!-- Left Column: Character Breakdown -->
+          <!-- Left Column: Character Breakdown & Stroke Rules -->
           <div class="writing-info-col">
             <div class="writing-character-hero-card">
               <div class="char-giant-display" id="charBigDisplay">${escapeHTML(currentChar.character)}</div>
@@ -1110,9 +1250,22 @@
             </div>
 
             <div class="stroke-steps-card">
-              <h4>🖌️ Stroke-by-Stroke Order Guidance</h4>
+              <div class="stroke-rule-header-row">
+                <span class="stroke-rule-badge-pill">📌 Rule: ${escapeHTML(ruleInfo.name)}</span>
+                <button type="button" class="btn-stroke-rules-trigger" id="btnOpenStrokeRulesModal">
+                  📜 All 7 Rules
+                </button>
+              </div>
+
+              <div class="stroke-rule-explanation">
+                ${escapeHTML(ruleInfo.explanation)}
+              </div>
+
+              <h4 style="margin-top: 10px; margin-bottom: 6px; font-size: 0.88rem; color: #1e293b;">
+                🖌️ Stroke-by-Stroke Sequence
+              </h4>
               <p class="stroke-steps-text" id="charStepsDisplay">
-                ${escapeHTML(currentChar.strokeOrderSteps || 'Follow standard stroke order: top to bottom, left to right.')}
+                ${escapeHTML(currentChar.strokeOrderSteps || ruleInfo.steps)}
               </p>
             </div>
           </div>
@@ -1160,6 +1313,11 @@
         renderWritingSection(lesson);
       };
     });
+
+    const openRulesBtn = document.getElementById('btnOpenStrokeRulesModal');
+    if (openRulesBtn) {
+      openRulesBtn.onclick = () => openStrokeRulesModal();
+    }
 
     const speakCharBtn = document.getElementById('btnSpeakWritingChar');
     if (speakCharBtn) {
