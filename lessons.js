@@ -820,7 +820,7 @@
       panel.innerHTML = `
         <div class="exercises-workspace" style="text-align: center; padding: 50px;">
           <h3>✏️ Practice Quiz Loading</h3>
-          <p>Interactive practice questions are loading from lessons.xlsx for this module.</p>
+          <p>Interactive practice questions are loading from lessons.xlsx for this lesson.</p>
         </div>
       `;
       return;
