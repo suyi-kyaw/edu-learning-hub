@@ -149,74 +149,7 @@ function sortByOrder(
    ========================================================= */
 
 function initializeMobileMenu() {
-  const menuButton =
-    document.getElementById("menuToggle") ||
-    document.getElementById("mobileMenuButton");
-
-  const mobileMenu =
-    document.getElementById("mainNav") ||
-    document.getElementById("mobileMenu");
-
-  const closeBtn = document.getElementById("hideMenuCloseBtn");
-
-  if (!menuButton || !mobileMenu) {
-    return;
-  }
-
-  function closeMenu() {
-    mobileMenu.classList.remove("active", "open");
-    menuButton.setAttribute("aria-expanded", "false");
-    menuButton.setAttribute("aria-label", "Open navigation");
-  }
-
-  function openMenu() {
-    mobileMenu.classList.add("active");
-    menuButton.setAttribute("aria-expanded", "true");
-    menuButton.setAttribute("aria-label", "Close navigation");
-  }
-
-  menuButton.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isOpen = mobileMenu.classList.contains("active") || mobileMenu.classList.contains("open");
-    if (isOpen) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
-  });
-
-  if (closeBtn) {
-    closeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      closeMenu();
-      menuButton.focus();
-    });
-  }
-
-  mobileMenu.addEventListener("click", (e) => {
-    e.stopPropagation();
-  });
-
-  document.addEventListener("click", (e) => {
-    if (mobileMenu.classList.contains("active") || mobileMenu.classList.contains("open")) {
-      closeMenu();
-    }
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && (mobileMenu.classList.contains("active") || mobileMenu.classList.contains("open"))) {
-      closeMenu();
-      menuButton.focus();
-    }
-  });
-
-  mobileMenu
-    .querySelectorAll("a")
-    .forEach(link => {
-      link.addEventListener("click", () => {
-        closeMenu();
-      });
-    });
+  // Handled universally by header.js via document-level event delegation
 }
 
 

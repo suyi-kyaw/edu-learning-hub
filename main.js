@@ -2020,70 +2020,7 @@ function renderLearningHub() {
 ========================================================= */
 
 function setupMobileMenu() {
-  const menuToggle = document.getElementById("menuToggle");
-  const mainNav = document.getElementById("mainNav");
-  const closeBtn = document.getElementById("hideMenuCloseBtn");
-
-  if (!menuToggle || !mainNav) {
-    return;
-  }
-
-  function closeMenu() {
-    mainNav.classList.remove("active");
-    menuToggle.setAttribute("aria-expanded", "false");
-  }
-
-  function openMenu() {
-    mainNav.classList.add("active");
-    menuToggle.setAttribute("aria-expanded", "true");
-  }
-
-  menuToggle.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isOpen = mainNav.classList.contains("active");
-    if (isOpen) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
-  });
-
-  if (closeBtn) {
-    closeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      closeMenu();
-      menuToggle.focus();
-    });
-  }
-
-  // Prevent clicks inside mainNav from closing it unintentionally
-  mainNav.addEventListener("click", (e) => {
-    e.stopPropagation();
-  });
-
-  // Close when clicking outside
-  document.addEventListener("click", (e) => {
-    if (mainNav.classList.contains("active")) {
-      closeMenu();
-    }
-  });
-
-  // Close on Escape key
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && mainNav.classList.contains("active")) {
-      closeMenu();
-      menuToggle.focus();
-    }
-  });
-
-  /*
-    Close menu after clicking a navigation link.
-  */
-  mainNav.querySelectorAll("a").forEach(link => {
-    link.addEventListener("click", () => {
-      closeMenu();
-    });
-  });
+  // Handled universally by header.js via document-level event delegation
 }
 
 

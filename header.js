@@ -63,30 +63,54 @@
   applyTheme(getStoredTheme(), false);
 
   // --- Mobile Menu Drawer ---
-  function toggleMobileMenu() {
-    const mainNav = document.getElementById('mainNav');
-    const menuBtn = document.getElementById('menuToggle');
+  function isMenuOpen() {
+    const mainNav = document.getElementById('mainNav') || document.querySelector('.main-nav');
+    if (!mainNav) return false;
+    return mainNav.classList.contains('active') || mainNav.classList.contains('is-open') || mainNav.classList.contains('open');
+  }
+
+  function openMobileMenu() {
+    const mainNav = document.getElementById('mainNav') || document.querySelector('.main-nav');
+    const menuBtn = document.getElementById('menuToggle') || document.querySelector('.menu-toggle');
     if (!mainNav) return;
-    const isOpen = mainNav.classList.toggle('is-open');
+    mainNav.classList.add('active', 'is-open', 'open');
+    mainNav.setAttribute('aria-hidden', 'false');
     if (menuBtn) {
-      menuBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      menuBtn.classList.toggle('active', isOpen);
+      menuBtn.setAttribute('aria-expanded', 'true');
+      menuBtn.classList.add('active', 'is-open', 'open');
     }
-    document.body.classList.toggle('menu-open', isOpen);
+    document.body.classList.add('menu-open');
   }
 
   function closeMobileMenu() {
-    const mainNav = document.getElementById('mainNav');
-    const menuBtn = document.getElementById('menuToggle');
-    if (mainNav) mainNav.classList.remove('is-open');
+    const mainNav = document.getElementById('mainNav') || document.querySelector('.main-nav');
+    const menuBtn = document.getElementById('menuToggle') || document.querySelector('.menu-toggle');
+    if (mainNav) {
+      mainNav.classList.remove('active', 'is-open', 'open');
+      mainNav.setAttribute('aria-hidden', 'true');
+    }
     if (menuBtn) {
       menuBtn.setAttribute('aria-expanded', 'false');
-      menuBtn.classList.remove('active');
+      menuBtn.classList.remove('active', 'is-open', 'open');
     }
     document.body.classList.remove('menu-open');
   }
 
-  // --- Global Event Delegation (Works even before/after dynamic header injection) ---
+  function toggleMobileMenu() {
+    if (isMenuOpen()) {
+      closeMobileMenu();
+    } else {
+      openMobileMenu();
+    }
+  }
+
+  // Expose global menu helpers
+  window.toggleLinguaMenu = toggleMobileMenu;
+  window.openLinguaMenu = openMobileMenu;
+  window.closeLinguaMenu = closeMobileMenu;
+  window.isLinguaMenuOpen = isMenuOpen;
+
+  // --- Global Event Delegation (Works reliably across all pages and dynamic injections) ---
   document.addEventListener('click', function (e) {
     const themeBtn = e.target.closest('#themeToggleBtn, .theme-toggle-btn');
     if (themeBtn) {
@@ -112,10 +136,37 @@
       return;
     }
 
-    // Close menu when clicking outside
-    const mainNav = document.getElementById('mainNav');
-    if (mainNav && mainNav.classList.contains('is-open')) {
-      if (!mainNav.contains(e.target) && !e.target.closest('#menuToggle, .menu-toggle')) {
+    const streakBadge = e.target.closest('#dailyStreakBadge, .streak-badge');
+    if (streakBadge) {
+      streakBadge.classList.toggle('show-tooltip');
+      return;
+    }
+
+    const levelBadge = e.target.closest('#userLevelBadge, .level-badge');
+    if (levelBadge) {
+      levelBadge.classList.toggle('show-tooltip');
+      return;
+    }
+
+    // Close menu when clicking navigation link inside mainNav
+    const navLink = e.target.closest('#mainNav a, .main-nav a');
+    if (navLink) {
+      closeMobileMenu();
+      return;
+    }
+
+    // Close tooltips when clicking elsewhere
+    if (!e.target.closest('#dailyStreakBadge, .streak-badge')) {
+      document.querySelectorAll('#dailyStreakBadge, .streak-badge').forEach(b => b.classList.remove('show-tooltip'));
+    }
+    if (!e.target.closest('#userLevelBadge, .level-badge')) {
+      document.querySelectorAll('#userLevelBadge, .level-badge').forEach(b => b.classList.remove('show-tooltip'));
+    }
+
+    // Close menu when clicking outside mainNav
+    if (isMenuOpen()) {
+      const mainNav = document.getElementById('mainNav') || document.querySelector('.main-nav');
+      if (mainNav && !mainNav.contains(e.target) && !e.target.closest('#menuToggle, .menu-toggle')) {
         closeMobileMenu();
       }
     }
@@ -123,8 +174,10 @@
 
   // Close menu on Escape key
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && isMenuOpen()) {
       closeMobileMenu();
+      const menuBtn = document.getElementById('menuToggle') || document.querySelector('.menu-toggle');
+      if (menuBtn) menuBtn.focus();
     }
   });
 
