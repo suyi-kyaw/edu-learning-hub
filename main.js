@@ -553,9 +553,29 @@ function speakChinese(
 
   stopAllAudio();
 
-  if (
-    !("speechSynthesis" in window)
-  ) {
+  if (window.LinguaAudio) {
+    if (button) {
+      button.textContent = "⏸ Speaking...";
+      button.classList.add("playing");
+      button.setAttribute("aria-busy", "true");
+      button.disabled = true;
+    }
+    window.LinguaAudio.speak(
+      text,
+      () => {},
+      () => {
+        if (button) {
+          button.textContent = "▶ Play";
+          button.classList.remove("playing");
+          button.removeAttribute("aria-busy");
+          button.disabled = false;
+        }
+      }
+    );
+    return;
+  }
+
+  if (!("speechSynthesis" in window)) {
     showToneAudioFallbackNotice("Speech synthesis is not supported in this browser.", true);
     return;
   }
@@ -564,61 +584,34 @@ function speakChinese(
     window.speechSynthesis.cancel();
   } catch (e) {}
 
-  const utterance =
-    new SpeechSynthesisUtterance(text);
-
-  utterance.lang =
-    "zh-CN";
-
-  utterance.rate =
-    0.85;
-
-  utterance.pitch =
-    1;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "zh-CN";
+  utterance.rate = 0.85;
+  utterance.pitch = 1;
 
   if (button) {
-    button.textContent =
-      "⏸ Speaking...";
-
-    button.classList.add(
-      "playing"
-    );
-
-    button.setAttribute(
-      "aria-busy",
-      "true"
-    );
-
+    button.textContent = "⏸ Speaking...";
+    button.classList.add("playing");
+    button.setAttribute("aria-busy", "true");
     button.disabled = true;
   }
 
   const resetSpeechButton = () => {
     if (button) {
-      button.textContent =
-        "▶ Play";
-
-      button.classList.remove(
-        "playing"
-      );
-
-      button.removeAttribute(
-        "aria-busy"
-      );
-
+      button.textContent = "▶ Play";
+      button.classList.remove("playing");
+      button.removeAttribute("aria-busy");
       button.disabled = false;
     }
   };
 
   utterance.onend = resetSpeechButton;
-
-  utterance.onerror = (err) => {
+  utterance.onerror = () => {
     resetSpeechButton();
     showToneAudioFallbackNotice("Speech synthesis encountered an error.", true);
   };
 
-  window.speechSynthesis.speak(
-    utterance
-  );
+  window.speechSynthesis.speak(utterance);
 }
 
 

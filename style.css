@@ -8490,7 +8490,8 @@ a {
   background-size: 50% 50%;
 }
 
-.canvas-ghost-character {
+.canvas-ghost-character,
+.fallback-ghost-char {
   position: absolute;
   inset: 0;
   display: grid;
@@ -8498,7 +8499,7 @@ a {
   font-family: var(--font-kaiti);
   font-size: 210px;
   font-weight: 900;
-  color: rgba(234, 88, 12, 0.25);
+  color: rgba(234, 88, 12, 0.28);
   pointer-events: none;
   user-select: none;
   line-height: 1;
@@ -8506,12 +8507,15 @@ a {
   z-index: 2;
 }
 
-[data-theme="dark"] .canvas-ghost-character {
+[data-theme="dark"] .canvas-ghost-character,
+[data-theme="dark"] .fallback-ghost-char {
   color: rgba(251, 146, 60, 0.35);
 }
 
-.canvas-ghost-character.hidden {
+.canvas-ghost-character.hidden,
+.fallback-ghost-char.hidden {
   opacity: 0;
+  display: none !important;
 }
 
 #hanziWriterTarget {
@@ -8520,12 +8524,14 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
+  z-index: 3;
+  pointer-events: none;
 }
 
 #hanziWriterTarget svg {
   width: 100% !important;
   height: 100% !important;
+  pointer-events: none;
 }
 
 #strokeDrawCanvas {
@@ -8533,7 +8539,22 @@ a {
   inset: 0;
   width: 100%;
   height: 100%;
+  z-index: 10;
+  pointer-events: auto;
+  touch-action: none;
   cursor: crosshair;
+}
+
+@keyframes strokeErrorShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.stroke-error-shake {
+  animation: strokeErrorShake 0.35s ease-in-out;
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25) !important;
 }
 
 .canvas-toolbar {
@@ -9453,6 +9474,125 @@ a {
   color: #ea580c;
   font-weight: 700;
 }
+
+/* =========================================================
+   FLUID RESPONSIVE BREAKPOINTS & ULTRA-COMPACT (<360px) FIX
+   Prevents sidebar, flyout menu, modals, and grid overflow
+   ========================================================= */
+
+@media (max-width: 360px) {
+  html, body {
+    overflow-x: hidden !important;
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  .container,
+  .nav-container {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    gap: 6px !important;
+  }
+
+  .logo-text {
+    font-size: 1.05rem !important;
+  }
+
+  .main-nav {
+    position: fixed !important;
+    top: 56px !important;
+    left: 6px !important;
+    right: 6px !important;
+    width: calc(100vw - 12px) !important;
+    max-width: calc(100vw - 12px) !important;
+    padding: 12px 10px !important;
+    border-radius: 16px !important;
+    box-sizing: border-box !important;
+    z-index: 1005 !important;
+  }
+
+  .hide-menu-tools {
+    padding: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .hide-menu-streak-card,
+  .hide-menu-level-card,
+  .hide-menu-reminder-wrap {
+    padding: 8px 10px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .hide-menu-link {
+    padding: 8px 10px !important;
+    font-size: 0.88rem !important;
+  }
+
+  .writing-stage-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .canvas-mizige-box {
+    width: 100% !important;
+    max-width: 270px !important;
+    height: 270px !important;
+    margin: 0 auto !important;
+  }
+
+  .canvas-mizige-box canvas,
+  #hanziWriterTarget,
+  #hanziWriterTarget svg {
+    width: 100% !important;
+    max-width: 270px !important;
+    height: 270px !important;
+  }
+
+  .lesson-grid,
+  .curriculum-grid,
+  .games-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .lesson-card,
+  .embedded-game-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .modal-content,
+  .quiz-modal-card,
+  .reminder-modal-card,
+  .practice-result-card,
+  .writing-workspace {
+    width: calc(100vw - 14px) !important;
+    max-width: calc(100vw - 14px) !important;
+    padding: 12px 8px !important;
+    margin: 6px auto !important;
+    box-sizing: border-box !important;
+  }
+
+  .theme-toggle-btn,
+  .menu-toggle {
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 6px !important;
+  }
+
+  .menu-toggle-label {
+    display: none !important;
+  }
+
+  .char-giant-display {
+    font-size: 3.8rem !important;
+  }
+}
+
 
 
 

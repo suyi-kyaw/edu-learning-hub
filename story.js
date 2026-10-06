@@ -203,64 +203,58 @@ function speakText(
   ) {
 
     return;
-
   }
-
 
   stopCurrentStoryAudio();
 
-
-  const utterance =
-    new SpeechSynthesisUtterance(
-      text
+  if (window.LinguaAudio) {
+    if (button) {
+      currentPlayingButton = button;
+      button.textContent = "⏸ Playing...";
+      button.classList.add("playing");
+    }
+    window.LinguaAudio.speak(
+      text,
+      () => {},
+      () => {
+        if (button) {
+          button.textContent = "▶ Play";
+          button.classList.remove("playing");
+          if (currentPlayingButton === button) currentPlayingButton = null;
+        }
+      }
     );
+    return;
+  }
 
-
-  utterance.lang =
-    "zh-CN";
-
-  utterance.rate =
-    0.82;
-
-  utterance.pitch =
-    1;
-
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "zh-CN";
+  utterance.rate = 0.82;
+  utterance.pitch = 1;
 
   if (button) {
-
     currentPlayingButton = button;
     button.textContent = "⏸ Playing...";
     button.classList.add("playing");
 
     utterance.onend = () => {
-
       button.textContent = "▶ Play";
       button.classList.remove("playing");
-
       if (currentPlayingButton === button) {
         currentPlayingButton = null;
       }
-
     };
 
     utterance.onerror = () => {
-
       button.textContent = "▶ Play";
       button.classList.remove("playing");
-
       if (currentPlayingButton === button) {
         currentPlayingButton = null;
       }
-
     };
-
   }
 
-
-  window.speechSynthesis.speak(
-    utterance
-  );
-
+  window.speechSynthesis.speak(utterance);
 }
 
 
@@ -339,66 +333,57 @@ function playAudio(
 
   stopCurrentStoryAudio();
 
+  if (window.LinguaAudio) {
+    if (button) {
+      currentPlayingButton = button;
+      button.textContent = "⏸ Playing...";
+      button.classList.add("playing");
+    }
+    window.LinguaAudio.playFile(
+      audioPath,
+      text,
+      () => {},
+      () => {
+        if (button) {
+          button.textContent = "▶ Play";
+          button.classList.remove("playing");
+          if (currentPlayingButton === button) currentPlayingButton = null;
+        }
+      }
+    );
+    return;
+  }
+
   if (audioPath) {
-
-    const audio =
-      new Audio(
-        audioPath
-      );
-
+    const audio = new Audio(audioPath);
     currentAudioInstance = audio;
 
     if (button) {
-
       currentPlayingButton = button;
       button.textContent = "⏸ Playing...";
       button.classList.add("playing");
 
       audio.addEventListener("ended", () => {
-
         button.textContent = "▶ Play";
         button.classList.remove("playing");
-
         if (currentPlayingButton === button) {
           currentPlayingButton = null;
         }
-
         currentAudioInstance = null;
-
       });
 
       audio.addEventListener("error", () => {
-
-        /* Fallback to speech synthesis on audio error */
-        speakText(
-          text,
-          button
-        );
-
+        speakText(text, button);
       });
-
     }
 
-    audio.play().catch(
-      () => {
-
-        speakText(
-          text,
-          button
-        );
-
-      }
-    );
-
+    audio.play().catch(() => {
+      speakText(text, button);
+    });
     return;
-
   }
 
-
-  speakText(
-    text,
-    button
-  );
+  speakText(text, button);
 
 }
 

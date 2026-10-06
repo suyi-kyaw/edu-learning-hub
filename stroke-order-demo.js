@@ -98,10 +98,10 @@
     }
 
     // Normalize character input
-    const charObj = (typeof character === 'object' && character !== null)
-      ? character
-      : { character: String(character || '水'), pinyin: '', meaning: '' };
-    const char = charObj.character;
+    const rawChar = (typeof character === 'object' && character !== null)
+      ? (character.character || character.char || character.title || '水')
+      : String(character || '水');
+    const char = (String(rawChar).match(/[\u4e00-\u9fa5]/) || ['水'])[0];
 
     // Normalize SVG path sequence
     const strokes = normalizeStrokeSequence(svgPathSequence, char);
@@ -148,10 +148,8 @@
           <!-- HanziWriter Fallback/Calligraphy Container -->
           <div id="${uid}_hwTarget" class="stroke-order-svg-render-target"></div>
 
-          <!-- Dynamic SVG Vector Layer with 楷体 Ghost Character Watermark -->
-          <svg id="${uid}_svgOverlay" viewBox="0 0 320 320" style="position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none;">
-            <text x="160" y="240" font-family="'KaiTi', 'STKaiti', '楷体', 'BiauKai', 'DFKai-SB', 'Noto Serif SC', serif" font-size="210" font-weight="900" text-anchor="middle" fill="rgba(234, 88, 12, 0.14)">${escapeHTML(char)}</text>
-          </svg>
+          <!-- Dynamic SVG Vector Layer for Stroke Overlays & Highlights -->
+          <svg id="${uid}_svgOverlay" viewBox="0 0 320 320" style="position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none;"></svg>
         </div>
 
         ${showControls ? `
@@ -231,7 +229,7 @@
 
     // Initialize HanziWriter if present in window
     const hwContainer = document.getElementById(`${uid}_hwTarget`);
-    if (hwContainer && typeof global.HanziWriter !== 'undefined') {
+    if (hwContainer && typeof global.HanziWriter !== 'undefined' && char) {
       try {
         hanziWriterInstance = global.HanziWriter.create(hwContainer, char, {
           width: 300,
@@ -242,7 +240,25 @@
           strokeColor: '#1e293b',
           radicalColor: '#ea580c',
           strokeAnimationSpeed: speed,
-          delayBetweenStrokes: 200
+          delayBetweenStrokes: 200,
+          charDataLoader: function (charToLoad, onComplete, onError) {
+            if (global.EMBEDDED_HANZI_DATA && global.EMBEDDED_HANZI_DATA[charToLoad]) {
+              onComplete(global.EMBEDDED_HANZI_DATA[charToLoad]);
+              return;
+            }
+            fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(charToLoad)}.json`)
+              .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+              })
+              .then(d => onComplete(d))
+              .catch(err => {
+                if (typeof onError === 'function') onError(err);
+              });
+          },
+          onLoadCharDataError: function (err) {
+            console.warn('[StrokeOrderDemo] HanziWriter char data notice for ' + char, err);
+          }
         });
       } catch (err) {
         hanziWriterInstance = null;
