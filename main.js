@@ -2215,6 +2215,14 @@ function setupReviewMode() {
     });
   }
 
+  const frontStrokeBtn = document.getElementById("cardFrontStrokeBtn");
+  if (frontStrokeBtn) {
+    frontStrokeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      playFlashcardStrokeAnimation();
+    });
+  }
+
   const backAudioBtn = document.getElementById("cardBackAudioBtn");
   if (backAudioBtn) {
     backAudioBtn.addEventListener("click", (e) => {
@@ -2419,8 +2427,23 @@ function renderCurrentReviewCard() {
   // Front card
   const frontTag = document.getElementById("cardSourceTag");
   const frontChar = document.getElementById("cardFrontChar");
+  const frontWriterBox = document.getElementById("cardFrontWriterContainer");
+  const strokeBtn = document.getElementById("cardFrontStrokeBtn");
+
   if (frontTag) frontTag.textContent = card.source;
-  if (frontChar) frontChar.textContent = card.character;
+  if (frontChar) {
+    frontChar.textContent = card.character;
+    frontChar.style.display = "";
+  }
+  if (frontWriterBox) {
+    frontWriterBox.style.display = "none";
+    frontWriterBox.innerHTML = "";
+  }
+  if (strokeBtn) {
+    strokeBtn.textContent = "✍️ Stroke Order";
+    strokeBtn.disabled = false;
+  }
+  activeFlashcardWriter = null;
 
   // Back card
   const backTag = document.getElementById("cardBackSourceTag");
@@ -2699,6 +2722,218 @@ function setupReelsInteractions() {
 
 
 /* =========================================================
+   HANZIWRITER STROKE ENGINE & ANIMATION MODULE (main.js)
+   Initializes HanziWriter with pre-bundled hanzi-data.js
+   stroke vectors and ensures container element is mounted
+   and visible before constructing the writer instance.
+========================================================= */
+
+let activeFlashcardWriter = null;
+
+/**
+ * Checks whether a DOM element is mounted in document.body
+ * and visible with positive layout dimensions.
+ */
+function isElementMountedAndVisible(element) {
+  if (!element || !(element instanceof Element)) return false;
+  if (!document.body.contains(element)) return false;
+
+  const style = window.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+/**
+ * Waits until container element is properly mounted and visible
+ * before executing callback, preventing 0-dimension canvas/SVG
+ * non-rendering stroke bugs in HanziWriter.
+ */
+function waitForContainerMountedAndVisible(container, callback, maxFrames = 30) {
+  if (!container) return;
+  let frameCount = 0;
+
+  function poll() {
+    frameCount++;
+    if (isElementMountedAndVisible(container)) {
+      callback();
+    } else if (frameCount < maxFrames) {
+      requestAnimationFrame(poll);
+    } else {
+      // Fallback: Ensure container has explicit dimensions if layout is delayed
+      if (container.getBoundingClientRect().width === 0) {
+        container.style.minWidth = "180px";
+        container.style.minHeight = "180px";
+      }
+      callback();
+    }
+  }
+
+  requestAnimationFrame(poll);
+}
+
+/**
+ * Initializes HanziWriter for a container and Chinese character.
+ * Ensures the character data is properly resolved with the
+ * corresponding stroke vectors from window.EMBEDDED_HANZI_DATA (hanzi-data.js),
+ * and that the container is mounted and visible before calling constructor.
+ *
+ * @param {HTMLElement|string} containerElementOrId
+ * @param {string|object} characterInput
+ * @param {object} customOptions
+ * @returns {Promise<object>} Resolves with the HanziWriter instance
+ */
+function initHanziWriter(containerElementOrId, characterInput, customOptions = {}) {
+  return new Promise((resolve, reject) => {
+    const container = typeof containerElementOrId === "string"
+      ? document.getElementById(containerElementOrId)
+      : containerElementOrId;
+
+    if (!container) {
+      console.warn("[HanziWriter] Container element not found:", containerElementOrId);
+      return reject(new Error("Container element not found"));
+    }
+
+    if (typeof window.HanziWriter === "undefined") {
+      console.warn("[HanziWriter] window.HanziWriter library is not loaded.");
+      return reject(new Error("HanziWriter library not loaded"));
+    }
+
+    // Extract single valid Chinese Hanzi character from input
+    const rawChar = (typeof characterInput === "object" && characterInput !== null)
+      ? (characterInput.character || characterInput.char || characterInput.word || characterInput.title || "早")
+      : String(characterInput || "早");
+
+    const matched = rawChar.match(/[\u4e00-\u9fa5]/);
+    const validChar = matched ? matched[0] : "早";
+
+    // Wait until the container is properly mounted and visible in the DOM
+    waitForContainerMountedAndVisible(container, () => {
+      try {
+        container.innerHTML = "";
+
+        const rect = container.getBoundingClientRect();
+        const computedSize = Math.round(Math.min(rect.width || 200, rect.height || 200));
+        const finalSize = computedSize > 40 ? computedSize : 200;
+
+        const writerConfig = {
+          width: customOptions.width || finalSize,
+          height: customOptions.height || finalSize,
+          padding: customOptions.padding !== undefined ? customOptions.padding : 10,
+          showOutline: customOptions.showOutline !== undefined ? customOptions.showOutline : true,
+          showCharacter: customOptions.showCharacter !== undefined ? customOptions.showCharacter : false,
+          strokeColor: customOptions.strokeColor || "#ea580c",
+          outlineColor: customOptions.outlineColor || "rgba(234, 88, 12, 0.28)",
+          drawingWidth: customOptions.drawingWidth || 16,
+          strokeAnimationSpeed: customOptions.strokeAnimationSpeed || 1.25,
+          delayBetweenStrokes: customOptions.delayBetweenStrokes || 200,
+
+          // Initialize character data with stroke vectors from loaded hanzi-data.js
+          charDataLoader: function (charToLoad, onComplete, onError) {
+            if (window.EMBEDDED_HANZI_DATA && window.EMBEDDED_HANZI_DATA[charToLoad]) {
+              onComplete(window.EMBEDDED_HANZI_DATA[charToLoad]);
+              return;
+            }
+
+            // Fallback: network fetch if character is outside pre-bundled curriculum
+            fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(charToLoad)}.json`)
+              .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+              })
+              .then(data => onComplete(data))
+              .catch(err => {
+                console.warn(`[HanziWriter] Remote stroke data fetch notice for ${charToLoad}:`, err);
+                if (typeof onError === "function") onError(err);
+              });
+          },
+
+          onLoadCharDataError: function (err) {
+            console.warn(`[HanziWriter] Error loading char data for ${validChar}:`, err);
+            if (customOptions.onLoadCharDataError) customOptions.onLoadCharDataError(err);
+          },
+
+          onLoadCharDataSuccess: function (data) {
+            if (customOptions.onLoadCharDataSuccess) customOptions.onLoadCharDataSuccess(data);
+          }
+        };
+
+        const writer = window.HanziWriter.create(container, validChar, writerConfig);
+        resolve(writer);
+      } catch (err) {
+        console.warn("[HanziWriter] Constructor instantiation error:", err);
+        reject(err);
+      }
+    });
+  });
+}
+
+function playFlashcardStrokeAnimation() {
+  const card = reviewQueue[currentReviewIndex];
+  if (!card) return;
+
+  const frontChar = document.getElementById("cardFrontChar");
+  const frontWriterBox = document.getElementById("cardFrontWriterContainer");
+  const strokeBtn = document.getElementById("cardFrontStrokeBtn");
+
+  if (!frontWriterBox) return;
+
+  if (strokeBtn) {
+    strokeBtn.textContent = "⏳ Loading...";
+    strokeBtn.disabled = true;
+  }
+
+  // Ensure container is mounted and visible before initializing HanziWriter
+  frontWriterBox.style.display = "flex";
+  if (frontChar) frontChar.style.display = "none";
+
+  initHanziWriter(frontWriterBox, card.character, {
+    width: 200,
+    height: 200,
+    showOutline: true,
+    showCharacter: false,
+    strokeColor: "#ea580c",
+    outlineColor: "rgba(234, 88, 12, 0.28)",
+    strokeAnimationSpeed: 1.2
+  })
+    .then((writer) => {
+      activeFlashcardWriter = writer;
+      if (strokeBtn) {
+        strokeBtn.textContent = "▶ Replay";
+        strokeBtn.disabled = false;
+      }
+      writer.animateCharacter({
+        onComplete: () => {
+          if (strokeBtn) strokeBtn.textContent = "✍️ Stroke Order";
+        }
+      });
+    })
+    .catch((err) => {
+      console.warn("Flashcard HanziWriter error:", err);
+      if (frontChar) frontChar.style.display = "";
+      if (frontWriterBox) frontWriterBox.style.display = "none";
+      if (strokeBtn) {
+        strokeBtn.textContent = "✍️ Stroke Order";
+        strokeBtn.disabled = false;
+      }
+    });
+}
+
+// Expose HanziWriter module globally
+window.initHanziWriter = initHanziWriter;
+window.isElementMountedAndVisible = isElementMountedAndVisible;
+window.waitForContainerMountedAndVisible = waitForContainerMountedAndVisible;
+window.LinguaHanziWriter = {
+  init: initHanziWriter,
+  isElementMountedAndVisible,
+  waitForContainerMountedAndVisible,
+  getActiveFlashcardWriter: () => activeFlashcardWriter
+};
+
+/* =========================================================
    GLOBAL DEBUG ACCESS
 ========================================================= */
 
@@ -2720,7 +2955,11 @@ window.linguaPath = {
 
   closeReviewModal: () => closeReviewModal(),
 
-  getReviewQueue: () => reviewQueue
+  getReviewQueue: () => reviewQueue,
+
+  initHanziWriter: (container, char, options) => initHanziWriter(container, char, options),
+
+  getActiveFlashcardWriter: () => activeFlashcardWriter
 
 };
 

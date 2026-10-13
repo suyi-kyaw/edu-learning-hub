@@ -1950,6 +1950,27 @@
     canvas.onpointercancel = handlePointerCancel;
     canvas.onpointerleave = handlePointerCancel;
 
+    // Helper to ensure container is mounted and visible with valid dimensions
+    function waitForContainerMountedAndVisible(container, callback, maxFrames = 25) {
+      if (!container) return;
+      let frameCount = 0;
+      function poll() {
+        frameCount++;
+        const isMounted = document.body.contains(container);
+        const rect = container.getBoundingClientRect();
+        const style = window.getComputedStyle(container);
+        const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0;
+        if (isMounted && isVisible) {
+          callback();
+        } else if (frameCount < maxFrames) {
+          requestAnimationFrame(poll);
+        } else {
+          callback();
+        }
+      }
+      requestAnimationFrame(poll);
+    }
+
     // Initialize single, high-precision HanziWriter instance
     const targetElement = document.getElementById('hanziWriterTarget');
     if (targetElement) {
@@ -1960,48 +1981,54 @@
       const validChar = (String(rawCharStr).match(/[\u4e00-\u9fa5]/) || ['早'])[0];
 
       if (window.HanziWriter && validChar) {
-        try {
-          if (currentHanziWriter && typeof currentHanziWriter.cancelQuiz === 'function') {
-            try { currentHanziWriter.cancelQuiz(); } catch (e) {}
-          }
-          currentHanziWriter = HanziWriter.create(targetElement, validChar, {
-            width: 290,
-            height: 290,
-            padding: 10,
-            showOutline: showGhostChar,
-            showCharacter: false,
-            strokeColor: '#ea580c',
-            outlineColor: 'rgba(234, 88, 12, 0.28)',
-            drawingWidth: 16,
-            strokeAnimationSpeed: 1.2,
-            delayBetweenStrokes: 250,
-            charDataLoader: function (charToLoad, onComplete, onError) {
-              if (window.EMBEDDED_HANZI_DATA && window.EMBEDDED_HANZI_DATA[charToLoad]) {
-                onComplete(window.EMBEDDED_HANZI_DATA[charToLoad]);
-                return;
-              }
-              fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(charToLoad)}.json`)
-                .then(res => {
-                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                  return res.json();
-                })
-                .then(data => onComplete(data))
-                .catch(err => {
-                  if (typeof onError === 'function') onError(err);
-                });
-            },
-            onLoadCharDataError: function (err) {
-              console.warn('HanziWriter data notice for ' + validChar, err);
-            },
-            onLoadCharDataSuccess: function () {
-              startStrokeWriting(currentChar, lesson, chars);
+        waitForContainerMountedAndVisible(targetElement, () => {
+          try {
+            if (currentHanziWriter && typeof currentHanziWriter.cancelQuiz === 'function') {
+              try { currentHanziWriter.cancelQuiz(); } catch (e) {}
             }
-          });
-          startStrokeWriting(currentChar, lesson, chars);
-        } catch (err) {
-          console.warn('HanziWriter init error:', err);
-          targetElement.innerHTML = `<div class="fallback-ghost-char chinese-kaiti ${showGhostChar ? '' : 'hidden'}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(validChar)}</div>`;
-        }
+            const rect = targetElement.getBoundingClientRect();
+            const computedW = Math.round(rect.width) > 40 ? Math.round(rect.width) : 290;
+            const computedH = Math.round(rect.height) > 40 ? Math.round(rect.height) : 290;
+
+            currentHanziWriter = HanziWriter.create(targetElement, validChar, {
+              width: computedW,
+              height: computedH,
+              padding: 10,
+              showOutline: showGhostChar,
+              showCharacter: false,
+              strokeColor: '#ea580c',
+              outlineColor: 'rgba(234, 88, 12, 0.28)',
+              drawingWidth: 16,
+              strokeAnimationSpeed: 1.2,
+              delayBetweenStrokes: 250,
+              charDataLoader: function (charToLoad, onComplete, onError) {
+                if (window.EMBEDDED_HANZI_DATA && window.EMBEDDED_HANZI_DATA[charToLoad]) {
+                  onComplete(window.EMBEDDED_HANZI_DATA[charToLoad]);
+                  return;
+                }
+                fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(charToLoad)}.json`)
+                  .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.json();
+                  })
+                  .then(data => onComplete(data))
+                  .catch(err => {
+                    if (typeof onError === 'function') onError(err);
+                  });
+              },
+              onLoadCharDataError: function (err) {
+                console.warn('HanziWriter data notice for ' + validChar, err);
+              },
+              onLoadCharDataSuccess: function () {
+                startStrokeWriting(currentChar, lesson, chars);
+              }
+            });
+            startStrokeWriting(currentChar, lesson, chars);
+          } catch (err) {
+            console.warn('HanziWriter init error:', err);
+            targetElement.innerHTML = `<div class="fallback-ghost-char chinese-kaiti ${showGhostChar ? '' : 'hidden'}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(validChar)}</div>`;
+          }
+        });
       } else {
         targetElement.innerHTML = `<div class="fallback-ghost-char chinese-kaiti ${showGhostChar ? '' : 'hidden'}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(validChar)}</div>`;
       }

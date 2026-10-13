@@ -230,38 +230,50 @@
     // Initialize HanziWriter if present in window
     const hwContainer = document.getElementById(`${uid}_hwTarget`);
     if (hwContainer && typeof global.HanziWriter !== 'undefined' && char) {
-      try {
-        hanziWriterInstance = global.HanziWriter.create(hwContainer, char, {
-          width: 300,
-          height: 300,
-          padding: 15,
-          showOutline: true,
-          showCharacter: false,
-          strokeColor: '#1e293b',
-          radicalColor: '#ea580c',
-          strokeAnimationSpeed: speed,
-          delayBetweenStrokes: 200,
-          charDataLoader: function (charToLoad, onComplete, onError) {
-            if (global.EMBEDDED_HANZI_DATA && global.EMBEDDED_HANZI_DATA[charToLoad]) {
-              onComplete(global.EMBEDDED_HANZI_DATA[charToLoad]);
-              return;
+      const initHw = () => {
+        try {
+          const rect = hwContainer.getBoundingClientRect();
+          const w = Math.round(rect.width) > 40 ? Math.round(rect.width) : 300;
+          const h = Math.round(rect.height) > 40 ? Math.round(rect.height) : 300;
+
+          hanziWriterInstance = global.HanziWriter.create(hwContainer, char, {
+            width: w,
+            height: h,
+            padding: 15,
+            showOutline: true,
+            showCharacter: false,
+            strokeColor: '#1e293b',
+            radicalColor: '#ea580c',
+            strokeAnimationSpeed: speed,
+            delayBetweenStrokes: 200,
+            charDataLoader: function (charToLoad, onComplete, onError) {
+              if (global.EMBEDDED_HANZI_DATA && global.EMBEDDED_HANZI_DATA[charToLoad]) {
+                onComplete(global.EMBEDDED_HANZI_DATA[charToLoad]);
+                return;
+              }
+              fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(charToLoad)}.json`)
+                .then(r => {
+                  if (!r.ok) throw new Error('HTTP ' + r.status);
+                  return r.json();
+                })
+                .then(d => onComplete(d))
+                .catch(err => {
+                  if (typeof onError === 'function') onError(err);
+                });
+            },
+            onLoadCharDataError: function (err) {
+              console.warn('[StrokeOrderDemo] HanziWriter char data notice for ' + char, err);
             }
-            fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(charToLoad)}.json`)
-              .then(r => {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-              })
-              .then(d => onComplete(d))
-              .catch(err => {
-                if (typeof onError === 'function') onError(err);
-              });
-          },
-          onLoadCharDataError: function (err) {
-            console.warn('[StrokeOrderDemo] HanziWriter char data notice for ' + char, err);
-          }
-        });
-      } catch (err) {
-        hanziWriterInstance = null;
+          });
+        } catch (err) {
+          hanziWriterInstance = null;
+        }
+      };
+
+      if (document.body.contains(hwContainer) && hwContainer.getBoundingClientRect().width > 0) {
+        initHw();
+      } else {
+        requestAnimationFrame(initHw);
       }
     }
 
