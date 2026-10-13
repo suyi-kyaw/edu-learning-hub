@@ -1671,10 +1671,10 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    const firstVector = vectors[0] || { label: '1st Stroke' };
+    const firstVector = vectors[0] || { label: '1st Stroke', direction: 'Follow stroke order' };
     if (stepBadge) stepBadge.textContent = `Stroke 1 / ${total}`;
     if (stepHint) {
-      stepHint.innerHTML = `👉 Draw <strong>Stroke 1</strong>: <span class="chinese-kaiti" style="color: #ea580c; font-weight: bold;">${escapeHTML(firstVector.label || '1st Stroke')}</span>`;
+      stepHint.innerHTML = `👉 Draw <strong>Stroke 1</strong>: <span class="chinese-kaiti" style="color: #ea580c; font-weight: bold;">${escapeHTML(firstVector.label || '1st Stroke')}</span> (${escapeHTML(firstVector.direction || 'Follow stroke order')})`;
     }
     if (liveScoresRow) {
       liveScoresRow.innerHTML = '<span style="font-size: 0.8rem; color: #a8a29e; font-style: italic;">Write strokes step-by-step on the canvas in correct sequence</span>';
@@ -1708,7 +1708,7 @@
     });
   }
 
-  // Exact Character Stroke Animation Engine
+  // Exact Character Stroke Animation & Geometry Engine
   function getCharacterStrokeVectors(currentChar) {
     if (!currentChar) return [];
     let char = '';
@@ -1721,119 +1721,205 @@
       count = parseInt(currentChar.strokeCount, 10) || 4;
     }
 
-    if (!char) char = '早';
+    const cleanChar = (String(char).match(/[\u4e00-\u9fa5]/) || ['早'])[0];
 
     const charMap = {
       "我": [
-        { type: "left_fall", x1: 150, y1: 50, x2: 100, y2: 90, label: "1.ノ Top Left Fall" },
-        { type: "horizontal", x1: 70, y1: 110, x2: 240, y2: 110, label: "2.一 Main Horizontal" },
-        { type: "v_hook", x1: 120, y1: 90, x2: 120, y2: 260, x3: 95, y3: 240, label: "3.亅 Vertical Hook" },
-        { type: "rising", x1: 60, y1: 220, x2: 140, y2: 170, label: "4.提 Lower Rising Stroke" },
-        { type: "slant_hook", x1: 170, y1: 60, x2: 240, y2: 250, x3: 265, y3: 230, label: "5.㇂ Slant Hook" },
-        { type: "left_fall", x1: 210, y1: 140, x2: 160, y2: 210, label: "6.撇 Middle Left Fall" },
-        { type: "dot", x1: 220, y1: 70, x2: 250, y2: 100, label: "7.丶 Top Right Dot" }
+        { type: "left_fall", x1: 150, y1: 50, x2: 100, y2: 90, label: "1.ノ Top Left Fall", direction: "Top-right to bottom-left" },
+        { type: "horizontal", x1: 70, y1: 110, x2: 240, y2: 110, label: "2.一 Main Horizontal", direction: "Left to right" },
+        { type: "v_hook", x1: 120, y1: 90, x2: 120, y2: 260, x3: 95, y3: 240, label: "3.亅 Vertical Hook", direction: "Top to bottom" },
+        { type: "rising", x1: 60, y1: 220, x2: 140, y2: 170, label: "4.提 Lower Rising Stroke", direction: "Lower-left to upper-right" },
+        { type: "slant_hook", x1: 170, y1: 60, x2: 240, y2: 250, x3: 265, y3: 230, label: "5.㇂ Slant Hook", direction: "Top-left to bottom-right" },
+        { type: "left_fall", x1: 210, y1: 140, x2: 160, y2: 210, label: "6.撇 Middle Left Fall", direction: "Top-right to bottom-left" },
+        { type: "dot", x1: 220, y1: 70, x2: 250, y2: 100, label: "7.丶 Top Right Dot", direction: "Top to bottom-right" }
       ],
       "你": [
-        { type: "left_fall", x1: 90, y1: 60, x2: 60, y2: 140, label: "1.ノ Person Slant" },
-        { type: "vertical", x1: 75, y1: 130, x2: 75, y2: 270, label: "2.丨 Person Vertical" },
-        { type: "left_fall", x1: 200, y1: 60, x2: 170, y2: 100, label: "3.ノ Top Slant" },
-        { type: "v_hook", x1: 150, y1: 100, x2: 250, y2: 100, x3: 230, y3: 140, label: "4.乛 Hook" },
-        { type: "v_hook", x1: 195, y1: 110, x2: 195, y2: 260, x3: 170, y3: 240, label: "5.亅 Center Hook" },
-        { type: "dot", x1: 140, y1: 150, x2: 120, y2: 210, label: "6.丶 Left Dot" },
-        { type: "dot", x1: 230, y1: 150, x2: 260, y2: 210, label: "7.丶 Right Dot" }
+        { type: "left_fall", x1: 90, y1: 60, x2: 60, y2: 140, label: "1.ノ Person Slant", direction: "Top-right to bottom-left" },
+        { type: "vertical", x1: 75, y1: 130, x2: 75, y2: 270, label: "2.丨 Person Vertical", direction: "Top to bottom" },
+        { type: "left_fall", x1: 200, y1: 60, x2: 170, y2: 100, label: "3.ノ Top Slant", direction: "Top-right to bottom-left" },
+        { type: "v_hook", x1: 150, y1: 100, x2: 250, y2: 100, x3: 230, y3: 140, label: "4.乛 Hook", direction: "Left to right, then down" },
+        { type: "v_hook", x1: 195, y1: 110, x2: 195, y2: 260, x3: 170, y3: 240, label: "5.亅 Center Hook", direction: "Top to bottom" },
+        { type: "dot", x1: 140, y1: 150, x2: 120, y2: 210, label: "6.丶 Left Dot", direction: "Top to bottom" },
+        { type: "dot", x1: 230, y1: 150, x2: 260, y2: 210, label: "7.丶 Right Dot", direction: "Top to bottom-right" }
       ],
       "他": [
-        { type: "left_fall", x1: 90, y1: 60, x2: 60, y2: 140, label: "1.ノ Person Slant" },
-        { type: "vertical", x1: 75, y1: 130, x2: 75, y2: 270, label: "2.丨 Person Vertical" },
-        { type: "horizontal", x1: 140, y1: 120, x2: 260, y2: 120, label: "3.乛 Top Horizontal Hook" },
-        { type: "vertical", x1: 170, y1: 80, x2: 170, y2: 240, label: "4.丨 Center Vertical" },
-        { type: "v_hook", x1: 220, y1: 80, x2: 220, y2: 260, x3: 250, y3: 220, label: "5.乚 Curved Hook" }
+        { type: "left_fall", x1: 90, y1: 60, x2: 60, y2: 140, label: "1.ノ Person Slant", direction: "Top-right to bottom-left" },
+        { type: "vertical", x1: 75, y1: 130, x2: 75, y2: 270, label: "2.丨 Person Vertical", direction: "Top to bottom" },
+        { type: "horizontal", x1: 140, y1: 120, x2: 260, y2: 120, label: "3.乛 Top Horizontal Hook", direction: "Left to right" },
+        { type: "vertical", x1: 170, y1: 80, x2: 170, y2: 240, label: "4.丨 Center Vertical", direction: "Top to bottom" },
+        { type: "v_hook", x1: 220, y1: 80, x2: 220, y2: 260, x3: 250, y3: 220, label: "5.乚 Curved Hook", direction: "Top to bottom, curved right" }
       ],
       "早": [
-        { type: "vertical", x1: 115, y1: 80, x2: 115, y2: 170, label: "1.丨 Left Vertical of 日" },
-        { type: "corner", x1: 115, y1: 80, x2: 205, y2: 80, x3: 205, y3: 170, label: "2.𠃍 Top-Right Corner of 日" },
-        { type: "horizontal", x1: 115, y1: 125, x2: 205, y2: 125, label: "3.一 Middle Bar of 日" },
-        { type: "horizontal", x1: 115, y1: 170, x2: 205, y2: 170, label: "4.一 Bottom Bar of 日" },
-        { type: "horizontal", x1: 85, y1: 215, x2: 235, y2: 215, label: "5.一 Lower Cross Bar" },
-        { type: "vertical", x1: 160, y1: 125, x2: 160, y2: 275, label: "6.丨 Central Vertical Drop" }
+        { type: "vertical", x1: 115, y1: 80, x2: 115, y2: 170, label: "1.丨 Left Vertical of 日", direction: "Top to bottom" },
+        { type: "corner", x1: 115, y1: 80, x2: 205, y2: 80, x3: 205, y3: 170, label: "2.𠃍 Top-Right Corner of 日", direction: "Left to right, then down" },
+        { type: "horizontal", x1: 115, y1: 125, x2: 205, y2: 125, label: "3.一 Middle Bar of 日", direction: "Left to right" },
+        { type: "horizontal", x1: 115, y1: 170, x2: 205, y2: 170, label: "4.一 Bottom Bar of 日", direction: "Left to right" },
+        { type: "horizontal", x1: 85, y1: 215, x2: 235, y2: 215, label: "5.一 Lower Cross Bar", direction: "Left to right" },
+        { type: "vertical", x1: 160, y1: 125, x2: 160, y2: 275, label: "6.丨 Central Vertical Drop", direction: "Top to bottom" }
       ],
       "好": [
-        { type: "slant_angle", x1: 100, y1: 70, x2: 70, y2: 140, x3: 130, y3: 180, label: "1.ㄑ Slant Angle" },
-        { type: "left_fall", x1: 130, y1: 90, x2: 60, y2: 250, label: "2.ノ Left Falling" },
-        { type: "horizontal", x1: 40, y1: 150, x2: 140, y2: 150, label: "3.一 Cross Bar" },
-        { type: "corner", x1: 180, y1: 80, x2: 250, y2: 80, x3: 220, y3: 120, label: "4.乛 Top Hook" },
-        { type: "v_hook", x1: 215, y1: 120, x2: 215, y2: 260, x3: 190, y3: 240, label: "5.亅 Vertical Hook" },
-        { type: "horizontal", x1: 150, y1: 160, x2: 270, y2: 160, label: "6.一 Center Bar" }
+        { type: "slant_angle", x1: 100, y1: 70, x2: 70, y2: 140, x3: 130, y3: 180, label: "1.ㄑ Slant Angle", direction: "Top-right to bottom-left" },
+        { type: "left_fall", x1: 130, y1: 90, x2: 60, y2: 250, label: "2.ノ Left Falling", direction: "Top-right to bottom-left" },
+        { type: "horizontal", x1: 40, y1: 150, x2: 140, y2: 150, label: "3.一 Cross Bar", direction: "Left to right" },
+        { type: "corner", x1: 180, y1: 80, x2: 250, y2: 80, x3: 220, y3: 120, label: "4.乛 Top Hook", direction: "Left to right, then hook down" },
+        { type: "v_hook", x1: 215, y1: 120, x2: 215, y2: 260, x3: 190, y3: 240, label: "5.亅 Vertical Hook", direction: "Top to bottom" },
+        { type: "horizontal", x1: 150, y1: 160, x2: 270, y2: 160, label: "6.一 Center Bar", direction: "Left to right" }
       ],
       "水": [
-        { type: "v_hook", x1: 160, y1: 50, x2: 160, y2: 270, x3: 130, y3: 240, label: "1.亅 Center Hook" },
-        { type: "corner_slant", x1: 70, y1: 120, x2: 120, y2: 120, x3: 80, y3: 170, label: "2.㇇ Horizontal Slant" },
-        { type: "left_fall", x1: 120, y1: 170, x2: 50, y2: 260, label: "3.ノ Left Fall" },
-        { type: "right_fall", x1: 180, y1: 130, x2: 270, y2: 260, label: "4.㇏ Right Fall" }
+        { type: "v_hook", x1: 160, y1: 50, x2: 160, y2: 270, x3: 130, y3: 240, label: "1.亅 Center Hook", direction: "Top to bottom" },
+        { type: "corner_slant", x1: 70, y1: 120, x2: 120, y2: 120, x3: 80, y3: 170, label: "2.㇇ Horizontal Slant", direction: "Left to right, then down-left" },
+        { type: "left_fall", x1: 120, y1: 170, x2: 50, y2: 260, label: "3.ノ Left Fall", direction: "Top-right to bottom-left" },
+        { type: "right_fall", x1: 180, y1: 130, x2: 270, y2: 260, label: "4.㇏ Right Fall", direction: "Top-left to bottom-right" }
       ],
       "大": [
-        { type: "horizontal", x1: 60, y1: 120, x2: 260, y2: 120, label: "1.一 Main Horizontal" },
-        { type: "left_fall", x1: 160, y1: 70, x2: 60, y2: 270, label: "2.ノ Left Falling" },
-        { type: "right_fall", x1: 160, y1: 120, x2: 260, y2: 270, label: "3.㇏ Right Falling" }
+        { type: "horizontal", x1: 60, y1: 120, x2: 260, y2: 120, label: "1.一 Main Horizontal", direction: "Left to right" },
+        { type: "left_fall", x1: 160, y1: 70, x2: 60, y2: 270, label: "2.ノ Left Falling", direction: "Top-right to bottom-left" },
+        { type: "right_fall", x1: 160, y1: 120, x2: 260, y2: 270, label: "3.㇏ Right Falling", direction: "Top-left to bottom-right" }
       ],
       "小": [
-        { type: "v_hook", x1: 160, y1: 60, x2: 160, y2: 260, x3: 130, y3: 235, label: "1.亅 Center Hook" },
-        { type: "dot", x1: 90, y1: 120, x2: 60, y2: 180, label: "2.丶 Left Dot" },
-        { type: "dot", x1: 230, y1: 120, x2: 260, y2: 180, label: "3.丶 Right Dot" }
+        { type: "v_hook", x1: 160, y1: 60, x2: 160, y2: 260, x3: 130, y3: 235, label: "1.亅 Center Hook", direction: "Top to bottom" },
+        { type: "dot", x1: 90, y1: 120, x2: 60, y2: 180, label: "2.丶 Left Dot", direction: "Top to bottom-left" },
+        { type: "dot", x1: 230, y1: 120, x2: 260, y2: 180, label: "3.丶 Right Dot", direction: "Top to bottom-right" }
       ],
       "人": [
-        { type: "left_fall", x1: 160, y1: 60, x2: 60, y2: 270, label: "1.ノ Left Falling" },
-        { type: "right_fall", x1: 130, y1: 120, x2: 260, y2: 270, label: "2.㇏ Right Falling" }
+        { type: "left_fall", x1: 160, y1: 60, x2: 60, y2: 270, label: "1.ノ Left Falling", direction: "Top-right to bottom-left" },
+        { type: "right_fall", x1: 130, y1: 120, x2: 260, y2: 270, label: "2.㇏ Right Falling", direction: "Top-left to bottom-right" }
       ],
       "一": [
-        { type: "horizontal", x1: 50, y1: 160, x2: 270, y2: 160, label: "1.一 Horizontal Bar" }
+        { type: "horizontal", x1: 50, y1: 160, x2: 270, y2: 160, label: "1.一 Horizontal Bar", direction: "Left to right" }
       ],
       "二": [
-        { type: "horizontal", x1: 80, y1: 110, x2: 240, y2: 110, label: "1.一 Top Bar" },
-        { type: "horizontal", x1: 50, y1: 210, x2: 270, y2: 210, label: "2.一 Bottom Bar" }
+        { type: "horizontal", x1: 80, y1: 110, x2: 240, y2: 110, label: "1.一 Top Bar", direction: "Left to right" },
+        { type: "horizontal", x1: 50, y1: 210, x2: 270, y2: 210, label: "2.一 Bottom Bar", direction: "Left to right" }
       ],
       "三": [
-        { type: "horizontal", x1: 80, y1: 90, x2: 240, y2: 90, label: "1.一 Top Bar" },
-        { type: "horizontal", x1: 100, y1: 160, x2: 220, y2: 160, label: "2.一 Middle Bar" },
-        { type: "horizontal", x1: 50, y1: 230, x2: 270, y2: 230, label: "3.一 Bottom Bar" }
+        { type: "horizontal", x1: 80, y1: 90, x2: 240, y2: 90, label: "1.一 Top Bar", direction: "Left to right" },
+        { type: "horizontal", x1: 100, y1: 160, x2: 220, y2: 160, label: "2.一 Middle Bar", direction: "Left to right" },
+        { type: "horizontal", x1: 50, y1: 230, x2: 270, y2: 230, label: "3.一 Bottom Bar", direction: "Left to right" }
       ],
       "坐": [
-        { type: "left_fall", x1: 100, y1: 60, x2: 70, y2: 120, label: "1.ノ Left Person" },
-        { type: "dot", x1: 110, y1: 85, x2: 130, y2: 120, label: "2.丶 Person Dot" },
-        { type: "left_fall", x1: 220, y1: 60, x2: 190, y2: 120, label: "3.ノ Right Person" },
-        { type: "dot", x1: 230, y1: 85, x2: 250, y2: 120, label: "4.丶 Person Dot" },
-        { type: "horizontal", x1: 80, y1: 150, x2: 240, y2: 150, label: "5.一 Middle Bar" },
-        { type: "vertical", x1: 160, y1: 40, x2: 160, y2: 270, label: "6.丨 Center Vertical" },
-        { type: "horizontal", x1: 40, y1: 270, x2: 280, y2: 270, label: "7.一 Ground Bar" }
+        { type: "left_fall", x1: 100, y1: 60, x2: 70, y2: 120, label: "1.ノ Left Person", direction: "Top-right to bottom-left" },
+        { type: "dot", x1: 110, y1: 85, x2: 130, y2: 120, label: "2.丶 Person Dot", direction: "Top to bottom-right" },
+        { type: "left_fall", x1: 220, y1: 60, x2: 190, y2: 120, label: "3.ノ Right Person", direction: "Top-right to bottom-left" },
+        { type: "dot", x1: 230, y1: 85, x2: 250, y2: 120, label: "4.丶 Person Dot", direction: "Top to bottom-right" },
+        { type: "horizontal", x1: 80, y1: 150, x2: 240, y2: 150, label: "5.一 Middle Bar", direction: "Left to right" },
+        { type: "vertical", x1: 160, y1: 40, x2: 160, y2: 270, label: "6.丨 Center Vertical", direction: "Top to bottom" },
+        { type: "horizontal", x1: 40, y1: 270, x2: 280, y2: 270, label: "7.一 Ground Bar", direction: "Left to right" }
       ],
       "做": [
-        { type: "left_fall", x1: 70, y1: 60, x2: 40, y2: 130, label: "1.ノ Person Slant" },
-        { type: "vertical", x1: 55, y1: 130, x2: 55, y2: 270, label: "2.丨 Person Drop" },
-        { type: "left_fall", x1: 130, y1: 60, x2: 100, y2: 100, label: "3.ノ Middle Slant" },
-        { type: "horizontal", x1: 90, y1: 100, x2: 160, y2: 100, label: "4.一 Top Bar" },
-        { type: "vertical", x1: 125, y1: 100, x2: 125, y2: 190, label: "5.丨 Center Bar" },
-        { type: "corner", x1: 95, y1: 140, x2: 155, y2: 140, x3: 155, y3: 190, label: "6.𠃍 Corner" },
-        { type: "horizontal", x1: 95, y1: 190, x2: 155, y2: 190, label: "7.一 Box Bottom" },
-        { type: "left_fall", x1: 125, y1: 200, x2: 90, y2: 260, label: "8.ノ Lower Left" },
-        { type: "right_fall", x1: 125, y1: 210, x2: 165, y2: 260, label: "9.㇏ Lower Right" },
-        { type: "left_fall", x1: 220, y1: 60, x2: 190, y2: 130, label: "10.ノ Right Top Slant" },
-        { type: "right_fall", x1: 190, y1: 130, x2: 270, y2: 260, label: "11.㇏ Right Falling" }
+        { type: "left_fall", x1: 70, y1: 60, x2: 40, y2: 130, label: "1.ノ Person Slant", direction: "Top-right to bottom-left" },
+        { type: "vertical", x1: 55, y1: 130, x2: 55, y2: 270, label: "2.丨 Person Drop", direction: "Top to bottom" },
+        { type: "left_fall", x1: 130, y1: 60, x2: 100, y2: 100, label: "3.ノ Middle Slant", direction: "Top-right to bottom-left" },
+        { type: "horizontal", x1: 90, y1: 100, x2: 160, y2: 100, label: "4.一 Top Bar", direction: "Left to right" },
+        { type: "vertical", x1: 125, y1: 100, x2: 125, y2: 190, label: "5.丨 Center Bar", direction: "Top to bottom" },
+        { type: "corner", x1: 95, y1: 140, x2: 155, y2: 140, x3: 155, y3: 190, label: "6.𠃍 Corner", direction: "Left to right, then down" },
+        { type: "horizontal", x1: 95, y1: 190, x2: 155, y2: 190, label: "7.一 Box Bottom", direction: "Left to right" },
+        { type: "left_fall", x1: 125, y1: 200, x2: 90, y2: 260, label: "8.ノ Lower Left", direction: "Top-right to bottom-left" },
+        { type: "right_fall", x1: 125, y1: 210, x2: 165, y2: 260, label: "9.㇏ Lower Right", direction: "Top-left to bottom-right" },
+        { type: "left_fall", x1: 220, y1: 60, x2: 190, y2: 130, label: "10.ノ Right Top Slant", direction: "Top-right to bottom-left" },
+        { type: "right_fall", x1: 190, y1: 130, x2: 270, y2: 260, label: "11.㇏ Right Falling", direction: "Top-left to bottom-right" }
       ],
       "爱": [
-        { type: "left_fall", x1: 160, y1: 40, x2: 120, y2: 80, label: "1.ノ Top Slant" },
-        { type: "dot", x1: 80, y1: 80, x2: 100, y2: 110, label: "2.丶 Left Dot" },
-        { type: "dot", x1: 140, y1: 80, x2: 160, y2: 110, label: "3.丶 Middle Dot" },
-        { type: "left_fall", x1: 220, y1: 80, x2: 190, y2: 110, label: "4.ノ Right Slant" },
-        { type: "corner", x1: 60, y1: 130, x2: 260, y2: 130, x3: 240, y3: 160, label: "5.冖 Crown" },
-        { type: "left_fall", x1: 130, y1: 160, x2: 90, y2: 210, label: "6.ノ Heart Slant" },
-        { type: "corner", x1: 90, y1: 190, x2: 230, y2: 190, x3: 210, y3: 230, label: "7.乛 Heart Hook" },
-        { type: "left_fall", x1: 150, y1: 200, x2: 80, y2: 280, label: "8.ノ Lower Left" },
-        { type: "right_fall", x1: 150, y1: 210, x2: 270, y2: 280, label: "9.㇏ Lower Right" }
+        { type: "left_fall", x1: 160, y1: 40, x2: 120, y2: 80, label: "1.ノ Top Slant", direction: "Top-right to bottom-left" },
+        { type: "dot", x1: 80, y1: 80, x2: 100, y2: 110, label: "2.丶 Left Dot", direction: "Top to bottom-right" },
+        { type: "dot", x1: 140, y1: 80, x2: 160, y2: 110, label: "3.丶 Middle Dot", direction: "Top to bottom-right" },
+        { type: "left_fall", x1: 220, y1: 80, x2: 190, y2: 110, label: "4.ノ Right Slant", direction: "Top-right to bottom-left" },
+        { type: "corner", x1: 60, y1: 130, x2: 260, y2: 130, x3: 240, y3: 160, label: "5.冖 Crown", direction: "Left to right, then hook down" },
+        { type: "left_fall", x1: 130, y1: 160, x2: 90, y2: 210, label: "6.ノ Heart Slant", direction: "Top-right to bottom-left" },
+        { type: "corner", x1: 90, y1: 190, x2: 230, y2: 190, x3: 210, y3: 230, label: "7.乛 Heart Hook", direction: "Left to right, then hook" },
+        { type: "left_fall", x1: 150, y1: 200, x2: 80, y2: 280, label: "8.ノ Lower Left", direction: "Top-right to bottom-left" },
+        { type: "right_fall", x1: 150, y1: 210, x2: 270, y2: 280, label: "9.㇏ Lower Right", direction: "Top-left to bottom-right" }
       ]
     };
 
-    if (charMap[char]) {
-      return charMap[char];
+    // Extract authoritative strokes from embedded hanzi-data medians if available
+    if (window.EMBEDDED_HANZI_DATA && window.EMBEDDED_HANZI_DATA[cleanChar]) {
+      const charData = window.EMBEDDED_HANZI_DATA[cleanChar];
+      if (charData && Array.isArray(charData.medians) && charData.medians.length > 0) {
+        const padding = 20;
+        const width = 320;
+        const height = 320;
+        const scale = (width - 2 * padding) / 1024;
+        const xOffset = padding;
+        const yOffset = 124 * scale + padding;
+
+        const vectors = charData.medians.map((medianPts, idx) => {
+          const pts = medianPts.map(pt => ({
+            x: Math.round(pt[0] * scale + xOffset),
+            y: Math.round(height - yOffset - pt[1] * scale)
+          }));
+          const pStart = pts[0];
+          const pEnd = pts[pts.length - 1];
+          const dx = pEnd.x - pStart.x;
+          const dy = pEnd.y - pStart.y;
+          const len = Math.round(Math.hypot(dx, dy));
+
+          const pre = charMap[cleanChar] && charMap[cleanChar][idx];
+          if (pre) {
+            return {
+              ...pre,
+              x1: pStart.x,
+              y1: pStart.y,
+              x2: pEnd.x,
+              y2: pEnd.y,
+              pts,
+              len
+            };
+          }
+
+          let type = 'stroke';
+          let label = `第${idx + 1}笔`;
+          let direction = 'Follow stroke flow';
+
+          if (len < 38) {
+            type = 'dot';
+            label = `第${idx + 1}笔 丶 点 (Diǎn, Dot)`;
+            direction = 'Top to bottom-right';
+          } else if (Math.abs(dx) > Math.abs(dy) * 1.4 && dx > 0) {
+            type = 'horizontal';
+            label = `第${idx + 1}笔 一 横 (Héng, Left to Right)`;
+            direction = 'Left to right (从左到右)';
+          } else if (Math.abs(dy) > Math.abs(dx) * 1.4 && dy > 0) {
+            type = 'vertical';
+            label = `第${idx + 1}笔 丨 竖 (Shù, Top to Bottom)`;
+            direction = 'Top to bottom (从上到下)';
+          } else if (dx < 0 && dy > 0) {
+            type = 'left_fall';
+            label = `第${idx + 1}笔 丿 撇 (Piě, Left Falling)`;
+            direction = 'Top-right to bottom-left (从右上到左下)';
+          } else if (dx > 0 && dy > 0) {
+            type = 'right_fall';
+            label = `第${idx + 1}笔 ㇏ 捺 (Nà, Right Falling)`;
+            direction = 'Top-left to bottom-right (从左上到右下)';
+          } else if (dx > 0 && dy < 0) {
+            type = 'rising';
+            label = `第${idx + 1}笔 提 (Tí, Rising)`;
+            direction = 'Lower-left to upper-right (从左下到右上)';
+          } else {
+            type = 'corner';
+            label = `第${idx + 1}笔 折/钩 (Zhé / Gōu)`;
+            direction = 'Follow stroke trajectory';
+          }
+
+          return {
+            type,
+            x1: pStart.x,
+            y1: pStart.y,
+            x2: pEnd.x,
+            y2: pEnd.y,
+            pts,
+            len,
+            label,
+            direction
+          };
+        });
+
+        return vectors;
+      }
+    }
+
+    if (charMap[cleanChar]) {
+      return charMap[cleanChar];
     }
 
     const strokes = [];
@@ -1844,70 +1930,169 @@
         strokes.push({
           type: "horizontal",
           x1: 60, y1: y, x2: 260, y2: y,
-          label: `${i + 1}.一 Horizontal Stroke`
+          label: `第${i + 1}笔 一 横 (Left to Right)`,
+          direction: "Left to right (从左到右)"
         });
       } else {
         strokes.push({
           type: "vertical",
           x1: 60 + ((i * 45) % 180), y1: Math.max(40, y - 50),
           x2: 60 + ((i * 45) % 180), y2: Math.min(280, y + 60),
-          label: `${i + 1}.丨 Vertical Stroke`
+          label: `第${i + 1}笔 丨 竖 (Top to Bottom)`,
+          direction: "Top to bottom (从上到下)"
         });
       }
     }
     return strokes;
   }
 
-  // Evaluate single stroke accuracy (0-100%) against expected stroke vector
+  // Multi-Factor Strict Stroke Step & Format Evaluator
   function evaluateSingleStroke(points, strokeIdx, currentChar) {
-    if (!points || points.length < 2) return 0;
+    if (!points || points.length < 2) {
+      return {
+        pass: false,
+        score: 0,
+        reason: 'too_short',
+        hint: '⚠️ Stroke too short. Please draw the stroke on the canvas.',
+        valueOf() { return 0; }
+      };
+    }
 
     const strokeVectors = getCharacterStrokeVectors(currentChar);
     const totalExpected = strokeVectors.length || 4;
 
-    if (strokeIdx >= totalExpected) return 60;
+    if (strokeIdx >= totalExpected) {
+      return {
+        pass: true,
+        score: 75,
+        reason: 'extra',
+        hint: 'Character already complete.',
+        valueOf() { return 75; }
+      };
+    }
 
-    const expected = strokeVectors[strokeIdx];
+    const expected = strokeVectors[strokeIdx] || { x1: 50, y1: 150, x2: 250, y2: 150, label: `Stroke ${strokeIdx + 1}` };
     const startP = points[0];
     const endP = points[points.length - 1];
     const dx = endP.x - startP.x;
     const dy = endP.y - startP.y;
     const len = Math.hypot(dx, dy);
 
-    if (len < 6) return 0; // Ignore tiny taps under 6px
-
-    if (expected) {
-      const userAngle = Math.atan2(dy, dx);
-      const expDx = (expected.x2 || 0) - (expected.x1 || 0);
-      const expDy = (expected.y2 || 0) - (expected.y1 || 0);
-      const expAngle = Math.atan2(expDy, expDx);
-
-      let angleDiff = Math.abs(userAngle - expAngle);
-      if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      points.forEach(p => {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      });
-      const drawnMidX = (minX + maxX) / 2;
-      const drawnMidY = (minY + maxY) / 2;
-
-      const expMidX = ((expected.x1 || 0) + (expected.x2 || 0)) / 2;
-      const expMidY = ((expected.y1 || 0) + (expected.y2 || 0)) / 2;
-
-      const distErr = Math.hypot(drawnMidX - expMidX, drawnMidY - expMidY);
-
-      const dirFactor = Math.max(0, 1 - angleDiff / Math.PI);
-      const posFactor = Math.max(0, 1 - distErr / 220);
-
-      const strokeScore = Math.round((dirFactor * 0.5 + posFactor * 0.5) * 100);
-      return Math.min(98, Math.max(40, strokeScore));
+    // Reject tiny taps under 10px unless expected is a dot
+    if (len < 10 && expected.type !== 'dot') {
+      return {
+        pass: false,
+        score: 0,
+        reason: 'too_short',
+        hint: '⚠️ Stroke is too short. Please draw the full stroke.',
+        valueOf() { return 0; }
+      };
     }
 
-    return 60;
+    const userAngle = Math.atan2(dy, dx);
+    const expDx = (expected.x2 || 0) - (expected.x1 || 0);
+    const expDy = (expected.y2 || 0) - (expected.y1 || 0);
+    const expAngle = Math.atan2(expDy, expDx);
+
+    let angleDiff = Math.abs(userAngle - expAngle);
+    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+
+    const startDist = Math.hypot(startP.x - expected.x1, startP.y - expected.y1);
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    points.forEach(p => {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    });
+    const drawnMidX = (minX + maxX) / 2;
+    const drawnMidY = (minY + maxY) / 2;
+    const expMidX = ((expected.x1 || 0) + (expected.x2 || 0)) / 2;
+    const expMidY = ((expected.y1 || 0) + (expected.y2 || 0)) / 2;
+    const midDist = Math.hypot(drawnMidX - expMidX, drawnMidY - expMidY);
+
+    // 1. OUT OF ORDER CHECK: Did the user draw a subsequent stroke instead of current step?
+    // Only check if current drawn stroke deviates from current expected stroke
+    if (angleDiff > 0.65 || startDist > 65) {
+      for (let k = strokeIdx + 1; k < strokeVectors.length; k++) {
+        const other = strokeVectors[k];
+        const oDx = other.x2 - other.x1;
+        const oDy = other.y2 - other.y1;
+        const oAngle = Math.atan2(oDy, oDx);
+        let oAngleDiff = Math.abs(userAngle - oAngle);
+        if (oAngleDiff > Math.PI) oAngleDiff = 2 * Math.PI - oAngleDiff;
+        const oStartDist = Math.hypot(startP.x - other.x1, startP.y - other.y1);
+
+        if (oAngleDiff < 0.48 && oStartDist < 48) {
+          return {
+            pass: false,
+            score: 15,
+            reason: 'out_of_order',
+            hint: `⚠️ Out of order! That looks like Stroke ${k + 1}, but you must draw <strong>Stroke ${strokeIdx + 1}</strong> first.`,
+            valueOf() { return 15; }
+          };
+        }
+      }
+    }
+
+    // 2. DIRECTION CHECK: Must not be written backwards (tolerance max 72 degrees / 1.26 radians)
+    if (angleDiff > 1.26) {
+      let dirTip = expected.direction || 'Follow stroke direction';
+      if (Math.abs(expDx) > Math.abs(expDy) * 1.3 && expDx > 0) {
+        dirTip = 'Draw from left to right (从左到右)';
+      } else if (Math.abs(expDy) > Math.abs(expDx) * 1.3 && expDy > 0) {
+        dirTip = 'Draw from top to bottom (从上到下)';
+      } else if (expDx < 0 && expDy > 0) {
+        dirTip = 'Draw from top-right to bottom-left (从右上到左下)';
+      } else if (expDx > 0 && expDy > 0) {
+        dirTip = 'Draw from top-left to bottom-right (从左上到右下)';
+      }
+
+      return {
+        pass: false,
+        score: 20,
+        reason: 'wrong_direction',
+        hint: `⚠️ Wrong direction for ${escapeHTML(expected.label || `Stroke ${strokeIdx + 1}`)}! ${dirTip}.`,
+        valueOf() { return 20; }
+      };
+    }
+
+    // 3. START POSITION & LOCATION CHECK: Must start in reasonable neighborhood
+    if (startDist > 115 || midDist > 125) {
+      return {
+        pass: false,
+        score: 25,
+        reason: 'wrong_position',
+        hint: `⚠️ Wrong position! Draw <strong>${escapeHTML(expected.label || `Stroke ${strokeIdx + 1}`)}</strong> in the correct section.`,
+        valueOf() { return 25; }
+      };
+    }
+
+    // 4. SCORE CALCULATION
+    const dirFactor = Math.max(0, 1 - angleDiff / (Math.PI / 2));
+    const posFactor = Math.max(0, 1 - (startDist * 0.55 + midDist * 0.45) / 125);
+    const expLen = Math.hypot(expDx, expDy);
+    const lenRatio = Math.min(len, expLen) / Math.max(len, expLen, 1);
+    const rawScore = Math.round((dirFactor * 0.45 + posFactor * 0.40 + lenRatio * 0.15) * 100);
+
+    if (rawScore < 42) {
+      return {
+        pass: false,
+        score: rawScore,
+        reason: 'low_score',
+        hint: `⚠️ Inaccurate stroke format. Follow the line of <strong>${escapeHTML(expected.label || `Stroke ${strokeIdx + 1}`)}</strong>.`,
+        valueOf() { return rawScore; }
+      };
+    }
+
+    return {
+      pass: true,
+      score: Math.min(99, Math.max(50, rawScore)),
+      reason: 'ok',
+      hint: `✅ Correct stroke!`,
+      valueOf() { return this.score; }
+    };
   }
 
   // --- HTML5 Canvas Writing & Pointer Events Engine ---
@@ -2020,10 +2205,14 @@
                 console.warn('HanziWriter data notice for ' + validChar, err);
               },
               onLoadCharDataSuccess: function () {
-                startStrokeWriting(currentChar, lesson, chars);
+                if (drawnStrokes.length === 0) {
+                  startStrokeWriting(currentChar, lesson, chars);
+                }
               }
             });
-            startStrokeWriting(currentChar, lesson, chars);
+            if (drawnStrokes.length === 0) {
+              startStrokeWriting(currentChar, lesson, chars);
+            }
           } catch (err) {
             console.warn('HanziWriter init error:', err);
             targetElement.innerHTML = `<div class="fallback-ghost-char chinese-kaiti ${showGhostChar ? '' : 'hidden'}" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(validChar)}</div>`;
@@ -2088,30 +2277,36 @@
       const strokeIdx = drawnStrokes.length;
 
       if (strokeIdx < totalExpected) {
-        const score = evaluateSingleStroke(currentStrokePoints, strokeIdx, activeWritingChar);
+        const evalResult = evaluateSingleStroke(currentStrokePoints, strokeIdx, activeWritingChar);
         const expectedVector = strokeVectors[strokeIdx] || { label: `Stroke ${strokeIdx + 1}` };
 
-        // Accept stroke if score >= 15 or valid drawing length
-        if (score < 15) {
+        // Strictly block incorrect stroke, erase invalid drawing line, and show instructional correction
+        if (!evalResult.pass) {
           userMistakesCount++;
           if (window.LinguaAudio) window.LinguaAudio.playChime(false);
 
+          // Clear invalid stroke from canvas, leaving all previously drawn correct strokes intact
           redrawCanvasFromStrokes();
 
           const stepHint = document.getElementById('strokeOrderHintText');
           if (stepHint) {
-            stepHint.innerHTML = `<span style="color: #dc2626; font-weight: 700;">⚠️ Incorrect stroke! Try drawing: <strong class="chinese-kaiti" style="color: #dc2626;">${escapeHTML(expectedVector.label || `Stroke ${strokeIdx + 1}`)}</strong></span>`;
+            stepHint.innerHTML = `<span style="color: #dc2626; font-weight: 700;">${evalResult.hint || `⚠️ Incorrect stroke! Try drawing: ${escapeHTML(expectedVector.label || `Stroke ${strokeIdx + 1}`)}`}</span>`;
           }
           const stepBar = document.getElementById('strokeOrderStepBar');
           if (stepBar) {
             stepBar.classList.add('stroke-error-shake');
-            setTimeout(() => stepBar.classList.remove('stroke-error-shake'), 400);
+            setTimeout(() => stepBar.classList.remove('stroke-error-shake'), 450);
+          }
+          const container = document.getElementById('canvasContainer');
+          if (container) {
+            container.classList.add('stroke-error-shake');
+            setTimeout(() => container.classList.remove('stroke-error-shake'), 450);
           }
         } else {
           // ACCEPT STROKE: Keep user's exact handwritten stroke on canvas & advance step
           if (window.LinguaAudio) window.LinguaAudio.playChime(true);
           drawnStrokes.push([...currentStrokePoints]);
-          strokeScores.push(score);
+          strokeScores.push(evalResult.score);
 
           redrawCanvasFromStrokes();
           updateStrokeBadgesUI(activeWritingChar);
@@ -2124,11 +2319,11 @@
             const nextVector = strokeVectors[nextIdx] || { label: `Stroke ${nextIdx + 1}` };
             if (stepBadge) stepBadge.textContent = `Stroke ${nextIdx + 1} / ${totalExpected}`;
             if (stepHint) {
-              stepHint.innerHTML = `✅ Correct stroke! Next: <strong class="chinese-kaiti" style="color: #ea580c;">${escapeHTML(nextVector.label || `Stroke ${nextIdx + 1}`)}</strong>`;
+              stepHint.innerHTML = `✅ Step ${strokeIdx + 1} Correct! Next: 👉 <strong class="chinese-kaiti" style="color: #ea580c;">${escapeHTML(nextVector.label || `Stroke ${nextIdx + 1}`)}</strong> (${escapeHTML(nextVector.direction || 'Follow stroke order')})`;
             }
           } else {
             if (stepBadge) stepBadge.textContent = `Completed (${totalExpected} / ${totalExpected})`;
-            if (stepHint) stepHint.innerHTML = `🎉 <strong>Character Completed!</strong> Great job!`;
+            if (stepHint) stepHint.innerHTML = `🎉 <strong>Character Completed!</strong> Great handwriting!`;
 
             const accuracy = Math.max(50, Math.round(strokeScores.reduce((a, b) => a + b, 0) / totalExpected));
             if (activeWritingLesson && activeWritingLesson.id) {
