@@ -1,6 +1,6 @@
 {
-  "summary": "Added bottom Next navigation action bars to Video Lesson and Writing & Stroke Order tabs. Fixed text layout and card overflow issues in Writing Stroke and Pronunciation Check workspaces with robust word breaking, flex wrapping, and responsive sizing.",
-  "updatedAt": "2026-10-14T06:04:03.801104933Z",
+  "summary": "Implemented auto smooth-scroll to top of sections when clicking next in both lesson workspaces and story pages, with proper header offsets.",
+  "updatedAt": "2026-10-14T06:11:26.740778159Z",
   "requestFeedback": true,
   "userFacing": true
 }

@@ -793,15 +793,13 @@
       p.classList.toggle('active', p.id === `panel-${tabName}`);
     });
 
-    // If tabs bar is docked sticky at top while scrolling, smoothly reposition viewport to section top
-    const tabsBar = document.querySelector('.workspace-tabs-bar');
-    if (tabsBar) {
-      const rect = tabsBar.getBoundingClientRect();
-      const stickyOffset = window.innerWidth <= 768 ? 66 : 74;
-      if (rect.top <= stickyOffset + 4) {
-        const targetScroll = window.pageYOffset + rect.top - stickyOffset;
-        window.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
-      }
+    // Smooth scroll to top of lesson workspace container with sticky offset so section is fully in view
+    const workspaceEl = document.getElementById('lessonWorkspace');
+    if (workspaceEl) {
+      const rect = workspaceEl.getBoundingClientRect();
+      const stickyOffset = window.innerWidth <= 768 ? 120 : 135;
+      const targetScroll = window.pageYOffset + rect.top - stickyOffset;
+      window.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
     }
 
     // If writing tab is opened, initialize canvas and writing section

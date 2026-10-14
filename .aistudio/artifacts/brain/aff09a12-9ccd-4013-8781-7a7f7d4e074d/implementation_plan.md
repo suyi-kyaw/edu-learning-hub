@@ -1,13 +1,11 @@
-# Implementation Complete - Navigation Bars & Layout Fixes
+# Implementation Complete - Auto Scroll to Top on Next Navigation
 
-Successfully added bottom navigation action bars and resolved text overflow issues across the lesson workspaces.
+Successfully added smooth auto-scrolling to the top of sections when clicking next/navigation across lessons and story pages.
 
 ## Key Changes
 
-1. **Bottom Navigation Action Bars**:
-   - **Video Lesson Section**: Added a bottom navigation footer bar with the primary button `Continue to Practice Exercises ✏️ →` that immediately switches to the Practice Exercises tab when clicked.
-   - **Writing & Stroke Order Section**: Added a bottom navigation footer bar with the primary button `Go to Pronunciation Check 🎤 →` that immediately switches to the Pronunciation Check tab.
+1. **Lesson Workspaces (`lessons.js`)**:
+   - Whenever a user clicks next/continue buttons or switches between tabs (Video, Practice Exercises, Writing & Stroke Order, Pronunciation Check), the view automatically smooth-scrolls to the top of `#lessonWorkspace` with precise sticky offsets to ensure section titles are never hidden under the sticky header or floating tab bar.
 
-2. **Text Layout & Card Overflow Fixes**:
-   - **Writing Stroke Workspace**: Enhanced `.writing-stage-grid`, `.writing-info-col`, `.stroke-steps-card`, and stroke-step text descriptions with `box-sizing: border-box`, `min-width: 0`, and robust `word-break: break-word` / `overflow-wrap: break-word` properties to prevent any text from overflowing out of containers on mobile or narrow screens.
-   - **Pronunciation Check Workspace**: Updated target sentence cards (`.pron-target-card`, `.pron-target-chinese`, `.pron-target-pinyin`), side-by-side comparison boxes (`.pron-compare-box`, `.pron-compare-val`), and feedback containers with flexible wrapping and word-break rules so long sentences and microphone transcription strings never break layout bounds.
+2. **Story Pages (`story-scroll.js`)**:
+   - Added a smooth scroll event handler for all lesson navigation anchors (`#reading`, `#vocabulary`, `#exercises`, `#watch`, `#understand`), ensuring clicking any section link smoothly scrolls the viewport to the correct top position with header and sticky tab offsets.
