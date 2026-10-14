@@ -376,26 +376,96 @@
       }
     }
 
-    // Mark current active link
-    const currentPath = window.location.pathname.split('/').pop() || 'index.html';
-    document.querySelectorAll('.desktop-nav .nav-link, .hide-menu-nav-links .hide-menu-link').forEach(link => {
-      const href = link.getAttribute('href');
-      if (href) {
-        if (href === currentPath || (currentPath === '' && href === 'index.html')) {
-          link.classList.add('active');
-        } else if (currentPath.includes('lessons') && href.includes('lessons')) {
-          link.classList.add('active');
-        }
-      }
-    });
+    // Highlight active link matching the current page
+    highlightActiveNavLink();
 
     // Sync theme UI on injected button
     updateThemeButtonUI(document.documentElement.getAttribute('data-theme') || getStoredTheme());
+
+    // Update scroll elevation
+    handleHeaderScroll();
   }
 
+  // Active navigation link highlighter with bold colored text & dot indicator support
+  function highlightActiveNavLink() {
+    try {
+      const pathname = window.location.pathname || '';
+      const segments = pathname.split('/').filter(Boolean);
+      let currentFile = (segments.pop() || 'index.html').toLowerCase().split('?')[0].split('#')[0];
+
+      if (!currentFile || currentFile === '' || currentFile === 'index') {
+        currentFile = 'index.html';
+      }
+
+      const navLinks = document.querySelectorAll('.desktop-nav .nav-link, .hide-menu-nav-links .hide-menu-link');
+      navLinks.forEach(link => {
+        link.classList.remove('active');
+        link.removeAttribute('aria-current');
+
+        const href = (link.getAttribute('href') || '').toLowerCase().trim();
+        if (!href) return;
+
+        const hrefParts = href.split('/').filter(Boolean);
+        const linkFile = (hrefParts.pop() || '').split('?')[0].split('#')[0];
+
+        let isMatch = false;
+
+        // Exact file match
+        if (linkFile === currentFile && !link.classList.contains('hide-menu-review-link')) {
+          isMatch = true;
+        }
+        // Home match
+        else if ((currentFile === 'index.html' || currentFile === '') && (linkFile === 'index.html' || linkFile === '' || href === '/')) {
+          isMatch = true;
+        }
+        // Lessons matching (covers lessons.html, lessons-adult.html, lessons-kids.html)
+        else if (currentFile.startsWith('lesson') && linkFile.startsWith('lesson')) {
+          isMatch = true;
+        }
+        // Games matching (covers games.html, games-embed.html)
+        else if (currentFile.startsWith('game') && linkFile.startsWith('game')) {
+          isMatch = true;
+        }
+        // Stories matching (covers story.html)
+        else if (currentFile.startsWith('story') && linkFile.startsWith('story') && !link.classList.contains('hide-menu-review-link')) {
+          isMatch = true;
+        }
+
+        if (isMatch) {
+          link.classList.add('active');
+          link.setAttribute('aria-current', 'page');
+        }
+      });
+    } catch (err) {
+      console.warn('LinguaPath: Error highlighting active navigation link', err);
+    }
+  }
+
+  // Expose active nav highlight helper
+  window.highlightLinguaActiveNav = highlightActiveNavLink;
+
+  // Header scroll state tracker for sticky navbar elevation
+  function handleHeaderScroll() {
+    const isScrolled = window.scrollY > 8;
+    const headerEl = document.querySelector('.site-header');
+    const sharedContainer = document.getElementById('sharedHeader');
+    if (headerEl) {
+      headerEl.classList.toggle('is-scrolled', isScrolled);
+    }
+    if (sharedContainer) {
+      sharedContainer.classList.toggle('is-scrolled', isScrolled);
+    }
+  }
+
+  window.addEventListener('scroll', handleHeaderScroll, { passive: true });
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectHeader);
+    document.addEventListener('DOMContentLoaded', () => {
+      highlightActiveNavLink();
+      injectHeader();
+    });
   } else {
+    highlightActiveNavLink();
     injectHeader();
   }
 })();

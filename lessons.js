@@ -658,6 +658,7 @@
       renderVideoSection(lesson);
       renderExercisesSection(lesson);
       renderWritingSection(lesson);
+      renderPronunciationSection(lesson);
       switchWorkspaceTab('video');
 
       // Scroll to top of workspace smoothly
@@ -682,6 +683,9 @@
   function closeLessonWorkspace(updateUrl = true) {
     const workspace = document.getElementById('lessonWorkspace');
     const curriculumSection = document.getElementById('curriculumListSection');
+
+    // Stop active speech recognition recording if in progress
+    stopPronunciationRecording();
 
     if (workspace) {
       workspace.classList.remove('active');
@@ -769,6 +773,11 @@
   function switchWorkspaceTab(tabName) {
     activeWorkspaceTab = tabName;
 
+    // Stop active speech recognition recording if user leaves pronunciation tab
+    if (tabName !== 'pronunciation') {
+      stopPronunciationRecording();
+    }
+
     document.querySelectorAll('.workspace-tab-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === tabName);
     });
@@ -780,6 +789,11 @@
     // If writing tab is opened, initialize canvas and writing section
     if (tabName === 'writing' && activeLesson) {
       setTimeout(() => renderWritingSection(activeLesson), 50);
+    }
+
+    // If pronunciation tab is opened, render and initialize pronunciation workspace
+    if (tabName === 'pronunciation' && activeLesson) {
+      setTimeout(() => renderPronunciationSection(activeLesson), 50);
     }
   }
 
@@ -2405,6 +2419,957 @@
 
     if (currentChar) {
       startStrokeWriting(currentChar, activeWritingLesson, activeWritingChars);
+    }
+  }
+
+  // =========================================================
+  // --- SECTION 4: PRONUNCIATION CHECK (Web Speech API) ---
+  // =========================================================
+
+  const PRONUNCIATION_PRACTICE_BANK = {
+    "adult-basics-01": [
+      {
+        chinese: "早上好！今天天气真好。",
+        pinyin: "Zǎoshang hǎo! Jīntiān tiānqì zhēn hǎo.",
+        meaning: "Good morning! The weather is really nice today.",
+        focus: "Morning greetings & daily pleasantries"
+      },
+      {
+        chinese: "您好，请问洗手间在哪里？",
+        pinyin: "Nín hǎo, qǐngwèn xǐshǒujiān zài nǎlǐ?",
+        meaning: "Hello, excuse me, where is the restroom?",
+        focus: "Polite inquiries (您好 / 请问)"
+      },
+      {
+        chinese: "非常感谢您的热心帮助。",
+        pinyin: "Fēicháng gǎnxiè nín de rèxīn bāngzhù.",
+        meaning: "Thank you very much for your kind help.",
+        focus: "Gratitude & formal etiquette"
+      },
+      {
+        chinese: "不客气，明天见！",
+        pinyin: "Bú kèqi, míngtiān jiàn!",
+        meaning: "You're welcome, see you tomorrow!",
+        focus: "Closing pleasantries"
+      }
+    ],
+    "adult-basics-02": [
+      {
+        chinese: "你好，我叫大卫，很高兴认识你。",
+        pinyin: "Nǐ hǎo, wǒ jiào Dàwèi, hěn gāoxìng rènshí nǐ.",
+        meaning: "Hello, my name is David, nice to meet you.",
+        focus: "Self-introduction & greetings"
+      },
+      {
+        chinese: "我是美国人，目前在北京工作。",
+        pinyin: "Wǒ shì Měiguó rén, mùqián zài Běijīng gōngzuò.",
+        meaning: "I am American, currently working in Beijing.",
+        focus: "Nationality & location"
+      },
+      {
+        chinese: "我的手机号码是一三八零零一二。",
+        pinyin: "Wǒ de shǒujī hàomǎ shì yīsānbā línglíng yī'èr.",
+        meaning: "My cell phone number is 138-0012.",
+        focus: "Digits & phone number rhythm"
+      },
+      {
+        chinese: "请问这个一件多少钱？",
+        pinyin: "Qǐngwèn zhège yí jiàn duōshao qián?",
+        meaning: "Excuse me, how much is this one piece?",
+        focus: "Basic prices & measure words"
+      }
+    ],
+    "adult-travel-01": [
+      {
+        chinese: "服务员，请给我们一份菜单。",
+        pinyin: "Fúwùyuán, qǐng gěi wǒmen yí fèn càidān.",
+        meaning: "Waiter, please bring us a menu.",
+        focus: "Restaurant etiquette"
+      },
+      {
+        chinese: "我们点一份宫保鸡丁和水饺。",
+        pinyin: "Wǒmen diǎn yí fèn gōngbǎo jīdīng hé shuǐjiǎo.",
+        meaning: "We'd like to order Kung Pao chicken and dumplings.",
+        focus: "Ordering signature dishes"
+      },
+      {
+        chinese: "请不要放辣椒，我们不吃辣。",
+        pinyin: "Qǐng búyào fàng làjiāo, wǒmen bù chī là.",
+        meaning: "Please don't put chili, we don't eat spicy.",
+        focus: "Dietary preferences"
+      },
+      {
+        chinese: "你好买单，可以用微信支付吗？",
+        pinyin: "Nǐ hǎo mǎidān, kěyǐ yòng Wēixìn zhīfù ma?",
+        meaning: "Hello, check please, can I pay using WeChat?",
+        focus: "Digital payments & bill settlement"
+      }
+    ],
+    "adult-travel-02": [
+      {
+        chinese: "请问去最近的地铁站怎么走？",
+        pinyin: "Qǐngwèn qù zuìjìn de dìtiězhàn zěnme zǒu?",
+        meaning: "Excuse me, how do I walk to the nearest subway station?",
+        focus: "Asking directions"
+      },
+      {
+        chinese: "向前一直走，在十字路口向右转。",
+        pinyin: "Xiàng qián yìzhí zǒu, zài shízì lùkǒu xiàng yòu zhuǎn.",
+        meaning: "Walk straight ahead, then turn right at the crossroads.",
+        focus: "Navigation directions"
+      },
+      {
+        chinese: "我要买一张去上海的高铁二等座。",
+        pinyin: "Wǒ yào mǎi yì zhāng qù Shànghǎi de gāotiě èrděngzuò.",
+        meaning: "I'd like to buy a second-class bullet train ticket to Shanghai.",
+        focus: "High-speed rail booking"
+      },
+      {
+        chinese: "请带我到这家酒店，谢谢师傅。",
+        pinyin: "Qǐng dài wǒ dào zhè jiā jiǔdiàn, xièxie shīfu.",
+        meaning: "Please take me to this hotel, thank you driver.",
+        focus: "Taxi communication"
+      }
+    ],
+    "adult-business-01": [
+      {
+        chinese: "王总您好，初次见面，请多关照。",
+        pinyin: "Wáng zǒng nín hǎo, chūcì jiànmiàn, qǐng duō guānzhào.",
+        meaning: "Hello Director Wang, nice to meet you for the first time.",
+        focus: "Corporate introductions"
+      },
+      {
+        chinese: "这是我们公司的最新项目企划方案。",
+        pinyin: "Zhè shì wǒmen gōngsī de zuìxīn xiàngmù qǐhuà fāng'àn.",
+        meaning: "This is our company's latest project proposal.",
+        focus: "Presenting business materials"
+      },
+      {
+        chinese: "期待我们双方未来有更深入的合作。",
+        pinyin: "Qīdài wǒmen shuāngfāng wèilái yǒu gèng shēnrù de hézuò.",
+        meaning: "Looking forward to deeper cooperation between our parties.",
+        focus: "Partnership etiquette"
+      }
+    ],
+    "adult-business-02": [
+      {
+        chinese: "关于这批产品的单价，我们还可以商量吗？",
+        pinyin: "Guānyú zhè pī chǎnpǐn de dānjià, wǒmen hái kěyǐ shāngliang ma?",
+        meaning: "Regarding the unit price of these products, can we negotiate further?",
+        focus: "Price discussions"
+      },
+      {
+        chinese: "如果订购数量翻倍，能否给予百分之五的折扣？",
+        pinyin: "Rúguǒ dìnggòu shùliàng fānbèi, néngfǒu jǐyǔ bǎi fēn zhī wǔ de zhékòu?",
+        meaning: "If order volume doubles, could you grant a 5% discount?",
+        focus: "Bulk discount negotiation"
+      },
+      {
+        chinese: "双方对本次采购合同条款都表示满意。",
+        pinyin: "Shuāngfāng duì běncì cǎigòu hétong tiáokuǎn dōu biǎoshì mǎnyì.",
+        meaning: "Both parties are satisfied with the terms of this procurement contract.",
+        focus: "Contract finalization"
+      }
+    ],
+    "kids-pinyin-01": [
+      {
+        chinese: "你好！小熊猫，你好吗？",
+        pinyin: "Nǐ hǎo! Xiǎo xióngmāo, nǐ hǎo ma?",
+        meaning: "Hello! Little panda, how are you?",
+        focus: "Friendly greetings"
+      },
+      {
+        chinese: "我很好，谢谢你，我的好朋友！",
+        pinyin: "Wǒ hěn hǎo, xièxie nǐ, wǒ de hǎo péngyou!",
+        meaning: "I am great, thank you, my good friend!",
+        focus: "Happy response"
+      },
+      {
+        chinese: "小白兔，蹦蹦跳跳真可爱。",
+        pinyin: "Xiǎo bái tù, bèngbèng tiàotiào zhēn kě'ài.",
+        meaning: "The little white rabbit hops around, so cute.",
+        focus: "Animal rhyming fun"
+      },
+      {
+        chinese: "再见，明天我们一起玩游戏！",
+        pinyin: "Zàijiàn, míngtiān wǒmen yìqǐ wán yóuxì!",
+        meaning: "Goodbye, tomorrow let's play games together!",
+        focus: "Playful farewell"
+      }
+    ],
+    "kids-pinyin-02": [
+      {
+        chinese: "小猫喵喵叫，小狗汪汪叫。",
+        pinyin: "Xiǎo māo miāo miāo jiào, xiǎo gǒu wāng wāng jiào.",
+        meaning: "Kittens say meow meow, puppies say woof woof.",
+        focus: "Onomatopoeia & animal sounds"
+      },
+      {
+        chinese: "大象鼻子长，长颈鹿个子高。",
+        pinyin: "Dàxiàng bízi cháng, chángjǐnglù gèzi gāo.",
+        meaning: "Elephants have long trunks, giraffes are tall.",
+        focus: "Descriptive animal traits"
+      },
+      {
+        chinese: "红红的苹果甜又香，真好吃！",
+        pinyin: "Hónghóng de píngguǒ tián yòu xiāng, zhēn hǎochī!",
+        meaning: "Red apples are sweet and fragrant, so tasty!",
+        focus: "Colors and delicious foods"
+      }
+    ],
+    "kids-animals-01": [
+      {
+        chinese: "动物园里有好多可爱的小动物。",
+        pinyin: "Dòngwùyuán lǐ yǒu hǎoduō kě'ài de xiǎo dòngwù.",
+        meaning: "There are so many cute animals in the zoo.",
+        focus: "Zoo exploration"
+      },
+      {
+        chinese: "看！熊猫正在开心地吃竹子。",
+        pinyin: "Kàn! Xióngmāo zhèngzài kāixīn de chī zhúzi.",
+        meaning: "Look! The panda is happily eating bamboo.",
+        focus: "Panda habitat"
+      },
+      {
+        chinese: "大老虎威风凛凛真帅气。",
+        pinyin: "Dà lǎohǔ wēifēng lǐnlǐn zhēn shuàiqì.",
+        meaning: "The big tiger looks mighty and handsome.",
+        focus: "Wild animal adjectives"
+      }
+    ],
+    "kids-animals-02": [
+      {
+        chinese: "海洋里有大鲸鱼和彩色的小热带鱼。",
+        pinyin: "Hǎiyáng lǐ yǒu dà jīngyú hé cǎisè de xiǎo rèdàiyú.",
+        meaning: "In the ocean there are big whales and colorful tropical fish.",
+        focus: "Marine creatures"
+      },
+      {
+        chinese: "海豚在浪花里跳跃翻滚，真聪明！",
+        pinyin: "Hǎitún zài lànghuā lǐ tiàoyuè fāngǔn, zhēn cōngmíng!",
+        meaning: "Dolphins leap and roll in the waves, so smart!",
+        focus: "Dolphin intelligence"
+      }
+    ],
+    "kids-culture-01": [
+      {
+        chinese: "新年快乐！恭喜发财，红包拿来！",
+        pinyin: "Xīnnián kuàilè! Gōngxǐ fācái, hóngbāo nálái!",
+        meaning: "Happy New Year! Wishing you prosperity, red envelopes please!",
+        focus: "Spring Festival celebrations"
+      },
+      {
+        chinese: "过年全家人一起吃饺子，贴春联。",
+        pinyin: "Guònián quán jiā rén yìqǐ chī jiǎozi, tiē chūnlián.",
+        meaning: "During New Year the whole family eats dumplings and puts up spring couplets.",
+        focus: "Traditional holiday customs"
+      }
+    ],
+    "kids-culture-02": [
+      {
+        chinese: "中秋节的月亮又大又圆，月饼真香！",
+        pinyin: "Zhōngqiūjié de yuèliang yòu dà yòu yuán, yuèbǐng zhēn xiāng!",
+        meaning: "The Mid-Autumn moon is big and round, mooncakes smell so good!",
+        focus: "Moon Festival traditions"
+      },
+      {
+        chinese: "嫦娥奔月的美丽传说流传千百年。",
+        pinyin: "Cháng'é bēn yuè de měilì chuánshuō liúchuán qiānbǎi nián.",
+        meaning: "The beautiful legend of Chang'e flying to the moon has been told for centuries.",
+        focus: "Folklore storytelling"
+      }
+    ]
+  };
+
+  // State variables for Pronunciation Check
+  let activePronunciationLesson = null;
+  let activePronunciationSentences = [];
+  let currentPronunciationIndex = 0;
+  let activeSpeechRecognition = null;
+  let isPronunciationRecording = false;
+  let pronunciationSessionScores = {};
+
+  // Standard character to Pinyin dictionary lookup
+  const HANZI_PINYIN_MAP = {
+    "早": "zǎo", "上": "shang", "好": "hǎo", "今": "jīn", "天": "tiān", "气": "qì", "真": "zhēn",
+    "您": "nín", "请": "qǐng", "问": "wèn", "洗": "xǐ", "手": "shǒu", "间": "jiān", "在": "zài",
+    "哪": "nǎ", "里": "lǐ", "非": "fēi", "常": "cháng", "感": "gǎn", "谢": "xiè", "的": "de",
+    "热": "rè", "心": "xīn", "帮": "bāng", "助": "zhù", "不": "bù", "客": "kè", "明": "míng",
+    "见": "jiàn", "我": "wǒ", "叫": "jiào", "大": "dà", "卫": "wèi", "很": "hěn", "高": "gāo",
+    "兴": "xìng", "认": "rèn", "识": "shi", "你": "nǐ", "是": "shì", "美": "měi", "国": "guó",
+    "人": "rén", "目": "mù", "前": "qián", "北": "běi", "京": "jīng", "工": "gōng", "作": "zuò",
+    "机": "jī", "号": "hào", "码": "mǎ", "一": "yī", "三": "sān", "八": "bā", "零": "líng",
+    "二": "èr", "这": "zhè", "个": "gè", "件": "jiàn", "多": "duō", "少": "shǎo", "钱": "qián",
+    "服": "fú", "务": "wù", "员": "yuán", "给": "gěi", "们": "men", "份": "fèn", "菜": "cài",
+    "单": "dān", "点": "diǎn", "宫": "gōng", "保": "bǎo", "鸡": "jī", "丁": "dīng", "和": "hé",
+    "水": "shuǐ", "饺": "jiǎo", "要": "yào", "放": "fàng", "辣": "là", "椒": "jiāo", "吃": "chī",
+    "买": "mǎi", "可": "kě", "以": "yǐ", "用": "yòng", "微": "wēi", "信": "xìn", "支": "zhī",
+    "付": "fù", "吗": "ma", "最": "zuì", "近": "jìn", "地": "dì", "铁": "tiě", "站": "zhàn",
+    "怎": "zěn", "么": "me", "走": "zǒu", "向": "xiàng", "直": "zhí", "十": "shí", "字": "zì",
+    "路": "lù", "口": "kǒu", "右": "yòu", "转": "zhuǎn", "张": "zhāng", "去": "qù", "海": "hǎi",
+    "等": "děng", "座": "zuò", "带": "dài", "到": "dào", "家": "jiā", "酒": "jiǔ", "店": "diàn",
+    "师": "shī", "傅": "fu", "王": "wáng", "总": "zǒng", "初": "chū", "次": "cì", "面": "miàn",
+    "关": "guān", "照": "zhào", "司": "sī", "新": "xīn", "项": "xiàng", "企": "qǐ", "划": "huà",
+    "方": "fāng", "案": "àn", "期": "qī", "双": "shuāng", "未": "wèi", "来": "lái", "有": "yǒu",
+    "更": "gèng", "深": "shēn", "入": "rù", "合": "hé", "产": "chǎn", "品": "pǐn", "批": "pī",
+    "商": "shāng", "量": "liang", "如": "rú", "果": "guǒ", "订": "dìng", "购": "gòu", "数": "shù",
+    "翻": "fān", "倍": "bèi", "能": "néng", "否": "fǒu", "予": "yǔ", "百": "bǎi", "分": "fēn",
+    "之": "zhī", "五": "wǔ", "折": "zhé", "扣": "kòu", "对": "duì", "本": "běn", "采": "cǎi",
+    "同": "tóng", "条": "tiáo", "款": "kuǎn", "都": "dōu", "表": "biǎo", "示": "shì", "满": "mǎn",
+    "意": "yì", "熊": "xióng", "猫": "māo", "兔": "tù", "蹦": "bèng", "跳": "tiào", "爱": "ài",
+    "玩": "wán", "游": "yóu", "戏": "xì", "狗": "gǒu", "汪": "wāng", "喵": "miāo", "象": "xiàng",
+    "鼻": "bí", "子": "zi", "长": "cháng", "颈": "jǐng", "鹿": "lù", "红": "hóng", "苹": "píng",
+    "甜": "tián", "香": "xiāng", "动": "dòng", "物": "wù", "园": "yuán", "翠": "cuì", "绿": "lǜ",
+    "竹": "zhú", "老": "lǎo", "虎": "hǔ", "威": "wēi", "风": "fēng", "凛": "lǐn", "帅": "shuài",
+    "鲸": "jīng", "鱼": "yú", "色": "sè", "豚": "tún", "浪": "làng", "花": "huā", "跃": "yuè",
+    "滚": "gǔn", "聪": "cōng", "年": "nián", "快": "kuài", "乐": "lè", "恭": "gōng", "喜": "xǐ",
+    "发": "fā", "财": "cái", "包": "bāo", "拿": "ná", "全": "quán", "贴": "tiē", "春": "chūn",
+    "联": "lián", "中": "zhōng", "秋": "qiū", "节": "jié", "月": "yuè", "饼": "bǐng", "嫦": "cháng",
+    "娥": "é", "奔": "bēn", "传": "chuán", "说": "shuō", "流": "liú", "千": "qiān"
+  };
+
+  function getCharacterPinyin(char, fallbackSentencePinyin, idx) {
+    if (HANZI_PINYIN_MAP[char]) return HANZI_PINYIN_MAP[char];
+    if (fallbackSentencePinyin) {
+      const words = fallbackSentencePinyin.replace(/[!,?.;:'"—\-]/g, '').trim().split(/\s+/);
+      if (words[idx]) return words[idx].toLowerCase();
+    }
+    return '';
+  }
+
+  function getLessonPronunciationSentences(lesson) {
+    if (!lesson) return [];
+    const lessonId = String(lesson.id || '').trim().toLowerCase();
+    for (const [key, list] of Object.entries(PRONUNCIATION_PRACTICE_BANK)) {
+      if (key.toLowerCase() === lessonId) return list;
+    }
+    // Check if vocabulary items exist for this lesson
+    const vocab = allVocabulary.filter(v => String(v.lessonId || '').trim().toLowerCase() === lessonId);
+    if (vocab.length > 0) {
+      return vocab.slice(0, 5).map(v => ({
+        chinese: v.character || lesson.chineseTitle || lesson.title,
+        pinyin: v.pinyin || '',
+        meaning: v.meaning || `Vocabulary phrase for ${lesson.title}`,
+        focus: `Lesson Vocabulary`
+      }));
+    }
+    // Fallback based on lesson Chinese title
+    const fallbackList = [];
+    if (lesson.chineseTitle) {
+      fallbackList.push({
+        chinese: lesson.chineseTitle,
+        pinyin: lesson.pinyin || '',
+        meaning: lesson.meaning || lesson.title,
+        focus: "Lesson Core Phrase"
+      });
+    }
+    fallbackList.push({
+      chinese: "你好！很高兴学中文。",
+      pinyin: "Nǐ hǎo! Hěn gāoxìng xué Zhōngwén.",
+      meaning: "Hello! Very happy to learn Chinese.",
+      focus: "General Greeting Practice"
+    });
+    return fallbackList;
+  }
+
+  function stopPronunciationRecording() {
+    if (activeSpeechRecognition) {
+      try {
+        activeSpeechRecognition.onend = null;
+        activeSpeechRecognition.onerror = null;
+        activeSpeechRecognition.onresult = null;
+        activeSpeechRecognition.stop();
+      } catch (e) {}
+      activeSpeechRecognition = null;
+    }
+    isPronunciationRecording = false;
+    updatePronunciationMicUI(false);
+  }
+
+  function updatePronunciationMicUI(recording) {
+    const consoleEl = document.getElementById('pronMicConsole');
+    const statusText = document.getElementById('pronMicStatusText');
+    const interimBox = document.getElementById('pronInterimBox');
+
+    if (consoleEl) {
+      consoleEl.classList.toggle('is-recording', recording);
+    }
+    if (statusText) {
+      statusText.textContent = recording ? '🔴 Listening... Speak clearly in Mandarin!' : '🎙️ Click to Read Aloud';
+    }
+    if (interimBox && !recording) {
+      interimBox.style.display = 'none';
+    }
+  }
+
+  // Pure Client-side Speech Recognition with zh-CN
+  function togglePronunciationRecording(currentSentence) {
+    if (isPronunciationRecording) {
+      stopPronunciationRecording();
+      return;
+    }
+
+    const SpeechRecClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecClass) {
+      const hint = document.getElementById('pronMicStatusText');
+      if (hint) {
+        hint.innerHTML = '⚠️ Web Speech API not supported in this browser. Please use Chrome, Edge, or Safari, or test with the input below.';
+      }
+      return;
+    }
+
+    try {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      const rec = new SpeechRecClass();
+      rec.lang = 'zh-CN';
+      rec.continuous = false;
+      rec.interimResults = true;
+      rec.maxAlternatives = 3;
+
+      let finalTranscript = '';
+      activeSpeechRecognition = rec;
+      isPronunciationRecording = true;
+      updatePronunciationMicUI(true);
+
+      const interimBox = document.getElementById('pronInterimBox');
+      const interimText = document.getElementById('pronInterimText');
+      if (interimBox) interimBox.style.display = 'inline-block';
+      if (interimText) interimText.textContent = 'Listening... Speak in Mandarin now';
+
+      rec.onresult = (evt) => {
+        let interim = '';
+        for (let i = evt.resultIndex; i < evt.results.length; ++i) {
+          if (evt.results[i].isFinal) {
+            finalTranscript += evt.results[i][0].transcript;
+          } else {
+            interim += evt.results[i][0].transcript;
+          }
+        }
+        if (interimText) {
+          const display = (finalTranscript || interim).trim();
+          interimText.textContent = display ? `Listening: "${display}"` : 'Listening... Speak in Mandarin now';
+        }
+      };
+
+      rec.onerror = (evt) => {
+        console.warn('Speech recognition error:', evt.error);
+        stopPronunciationRecording();
+        const hintEl = document.getElementById('pronMicStatusText');
+        if (hintEl) {
+          if (evt.error === 'not-allowed') {
+            hintEl.textContent = '⚠️ Microphone permission denied. Please allow mic in browser settings.';
+          } else if (evt.error === 'no-speech') {
+            hintEl.textContent = '⚠️ No speech detected. Click the mic and read the phrase again.';
+          } else {
+            hintEl.textContent = `Speech Notice: ${evt.error}. Click mic to retry.`;
+          }
+        }
+      };
+
+      rec.onspeechend = () => {
+        try { rec.stop(); } catch (e) {}
+      };
+
+      rec.onend = () => {
+        isPronunciationRecording = false;
+        activeSpeechRecognition = null;
+        updatePronunciationMicUI(false);
+        if (finalTranscript.trim()) {
+          evaluateAndRenderPronunciation(finalTranscript, currentSentence);
+        }
+      };
+
+      rec.start();
+    } catch (err) {
+      console.warn("Failed to initialize speech recognition:", err);
+      stopPronunciationRecording();
+    }
+  }
+
+  // Word-by-word sequence alignment and pronunciation scoring
+  function calculatePronunciationAccuracy(targetText, heardText, targetPinyin) {
+    // Strip non-Hanzi and punctuation symbols for clean alignment
+    const cleanTarget = (targetText || '').replace(/[\s\p{P}\p{S}]/gu, '');
+    const cleanHeard = (heardText || '').replace(/[\s\p{P}\p{S}]/gu, '');
+
+    const targetChars = Array.from(cleanTarget);
+    const heardChars = Array.from(cleanHeard);
+
+    if (targetChars.length === 0) {
+      return { score: 100, matches: [], cleanTarget, cleanHeard };
+    }
+
+    if (heardChars.length === 0) {
+      const matches = targetChars.map((char, idx) => ({
+        char,
+        pinyin: getCharacterPinyin(char, targetPinyin, idx),
+        status: 'miss',
+        heardChar: ''
+      }));
+      return { score: 0, matches, matchCount: 0, targetLength: targetChars.length, cleanTarget, cleanHeard };
+    }
+
+    // Longest Common Subsequence dynamic programming table
+    const m = targetChars.length;
+    const n = heardChars.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (targetChars[i - 1] === heardChars[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+        } else {
+          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+        }
+      }
+    }
+
+    // Backtrack to identify aligned matching characters
+    const alignedTargetIndices = new Set();
+    let i = m, j = n;
+    while (i > 0 && j > 0) {
+      if (targetChars[i - 1] === heardChars[j - 1]) {
+        alignedTargetIndices.add(i - 1);
+        i--;
+        j--;
+      } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+        i--;
+      } else {
+        j--;
+      }
+    }
+
+    // Common Chinese homophones / near matches
+    const HOMOPHONE_SETS = [
+      ['在', '再'], ['做', '作', '坐', '座'], ['他', '她', '它'],
+      ['的', '得', '地'], ['以', '已'], ['向', '相'], ['只', '支'],
+      ['好', '号'], ['要', '药'], ['车', '彻'], ['直', '只']
+    ];
+
+    function isNearMatch(tc, hc) {
+      if (!tc || !hc) return false;
+      return HOMOPHONE_SETS.some(set => set.includes(tc) && set.includes(hc));
+    }
+
+    // Build word-by-word evaluation cards
+    let matchCount = 0;
+    let closeCount = 0;
+
+    const matches = targetChars.map((char, idx) => {
+      const pinyin = getCharacterPinyin(char, targetPinyin, idx);
+      if (alignedTargetIndices.has(idx)) {
+        matchCount++;
+        return { char, pinyin, status: 'match', heardChar: char };
+      }
+
+      // Check if character was near-match or spoken in approximate position
+      const heardChar = heardChars[idx] || '';
+      if (isNearMatch(char, heardChar)) {
+        closeCount++;
+        return { char, pinyin, status: 'close', heardChar };
+      }
+
+      return { char, pinyin, status: 'miss', heardChar };
+    });
+
+    const rawScore = Math.round(((matchCount * 1.0 + closeCount * 0.6) / targetChars.length) * 100);
+    const score = Math.max(0, Math.min(100, rawScore));
+
+    return {
+      score,
+      matches,
+      matchCount,
+      closeCount,
+      targetLength: targetChars.length,
+      cleanTarget,
+      cleanHeard
+    };
+  }
+
+  function evaluateAndRenderPronunciation(spokenText, sentence) {
+    if (!sentence) return;
+    const result = calculatePronunciationAccuracy(sentence.chinese, spokenText, sentence.pinyin);
+
+    // Save score in session map
+    const scoreKey = `${activePronunciationLesson ? activePronunciationLesson.id : 'lesson'}_${currentPronunciationIndex}`;
+    if (!pronunciationSessionScores[scoreKey] || result.score > pronunciationSessionScores[scoreKey]) {
+      pronunciationSessionScores[scoreKey] = result.score;
+    }
+
+    if (activePronunciationLesson && result.score >= 70) {
+      saveUserScore(activePronunciationLesson.id, 'pronunciation', result.score);
+    }
+
+    // Audio chime feedback
+    if (result.score >= 80) {
+      playSound('correct');
+    } else {
+      playSound('click');
+    }
+
+    renderPronunciationFeedback(result, sentence);
+    updatePronunciationNavDots();
+  }
+
+  function renderPronunciationFeedback(result, sentence) {
+    const feedbackBox = document.getElementById('pronFeedbackContainer');
+    if (!feedbackBox) return;
+
+    let scoreClass = 'score-needs-work';
+    let fillClass = 'fill-needs-work';
+    let titleMsg = '加油！Keep Practicing!';
+    let detailMsg = 'Listen to the native speaker and practice the highlighted red characters.';
+
+    if (result.score >= 90) {
+      scoreClass = 'score-excellent';
+      fillClass = 'fill-excellent';
+      titleMsg = '太棒了！Outstanding! 🌟';
+      detailMsg = 'Fluent, accurate tones with near-native Mandarin cadence!';
+    } else if (result.score >= 75) {
+      scoreClass = 'score-good';
+      fillClass = 'fill-good';
+      titleMsg = '很好！Very Good! 👍';
+      detailMsg = 'Clear articulation and strong rhythm. Minor adjustments on missed words.';
+    } else if (result.score >= 60) {
+      scoreClass = 'score-fair';
+      fillClass = 'fill-fair';
+      titleMsg = '不错！Good Effort! 💡';
+      detailMsg = 'Understandable phrasing. Pay close attention to tone inflections.';
+    }
+
+    // Character cards markup
+    const charCardsHtml = result.matches.map(m => {
+      let badgeLabel = '✓ Match';
+      if (m.status === 'close') badgeLabel = '~ Close';
+      if (m.status === 'miss') badgeLabel = '✗ Check';
+
+      return `
+        <div class="pron-char-card ${m.status}" title="Click to hear '${escapeHTML(m.char)}'" data-char="${escapeHTML(m.char)}">
+          <span class="pron-char-pinyin">${escapeHTML(m.pinyin || '')}</span>
+          <span class="pron-char-text chinese-kaiti">${escapeHTML(m.char)}</span>
+          <span class="pron-char-badge">${badgeLabel}</span>
+        </div>
+      `;
+    }).join('');
+
+    const isLastSentence = currentPronunciationIndex >= activePronunciationSentences.length - 1;
+
+    feedbackBox.innerHTML = `
+      <div class="pron-score-hero">
+        <div class="pron-score-pill-wrap">
+          <div class="pron-score-pill ${scoreClass}">
+            <span>${result.score}</span><span class="unit">%</span>
+          </div>
+          <div class="pron-score-details">
+            <h3>${titleMsg}</h3>
+            <p>${detailMsg}</p>
+          </div>
+        </div>
+        <div class="pron-audio-controls">
+          <button type="button" class="btn-pron-audio" id="btnPronListenTarget">
+            <span>🔊 Native Audio</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="pron-progress-meter" role="progressbar" aria-valuenow="${result.score}" aria-valuemin="0" aria-valuemax="100">
+        <div class="pron-progress-fill ${fillClass}" style="width: ${result.score}%;"></div>
+      </div>
+
+      <div class="pron-breakdown-heading">
+        <h4><span>🎯 Word-by-Word Pronunciation Accuracy:</span></h4>
+        <div class="pron-breakdown-legend">
+          <span class="pron-legend-item"><span class="pron-legend-dot green"></span> Match</span>
+          <span class="pron-legend-item"><span class="pron-legend-dot amber"></span> Near</span>
+          <span class="pron-legend-item"><span class="pron-legend-dot red"></span> Missed</span>
+        </div>
+      </div>
+
+      <div class="pron-char-cards-grid">
+        ${charCardsHtml}
+      </div>
+
+      <div class="pron-compare-box">
+        <div class="pron-compare-row">
+          <span class="pron-compare-label">Target Text:</span>
+          <span class="pron-compare-val chinese-kaiti" style="font-family: 'KaiTi', '楷体', serif; color: #ea580c;">${escapeHTML(sentence.chinese)}</span>
+        </div>
+        <div class="pron-compare-row">
+          <span class="pron-compare-label">Microphone Heard:</span>
+          <span class="pron-compare-val chinese-kaiti" style="font-family: 'KaiTi', '楷体', serif;">${escapeHTML(result.cleanHeard || '(No speech transcribed)')}</span>
+        </div>
+      </div>
+
+      <div class="pron-actions-row">
+        <button type="button" class="btn-pron-retry" id="btnPronRetry">
+          <span>↺ Try Again</span>
+        </button>
+        <button type="button" class="btn-pron-next" id="btnPronNextSentence">
+          <span>${isLastSentence ? '★ Finish Practice →' : 'Next Sentence →'}</span>
+        </button>
+      </div>
+    `;
+
+    feedbackBox.style.display = 'block';
+
+    // Hook listeners
+    feedbackBox.querySelectorAll('.pron-char-card').forEach(card => {
+      card.onclick = () => {
+        const char = card.dataset.char;
+        if (char) speakChinese(char);
+      };
+    });
+
+    const btnListen = document.getElementById('btnPronListenTarget');
+    if (btnListen) {
+      btnListen.onclick = () => speakChinese(sentence.chinese);
+    }
+
+    const btnRetry = document.getElementById('btnPronRetry');
+    if (btnRetry) {
+      btnRetry.onclick = () => {
+        feedbackBox.style.display = 'none';
+        togglePronunciationRecording(sentence);
+      };
+    }
+
+    const btnNext = document.getElementById('btnPronNextSentence');
+    if (btnNext) {
+      btnNext.onclick = () => {
+        if (!isLastSentence) {
+          switchPronunciationSentence(currentPronunciationIndex + 1);
+        } else {
+          switchPronunciationSentence(0);
+        }
+      };
+    }
+  }
+
+  function updatePronunciationNavDots() {
+    const pillsWrap = document.getElementById('pronNavPills');
+    if (!pillsWrap) return;
+
+    pillsWrap.querySelectorAll('.pron-dot-btn').forEach((btn, idx) => {
+      const scoreKey = `${activePronunciationLesson ? activePronunciationLesson.id : 'lesson'}_${idx}`;
+      const bestScore = pronunciationSessionScores[scoreKey];
+      btn.classList.toggle('active', idx === currentPronunciationIndex);
+      btn.classList.toggle('completed', bestScore !== undefined && bestScore >= 70);
+    });
+  }
+
+  function switchPronunciationSentence(index) {
+    if (!activePronunciationSentences || !activePronunciationSentences.length) return;
+    stopPronunciationRecording();
+
+    currentPronunciationIndex = Math.max(0, Math.min(activePronunciationSentences.length - 1, index));
+    renderCurrentPronunciationCard();
+  }
+
+  function renderCurrentPronunciationCard() {
+    const sentence = activePronunciationSentences[currentPronunciationIndex];
+    if (!sentence) return;
+
+    // Update Top Badges & Progress
+    const badgeStep = document.getElementById('pronBadgeStep');
+    if (badgeStep) {
+      badgeStep.textContent = `Sentence ${currentPronunciationIndex + 1} of ${activePronunciationSentences.length}`;
+    }
+
+    const topicBadge = document.getElementById('pronBadgeTopic');
+    if (topicBadge) {
+      topicBadge.textContent = sentence.focus || (activePronunciationLesson ? activePronunciationLesson.title : 'Mandarin Speech');
+    }
+
+    // Update Target Card Content
+    const pinyinEl = document.getElementById('pronTargetPinyin');
+    const chineseEl = document.getElementById('pronTargetChinese');
+    const meaningEl = document.getElementById('pronTargetMeaning');
+
+    if (pinyinEl) pinyinEl.textContent = sentence.pinyin || '';
+    if (chineseEl) chineseEl.textContent = sentence.chinese || '';
+    if (meaningEl) meaningEl.textContent = sentence.meaning ? `"${sentence.meaning}"` : '';
+
+    // Reset Mic UI & Hide Feedback from previous sentence
+    updatePronunciationMicUI(false);
+    const feedbackBox = document.getElementById('pronFeedbackContainer');
+    if (feedbackBox) feedbackBox.style.display = 'none';
+
+    updatePronunciationNavDots();
+
+    // Check if user already scored this sentence in current session
+    const scoreKey = `${activePronunciationLesson ? activePronunciationLesson.id : 'lesson'}_${currentPronunciationIndex}`;
+    const previousScore = pronunciationSessionScores[scoreKey];
+    if (previousScore !== undefined) {
+      // Re-evaluate with previous best transcript
+      const result = calculatePronunciationAccuracy(sentence.chinese, sentence.chinese, sentence.pinyin);
+      result.score = previousScore;
+      renderPronunciationFeedback(result, sentence);
+    }
+  }
+
+  // --- Main Pronunciation Section Renderer ---
+  function renderPronunciationSection(lesson) {
+    const panel = document.getElementById('panel-pronunciation');
+    if (!panel) return;
+
+    activePronunciationLesson = lesson;
+    activePronunciationSentences = getLessonPronunciationSentences(lesson);
+    currentPronunciationIndex = 0;
+
+    const sentences = activePronunciationSentences;
+    const currentSentence = sentences[0] || {
+      chinese: "早上好！今天天气真好。",
+      pinyin: "Zǎoshang hǎo! Jīntiān tiānqì zhēn hǎo.",
+      meaning: "Good morning! The weather is really nice today.",
+      focus: "Morning greetings"
+    };
+
+    const dotsHtml = sentences.map((_, idx) => `
+      <button type="button" class="pron-dot-btn ${idx === 0 ? 'active' : ''}" data-idx="${idx}" title="Sentence ${idx + 1}" aria-label="Sentence ${idx + 1}">
+        ${idx + 1}
+      </button>
+    `).join('');
+
+    panel.innerHTML = `
+      <div class="pronunciation-workspace">
+        <!-- Top Status Bar with Badges and Carousel Navigation -->
+        <div class="pron-top-bar">
+          <div class="pron-badges-wrap">
+            <span class="pron-badge-topic" id="pronBadgeTopic">
+              ${escapeHTML(currentSentence.focus || lesson.title)}
+            </span>
+            <span class="pron-badge-step" id="pronBadgeStep">
+              Sentence 1 of ${sentences.length}
+            </span>
+          </div>
+
+          <div class="pron-nav-pills" id="pronNavPills" role="tablist" aria-label="Sentence Carousel">
+            ${dotsHtml}
+          </div>
+        </div>
+
+        <!-- Target Sentence Showcase Card -->
+        <div class="pron-target-card">
+          <div class="pron-target-pinyin" id="pronTargetPinyin">
+            ${escapeHTML(currentSentence.pinyin)}
+          </div>
+          <div class="pron-target-chinese chinese-kaiti" id="pronTargetChinese" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">
+            ${escapeHTML(currentSentence.chinese)}
+          </div>
+          <div class="pron-target-meaning" id="pronTargetMeaning">
+            "${escapeHTML(currentSentence.meaning)}"
+          </div>
+
+          <!-- Native Audio Reference Player -->
+          <div class="pron-audio-controls">
+            <button type="button" class="btn-pron-audio" id="btnPronListenNormal">
+              <span>🔊 Listen Native (1.0x)</span>
+            </button>
+            <button type="button" class="btn-pron-audio" id="btnPronListenSlow">
+              <span>🐢 Slow Speed (0.6x)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Microphone Interactive Console -->
+        <div class="pron-mic-console" id="pronMicConsole">
+          <div class="pron-mic-btn-wrap">
+            <div class="pron-mic-pulse-ring"></div>
+            <button type="button" class="pron-mic-btn" id="btnPronRecord" title="Click to Read Aloud" aria-label="Start recording pronunciation">
+              🎙️
+            </button>
+          </div>
+
+          <div class="pron-mic-status-text" id="pronMicStatusText">
+            🎙️ Click to Read Aloud
+          </div>
+
+          <p class="pron-mic-hint">
+            Press the mic, read the Chinese sentence above clearly into your device, and get instant word-by-word visual accuracy feedback.
+          </p>
+
+          <!-- Sound Wave Animation Bars -->
+          <div class="pron-sound-wave-bars" id="pronSoundWaveBars">
+            <div class="pron-wave-bar"></div>
+            <div class="pron-wave-bar"></div>
+            <div class="pron-wave-bar"></div>
+            <div class="pron-wave-bar"></div>
+            <div class="pron-wave-bar"></div>
+          </div>
+
+          <!-- Live Interim Transcript Preview -->
+          <div class="pron-interim-box" id="pronInterimBox">
+            <span id="pronInterimText">Listening... Speak in Mandarin now</span>
+          </div>
+        </div>
+
+        <!-- Visual Word-by-Word Feedback Card -->
+        <div class="pron-feedback-container" id="pronFeedbackContainer"></div>
+
+        <!-- Manual Evaluation Fallback for Browsers / Environments -->
+        <div class="pron-manual-test-wrap">
+          <span>💡 Or test feedback by typing what was said:</span>
+          <form class="pron-manual-form" id="pronManualForm">
+            <input type="text" class="pron-manual-input" id="pronManualInput" placeholder="e.g. 早上好天气好" value="" />
+            <button type="submit" class="btn-pron-evaluate">Evaluate</button>
+          </form>
+        </div>
+      </div>
+    `;
+
+    // Hook Carousel Dots
+    panel.querySelectorAll('.pron-dot-btn').forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.idx, 10);
+        switchPronunciationSentence(idx);
+      };
+    });
+
+    // Hook Audio Buttons
+    const btnNormal = document.getElementById('btnPronListenNormal');
+    if (btnNormal) {
+      btnNormal.onclick = () => {
+        const sentence = activePronunciationSentences[currentPronunciationIndex];
+        if (sentence && sentence.chinese) speakChinese(sentence.chinese);
+      };
+    }
+
+    const btnSlow = document.getElementById('btnPronListenSlow');
+    if (btnSlow) {
+      btnSlow.onclick = () => {
+        const sentence = activePronunciationSentences[currentPronunciationIndex];
+        if (sentence && sentence.chinese) {
+          if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+            const utt = new SpeechSynthesisUtterance(sentence.chinese);
+            utt.lang = 'zh-CN';
+            utt.rate = 0.6;
+            window.speechSynthesis.speak(utt);
+          }
+        }
+      };
+    }
+
+    // Hook Mic Button
+    const btnRecord = document.getElementById('btnPronRecord');
+    if (btnRecord) {
+      btnRecord.onclick = () => {
+        const sentence = activePronunciationSentences[currentPronunciationIndex];
+        togglePronunciationRecording(sentence);
+      };
+    }
+
+    // Hook Manual Form
+    const manualForm = document.getElementById('pronManualForm');
+    if (manualForm) {
+      manualForm.onsubmit = (e) => {
+        e.preventDefault();
+        const input = document.getElementById('pronManualInput');
+        if (input && input.value.trim()) {
+          const sentence = activePronunciationSentences[currentPronunciationIndex];
+          evaluateAndRenderPronunciation(input.value.trim(), sentence);
+        }
+      };
     }
   }
 
