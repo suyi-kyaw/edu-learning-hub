@@ -1,6 +1,6 @@
 {
-  "summary": "Implemented Web Speech API Pronunciation Check feature with dedicated workspace tab, interactive microphone speech recognition in Mandarin (zh-CN), sentence carousel navigation, word-by-word visual highlight cards (green/amber/red), accuracy percentage scores, native audio playback, and dark theme support.",
-  "updatedAt": "2026-10-14T05:05:08.021275298Z",
+  "summary": "Added bottom Next navigation action bars to Video Lesson and Writing & Stroke Order tabs. Fixed text layout and card overflow issues in Writing Stroke and Pronunciation Check workspaces with robust word breaking, flex wrapping, and responsive sizing.",
+  "updatedAt": "2026-10-14T06:04:03.801104933Z",
   "requestFeedback": true,
   "userFacing": true
 }

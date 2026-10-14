@@ -779,12 +779,30 @@
     }
 
     document.querySelectorAll('.workspace-tab-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === tabName);
+      const isActive = b.dataset.tab === tabName;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      if (isActive) {
+        try {
+          b.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        } catch (_) {}
+      }
     });
 
     document.querySelectorAll('.workspace-panel').forEach(p => {
       p.classList.toggle('active', p.id === `panel-${tabName}`);
     });
+
+    // If tabs bar is docked sticky at top while scrolling, smoothly reposition viewport to section top
+    const tabsBar = document.querySelector('.workspace-tabs-bar');
+    if (tabsBar) {
+      const rect = tabsBar.getBoundingClientRect();
+      const stickyOffset = window.innerWidth <= 768 ? 66 : 74;
+      if (rect.top <= stickyOffset + 4) {
+        const targetScroll = window.pageYOffset + rect.top - stickyOffset;
+        window.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+      }
+    }
 
     // If writing tab is opened, initialize canvas and writing section
     if (tabName === 'writing' && activeLesson) {
@@ -857,6 +875,12 @@
             `}
           </div>
         </div>
+
+        <div class="video-bottom-nav-bar" style="display: flex; justify-content: flex-end; margin-top: 32px;">
+          <button type="button" class="btn btn-primary btn-lg" id="btnBottomNextToExercises">
+            Continue to Practice Exercises ✏️ →
+          </button>
+        </div>
       </div>
     `;
 
@@ -885,6 +909,11 @@
     const nextQuizBtn = document.getElementById('btnNextToQuiz');
     if (nextQuizBtn) {
       nextQuizBtn.onclick = () => switchWorkspaceTab('exercises');
+    }
+
+    const bottomNextQuizBtn = document.getElementById('btnBottomNextToExercises');
+    if (bottomNextQuizBtn) {
+      bottomNextQuizBtn.onclick = () => switchWorkspaceTab('exercises');
     }
   }
 
@@ -1335,6 +1364,12 @@
             </div>
           </div>
         </div>
+
+        <div class="writing-bottom-nav-bar" style="display: flex; justify-content: flex-end; margin-top: 32px;">
+          <button type="button" class="btn btn-primary btn-lg" id="btnBottomNextToPronunciation">
+            Go to Pronunciation Check 🎤 →
+          </button>
+        </div>
       </div>
     `;
 
@@ -1394,6 +1429,11 @@
     const gradeBtn = document.getElementById('btnGradeWriting');
     if (gradeBtn) {
       gradeBtn.onclick = () => openPracticeResultModal(currentChar, lesson, chars);
+    }
+
+    const bottomNextPronBtn = document.getElementById('btnBottomNextToPronunciation');
+    if (bottomNextPronBtn) {
+      bottomNextPronBtn.onclick = () => switchWorkspaceTab('pronunciation');
     }
 
     initWritingCanvas(currentChar, lesson, chars);
