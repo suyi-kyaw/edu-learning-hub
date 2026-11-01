@@ -1,6 +1,6 @@
 {
-  "summary":  "Completed implementation for pronunciation evaluation on stop and resetting previous results on retry.",
-  "updatedAt":  "2026-11-01T04:18:55.594574565Z",
+  "summary":  "Completed implementation of Chinese number normalization for the Pronunciation Check workspace.",
+  "updatedAt":  "2026-11-01T10:37:24.178678053Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

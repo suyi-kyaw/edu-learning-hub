@@ -2879,6 +2879,70 @@
     }
   }
 
+  // Converts Arabic numerals and percentages into Chinese characters
+  function normalizeChineseNumbers(text, targetText) {
+    if (!text || typeof text !== 'string') return '';
+    let result = text;
+
+    const DIGIT_MAP = {
+      '0': '零', '1': '一', '2': '二', '3': '三', '4': '四',
+      '5': '五', '6': '六', '7': '七', '8': '八', '9': '九',
+      '０': '零', '１': '一', '２': '二', '３': '三', '４': '四',
+      '５': '五', '６': '六', '７': '七', '８': '八', '９': '九'
+    };
+
+    function integerToChinese(num) {
+      const n = parseInt(num, 10);
+      if (isNaN(n)) return '';
+      if (n === 0) return '零';
+      if (n <= 10) return ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][n];
+      if (n < 20) return '十' + (n % 10 !== 0 ? ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'][n % 10] : '');
+      if (n < 100) {
+        const tens = Math.floor(n / 10);
+        const ones = n % 10;
+        return DIGIT_MAP[tens] + '十' + (ones !== 0 ? DIGIT_MAP[ones] : '');
+      }
+      if (n < 1000) {
+        const hundreds = Math.floor(n / 100);
+        const remainder = n % 100;
+        let str = DIGIT_MAP[hundreds] + '百';
+        if (remainder === 0) return str;
+        if (remainder < 10) return str + '零' + DIGIT_MAP[remainder];
+        const tens = Math.floor(remainder / 10);
+        const ones = remainder % 10;
+        return str + DIGIT_MAP[tens] + '十' + (ones !== 0 ? DIGIT_MAP[ones] : '');
+      }
+      return String(num).split('').map(d => DIGIT_MAP[d] || d).join('');
+    }
+
+    // 1. Handle percentages: e.g. 5% or %5 or 百分之 5
+    result = result.replace(/(\d+(?:\.\d+)?)\s*%/g, (_, num) => {
+      return '百分之' + (num.includes('.') 
+        ? num.split('.').map(p => integerToChinese(p)).join('点') 
+        : integerToChinese(num));
+    });
+    result = result.replace(/%\s*(\d+(?:\.\d+)?)/g, (_, num) => {
+      return '百分之' + (num.includes('.') 
+        ? num.split('.').map(p => integerToChinese(p)).join('点') 
+        : integerToChinese(num));
+    });
+
+    // 2. Remove hyphens/dashes or spaces between digits (e.g. 138-0012 -> 1380012)
+    result = result.replace(/(?<=[0-9０-９])[-–—\s]+(?=[0-9０-９])/g, '');
+
+    // 3. Check if target text uses compound numbers or individual digits
+    const targetHasCompound = targetText && /[十百千万]/.test(targetText);
+    const targetHasDigits = targetText && /[零一二三四五六七八九]/.test(targetText);
+
+    if (targetHasCompound && !targetHasDigits) {
+      result = result.replace(/\b(\d+)\b/g, (_, num) => integerToChinese(num));
+    } else {
+      result = result.replace(/[0-9０-９]/g, (char) => DIGIT_MAP[char] || char);
+    }
+
+    return result;
+  }
+
   function updatePronunciationMicUI(recording) {
     const consoleEl = document.getElementById('pronMicConsole');
     const statusText = document.getElementById('pronMicStatusText');
@@ -2900,7 +2964,9 @@
     if (interimBox) {
       interimBox.style.display = recording ? 'inline-block' : 'none';
       if (recording && interimText) {
-        const currentDisplay = (accumulatedPronunciationTranscript + (latestPronunciationInterim ? ' ' + latestPronunciationInterim : '')).trim();
+        const rawDisplay = (accumulatedPronunciationTranscript + (latestPronunciationInterim ? ' ' + latestPronunciationInterim : '')).trim();
+        const targetStr = activePronunciationSentence ? activePronunciationSentence.chinese : '';
+        const currentDisplay = normalizeChineseNumbers(rawDisplay, targetStr);
         interimText.textContent = currentDisplay
           ? `Listening: "${currentDisplay}" (Click mic when done)`
           : 'Listening... Speak in Mandarin now (Click mic when done)';
@@ -2936,7 +3002,9 @@
         latestPronunciationInterim = interim;
         const interimText = document.getElementById('pronInterimText');
         if (interimText) {
-          const display = (accumulatedPronunciationTranscript + (interim ? ' ' + interim : '')).trim();
+          const rawDisplay = (accumulatedPronunciationTranscript + (interim ? ' ' + interim : '')).trim();
+          const targetStr = activePronunciationSentence ? activePronunciationSentence.chinese : '';
+          const display = normalizeChineseNumbers(rawDisplay, targetStr);
           interimText.textContent = display
             ? `Listening: "${display}" (Click mic when done)`
             : 'Listening... Speak in Mandarin now (Click mic when done)';
@@ -3023,9 +3091,12 @@
 
   // Word-by-word sequence alignment and pronunciation scoring
   function calculatePronunciationAccuracy(targetText, heardText, targetPinyin) {
+    // Normalize spoken numbers and digits into standard Chinese characters
+    const normalizedHeard = normalizeChineseNumbers(heardText, targetText);
+
     // Strip non-Hanzi and punctuation symbols for clean alignment
     const cleanTarget = (targetText || '').replace(/[\s\p{P}\p{S}]/gu, '');
-    const cleanHeard = (heardText || '').replace(/[\s\p{P}\p{S}]/gu, '');
+    const cleanHeard = (normalizedHeard || '').replace(/[\s\p{P}\p{S}]/gu, '');
 
     const targetChars = Array.from(cleanTarget);
     const heardChars = Array.from(cleanHeard);
@@ -3044,6 +3115,16 @@
       return { score: 0, matches, matchCount: 0, targetLength: targetChars.length, cleanTarget, cleanHeard };
     }
 
+    // Equivalent characters (e.g. 幺 for 一 in phone numbers, 两 for 二, 〇 for 零)
+    function areCharsEquivalent(tc, hc) {
+      if (!tc || !hc) return false;
+      if (tc === hc) return true;
+      if ((tc === '一' && hc === '幺') || (tc === '幺' && hc === '一')) return true;
+      if ((tc === '二' && hc === '两') || (tc === '两' && hc === '二')) return true;
+      if ((tc === '零' && hc === '〇') || (tc === '〇' && hc === '零')) return true;
+      return false;
+    }
+
     // Longest Common Subsequence dynamic programming table
     const m = targetChars.length;
     const n = heardChars.length;
@@ -3051,7 +3132,7 @@
 
     for (let i = 1; i <= m; i++) {
       for (let j = 1; j <= n; j++) {
-        if (targetChars[i - 1] === heardChars[j - 1]) {
+        if (areCharsEquivalent(targetChars[i - 1], heardChars[j - 1])) {
           dp[i][j] = dp[i - 1][j - 1] + 1;
         } else {
           dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
@@ -3063,7 +3144,7 @@
     const alignedTargetIndices = new Set();
     let i = m, j = n;
     while (i > 0 && j > 0) {
-      if (targetChars[i - 1] === heardChars[j - 1]) {
+      if (areCharsEquivalent(targetChars[i - 1], heardChars[j - 1])) {
         alignedTargetIndices.add(i - 1);
         i--;
         j--;
@@ -3078,7 +3159,8 @@
     const HOMOPHONE_SETS = [
       ['在', '再'], ['做', '作', '坐', '座'], ['他', '她', '它'],
       ['的', '得', '地'], ['以', '已'], ['向', '相'], ['只', '支'],
-      ['好', '号'], ['要', '药'], ['车', '彻'], ['直', '只']
+      ['好', '号'], ['要', '药'], ['车', '彻'], ['直', '只'],
+      ['一', '幺'], ['二', '两'], ['零', '〇']
     ];
 
     function isNearMatch(tc, hc) {
