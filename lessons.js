@@ -2726,6 +2726,7 @@
   let activeSpeechRecognition = null;
   let isPronunciationRecording = false;
   let accumulatedPronunciationTranscript = '';
+  let latestPronunciationInterim = '';
   let activePronunciationSentence = null;
   let userManuallyStoppedRecording = false;
   let pronunciationSessionScores = {};
@@ -2817,28 +2818,63 @@
     userManuallyStoppedRecording = true;
     isPronunciationRecording = false;
 
-    if (activeSpeechRecognition) {
+    const recToStop = activeSpeechRecognition;
+    activeSpeechRecognition = null;
+
+    // Capture combined transcript from both accumulated final chunks and active interim speech
+    let finalTranscript = (accumulatedPronunciationTranscript + (latestPronunciationInterim ? ' ' + latestPronunciationInterim : '')).trim();
+
+    if (recToStop) {
       try {
-        activeSpeechRecognition.onend = null;
-        activeSpeechRecognition.onerror = null;
-        activeSpeechRecognition.onresult = null;
-        activeSpeechRecognition.onspeechend = null;
-        activeSpeechRecognition.stop();
+        // If finalTranscript is currently empty and evaluation is requested,
+        // attach a flush listener so trailing speech buffer processed by stop() is not lost
+        if (!finalTranscript && shouldEvaluate) {
+          recToStop.onresult = (evt) => {
+            let flushText = '';
+            for (let i = evt.resultIndex; i < evt.results.length; ++i) {
+              const trans = evt.results[i][0]?.transcript || '';
+              if (trans) flushText += trans;
+            }
+            if (flushText) {
+              finalTranscript = (finalTranscript + ' ' + flushText).trim();
+            }
+          };
+        } else {
+          recToStop.onresult = null;
+        }
+        recToStop.onend = null;
+        recToStop.onerror = null;
+        recToStop.onspeechend = null;
+        recToStop.stop();
       } catch (e) {}
-      activeSpeechRecognition = null;
     }
 
     updatePronunciationMicUI(false);
 
     if (shouldEvaluate && activePronunciationSentence) {
-      const finalTranscript = (accumulatedPronunciationTranscript || '').trim();
-      if (finalTranscript) {
-        evaluateAndRenderPronunciation(finalTranscript, activePronunciationSentence);
-      } else {
-        const hintEl = document.getElementById('pronMicStatusText');
-        if (hintEl) {
-          hintEl.textContent = '⚠️ No speech detected. Click the mic to try reading aloud again!';
+      const sentenceToEval = activePronunciationSentence;
+      const executeEvaluation = (transcript) => {
+        const cleaned = (transcript || '').trim();
+        if (cleaned) {
+          evaluateAndRenderPronunciation(cleaned, sentenceToEval);
+        } else {
+          const hintEl = document.getElementById('pronMicStatusText');
+          if (hintEl) {
+            hintEl.textContent = '⚠️ No speech detected. Click the mic to try reading aloud again!';
+          }
         }
+      };
+
+      if (finalTranscript) {
+        executeEvaluation(finalTranscript);
+      } else {
+        const statusText = document.getElementById('pronMicStatusText');
+        if (statusText) {
+          statusText.innerHTML = '⏳ Evaluating pronunciation...';
+        }
+        setTimeout(() => {
+          executeEvaluation(finalTranscript);
+        }, 250);
       }
     }
   }
@@ -2864,7 +2900,7 @@
     if (interimBox) {
       interimBox.style.display = recording ? 'inline-block' : 'none';
       if (recording && interimText) {
-        const currentDisplay = (accumulatedPronunciationTranscript || '').trim();
+        const currentDisplay = (accumulatedPronunciationTranscript + (latestPronunciationInterim ? ' ' + latestPronunciationInterim : '')).trim();
         interimText.textContent = currentDisplay
           ? `Listening: "${currentDisplay}" (Click mic when done)`
           : 'Listening... Speak in Mandarin now (Click mic when done)';
@@ -2897,6 +2933,7 @@
             interim += trans;
           }
         }
+        latestPronunciationInterim = interim;
         const interimText = document.getElementById('pronInterimText');
         if (interimText) {
           const display = (accumulatedPronunciationTranscript + (interim ? ' ' + interim : '')).trim();
@@ -2966,9 +3003,17 @@
       return;
     }
 
+    // Immediately hide and clear previous feedback card on retry or new recording
+    const feedbackBox = document.getElementById('pronFeedbackContainer');
+    if (feedbackBox) {
+      feedbackBox.style.display = 'none';
+      feedbackBox.innerHTML = '';
+    }
+
     // Initialize recording session
     activePronunciationSentence = currentSentence;
     accumulatedPronunciationTranscript = '';
+    latestPronunciationInterim = '';
     userManuallyStoppedRecording = false;
     isPronunciationRecording = true;
     updatePronunciationMicUI(true);
@@ -3219,6 +3264,7 @@
     if (btnRetry) {
       btnRetry.onclick = () => {
         feedbackBox.style.display = 'none';
+        feedbackBox.innerHTML = '';
         togglePronunciationRecording(sentence);
       };
     }

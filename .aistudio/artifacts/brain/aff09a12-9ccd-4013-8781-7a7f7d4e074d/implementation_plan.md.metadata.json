@@ -1,6 +1,6 @@
 {
-  "summary":  "Updated speech recognition in the Pronunciation Check tab to continuous manual toggle control. Removed system auto-stop on pauses, added persistent transcript accumulation with auto-reconnect resilience, and updated the UI so the microphone button pulses red with 'Click to Finish & Check Score' until the user explicitly clicks it again.",
-  "updatedAt":  "2026-11-01T03:49:15.050120710Z",
+  "summary":  "Completed implementation for pronunciation evaluation on stop and resetting previous results on retry.",
+  "updatedAt":  "2026-11-01T04:18:55.594574565Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
