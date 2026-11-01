@@ -1,6 +1,6 @@
 {
-  "summary": "Implemented auto smooth-scroll to top of sections when clicking next in both lesson workspaces and story pages, with proper header offsets.",
-  "updatedAt": "2026-10-14T06:11:26.740778159Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "Updated speech recognition in the Pronunciation Check tab to continuous manual toggle control. Removed system auto-stop on pauses, added persistent transcript accumulation with auto-reconnect resilience, and updated the UI so the microphone button pulses red with 'Click to Finish & Check Score' until the user explicitly clicks it again.",
+  "updatedAt":  "2026-11-01T03:49:15.050120710Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }

@@ -10141,10 +10141,20 @@ a {
   font-weight: 700;
   color: #1e293b;
   margin-bottom: 6px;
+  transition: color 0.2s ease;
 }
 
 [data-theme="dark"] .pron-mic-status-text {
   color: #f1f5f9;
+}
+
+.is-recording .pron-mic-status-text {
+  color: #dc2626;
+  font-weight: 800;
+}
+
+[data-theme="dark"] .is-recording .pron-mic-status-text {
+  color: #f87171;
 }
 
 .pron-mic-hint {

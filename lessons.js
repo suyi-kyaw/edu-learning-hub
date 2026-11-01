@@ -793,11 +793,11 @@
       p.classList.toggle('active', p.id === `panel-${tabName}`);
     });
 
-    // Smooth scroll to top of lesson workspace container with sticky offset so section is fully in view
-    const workspaceEl = document.getElementById('lessonWorkspace');
-    if (workspaceEl) {
-      const rect = workspaceEl.getBoundingClientRect();
-      const stickyOffset = window.innerWidth <= 768 ? 120 : 135;
+    // Smooth scroll to the workspace tabs bar (practice exercise menu header) with sticky offset
+    const tabsBarEl = document.querySelector('.workspace-tabs-bar');
+    if (tabsBarEl) {
+      const rect = tabsBarEl.getBoundingClientRect();
+      const stickyOffset = window.innerWidth <= 768 ? 72 : 82;
       const targetScroll = window.pageYOffset + rect.top - stickyOffset;
       window.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
     }
@@ -2725,6 +2725,9 @@
   let currentPronunciationIndex = 0;
   let activeSpeechRecognition = null;
   let isPronunciationRecording = false;
+  let accumulatedPronunciationTranscript = '';
+  let activePronunciationSentence = null;
+  let userManuallyStoppedRecording = false;
   let pronunciationSessionScores = {};
 
   // Standard character to Pinyin dictionary lookup
@@ -2810,40 +2813,147 @@
     return fallbackList;
   }
 
-  function stopPronunciationRecording() {
+  function stopPronunciationRecording(shouldEvaluate = false) {
+    userManuallyStoppedRecording = true;
+    isPronunciationRecording = false;
+
     if (activeSpeechRecognition) {
       try {
         activeSpeechRecognition.onend = null;
         activeSpeechRecognition.onerror = null;
         activeSpeechRecognition.onresult = null;
+        activeSpeechRecognition.onspeechend = null;
         activeSpeechRecognition.stop();
       } catch (e) {}
       activeSpeechRecognition = null;
     }
-    isPronunciationRecording = false;
+
     updatePronunciationMicUI(false);
+
+    if (shouldEvaluate && activePronunciationSentence) {
+      const finalTranscript = (accumulatedPronunciationTranscript || '').trim();
+      if (finalTranscript) {
+        evaluateAndRenderPronunciation(finalTranscript, activePronunciationSentence);
+      } else {
+        const hintEl = document.getElementById('pronMicStatusText');
+        if (hintEl) {
+          hintEl.textContent = '⚠️ No speech detected. Click the mic to try reading aloud again!';
+        }
+      }
+    }
   }
 
   function updatePronunciationMicUI(recording) {
     const consoleEl = document.getElementById('pronMicConsole');
     const statusText = document.getElementById('pronMicStatusText');
+    const micBtn = document.getElementById('btnPronRecord');
     const interimBox = document.getElementById('pronInterimBox');
+    const interimText = document.getElementById('pronInterimText');
 
     if (consoleEl) {
       consoleEl.classList.toggle('is-recording', recording);
     }
-    if (statusText) {
-      statusText.textContent = recording ? '🔴 Listening... Speak clearly in Mandarin!' : '🎙️ Click to Read Aloud';
+    if (micBtn) {
+      micBtn.setAttribute('title', recording ? 'Click to finish & check score' : 'Click to Read Aloud');
+      micBtn.setAttribute('aria-label', recording ? 'Finish recording and evaluate pronunciation' : 'Start recording pronunciation');
+      micBtn.innerHTML = recording ? '⏹️' : '🎙️';
     }
-    if (interimBox && !recording) {
-      interimBox.style.display = 'none';
+    if (statusText) {
+      statusText.innerHTML = recording ? '🔴 Listening... Click to Finish &amp; Check Score' : '🎙️ Click to Read Aloud';
+    }
+    if (interimBox) {
+      interimBox.style.display = recording ? 'inline-block' : 'none';
+      if (recording && interimText) {
+        const currentDisplay = (accumulatedPronunciationTranscript || '').trim();
+        interimText.textContent = currentDisplay
+          ? `Listening: "${currentDisplay}" (Click mic when done)`
+          : 'Listening... Speak in Mandarin now (Click mic when done)';
+      }
     }
   }
 
-  // Pure Client-side Speech Recognition with zh-CN
+  function startSpeechRecognitionSession() {
+    if (!isPronunciationRecording || userManuallyStoppedRecording) return;
+    const SpeechRecClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecClass) return;
+
+    try {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      const rec = new SpeechRecClass();
+      rec.lang = 'zh-CN';
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.maxAlternatives = 3;
+
+      activeSpeechRecognition = rec;
+
+      rec.onresult = (evt) => {
+        let interim = '';
+        for (let i = evt.resultIndex; i < evt.results.length; ++i) {
+          const trans = evt.results[i][0].transcript || '';
+          if (evt.results[i].isFinal) {
+            accumulatedPronunciationTranscript += trans;
+          } else {
+            interim += trans;
+          }
+        }
+        const interimText = document.getElementById('pronInterimText');
+        if (interimText) {
+          const display = (accumulatedPronunciationTranscript + (interim ? ' ' + interim : '')).trim();
+          interimText.textContent = display
+            ? `Listening: "${display}" (Click mic when done)`
+            : 'Listening... Speak in Mandarin now (Click mic when done)';
+        }
+      };
+
+      rec.onerror = (evt) => {
+        // 'no-speech' is common when pausing - do NOT abort if user is still recording!
+        if (evt.error === 'no-speech') {
+          return;
+        }
+        console.warn('Speech recognition notice:', evt.error);
+        if (evt.error === 'not-allowed') {
+          stopPronunciationRecording(false);
+          const hintEl = document.getElementById('pronMicStatusText');
+          if (hintEl) {
+            hintEl.textContent = '⚠️ Microphone permission denied. Please allow mic in browser settings.';
+          }
+        }
+      };
+
+      // Ensure browser engine does not stop automatically on pauses
+      rec.onspeechend = null;
+
+      rec.onend = () => {
+        // If user hasn't clicked stop and recording is still marked active,
+        // automatically restart the session so pauses never stop the recording!
+        if (isPronunciationRecording && !userManuallyStoppedRecording) {
+          setTimeout(() => {
+            if (isPronunciationRecording && !userManuallyStoppedRecording) {
+              startSpeechRecognitionSession();
+            }
+          }, 100);
+        }
+      };
+
+      rec.start();
+    } catch (err) {
+      console.warn("Speech recognition session start error:", err);
+      if (isPronunciationRecording && !userManuallyStoppedRecording) {
+        setTimeout(() => {
+          if (isPronunciationRecording && !userManuallyStoppedRecording) {
+            startSpeechRecognitionSession();
+          }
+        }, 300);
+      }
+    }
+  }
+
+  // Pure Client-side Speech Recognition with zh-CN - Manual Toggle Control
   function togglePronunciationRecording(currentSentence) {
     if (isPronunciationRecording) {
-      stopPronunciationRecording();
+      // User clicked again to finish speaking and evaluate!
+      stopPronunciationRecording(true);
       return;
     }
 
@@ -2856,72 +2966,14 @@
       return;
     }
 
-    try {
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-      const rec = new SpeechRecClass();
-      rec.lang = 'zh-CN';
-      rec.continuous = false;
-      rec.interimResults = true;
-      rec.maxAlternatives = 3;
+    // Initialize recording session
+    activePronunciationSentence = currentSentence;
+    accumulatedPronunciationTranscript = '';
+    userManuallyStoppedRecording = false;
+    isPronunciationRecording = true;
+    updatePronunciationMicUI(true);
 
-      let finalTranscript = '';
-      activeSpeechRecognition = rec;
-      isPronunciationRecording = true;
-      updatePronunciationMicUI(true);
-
-      const interimBox = document.getElementById('pronInterimBox');
-      const interimText = document.getElementById('pronInterimText');
-      if (interimBox) interimBox.style.display = 'inline-block';
-      if (interimText) interimText.textContent = 'Listening... Speak in Mandarin now';
-
-      rec.onresult = (evt) => {
-        let interim = '';
-        for (let i = evt.resultIndex; i < evt.results.length; ++i) {
-          if (evt.results[i].isFinal) {
-            finalTranscript += evt.results[i][0].transcript;
-          } else {
-            interim += evt.results[i][0].transcript;
-          }
-        }
-        if (interimText) {
-          const display = (finalTranscript || interim).trim();
-          interimText.textContent = display ? `Listening: "${display}"` : 'Listening... Speak in Mandarin now';
-        }
-      };
-
-      rec.onerror = (evt) => {
-        console.warn('Speech recognition error:', evt.error);
-        stopPronunciationRecording();
-        const hintEl = document.getElementById('pronMicStatusText');
-        if (hintEl) {
-          if (evt.error === 'not-allowed') {
-            hintEl.textContent = '⚠️ Microphone permission denied. Please allow mic in browser settings.';
-          } else if (evt.error === 'no-speech') {
-            hintEl.textContent = '⚠️ No speech detected. Click the mic and read the phrase again.';
-          } else {
-            hintEl.textContent = `Speech Notice: ${evt.error}. Click mic to retry.`;
-          }
-        }
-      };
-
-      rec.onspeechend = () => {
-        try { rec.stop(); } catch (e) {}
-      };
-
-      rec.onend = () => {
-        isPronunciationRecording = false;
-        activeSpeechRecognition = null;
-        updatePronunciationMicUI(false);
-        if (finalTranscript.trim()) {
-          evaluateAndRenderPronunciation(finalTranscript, currentSentence);
-        }
-      };
-
-      rec.start();
-    } catch (err) {
-      console.warn("Failed to initialize speech recognition:", err);
-      stopPronunciationRecording();
-    }
+    startSpeechRecognitionSession();
   }
 
   // Word-by-word sequence alignment and pronunciation scoring
@@ -3323,7 +3375,7 @@
           </div>
 
           <p class="pron-mic-hint">
-            Press the mic, read the Chinese sentence above clearly into your device, and get instant word-by-word visual accuracy feedback.
+            Press the mic, read at your own pace, and click the mic again when finished to check your score.
           </p>
 
           <!-- Sound Wave Animation Bars -->
