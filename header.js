@@ -30,12 +30,27 @@
 
   function updateThemeButtonUI(theme) {
     const isDark = theme === 'dark';
-    const buttons = document.querySelectorAll('#themeToggleBtn, .theme-toggle-btn');
+    const buttons = document.querySelectorAll('#themeToggleBtn, #mobileThemeToggleBtn, .theme-toggle-btn');
     buttons.forEach(btn => {
       btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
-      btn.setAttribute('title', isDark ? 'Switch to light mode' : 'Switch to dark mode for late-night learning sessions');
+      btn.setAttribute('title', isDark ? 'Switch to light mode (Press to toggle)' : 'Switch to dark mode (Press to toggle)');
+      btn.setAttribute('aria-checked', isDark ? 'true' : 'false');
       btn.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+      const srText = btn.querySelector('.sr-only');
+      if (srText) {
+        srText.textContent = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+      }
     });
+
+    const mobileStatus = document.getElementById('mobileThemeStatusText');
+    if (mobileStatus) {
+      mobileStatus.textContent = isDark ? 'Dark Mode (Active)' : 'Light Mode (Active)';
+    }
+
+    const liveRegion = document.getElementById('themeLiveRegion');
+    if (liveRegion) {
+      liveRegion.textContent = isDark ? 'Dark mode enabled' : 'Light mode enabled';
+    }
   }
 
   function applyTheme(theme, save = true) {
@@ -53,6 +68,15 @@
     const next = current === 'dark' ? 'light' : 'dark';
     applyTheme(next, true);
   }
+
+  // Cross-tab theme synchronization
+  window.addEventListener('storage', function (e) {
+    if (e.key === 'linguapath_theme' || e.key === 'theme') {
+      if (e.newValue === 'dark' || e.newValue === 'light') {
+        applyTheme(e.newValue, false);
+      }
+    }
+  });
 
   // Expose global theme functions
   window.toggleLinguaTheme = toggleTheme;
@@ -214,11 +238,14 @@
           type="button"
           class="theme-toggle-btn"
           id="themeToggleBtn"
-          aria-label="Toggle dark mode"
-          title="Toggle light / dark mode for late-night learning sessions"
+          role="switch"
+          aria-checked="false"
+          aria-label="Switch to dark mode"
+          title="Switch to dark mode (Press to toggle)"
         >
           <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
           <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
+          <span class="sr-only" id="themeToggleSrText">Switch to dark mode</span>
         </button>
 
         <button
@@ -273,6 +300,30 @@
       <div class="hide-menu-divider" aria-hidden="true"></div>
 
       <div class="hide-menu-tools">
+        <div class="hide-menu-section-label">Appearance</div>
+        <div class="hide-menu-theme-row">
+          <div class="hide-menu-theme-info">
+            <span class="hide-menu-theme-icon" aria-hidden="true">🎨</span>
+            <div class="hide-menu-theme-text">
+              <strong class="hide-menu-theme-title">Theme Mode</strong>
+              <span class="hide-menu-theme-status" id="mobileThemeStatusText">Light Mode (Active)</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="theme-toggle-btn mobile-theme-toggle-btn"
+            id="mobileThemeToggleBtn"
+            role="switch"
+            aria-checked="false"
+            aria-label="Switch to dark mode"
+            title="Switch to dark mode (Press to toggle)"
+          >
+            <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+            <span class="theme-icon theme-icon-sun" aria-hidden="true">☀️</span>
+            <span class="sr-only">Switch to dark mode</span>
+          </button>
+        </div>
+
         <div class="hide-menu-section-label">Your Daily Streak</div>
         <div
           class="streak-badge hide-menu-streak-card"
@@ -347,10 +398,19 @@
         </div>
       </div>
     </nav>
+    <div id="themeLiveRegion" class="sr-only" aria-live="polite"></div>
   </header>
   `;
 
   async function injectHeader() {
+    const container = document.getElementById('sharedHeader');
+    // Render immediate fallback if container is currently empty to avoid any delay
+    if (container && (!container.innerHTML || !container.innerHTML.trim())) {
+      container.innerHTML = FALLBACK_HEADER_HTML;
+      highlightActiveNavLink();
+      updateThemeButtonUI(document.documentElement.getAttribute('data-theme') || getStoredTheme());
+    }
+
     let htmlContent = FALLBACK_HEADER_HTML;
     try {
       const res = await fetch('header.html?t=' + Date.now());
@@ -364,7 +424,6 @@
       // Use fallback
     }
 
-    const container = document.getElementById('sharedHeader');
     if (container) {
       container.innerHTML = htmlContent;
     } else {

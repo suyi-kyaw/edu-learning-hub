@@ -29,15 +29,14 @@
   >
 
   <link rel="stylesheet" href="style.css">
-  <!-- Early dark theme application to avoid white-flash on reload -->
+  <!-- Early theme application to avoid flash of incorrect theme on reload -->
   <script>
     (function () {
       try {
-        var savedTheme = localStorage.getItem("linguapath_theme");
+        var savedTheme = localStorage.getItem("linguapath_theme") || localStorage.getItem("theme");
         var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-        if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
-          document.documentElement.setAttribute("data-theme", "dark");
-        }
+        var activeTheme = (savedTheme === "dark" || savedTheme === "light") ? savedTheme : (prefersDark ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", activeTheme);
       } catch (e) {}
     })();
   </script>
