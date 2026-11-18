@@ -346,6 +346,103 @@
         "lastNotifiedDate",
         "updatedAt"
       ]
+    },
+    "SiteConfig": {
+      "title": "Public Site Content & Contact Settings",
+      "description": "Homepage hero copy, banner image, section titles/descriptions, Adult/Kids track copy, Contact Us details, and featured Stories/Reels/Games IDs managed by admin.",
+      "type": "object",
+      "properties": {
+        "configId": {
+          "type": "string",
+          "description": "Configuration document identifier (e.g. homepage)",
+          "minLength": 1,
+          "maxLength": 40,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "heroEyebrow": { "type": "string", "maxLength": 100 },
+        "heroTitleLine1": { "type": "string", "maxLength": 120 },
+        "heroTitleHighlight": { "type": "string", "maxLength": 120 },
+        "heroSubtitle": { "type": "string", "maxLength": 400 },
+        "heroPrimaryCta": { "type": "string", "maxLength": 60 },
+        "heroSecondaryCta": { "type": "string", "maxLength": 60 },
+        "heroBannerUrl": { "type": "string", "maxLength": 500 },
+        "storiesLabel": { "type": "string", "maxLength": 100 },
+        "storiesTitle": { "type": "string", "maxLength": 120 },
+        "storiesSubtitle": { "type": "string", "maxLength": 400 },
+        "gamesLabel": { "type": "string", "maxLength": 100 },
+        "gamesTitle": { "type": "string", "maxLength": 120 },
+        "gamesSubtitle": { "type": "string", "maxLength": 400 },
+        "lessonsLabel": { "type": "string", "maxLength": 100 },
+        "lessonsTitle": { "type": "string", "maxLength": 120 },
+        "lessonsSubtitle": { "type": "string", "maxLength": 400 },
+        "adultBadge": { "type": "string", "maxLength": 80 },
+        "adultTitle": { "type": "string", "maxLength": 140 },
+        "adultSubtitle": { "type": "string", "maxLength": 140 },
+        "adultDesc": { "type": "string", "maxLength": 400 },
+        "adultBullets": { "type": "array", "description": "Up to 6 highlight bullets for Adult card" },
+        "adultCta": { "type": "string", "maxLength": 80 },
+        "kidsBadge": { "type": "string", "maxLength": 80 },
+        "kidsTitle": { "type": "string", "maxLength": 140 },
+        "kidsSubtitle": { "type": "string", "maxLength": 140 },
+        "kidsDesc": { "type": "string", "maxLength": 400 },
+        "kidsBullets": { "type": "array", "description": "Up to 6 highlight bullets for Kids card" },
+        "kidsCta": { "type": "string", "maxLength": 80 },
+        "contactEmail": { "type": "string", "maxLength": 160 },
+        "contactPhone": { "type": "string", "maxLength": 40 },
+        "contactViber": { "type": "string", "maxLength": 40 },
+        "featuredReelIds": { "type": "array", "description": "Up to 12 reel IDs featured on homepage" },
+        "featuredStoryIds": { "type": "array", "description": "Up to 12 story IDs featured on homepage" },
+        "featuredGameIds": { "type": "array", "description": "Up to 12 Wordwall game IDs featured on homepage" },
+        "updatedBy": {
+          "type": "string",
+          "description": "Admin UID who last updated site settings",
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of update"
+        }
+      },
+      "required": [
+        "configId",
+        "heroEyebrow",
+        "heroTitleLine1",
+        "heroTitleHighlight",
+        "heroSubtitle",
+        "heroPrimaryCta",
+        "heroSecondaryCta",
+        "heroBannerUrl",
+        "storiesLabel",
+        "storiesTitle",
+        "storiesSubtitle",
+        "gamesLabel",
+        "gamesTitle",
+        "gamesSubtitle",
+        "lessonsLabel",
+        "lessonsTitle",
+        "lessonsSubtitle",
+        "adultBadge",
+        "adultTitle",
+        "adultSubtitle",
+        "adultDesc",
+        "adultBullets",
+        "adultCta",
+        "kidsBadge",
+        "kidsTitle",
+        "kidsSubtitle",
+        "kidsDesc",
+        "kidsBullets",
+        "kidsCta",
+        "contactEmail",
+        "contactPhone",
+        "contactViber",
+        "featuredReelIds",
+        "featuredStoryIds",
+        "featuredGameIds",
+        "updatedBy",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -364,6 +461,10 @@
     "/lessonCatalog/{lessonId}": {
       "schema": { "$ref": "#/entities/LessonCatalogItem" },
       "description": "Publicly readable Free/Paid lesson pricing metadata configured during uploads."
+    },
+    "/siteConfig/{configId}": {
+      "schema": { "$ref": "#/entities/SiteConfig" },
+      "description": "Publicly readable homepage content, contact us details, and featured showcase configuration."
     },
     "/admins/{userId}": {
       "schema": { "$ref": "#/entities/AdminUser" },

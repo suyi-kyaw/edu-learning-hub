@@ -7,15 +7,18 @@
     "dev": "node server.js",
     "build": "esbuild src/firebase/client.ts --bundle --format=iife --minify --outfile=vendor/firebase-app.js",
     "start": "node server.js",
-    "lint": "npx eslint firestore.rules && node -c server.js && node -c header.js"
+    "lint": "npx eslint firestore.rules && node -c server.js && node -c header.js && node -c footer.js && node -c auth-ui.js && node -c main.js && node -c admin.js"
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@types/multer": "^2.3.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
     "express": "^4.21.2",
     "firebase": "^13.4.0",
+    "firebase-admin": "^14.5.1",
     "hanzi-writer": "^3.7.3",
+    "multer": "^2.5.0",
     "xlsx": "^0.18.5"
   }
 }

@@ -442,10 +442,12 @@
       const container = document.getElementById('embeddedGamesContainer');
       if (!container) return;
 
-      const activeGames = gamesList.filter(g => {
-        const act = String(g.active || g.Active || 'TRUE').toUpperCase();
-        return act !== 'FALSE' && act !== '0';
-      });
+      const activeGames = gamesList
+        .filter(g => {
+          const act = String(g.active || g.Active || 'TRUE').toUpperCase();
+          return act !== 'FALSE' && act !== '0';
+        })
+        .sort((a, b) => (Number(a.order || a.Order) || 999) - (Number(b.order || b.Order) || 999));
 
       if (!activeGames.length) {
         container.innerHTML = `

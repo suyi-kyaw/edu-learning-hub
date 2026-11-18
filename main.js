@@ -58,6 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
   startDailyReminderScheduler();
   setupReviewMode();
   setupReelsInteractions();
+  initHomepageHydration();
   loadWorkbook();
 
   window.addEventListener("lingua-auth-change", () => {
@@ -2629,6 +2630,8 @@ function handleReviewKeyboardShortcuts(e) {
    FEATURED REELS & VIDEO MODAL INTERACTIONS
 ========================================================= */
 
+let reelModalBound = false;
+
 function setupReelsInteractions() {
   const reelCards = document.querySelectorAll(".reel-card");
   const modal = document.getElementById("reelModal");
@@ -2637,42 +2640,45 @@ function setupReelsInteractions() {
   const modalDesc = document.getElementById("reelModalDesc");
   const closeBtn = document.getElementById("closeReelModalBtn");
 
-  if (!reelCards.length) return;
+  if (reelCards.length) {
+    reelCards.forEach((card) => {
+      if (card.dataset.reelBound === "1") return;
+      card.dataset.reelBound = "1";
+      const previewVideo = card.querySelector(".reel-preview-video");
 
-  reelCards.forEach((card) => {
-    const previewVideo = card.querySelector(".reel-preview-video");
+      card.addEventListener("mouseenter", () => {
+        if (previewVideo && previewVideo.paused) {
+          previewVideo.play().catch(() => {});
+        }
+      });
 
-    // Desktop hover preview (muted playback)
-    card.addEventListener("mouseenter", () => {
-      if (previewVideo && previewVideo.paused) {
-        previewVideo.play().catch(() => {});
-      }
+      card.addEventListener("mouseleave", () => {
+        if (previewVideo && !previewVideo.paused) {
+          previewVideo.pause();
+        }
+      });
+
+      card.addEventListener("click", () => {
+        const videoSrc = card.dataset.video || (previewVideo && previewVideo.querySelector("source") ? previewVideo.querySelector("source").src : "");
+        const title = card.dataset.title || "Chinese Reel Video";
+        const desc = card.dataset.desc || "Bite-sized culture and Mandarin dialogue.";
+
+        if (modal && modalVideo) {
+          modalVideo.src = videoSrc;
+          if (modalTitle) modalTitle.textContent = title;
+          if (modalDesc) modalDesc.textContent = desc;
+
+          modal.classList.add("active");
+          modal.setAttribute("aria-hidden", "false");
+          modalVideo.currentTime = 0;
+          modalVideo.play().catch(() => {});
+        }
+      });
     });
+  }
 
-    card.addEventListener("mouseleave", () => {
-      if (previewVideo && !previewVideo.paused) {
-        previewVideo.pause();
-      }
-    });
-
-    // Click to open Reel Video Player Modal
-    card.addEventListener("click", () => {
-      const videoSrc = card.dataset.video || (previewVideo && previewVideo.querySelector("source") ? previewVideo.querySelector("source").src : "");
-      const title = card.dataset.title || "Chinese Reel Video";
-      const desc = card.dataset.desc || "Bite-sized culture and Mandarin dialogue.";
-
-      if (modal && modalVideo) {
-        modalVideo.src = videoSrc;
-        if (modalTitle) modalTitle.textContent = title;
-        if (modalDesc) modalDesc.textContent = desc;
-
-        modal.classList.add("active");
-        modal.setAttribute("aria-hidden", "false");
-        modalVideo.currentTime = 0;
-        modalVideo.play().catch(() => {});
-      }
-    });
-  });
+  if (reelModalBound) return;
+  reelModalBound = true;
 
   function closeReelModal() {
     if (!modal) return;
@@ -2705,6 +2711,315 @@ function setupReelsInteractions() {
       closeReelModal();
     }
   });
+}
+
+
+/* =========================================================
+   HOMEPAGE CMS HYDRATION & FEATURED ITEMS RENDERER
+========================================================= */
+
+let cachedHomeReels = [];
+let cachedHomeStories = [];
+let cachedHomeGames = [];
+let cachedHomeSiteConfig = null;
+
+function formatReelDuration(sec) {
+  const n = Math.max(0, Math.round(Number(sec) || 0));
+  const m = Math.floor(n / 60);
+  const s = n % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function getReelBadgeMeta(holidayId, type) {
+  const key = String(holidayId || type || "").toLowerCase();
+  if (key.includes("cny")) return { label: "🧧 Culture", cls: "reel-tag-culture" };
+  if (key.includes("kids")) return { label: "🐼 Kids Fun", cls: "reel-tag-market" };
+  if (key.includes("daily")) return { label: "🗣️ Daily Talk", cls: "reel-tag-daily" };
+  if (key.includes("grammar")) return { label: "🎵 Tones", cls: "reel-tag-daily" };
+  return { label: "🎬 Story Reel", cls: "reel-tag-culture" };
+}
+
+function extractGameIframeSrc(codeOrUrl) {
+  if (!codeOrUrl) return "";
+  const str = String(codeOrUrl).trim();
+  if (str.includes("<iframe")) {
+    const match = str.match(/src=["']([^"']+)["']/i);
+    if (match && match[1]) return match[1];
+  }
+  return str;
+}
+
+function applyHomepageSiteConfig(cfg) {
+  if (!cfg || !document.getElementById("homeHeroEyebrow")) return;
+  cachedHomeSiteConfig = cfg;
+
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && typeof val === "string" && val.trim()) {
+      el.textContent = val;
+    }
+  };
+
+  setText("homeHeroEyebrow", cfg.heroEyebrow);
+  setText("homeHeroTitleLine1", cfg.heroTitleLine1);
+  setText("homeHeroTitleHighlight", cfg.heroTitleHighlight);
+  setText("homeHeroSubtitle", cfg.heroSubtitle);
+  setText("homeHeroPrimaryCta", cfg.heroPrimaryCta);
+  setText("homeHeroSecondaryCta", cfg.heroSecondaryCta);
+
+  const bannerEl = document.getElementById("homeHeroBannerImg");
+  if (bannerEl && cfg.heroBannerUrl) {
+    bannerEl.src = cfg.heroBannerUrl;
+  }
+
+  setText("homeStoriesLabel", cfg.storiesLabel);
+  setText("homeStoriesTitle", cfg.storiesTitle);
+  setText("homeStoriesSubtitle", cfg.storiesSubtitle);
+
+  setText("homeGamesLabel", cfg.gamesLabel);
+  setText("homeGamesTitle", cfg.gamesTitle);
+  setText("homeGamesSubtitle", cfg.gamesSubtitle);
+
+  setText("homeLessonsLabel", cfg.lessonsLabel);
+  setText("homeLessonsTitle", cfg.lessonsTitle);
+  setText("homeLessonsSubtitle", cfg.lessonsSubtitle);
+
+  setText("homeAdultBadge", cfg.adultBadge);
+  setText("homeAdultTitle", cfg.adultTitle);
+  setText("homeAdultSubtitle", cfg.adultSubtitle);
+  setText("homeAdultDesc", cfg.adultDesc);
+  setText("homeAdultCta", cfg.adultCta);
+
+  const adultBulletsEl = document.getElementById("homeAdultBullets");
+  if (adultBulletsEl && Array.isArray(cfg.adultBullets) && cfg.adultBullets.length) {
+    adultBulletsEl.innerHTML = cfg.adultBullets
+      .map((item) => `<li><span>✓</span> ${escapeHTML(item)}</li>`)
+      .join("");
+  }
+
+  setText("homeKidsBadge", cfg.kidsBadge);
+  setText("homeKidsTitle", cfg.kidsTitle);
+  setText("homeKidsSubtitle", cfg.kidsSubtitle);
+  setText("homeKidsDesc", cfg.kidsDesc);
+  setText("homeKidsCta", cfg.kidsCta);
+
+  const kidsBulletsEl = document.getElementById("homeKidsBullets");
+  if (kidsBulletsEl && Array.isArray(cfg.kidsBullets) && cfg.kidsBullets.length) {
+    kidsBulletsEl.innerHTML = cfg.kidsBullets
+      .map((item) => `<li><span>★</span> ${escapeHTML(item)}</li>`)
+      .join("");
+  }
+
+  renderHomepageFeaturedReels(cfg);
+  renderHomepageFeaturedStories(cfg);
+  renderHomepageFeaturedGames(cfg);
+}
+
+function renderHomepageFeaturedReels(cfg) {
+  const grid = document.getElementById("homeFeaturedReelsGrid");
+  if (!grid || !cachedHomeReels.length) return;
+
+  const activeReels = cachedHomeReels.filter((r) => String(r.status || "active").toLowerCase() !== "inactive");
+  const featuredIds = Array.isArray(cfg?.featuredReelIds) ? cfg.featuredReelIds : [];
+
+  let picked = [];
+  if (featuredIds.length > 0) {
+    featuredIds.forEach((id) => {
+      const match = activeReels.find((r) => String(r.id || "").trim() === String(id).trim());
+      if (match) picked.push(match);
+    });
+  }
+  if (!picked.length) {
+    picked = activeReels.slice(0, 3);
+  }
+  if (!picked.length) return;
+
+  grid.innerHTML = picked
+    .slice(0, 6)
+    .map((reel) => {
+      const title = String(reel.title || "Mandarin Reel");
+      const videoUrl = String(reel.video_path || "assets/video/Reels Red Envelope.mp4");
+      const thumbUrl = String(reel.thumbnail_path || "assets/images/story-poster.jpg");
+      const duration = formatReelDuration(reel.duration_sec || 30);
+      const badge = getReelBadgeMeta(reel.holiday_id, reel.type);
+      const zhLine = String(reel.text_cn || "").slice(0, 26);
+      const enDesc = String(reel.text_en || "Bite-sized Chinese video story.");
+      return `
+        <article class="reel-card" data-video="${escapeHTML(videoUrl)}" data-title="${escapeHTML(title)}" data-desc="${escapeHTML(enDesc)}">
+          <div class="reel-thumbnail-wrap">
+            <video class="reel-preview-video" muted loop playsinline preload="metadata" poster="${escapeHTML(thumbUrl)}">
+              <source src="${escapeHTML(videoUrl)}" type="video/mp4">
+            </video>
+            <div class="reel-overlay">
+              <div class="reel-meta-top">
+                <span class="reel-badge-pill ${badge.cls}">${escapeHTML(badge.label)}</span>
+                <span class="reel-duration">${escapeHTML(duration)}</span>
+              </div>
+              <div class="reel-play-btn" aria-label="Play Reel: ${escapeHTML(title)}">
+                <span class="play-icon" aria-hidden="true">▶</span>
+              </div>
+              <div class="reel-meta-bottom">
+                <h3 class="reel-card-title">${escapeHTML(title)}</h3>
+                ${zhLine ? `<div class="reel-card-chinese">${escapeHTML(zhLine)}</div>` : ""}
+                <p class="reel-card-desc">${escapeHTML(enDesc)}</p>
+              </div>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  setupReelsInteractions();
+}
+
+function renderHomepageFeaturedStories(cfg) {
+  const strip = document.getElementById("homeFeaturedStoriesGrid");
+  if (!strip) return;
+
+  const featuredIds = Array.isArray(cfg?.featuredStoryIds) ? cfg.featuredStoryIds : [];
+  if (!featuredIds.length || !cachedHomeStories.length) {
+    strip.hidden = true;
+    strip.innerHTML = "";
+    return;
+  }
+
+  const picked = [];
+  featuredIds.forEach((id) => {
+    const match = cachedHomeStories.find((s) => String(s.id || "").trim() === String(id).trim());
+    if (match) picked.push(match);
+  });
+
+  if (!picked.length) {
+    strip.hidden = true;
+    strip.innerHTML = "";
+    return;
+  }
+
+  strip.hidden = false;
+  strip.innerHTML = picked
+    .map((story) => {
+      const sid = String(story.id || "lesson-01");
+      const title = String(story.title || sid);
+      const zh = String(story.chineseTitle || "");
+      const pinyin = String(story.pinyin || "");
+      const desc = String(story.description || "Read interactive story scenes and vocabulary.");
+      const poster = String(story.poster || "assets/images/story-poster.jpg");
+      const level = String(story.level || "Beginner");
+      return `
+        <a href="story.html?lesson=${encodeURIComponent(sid)}" class="home-featured-story-card">
+          <div class="home-featured-story-thumb">
+            <img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}" loading="lazy" onerror="this.onerror=null;this.src='assets/images/story-poster.jpg';" />
+          </div>
+          <div class="home-featured-story-body">
+            <span class="home-featured-story-kicker">Featured Story · ${escapeHTML(level)}</span>
+            <h3>${escapeHTML(title)}${zh ? ` <span class="zh-sub">${escapeHTML(zh)}</span>` : ""}</h3>
+            ${pinyin ? `<div class="home-featured-story-pinyin">${escapeHTML(pinyin)}</div>` : ""}
+            <p>${escapeHTML(desc)}</p>
+          </div>
+        </a>
+      `;
+    })
+    .join("");
+}
+
+function renderHomepageFeaturedGames(cfg) {
+  const container = document.getElementById("homeFeaturedGamesContainer");
+  if (!container || !cachedHomeGames.length) return;
+
+  const activeGames = cachedHomeGames
+    .filter((g) => String(g.active || "TRUE").toUpperCase() !== "FALSE")
+    .sort((a, b) => (Number(a.order) || 999) - (Number(b.order) || 999));
+
+  if (!activeGames.length) return;
+
+  const featuredIds = Array.isArray(cfg?.featuredGameIds) ? cfg.featuredGameIds : [];
+  let picked = [];
+  if (featuredIds.length > 0) {
+    featuredIds.forEach((id) => {
+      const match = activeGames.find((g) => String(g.id || "").trim() === String(id).trim());
+      if (match) picked.push(match);
+    });
+  }
+  if (!picked.length) {
+    picked = [activeGames[0]];
+  }
+
+  container.innerHTML = picked
+    .slice(0, 3)
+    .map((game) => {
+      const src = extractGameIframeSrc(game.embed_code || game.embed_url);
+      if (!src) return "";
+      const title = String(game.title || "Wordwall Interactive Game");
+      return `
+        <div class="game-iframe-wrapper" style="margin-bottom: 18px;">
+          <iframe
+            style="max-width:100%"
+            src="${escapeHTML(src)}"
+            width="${Number(game.width) || 500}"
+            height="${Number(game.height) || 380}"
+            frameborder="0"
+            allowfullscreen
+            class="game-iframe"
+            title="${escapeHTML(title)}"
+            loading="lazy"
+          ></iframe>
+        </div>
+      `;
+    })
+    .filter(Boolean)
+    .join("");
+}
+
+async function initHomepageHydration() {
+  if (!document.getElementById("homeHeroEyebrow")) return;
+
+  window.addEventListener("lingua-site-config-change", (e) => {
+    if (e && e.detail) {
+      applyHomepageSiteConfig(e.detail);
+    }
+  });
+
+  if (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === "function") {
+    applyHomepageSiteConfig(window.LinguaAuth.getSiteConfig());
+  }
+
+  // Load config + dynamic datasets in parallel
+  try {
+    const [cfgRes, reelsRes, storiesRes, lessonsRes] = await Promise.allSettled([
+      fetch("/api/site-config?t=" + Date.now()).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/reels-stories-data?t=" + Date.now()).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/stories-data?t=" + Date.now()).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/lessons-data?t=" + Date.now()).then((r) => (r.ok ? r.json() : null))
+    ]);
+
+    if (reelsRes.status === "fulfilled" && reelsRes.value?.sheets?.Videos) {
+      cachedHomeReels = reelsRes.value.sheets.Videos;
+    }
+    if (storiesRes.status === "fulfilled" && storiesRes.value?.sheets?.Lessons) {
+      cachedHomeStories = storiesRes.value.sheets.Lessons;
+    }
+    if (lessonsRes.status === "fulfilled" && lessonsRes.value?.sheets?.Games) {
+      cachedHomeGames = lessonsRes.value.sheets.Games;
+    }
+
+    const activeCfg =
+      (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === "function"
+        ? window.LinguaAuth.getSiteConfig()
+        : null) ||
+      (cfgRes.status === "fulfilled" && cfgRes.value?.config) ||
+      cachedHomeSiteConfig;
+
+    if (activeCfg) {
+      applyHomepageSiteConfig(activeCfg);
+    } else {
+      renderHomepageFeaturedReels(cachedHomeSiteConfig);
+      renderHomepageFeaturedStories(cachedHomeSiteConfig);
+      renderHomepageFeaturedGames(cachedHomeSiteConfig);
+    }
+  } catch (err) {
+    console.warn("Homepage hydration fallback:", err);
+  }
 }
 
 

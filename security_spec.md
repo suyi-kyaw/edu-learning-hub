@@ -9,8 +9,9 @@
 6. **Admin Verification (Anti-Email Spoofing)**: Token-based admin checks (`syndkyaw@gmail.com`) strictly enforce `request.auth.token.email_verified == true`.
 7. **Catalog Integrity**: Only verified admins can create, update, or delete `/lessonCatalog/{lessonId}` pricing records.
 8. **User Progress Ownership**: `/userProgress/{userId}` stores authenticated learner streak, completed lessons, and daily reminder settings. Only `isOwner(userId) || isAdmin()` may read or write a user's progress doc, with bounded list sizes (`streakDates <= 366`, `completedLessonIds <= 200`), strict time strings, and server-validated `updatedAt == request.time`.
+9. **Site Content & Contact Integrity**: `/siteConfig/{configId}` stores homepage copy, banner URL, section headers, Adult/Kids track card copy, Contact Us details, and featured showcase IDs. Publicly readable, but only verified admins (`isAdmin()`) may create, update, or delete records, with strict schema/size bounds and `updatedBy == request.auth.uid`.
 
-## 2. The "Dirty Dozen" Attack Payloads (All Must Fail with `PERMISSION_DENIED`)
+## 2. The "Dirty Dozen+" Attack Payloads (All Must Fail with `PERMISSION_DENIED`)
 1. **Self-Role Escalation**: Student creates `/users/{uid}` with `"role": "admin"`.
 2. **Free Membership Injection**: Student creates `/users/{uid}` with `"membershipStatus": "active"`, `"membershipPlan": "annual"`.
 3. **Membership Hijack Update**: Student updates own `/users/{uid}` adding `"adult-business-01"` to `subscribedLessonIds`.
@@ -23,4 +24,4 @@
 10. **Orphan Request Creation**: Unregistered UID without `/users/{uid}` doc attempts to create `/subscriptionRequests/req1`.
 11. **ID Poisoning Attack**: User creates doc with 500-char or invalid-character ID (`"req/../admin"`).
 12. **Unauthorized Catalog Mutation**: Non-admin student attempts to set `/lessonCatalog/adult-business-01` to `"accessType": "free"`.
-
+13. **Unauthorized Site Config Defacement**: Non-admin student or anonymous user attempts to overwrite `/siteConfig/homepage` contact email or hero text.

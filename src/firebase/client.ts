@@ -119,6 +119,92 @@ export interface UserProgress {
   updatedAt?: unknown;
 }
 
+export interface SiteConfig {
+  configId: string;
+  heroEyebrow: string;
+  heroTitleLine1: string;
+  heroTitleHighlight: string;
+  heroSubtitle: string;
+  heroPrimaryCta: string;
+  heroSecondaryCta: string;
+  heroBannerUrl: string;
+  storiesLabel: string;
+  storiesTitle: string;
+  storiesSubtitle: string;
+  gamesLabel: string;
+  gamesTitle: string;
+  gamesSubtitle: string;
+  lessonsLabel: string;
+  lessonsTitle: string;
+  lessonsSubtitle: string;
+  adultBadge: string;
+  adultTitle: string;
+  adultSubtitle: string;
+  adultDesc: string;
+  adultBullets: string[];
+  adultCta: string;
+  kidsBadge: string;
+  kidsTitle: string;
+  kidsSubtitle: string;
+  kidsDesc: string;
+  kidsBullets: string[];
+  kidsCta: string;
+  contactEmail: string;
+  contactPhone: string;
+  contactViber: string;
+  featuredReelIds: string[];
+  featuredStoryIds: string[];
+  featuredGameIds: string[];
+  updatedBy?: string;
+  updatedAt?: unknown;
+}
+
+export const DEFAULT_SITE_CONFIG: SiteConfig = {
+  configId: 'homepage',
+  heroEyebrow: 'Learn Chinese Step by Step',
+  heroTitleLine1: 'Learn Chinese',
+  heroTitleHighlight: 'with Confidence.',
+  heroSubtitle: 'Build your Chinese skills through pronunciation, everyday expressions, conversations, vocabulary, and practical exercises.',
+  heroPrimaryCta: 'Explore Stories & Reels',
+  heroSecondaryCta: 'Learning Hub',
+  heroBannerUrl: 'assets/hero-banner.png',
+  storiesLabel: 'Featured Stories & Reels',
+  storiesTitle: 'Stories & Reels',
+  storiesSubtitle: 'Watch bite-sized vertical video reels and engaging cultural narratives crafted for modern Mandarin learners.',
+  gamesLabel: 'Interactive Practice',
+  gamesTitle: 'Play & Practice Games',
+  gamesSubtitle: 'Reinforce your Chinese tones, character recognition, and rapid recall through interactive gameplay.',
+  lessonsLabel: 'Curriculum Pathways',
+  lessonsTitle: 'Choose Your Learning Pathway',
+  lessonsSubtitle: 'Select your track to access structured lessons, native voice recordings, dialogues, and practice exercises.',
+  adultBadge: 'Adults • Comprehensive',
+  adultTitle: 'Mandarin for Adults & Professionals',
+  adultSubtitle: '实用成人汉语 • Practical Proficiency',
+  adultDesc: 'Master practical conversation for career, travel, dining, and HSK test preparation with real-world scenarios and cultural nuance.',
+  adultBullets: [
+    'Everyday Living & Socializing',
+    'Business Meetings & Travel Mandarin',
+    'Sentence Patterns & HSK Vocabulary'
+  ],
+  adultCta: 'Start Learning (Adults) →',
+  kidsBadge: 'Kids • Playful Immersion',
+  kidsTitle: 'Chinese for Kids & Young Learners',
+  kidsSubtitle: '少儿趣味中文 • Joyful Adventures',
+  kidsDesc: 'Discover the joy of Mandarin through colorful stories, playful pinyin songs, animal adventures, and interactive challenges that inspire confidence.',
+  kidsBullets: [
+    'Animals, Colors & Family Adventures',
+    'Cheerful Pinyin Songs & Animations',
+    'Reward Badges & Interactive Quizzes'
+  ],
+  kidsCta: 'Start Learning (Kids) →',
+  contactEmail: 'syndkyaw@gmail.com',
+  contactPhone: '+95 9 798 123 456',
+  contactViber: '+95 9 798 123 456',
+  featuredReelIds: ['cny_01', 'daily_01', 'kids_01'],
+  featuredStoryIds: ['lesson-01'],
+  featuredGameIds: ['game-01']
+};
+
 const ADMIN_EMAIL = 'syndkyaw@gmail.com';
 export const CONTACT_INFO = {
   email: 'syndkyaw@gmail.com',
@@ -291,6 +377,7 @@ interface AuthState {
   allRequests: SubscriptionRequest[];
   allUsers: UserProfile[];
   lessonCatalog: Record<string, LessonCatalogItem>;
+  siteConfig: SiteConfig;
   lastError: string | null;
 }
 
@@ -304,6 +391,7 @@ const state: AuthState = {
   allRequests: [],
   allUsers: [],
   lessonCatalog: {},
+  siteConfig: { ...DEFAULT_SITE_CONFIG },
   lastError: null
 };
 
@@ -313,6 +401,7 @@ let unsubMyRequests: Unsubscribe | null = null;
 let unsubAllRequests: Unsubscribe | null = null;
 let unsubAllUsers: Unsubscribe | null = null;
 let unsubCatalog: Unsubscribe | null = null;
+let unsubSiteConfig: Unsubscribe | null = null;
 
 const subscribers = new Set<(s: AuthState) => void>();
 
@@ -354,6 +443,75 @@ function clearUserListeners(): void {
   }
 }
 
+function normalizeStrList(raw: unknown, maxItems: number, maxLen: number, fallback: string[]): string[] {
+  if (!Array.isArray(raw)) return [...fallback];
+  return raw
+    .map((x) => String(x || '').trim().slice(0, maxLen))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteConfig {
+  const s = (val: unknown, maxLen: number, fb: string): string => {
+    if (typeof val !== 'string') return fb;
+    const trimmed = val.trim();
+    return (trimmed || fb).slice(0, maxLen);
+  };
+  const opt = (val: unknown, maxLen: number, fb: string): string => {
+    if (typeof val !== 'string') return fb;
+    return val.trim().slice(0, maxLen);
+  };
+  return {
+    configId: 'homepage',
+    heroEyebrow: s(raw?.heroEyebrow, 100, DEFAULT_SITE_CONFIG.heroEyebrow),
+    heroTitleLine1: s(raw?.heroTitleLine1, 120, DEFAULT_SITE_CONFIG.heroTitleLine1),
+    heroTitleHighlight: s(raw?.heroTitleHighlight, 120, DEFAULT_SITE_CONFIG.heroTitleHighlight),
+    heroSubtitle: s(raw?.heroSubtitle, 400, DEFAULT_SITE_CONFIG.heroSubtitle),
+    heroPrimaryCta: s(raw?.heroPrimaryCta, 60, DEFAULT_SITE_CONFIG.heroPrimaryCta),
+    heroSecondaryCta: s(raw?.heroSecondaryCta, 60, DEFAULT_SITE_CONFIG.heroSecondaryCta),
+    heroBannerUrl: opt(raw?.heroBannerUrl, 500, DEFAULT_SITE_CONFIG.heroBannerUrl) || DEFAULT_SITE_CONFIG.heroBannerUrl,
+    storiesLabel: s(raw?.storiesLabel, 100, DEFAULT_SITE_CONFIG.storiesLabel),
+    storiesTitle: s(raw?.storiesTitle, 120, DEFAULT_SITE_CONFIG.storiesTitle),
+    storiesSubtitle: s(raw?.storiesSubtitle, 400, DEFAULT_SITE_CONFIG.storiesSubtitle),
+    gamesLabel: s(raw?.gamesLabel, 100, DEFAULT_SITE_CONFIG.gamesLabel),
+    gamesTitle: s(raw?.gamesTitle, 120, DEFAULT_SITE_CONFIG.gamesTitle),
+    gamesSubtitle: s(raw?.gamesSubtitle, 400, DEFAULT_SITE_CONFIG.gamesSubtitle),
+    lessonsLabel: s(raw?.lessonsLabel, 100, DEFAULT_SITE_CONFIG.lessonsLabel),
+    lessonsTitle: s(raw?.lessonsTitle, 120, DEFAULT_SITE_CONFIG.lessonsTitle),
+    lessonsSubtitle: s(raw?.lessonsSubtitle, 400, DEFAULT_SITE_CONFIG.lessonsSubtitle),
+    adultBadge: s(raw?.adultBadge, 80, DEFAULT_SITE_CONFIG.adultBadge),
+    adultTitle: s(raw?.adultTitle, 140, DEFAULT_SITE_CONFIG.adultTitle),
+    adultSubtitle: s(raw?.adultSubtitle, 140, DEFAULT_SITE_CONFIG.adultSubtitle),
+    adultDesc: s(raw?.adultDesc, 400, DEFAULT_SITE_CONFIG.adultDesc),
+    adultBullets: normalizeStrList(raw?.adultBullets, 6, 140, DEFAULT_SITE_CONFIG.adultBullets),
+    adultCta: s(raw?.adultCta, 80, DEFAULT_SITE_CONFIG.adultCta),
+    kidsBadge: s(raw?.kidsBadge, 80, DEFAULT_SITE_CONFIG.kidsBadge),
+    kidsTitle: s(raw?.kidsTitle, 140, DEFAULT_SITE_CONFIG.kidsTitle),
+    kidsSubtitle: s(raw?.kidsSubtitle, 140, DEFAULT_SITE_CONFIG.kidsSubtitle),
+    kidsDesc: s(raw?.kidsDesc, 400, DEFAULT_SITE_CONFIG.kidsDesc),
+    kidsBullets: normalizeStrList(raw?.kidsBullets, 6, 140, DEFAULT_SITE_CONFIG.kidsBullets),
+    kidsCta: s(raw?.kidsCta, 80, DEFAULT_SITE_CONFIG.kidsCta),
+    contactEmail: s(raw?.contactEmail, 160, DEFAULT_SITE_CONFIG.contactEmail),
+    contactPhone: s(raw?.contactPhone, 40, DEFAULT_SITE_CONFIG.contactPhone),
+    contactViber: s(raw?.contactViber, 40, DEFAULT_SITE_CONFIG.contactViber),
+    featuredReelIds: Array.isArray(raw?.featuredReelIds)
+      ? normalizeStrList(raw.featuredReelIds, 12, 128, [])
+      : [...DEFAULT_SITE_CONFIG.featuredReelIds],
+    featuredStoryIds: Array.isArray(raw?.featuredStoryIds)
+      ? normalizeStrList(raw.featuredStoryIds, 12, 128, [])
+      : [...DEFAULT_SITE_CONFIG.featuredStoryIds],
+    featuredGameIds: Array.isArray(raw?.featuredGameIds)
+      ? normalizeStrList(raw.featuredGameIds, 12, 128, [])
+      : [...DEFAULT_SITE_CONFIG.featuredGameIds],
+    updatedBy: raw?.updatedBy,
+    updatedAt: raw?.updatedAt
+  };
+}
+
+function emitSiteConfigChange(): void {
+  window.dispatchEvent(new CustomEvent('lingua-site-config-change', { detail: state.siteConfig }));
+}
+
 function startCatalogListener(): void {
   if (unsubCatalog) return;
   const catalogRef = collection(db, 'lessonCatalog');
@@ -372,6 +530,37 @@ function startCatalogListener(): void {
     },
     (err) => {
       console.warn('lessonCatalog listener warning:', err.message);
+    }
+  );
+}
+
+function startSiteConfigListener(): void {
+  if (unsubSiteConfig) return;
+
+  // Hydrate initially from server/static JSON cache so visitors get instant saved copy
+  fetch('/api/site-config?t=' + Date.now())
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+    .then((json) => {
+      if (json && json.config) {
+        state.siteConfig = normalizeSiteConfig(json.config);
+        emitSiteConfigChange();
+        emitState();
+      }
+    });
+
+  const cfgRef = doc(db, 'siteConfig', 'homepage');
+  unsubSiteConfig = onSnapshot(
+    cfgRef,
+    (snap) => {
+      if (snap.exists()) {
+        state.siteConfig = normalizeSiteConfig(snap.data() as Partial<SiteConfig>);
+        emitSiteConfigChange();
+        emitState();
+      }
+    },
+    (err) => {
+      console.warn('siteConfig listener warning:', err.message);
     }
   );
 }
@@ -591,6 +780,7 @@ function toMillis(ts: unknown): number {
 
 // Bootstrap listeners
 startCatalogListener();
+startSiteConfigListener();
 
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
@@ -997,6 +1187,57 @@ async function saveLessonCatalogItems(
   }
 }
 
+async function getIdToken(forceRefresh = false): Promise<string | null> {
+  const user = auth.currentUser;
+  if (!user) return null;
+  return user.getIdToken(forceRefresh);
+}
+
+function getSiteConfig(): SiteConfig {
+  return normalizeSiteConfig(state.siteConfig);
+}
+
+async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Admin sign-in required to update site configuration.');
+
+  const merged = normalizeSiteConfig({ ...state.siteConfig, ...partial });
+  const payload = {
+    ...merged,
+    configId: 'homepage',
+    updatedBy: user.uid,
+    updatedAt: serverTimestamp()
+  };
+
+  const cfgPath = 'siteConfig/homepage';
+  try {
+    await setDoc(doc(db, 'siteConfig', 'homepage'), payload);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, cfgPath);
+  }
+
+  state.siteConfig = merged;
+  emitSiteConfigChange();
+  emitState();
+
+  // Also sync local JSON cache on the Express backend when available
+  try {
+    const token = await user.getIdToken();
+    await fetch('/api/admin/site-config', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(merged)
+    });
+  } catch (err) {
+    console.warn('Backend site-config cache sync note:', err);
+  }
+
+  return merged;
+}
+
 // --- Access Evaluation Helpers ---
 
 function getLessonPricing(lesson: {
@@ -1297,9 +1538,13 @@ function getState(): AuthState {
 const LinguaAuth = {
   CONTACT_INFO,
   MEMBERSHIP_PLANS,
+  DEFAULT_SITE_CONFIG,
   calculateAge,
   getState,
   subscribe,
+  getIdToken,
+  getSiteConfig,
+  saveSiteConfig,
   registerWithEmail,
   loginWithEmail,
   signInWithGoogle,

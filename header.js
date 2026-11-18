@@ -248,6 +248,17 @@
           <span class="sr-only" id="themeToggleSrText">Switch to dark mode</span>
         </button>
 
+        <a
+          href="admin.html"
+          class="header-admin-btn"
+          id="headerAdminBtn"
+          hidden
+          title="Open Admin CMS Portal"
+        >
+          <span aria-hidden="true">⚙️</span>
+          <span>Admin Portal</span>
+        </a>
+
         <button
           type="button"
           class="account-header-btn"
@@ -300,6 +311,11 @@
         <a href="lessons.html" class="hide-menu-link">
           <span class="menu-link-icon" aria-hidden="true">📚</span>
           <span class="hide-menu-link-text">Lessons &amp; Pathways</span>
+        </a>
+        <a href="admin.html" class="hide-menu-link hide-menu-admin-link" id="mobileAdminLink" hidden>
+          <span class="menu-link-icon" aria-hidden="true">⚙️</span>
+          <span class="hide-menu-link-text">Admin Portal</span>
+          <span class="hide-menu-tag">Manage</span>
         </a>
       </div>
 
@@ -476,13 +492,26 @@
   }
 
   function syncMemberMenuVisibility(stateOverride) {
-    const memberTools = document.getElementById('hideMenuMemberTools');
-    if (!memberTools) return;
     const authState = stateOverride || (window.LinguaAuth ? window.LinguaAuth.getState() : null);
     const isSignedIn = Boolean(authState && authState.user);
-    memberTools.hidden = !isSignedIn;
-    if (!isSignedIn) {
-      document.querySelectorAll('#dailyStreakBadge, #userLevelBadge').forEach(b => b.classList.remove('show-tooltip'));
+    const isAdmin = Boolean(authState && authState.isAdmin);
+
+    const memberTools = document.getElementById('hideMenuMemberTools');
+    if (memberTools) {
+      memberTools.hidden = !isSignedIn;
+      if (!isSignedIn) {
+        document.querySelectorAll('#dailyStreakBadge, #userLevelBadge').forEach(b => b.classList.remove('show-tooltip'));
+      }
+    }
+
+    const headerAdminBtn = document.getElementById('headerAdminBtn');
+    if (headerAdminBtn) {
+      headerAdminBtn.hidden = !isAdmin;
+    }
+
+    const mobileAdminLink = document.getElementById('mobileAdminLink');
+    if (mobileAdminLink) {
+      mobileAdminLink.hidden = !isAdmin;
     }
   }
 

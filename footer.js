@@ -2,6 +2,7 @@
  * =========================================================
  * LINGUAPATH - SHARED FOOTER LOADER (footer.js)
  * Automatically loads and injects footer.html into all pages
+ * Dynamically hydrates Contact Us fields from SiteConfig.
  * =========================================================
  */
 
@@ -30,29 +31,29 @@
         <h4 class="footer-title">Contact Us</h4>
         <ul class="contact-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px;">
           <li>
-            <a href="mailto:syndkyaw@gmail.com" class="contact-item" style="display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none;">
+            <a href="mailto:syndkyaw@gmail.com" data-footer-contact="email-link" class="contact-item" style="display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none;">
               <span class="contact-icon" aria-hidden="true">✉️</span>
               <div class="contact-details">
                 <span class="contact-label" style="display: block; font-size: 0.75rem; color: #64748b;">Email</span>
-                <span class="contact-value" style="font-weight: 600; font-size: 0.9rem;">syndkyaw@gmail.com</span>
+                <span class="contact-value" data-footer-contact="email-value" style="font-weight: 600; font-size: 0.9rem;">syndkyaw@gmail.com</span>
               </div>
             </a>
           </li>
           <li>
-            <a href="tel:+959798123456" class="contact-item" style="display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none;">
+            <a href="tel:+959798123456" data-footer-contact="phone-link" class="contact-item" style="display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none;">
               <span class="contact-icon" aria-hidden="true">📞</span>
               <div class="contact-details">
                 <span class="contact-label" style="display: block; font-size: 0.75rem; color: #64748b;">Phone (Myanmar)</span>
-                <span class="contact-value" style="font-weight: 600; font-size: 0.9rem;">+95 9 798 123 456</span>
+                <span class="contact-value" data-footer-contact="phone-value" style="font-weight: 600; font-size: 0.9rem;">+95 9 798 123 456</span>
               </div>
             </a>
           </li>
           <li>
-            <a href="viber://chat?number=%2B959798123456" class="contact-item" title="Chat on Viber" style="display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none;">
+            <a href="viber://chat?number=%2B959798123456" data-footer-contact="viber-link" class="contact-item" title="Chat on Viber" style="display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none;">
               <span class="contact-icon" aria-hidden="true">💬</span>
               <div class="contact-details">
                 <span class="contact-label" style="display: block; font-size: 0.75rem; color: #64748b;">Viber (Myanmar)</span>
-                <span class="contact-value" style="font-weight: 600; font-size: 0.9rem;">+95 9 798 123 456</span>
+                <span class="contact-value" data-footer-contact="viber-value" style="font-weight: 600; font-size: 0.9rem;">+95 9 798 123 456</span>
               </div>
             </a>
           </li>
@@ -67,6 +68,57 @@
     </div>
   </footer>
   `;
+
+  function cleanTel(phone) {
+    return String(phone || '').replace(/[^+\d]/g, '');
+  }
+
+  function hydrateFooterContact(cfg) {
+    if (!cfg) return;
+    const footer = document.querySelector('footer.site-footer');
+    if (!footer) return;
+
+    const email = String(cfg.contactEmail || 'syndkyaw@gmail.com').trim();
+    const phone = String(cfg.contactPhone || '+95 9 798 123 456').trim();
+    const viber = String(cfg.contactViber || phone || '+95 9 798 123 456').trim();
+
+    const items = footer.querySelectorAll('.contact-list a.contact-item');
+    const emailLink = footer.querySelector('[data-footer-contact="email-link"]') || items[0];
+    const phoneLink = footer.querySelector('[data-footer-contact="phone-link"]') || items[1];
+    const viberLink = footer.querySelector('[data-footer-contact="viber-link"]') || items[2];
+
+    if (emailLink) {
+      emailLink.setAttribute('href', `mailto:${email}`);
+      const valEl = emailLink.querySelector('.contact-value');
+      if (valEl) valEl.textContent = email;
+    }
+    if (phoneLink) {
+      const tel = cleanTel(phone) || '+959798123456';
+      phoneLink.setAttribute('href', `tel:${tel}`);
+      const valEl = phoneLink.querySelector('.contact-value');
+      if (valEl) valEl.textContent = phone;
+    }
+    if (viberLink) {
+      const vib = cleanTel(viber) || '+959798123456';
+      viberLink.setAttribute('href', `viber://chat?number=${encodeURIComponent(vib)}`);
+      const valEl = viberLink.querySelector('.contact-value');
+      if (valEl) valEl.textContent = viber;
+    }
+  }
+
+  async function resolveAndHydrateFooter() {
+    if (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === 'function') {
+      hydrateFooterContact(window.LinguaAuth.getSiteConfig());
+      return;
+    }
+    try {
+      const r = await fetch('/api/site-config?t=' + Date.now());
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.config) hydrateFooterContact(j.config);
+      }
+    } catch (e) {}
+  }
 
   async function injectFooter() {
     let htmlContent = FALLBACK_FOOTER_HTML;
@@ -86,7 +138,6 @@
     if (container) {
       container.innerHTML = htmlContent;
     } else {
-      // If no sharedFooter placeholder exists, check for existing footer.site-footer and replace, or append to body
       const existing = document.querySelector('footer.site-footer');
       if (existing) {
         existing.outerHTML = htmlContent;
@@ -94,7 +145,19 @@
         document.body.insertAdjacentHTML('beforeend', htmlContent);
       }
     }
+
+    resolveAndHydrateFooter();
   }
+
+  window.addEventListener('lingua-site-config-change', function (e) {
+    hydrateFooterContact(e.detail);
+  });
+
+  window.addEventListener('lingua-auth-change', function (e) {
+    if (e.detail && e.detail.siteConfig) {
+      hydrateFooterContact(e.detail.siteConfig);
+    }
+  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', injectFooter);

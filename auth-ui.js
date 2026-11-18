@@ -58,6 +58,17 @@
     return window.LinguaAuth || null;
   }
 
+  function getSiteContact() {
+    const api = getAuthApi();
+    const cfg = api && typeof api.getSiteConfig === 'function' ? api.getSiteConfig() : null;
+    const contactEmail = (cfg && cfg.contactEmail) || 'syndkyaw@gmail.com';
+    const contactPhone = (cfg && cfg.contactPhone) || '+95 9 798 123 456';
+    const contactViber = (cfg && cfg.contactViber) || contactPhone || '+95 9 798 123 456';
+    const cleanVib = String(contactViber).replace(/[^+\d]/g, '') || '+959798123456';
+    const viberHref = `viber://chat?number=${encodeURIComponent(cleanVib)}`;
+    return { contactEmail, contactPhone, contactViber, viberHref };
+  }
+
   function getAgeLabel(dob) {
     const api = getAuthApi();
     if (!api || !dob) return '';
@@ -399,6 +410,7 @@
         ? `${perLessonTitle} (${perLessonPrice})`
         : PLAN_CATALOG[selectedPlan]?.title + ' · ' + PLAN_CATALOG[selectedPlan]?.defaultAmount;
 
+    const { contactEmail, contactViber, viberHref } = getSiteContact();
     const channel = subscribeContext.contactChannel === 'email' ? 'email' : 'viber';
     const prefilledHandle =
       channel === 'viber'
@@ -413,7 +425,7 @@
         profile?.phoneNumber || ''
       }\n\nPlease share the QR code for payment so my membership can be activated.\n\nThank you!`
     );
-    const mailtoHref = `mailto:syndkyaw@gmail.com?subject=${subject}&body=${body}`;
+    const mailtoHref = `mailto:${encodeURIComponent(contactEmail)}?subject=${subject}&body=${body}`;
 
     const pendingReq = (state?.myRequests || []).find((r) => r.status === 'pending');
 
@@ -481,18 +493,18 @@
           <div class="lp-contact-cards">
             <div class="lp-contact-card">
               <span class="lp-contact-kicker">Email</span>
-              <strong>syndkyaw@gmail.com</strong>
+              <strong>${escapeHTML(contactEmail)}</strong>
               <div class="lp-contact-actions">
                 <a class="lp-link-btn" href="${mailtoHref}">Open Email App</a>
-                <button type="button" class="lp-link-btn" data-copy-text="syndkyaw@gmail.com">Copy Email</button>
+                <button type="button" class="lp-link-btn" data-copy-text="${escapeHTML(contactEmail)}">Copy Email</button>
               </div>
             </div>
             <div class="lp-contact-card">
               <span class="lp-contact-kicker">Viber (Myanmar)</span>
-              <strong>+95 9 798 123 456</strong>
+              <strong>${escapeHTML(contactViber)}</strong>
               <div class="lp-contact-actions">
-                <a class="lp-link-btn" href="viber://chat?number=%2B959798123456">Chat on Viber</a>
-                <button type="button" class="lp-link-btn" data-copy-text="+95 9 798 123 456">Copy Number</button>
+                <a class="lp-link-btn" href="${escapeHTML(viberHref)}">Chat on Viber</a>
+                <button type="button" class="lp-link-btn" data-copy-text="${escapeHTML(contactViber)}">Copy Number</button>
               </div>
             </div>
           </div>
@@ -502,8 +514,8 @@
               <div class="lp-field">
                 <label for="lpSubChannel">Preferred QR Contact Channel</label>
                 <select id="lpSubChannel">
-                  <option value="viber" ${channel === 'viber' ? 'selected' : ''}>Viber (+95 9 798 123 456)</option>
-                  <option value="email" ${channel === 'email' ? 'selected' : ''}>Email (syndkyaw@gmail.com)</option>
+                  <option value="viber" ${channel === 'viber' ? 'selected' : ''}>Viber (${escapeHTML(contactViber)})</option>
+                  <option value="email" ${channel === 'email' ? 'selected' : ''}>Email (${escapeHTML(contactEmail)})</option>
                 </select>
               </div>
               <div class="lp-field">
@@ -593,7 +605,9 @@
           </div>
           <div class="lp-membership-actions">
             ${
-              membershipTone !== 'active' || profile?.membershipPlan === 'per_lesson'
+              state.isAdmin
+                ? `<a href="admin.html" class="lp-btn lp-btn-primary lp-btn-sm">Open Admin CMS Portal →</a>`
+                : membershipTone !== 'active' || profile?.membershipPlan === 'per_lesson'
                 ? `<button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpOpenPlansFromProfileBtn">Upgrade / Subscribe</button>`
                 : ''
             }
@@ -736,12 +750,15 @@
     return `
       <div class="lp-admin-toolbar">
         <div>
-          <strong>Curriculum Upload &amp; Lesson Pricing</strong>
-          <p class="lp-muted">Set which lessons are Free or Paid directly when uploading Excel/CSV lessons.</p>
+          <strong>Full Site &amp; Content Backend CMS</strong>
+          <p class="lp-muted">Manage Stories, Short Reels, Adult/Kids Lessons, Excel Exercises, Wordwall Games, Homepage Text &amp; Contact Us, and User Memberships.</p>
         </div>
-        <button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" id="lpAdminOpenPricingBtn">
-          Manage Free / Paid Lessons
-        </button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <a href="admin.html" class="lp-btn lp-btn-primary lp-btn-sm">Open Admin Portal →</a>
+          <button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" id="lpAdminOpenPricingBtn">
+            Lesson Pricing
+          </button>
+        </div>
       </div>
 
       <div class="lp-admin-section">
@@ -991,6 +1008,15 @@
         try {
           await api.loginWithEmail(email, password);
           feedbackBanner = null;
+          const nextState = api.getState();
+          if (nextState?.isAdmin && !pendingPostAuthSubscribe && !window.location.pathname.includes('admin.html')) {
+            showToast('Signed in as Admin — opening Admin Portal…');
+            closeModal();
+            setTimeout(() => {
+              window.location.href = 'admin.html';
+            }, 300);
+            return;
+          }
           showToast('Signed in successfully.');
           if (pendingPostAuthSubscribe) {
             subscribeContext = { ...pendingPostAuthSubscribe };
@@ -1100,6 +1126,15 @@
       try {
         await api.signInWithGoogle();
         feedbackBanner = null;
+        const nextState = api.getState();
+        if (nextState?.isAdmin && !pendingPostAuthSubscribe && !window.location.pathname.includes('admin.html')) {
+          showToast('Signed in as Admin — opening Admin Portal…');
+          closeModal();
+          setTimeout(() => {
+            window.location.href = 'admin.html';
+          }, 300);
+          return;
+        }
         showToast('Signed in with Google.');
         if (pendingPostAuthSubscribe) {
           subscribeContext = { ...pendingPostAuthSubscribe };
@@ -1773,7 +1808,7 @@
             <h3>Thank you for reviewing "${escapeHTML(reviewState.title)}"</h3>
             <p class="lp-muted">
               Your email app has been opened with a prefilled review addressed to
-              <strong>syndkyaw@gmail.com</strong> (${reviewState.rating}/5 · ${escapeHTML(ratingText)}).
+              <strong>${escapeHTML(getSiteContact().contactEmail)}</strong> (${reviewState.rating}/5 · ${escapeHTML(ratingText)}).
               Please click Send in your email client to deliver it.
             </p>
             <div class="lp-review-sent-actions">
@@ -1916,7 +1951,8 @@
           commentVal
         ].join('\n');
 
-        const mailtoHref = `mailto:syndkyaw@gmail.com?subject=${encodeURIComponent(subjectText)}&body=${encodeURIComponent(bodyText)}`;
+        const targetEmail = getSiteContact().contactEmail || 'syndkyaw@gmail.com';
+        const mailtoHref = `mailto:${encodeURIComponent(targetEmail)}?subject=${encodeURIComponent(subjectText)}&body=${encodeURIComponent(bodyText)}`;
         reviewState.mailtoUrl = mailtoHref;
         reviewState.submitted = true;
         reviewState.errorMsg = '';

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin CMS Portal - LinguaPath</title>
+  <meta name="description" content="Manage LinguaPath stories, reels, lessons, exercises, homepage content, Wordwall games, and learner memberships.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@600;700&family=Roboto:wght@400;500;600;700&family=Ma+Shan+Zheng&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="style.css">
+  <!-- Early theme application to avoid flash of incorrect theme on reload -->
+  <script>
+    (function () {
+      try {
+        var savedTheme = localStorage.getItem("linguapath_theme") || localStorage.getItem("theme");
+        var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var activeTheme = (savedTheme === "dark" || savedTheme === "light") ? savedTheme : (prefersDark ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", activeTheme);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body class="admin-page">
+
+  <!-- Shared Header Container -->
+  <div id="sharedHeader"></div>
+
+  <!-- Auth / Permission Gate -->
+  <section id="adminAuthGate" class="container">
+    <div class="admin-gate-box">
+      <span class="admin-sidebar-kicker">LinguaPath Backend</span>
+      <h1 id="adminGateTitle" style="font-size:1.5rem; font-weight:800; margin:6px 0 10px;">Checking Administrator Session…</h1>
+      <p id="adminGateMessage" style="font-size:0.92rem; color:#64748b; margin:0 0 20px; line-height:1.55;">
+        Verifying your account credentials before loading the content management workspace.
+      </p>
+      <div id="adminGateActions" style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;"></div>
+    </div>
+  </section>
+
+  <!-- Main Admin CMS Workspace (Shown ONLY to Verified Admin) -->
+  <div id="adminWorkspace" class="admin-shell" hidden>
+    <aside class="admin-sidebar" aria-label="Admin sections">
+      <div class="admin-sidebar-header">
+        <span class="admin-sidebar-kicker">Content Backend</span>
+        <h2 class="admin-sidebar-title">Admin CMS Portal</h2>
+      </div>
+
+      <nav class="admin-nav-list" role="tablist">
+        <button type="button" class="admin-nav-btn active" data-admin-tab="home" role="tab" aria-selected="true">
+          <span>Homepage &amp; Contact</span>
+          <span class="admin-nav-count" id="countHome">Live</span>
+        </button>
+        <button type="button" class="admin-nav-btn" data-admin-tab="stories" role="tab" aria-selected="false">
+          <span>Stories &amp; Exercises</span>
+          <span class="admin-nav-count" id="countStories">0</span>
+        </button>
+        <button type="button" class="admin-nav-btn" data-admin-tab="reels" role="tab" aria-selected="false">
+          <span>Short Reels</span>
+          <span class="admin-nav-count" id="countReels">0</span>
+        </button>
+        <button type="button" class="admin-nav-btn" data-admin-tab="lessons" role="tab" aria-selected="false">
+          <span>Lessons &amp; Exercises</span>
+          <span class="admin-nav-count" id="countLessons">0</span>
+        </button>
+        <button type="button" class="admin-nav-btn" data-admin-tab="games" role="tab" aria-selected="false">
+          <span>Wordwall Games</span>
+          <span class="admin-nav-count" id="countGames">0</span>
+        </button>
+        <button type="button" class="admin-nav-btn" data-admin-tab="users" role="tab" aria-selected="false">
+          <span>Users &amp; Memberships</span>
+          <span class="admin-nav-count" id="countUsers">0</span>
+        </button>
+      </nav>
+    </aside>
+
+    <div class="admin-main">
+      <div class="admin-topbar">
+        <div class="admin-breadcrumb">
+          <span>Admin Portal</span>
+          <span>/</span>
+          <strong id="adminBreadcrumbLabel">Homepage &amp; Contact</strong>
+        </div>
+
+        <div class="admin-topbar-actions">
+          <span id="adminSyncStatus" style="font-size:0.8rem; color:#64748b; font-weight:600;">Ready</span>
+          <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="adminRefreshBtn">Refresh Data</button>
+          <a href="index.html" class="admin-btn admin-btn-secondary admin-btn-sm">View Public Site ↗</a>
+        </div>
+      </div>
+
+      <main class="admin-content-area" id="adminViewport"></main>
+    </div>
+  </div>
+
+  <!-- Admin Edit / Upload / Confirmation Modal -->
+  <div id="adminModalBackdrop" class="admin-modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="admin-modal-dialog" id="adminModalDialog"></div>
+  </div>
+
+  <!-- SheetJS for Exercise Spreadsheets & Template Generation -->
+  <script src="vendor/xlsx.full.min.js"></script>
+
+  <!-- Firebase Auth & Firestore Client -->
+  <script src="vendor/firebase-app.js"></script>
+  <script src="auth-ui.js"></script>
+
+  <!-- Shared Header Controller -->
+  <script src="header.js" defer></script>
+
+  <!-- Admin CMS Controller -->
+  <script src="admin.js" defer></script>
+</body>
+</html>

@@ -4226,6 +4226,7 @@
 
         <p style="font-size: 0.92rem; color: var(--text-muted, #64748b); margin-bottom: 14px; line-height: 1.5;">
           Export or upload Adult &amp; Kids Mandarin lessons (.xlsx / .csv) and choose which lessons are Free vs. Paid.
+          <a href="admin.html#lessons" style="font-weight: 700; color: #ea580c; margin-left: 6px; text-decoration: none;">Open Full Admin CMS →</a>
         </p>
 
         <div id="excelManagerStatusBanner" style="display:none; margin-bottom: 14px;"></div>
@@ -4492,9 +4493,17 @@
         localStorage.setItem('linguapath_custom_lessons', JSON.stringify(customPayload));
 
         try {
+          const token =
+            window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function'
+              ? await window.LinguaAuth.getIdToken()
+              : null;
+          const headers = { 'Content-Type': 'application/octet-stream' };
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
           await fetch('/api/upload-excel', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/octet-stream' },
+            headers,
             body: data
           });
         } catch (err) {
