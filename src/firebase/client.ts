@@ -891,7 +891,12 @@ async function registerWithEmail(params: {
 async function loginWithEmail(email: string, password: string): Promise<User> {
   try {
     const cred = await signInWithEmailAndPassword(auth, String(email || '').trim(), String(password || ''));
-    await ensureUserProfileDoc(cred.user);
+    const profile = await ensureUserProfileDoc(cred.user);
+    state.user = cred.user;
+    state.profile = profile;
+    state.ready = true;
+    startUserListeners(cred.user);
+    emitState();
     return cred.user;
   } catch (err) {
     throw formatAuthError(err);
@@ -901,7 +906,12 @@ async function loginWithEmail(email: string, password: string): Promise<User> {
 async function signInWithGoogle(): Promise<User> {
   try {
     const cred = await signInWithPopup(auth, googleProvider);
-    await ensureUserProfileDoc(cred.user);
+    const profile = await ensureUserProfileDoc(cred.user);
+    state.user = cred.user;
+    state.profile = profile;
+    state.ready = true;
+    startUserListeners(cred.user);
+    emitState();
     return cred.user;
   } catch (err) {
     throw formatAuthError(err);

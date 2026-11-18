@@ -297,11 +297,11 @@
           isProviderDisabled
             ? `
           <div class="lp-console-guide">
-            <div class="lp-console-guide-title">To enable Email/Password login in Firebase Console:</div>
+            <div class="lp-console-guide-title">Why password login is blocked on Firebase right now:</div>
             <ol class="lp-console-guide-list">
-              <li>Open Firebase Authentication Sign-in methods for this project.</li>
-              <li>Click <strong>Email/Password</strong>, toggle <strong>Enable</strong>, and click <strong>Save</strong>.</li>
-              <li>Add or reset your password account under <strong>Users</strong>, or click <strong>Continue with Google</strong> above right now.</li>
+              <li>New AI Studio Starter Tier Firebase projects turn <strong>Google Sign-In</strong> on and leave <strong>Email/Password</strong> disabled on Google&apos;s servers.</li>
+              <li>Click <strong>Continue with Google</strong> below using <strong>syndkyaw@gmail.com</strong> to open the Admin CMS Portal immediately.</li>
+              <li>If you specifically need password login, upgrade/claim the project in Google Cloud, enable <strong>Email/Password</strong> under Firebase Console &rarr; Authentication &rarr; Sign-in method, and add <strong>syndkyaw@gmail.com</strong> under Users.</li>
             </ol>
             <div class="lp-feedback-actions">
               <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpFallbackGoogleBtn">Continue with Google Now</button>
@@ -1049,12 +1049,16 @@
           await api.loginWithEmail(email, password);
           feedbackBanner = null;
           const nextState = api.getState();
-          if (nextState?.isAdmin && !pendingPostAuthSubscribe && !window.location.pathname.includes('admin.html')) {
-            showToast('Signed in as Admin — opening Admin Portal…');
+          if (nextState?.isAdmin && !pendingPostAuthSubscribe) {
             closeModal();
-            setTimeout(() => {
-              window.location.href = 'admin.html';
-            }, 300);
+            if (window.location.pathname.includes('admin.html')) {
+              showToast('Signed in as Admin — CMS Portal unlocked.');
+            } else {
+              showToast('Signed in as Admin — opening Admin Portal…');
+              setTimeout(() => {
+                window.location.href = 'admin.html';
+              }, 300);
+            }
             return;
           }
           showToast('Signed in successfully.');
@@ -1183,12 +1187,16 @@
         await api.signInWithGoogle();
         feedbackBanner = null;
         const nextState = api.getState();
-        if (nextState?.isAdmin && !pendingPostAuthSubscribe && !window.location.pathname.includes('admin.html')) {
-          showToast('Signed in as Admin — opening Admin Portal…');
+        if (nextState?.isAdmin && !pendingPostAuthSubscribe) {
           closeModal();
-          setTimeout(() => {
-            window.location.href = 'admin.html';
-          }, 300);
+          if (window.location.pathname.includes('admin.html')) {
+            showToast('Signed in as Admin — CMS Portal unlocked.');
+          } else {
+            showToast('Signed in as Admin — opening Admin Portal…');
+            setTimeout(() => {
+              window.location.href = 'admin.html';
+            }, 300);
+          }
           return;
         }
         showToast('Signed in with Google.');
