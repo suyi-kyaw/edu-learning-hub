@@ -680,8 +680,16 @@ app.post(
   }
 );
 
-// Serve static files from root directory
-app.use(express.static(__dirname));
+// Serve static files from root directory (no-cache on code/markup so bundle updates apply immediately)
+app.use(
+  express.static(__dirname, {
+    setHeaders(res, filePath) {
+      if (/\.(js|css|html)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    }
+  })
+);
 
 // Route handlers for convenient navigation
 app.get('/', (req, res) => {

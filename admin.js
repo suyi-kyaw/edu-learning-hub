@@ -2881,6 +2881,7 @@
               </svg>
               <span>Continue with Google (Admin)</span>
             </button>
+            <div id="adminGateErrorBox" hidden style="padding:10px 12px; border-radius:10px; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; font-size:0.84rem; text-align:left; line-height:1.45;"></div>
             <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
               <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignInBtn">Sign In with Email</button>
               <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
@@ -2888,9 +2889,11 @@
           </div>
         `;
         const directGoogleBtn = document.getElementById('adminGateGoogleDirectBtn');
+        const gateErrorBox = document.getElementById('adminGateErrorBox');
         if (directGoogleBtn) {
           directGoogleBtn.onclick = async () => {
             if (!window.LinguaAuth || typeof window.LinguaAuth.signInWithGoogle !== 'function') return;
+            if (gateErrorBox) gateErrorBox.hidden = true;
             directGoogleBtn.disabled = true;
             const span = directGoogleBtn.querySelector('span');
             if (span) span.textContent = 'Signing in with Google…';
@@ -2899,7 +2902,17 @@
             } catch (err) {
               directGoogleBtn.disabled = false;
               if (span) span.textContent = 'Continue with Google (Admin)';
-              toast(err instanceof Error ? err.message : 'Google sign-in failed.', 'error');
+              const msg = err instanceof Error ? err.message : 'Google sign-in failed.';
+              if (gateErrorBox) {
+                gateErrorBox.hidden = false;
+                gateErrorBox.innerHTML = `
+                  <div>${escapeHTML(msg)}</div>
+                  <div style="margin-top:8px;">
+                    <a class="admin-btn admin-btn-primary admin-btn-sm" href="${escapeHTML(window.location.href)}" target="_blank" rel="noopener noreferrer">Open Admin Portal in New Tab ↗</a>
+                  </div>
+                `;
+              }
+              toast(msg, 'error');
             }
           };
         }

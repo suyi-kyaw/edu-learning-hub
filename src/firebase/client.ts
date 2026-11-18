@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  getRedirectResult,
   GoogleAuthProvider,
   linkWithPopup,
   unlink,
@@ -359,10 +360,40 @@ function formatAuthError(err: unknown): CodedAuthError {
       out = new Error('Please enter a valid email address.');
       break;
     case 'auth/popup-closed-by-user':
-      out = new Error('Google sign-in popup was closed before completing.');
+      out = new Error(
+        'Google sign-in popup was closed before completing. Try again or open the app in a new browser tab if the preview window closed the popup.'
+      );
       break;
     case 'auth/popup-blocked':
-      out = new Error('Popup was blocked by your browser. Please allow popups for this site and try again.');
+      out = new Error(
+        'Google sign-in popup was blocked by your browser or embedded preview frame. Allow popups for this site or click Open in New Tab to sign in.'
+      );
+      break;
+    case 'auth/cancelled-popup-request':
+      out = new Error('A previous Google sign-in popup was cancelled. Please click Continue with Google once and finish signing in.');
+      break;
+    case 'auth/unauthorized-domain':
+      out = new Error(
+        `This domain (${typeof window !== 'undefined' ? window.location.hostname : 'preview'}) is not yet authorized for Firebase OAuth popups (auth/unauthorized-domain).`
+      );
+      break;
+    case 'auth/web-storage-unsupported':
+      out = new Error(
+        'Browser storage or third-party cookies are blocked in this embedded frame. Please open the app in a new browser tab to sign in with Google.'
+      );
+      break;
+    case 'auth/account-exists-with-different-credential':
+      out = new Error(
+        'An account already exists with this email under another sign-in method. Sign in with that method first, then link Google in your profile.'
+      );
+      break;
+    case 'auth/network-request-failed':
+      out = new Error('Network error while contacting Google/Firebase Authentication. Please check your connection and try again.');
+      break;
+    case 'auth/internal-error':
+      out = new Error(
+        'Google sign-in encountered an internal popup/iframe error (auth/internal-error). Allow popups/third-party cookies or open the app in a new tab to sign in.'
+      );
       break;
     case 'auth/credential-already-in-use':
       out = new Error('That Google account is already linked to another user.');
@@ -373,9 +404,22 @@ function formatAuthError(err: unknown): CodedAuthError {
     case 'auth/requires-recent-login':
       out = new Error('Please sign out and sign back in before modifying linked sign-in providers.');
       break;
-    default:
-      out = new Error(rawMsg.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\.?$/, '') || 'Authentication failed.');
+    default: {
+      let friendly = rawMsg.replace(/^Firebase:\s*/i, '').trim();
+      if (friendly.startsWith('Firestore Error:')) {
+        try {
+          const parsed = JSON.parse(friendly.slice('Firestore Error:'.length).trim());
+          friendly = `Profile sync error (${parsed.operationType || 'write'} on ${parsed.path || 'users'}): ${parsed.error || 'Permission denied'}`;
+        } catch (_) {
+          // keep original
+        }
+      }
+      if (!code && !friendly) {
+        friendly = 'Authentication failed.';
+      }
+      out = new Error(friendly);
       break;
+    }
   }
   out.code = code;
   return out;
@@ -581,7 +625,24 @@ function startSiteConfigListener(): void {
   );
 }
 
+const inFlightProfileEnsures = new Map<string, Promise<UserProfile>>();
+
 async function ensureUserProfileDoc(
+  user: User,
+  overrides?: Partial<{ username: string; phoneNumber: string; dob: string }>
+): Promise<UserProfile> {
+  const existingPromise = inFlightProfileEnsures.get(user.uid);
+  if (existingPromise && !overrides) {
+    return existingPromise;
+  }
+  const run = ensureUserProfileDocInner(user, overrides).finally(() => {
+    inFlightProfileEnsures.delete(user.uid);
+  });
+  inFlightProfileEnsures.set(user.uid, run);
+  return run;
+}
+
+async function ensureUserProfileDocInner(
   user: User,
   overrides?: Partial<{ username: string; phoneNumber: string; dob: string }>
 ): Promise<UserProfile> {
@@ -817,9 +878,12 @@ function toMillis(ts: unknown): number {
   return 0;
 }
 
-// Bootstrap listeners
+// Bootstrap listeners & handle any pending redirect sign-in result
 startCatalogListener();
 startSiteConfigListener();
+getRedirectResult(auth).catch((err) => {
+  console.warn('getRedirectResult note:', err?.code || err?.message || err);
+});
 
 onAuthStateChanged(auth, async (user) => {
   state.user = user;
@@ -903,19 +967,37 @@ async function loginWithEmail(email: string, password: string): Promise<User> {
   }
 }
 
+let inFlightGoogleSignIn: Promise<User> | null = null;
+
 async function signInWithGoogle(): Promise<User> {
-  try {
-    const cred = await signInWithPopup(auth, googleProvider);
-    const profile = await ensureUserProfileDoc(cred.user);
-    state.user = cred.user;
-    state.profile = profile;
-    state.ready = true;
-    startUserListeners(cred.user);
-    emitState();
-    return cred.user;
-  } catch (err) {
-    throw formatAuthError(err);
+  if (inFlightGoogleSignIn) {
+    return inFlightGoogleSignIn;
   }
+  const run = (async () => {
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      let profile: UserProfile | null = null;
+      try {
+        profile = await ensureUserProfileDoc(cred.user);
+      } catch (profileErr) {
+        console.warn('Profile bootstrap delayed after Google login:', profileErr);
+      }
+      state.user = cred.user;
+      if (profile) {
+        state.profile = profile;
+      }
+      state.ready = true;
+      startUserListeners(cred.user);
+      emitState();
+      return cred.user;
+    } catch (err) {
+      throw formatAuthError(err);
+    } finally {
+      inFlightGoogleSignIn = null;
+    }
+  })();
+  inFlightGoogleSignIn = run;
+  return run;
 }
 
 async function linkGoogleAccount(): Promise<string[]> {

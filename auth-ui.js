@@ -289,7 +289,9 @@
   function renderFeedbackHTML() {
     if (!feedbackBanner || !feedbackBanner.text) return '';
     const isProviderDisabled = Boolean(feedbackBanner.isProviderDisabled || feedbackBanner.showGoogleHint);
+    const isPopupIssue = Boolean(feedbackBanner.isPopupIssue);
     const consoleUrl = getConsoleProvidersUrl();
+    const fullTabUrl = typeof window !== 'undefined' ? window.location.href : '/';
     return `
       <div class="lp-feedback lp-feedback-${escapeHTML(feedbackBanner.type || 'info')}" role="alert">
         <div>${escapeHTML(feedbackBanner.text)}</div>
@@ -307,6 +309,12 @@
               <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpFallbackGoogleBtn">Continue with Google Now</button>
               <a class="lp-btn lp-btn-secondary lp-btn-sm" href="${escapeHTML(consoleUrl)}" target="_blank" rel="noopener noreferrer">Open Firebase Sign-in Method ↗</a>
             </div>
+          </div>
+        `
+            : isPopupIssue
+            ? `
+          <div class="lp-feedback-actions">
+            <a class="lp-btn lp-btn-primary lp-btn-sm" href="${escapeHTML(fullTabUrl)}" target="_blank" rel="noopener noreferrer">Open App in New Tab to Sign In ↗</a>
           </div>
         `
             : ''
@@ -1210,7 +1218,27 @@
         }
         renderModal();
       } catch (err) {
-        feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Google sign-in failed.' };
+        const code = err && typeof err === 'object' ? String(err.code || '') : '';
+        const popupCodes = new Set([
+          'auth/popup-blocked',
+          'auth/popup-closed-by-user',
+          'auth/cancelled-popup-request',
+          'auth/internal-error',
+          'auth/web-storage-unsupported',
+          'auth/unauthorized-domain'
+        ]);
+        const inIframe = (() => {
+          try {
+            return window.self !== window.top;
+          } catch (_) {
+            return true;
+          }
+        })();
+        feedbackBanner = {
+          type: 'error',
+          text: err instanceof Error ? err.message : 'Google sign-in failed.',
+          isPopupIssue: popupCodes.has(code) || inIframe
+        };
         renderModal();
       }
     };
