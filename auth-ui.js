@@ -279,15 +279,36 @@
     }
   }
 
+  function getConsoleProvidersUrl() {
+    const api = getAuthApi();
+    const projectId = (api && api.projectId) || 'melodic-ace-2lvvl';
+    return `https://console.firebase.google.com/project/${encodeURIComponent(projectId)}/authentication/providers`;
+  }
+
   // --- Modal Rendering ---
   function renderFeedbackHTML() {
     if (!feedbackBanner || !feedbackBanner.text) return '';
+    const isProviderDisabled = Boolean(feedbackBanner.isProviderDisabled || feedbackBanner.showGoogleHint);
+    const consoleUrl = getConsoleProvidersUrl();
     return `
       <div class="lp-feedback lp-feedback-${escapeHTML(feedbackBanner.type || 'info')}" role="alert">
         <div>${escapeHTML(feedbackBanner.text)}</div>
         ${
-          feedbackBanner.showGoogleHint
-            ? `<button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" id="lpFallbackGoogleBtn" style="margin-top:8px;">Continue with Google Instead</button>`
+          isProviderDisabled
+            ? `
+          <div class="lp-console-guide">
+            <div class="lp-console-guide-title">To enable Email/Password login in Firebase Console:</div>
+            <ol class="lp-console-guide-list">
+              <li>Open Firebase Authentication Sign-in methods for this project.</li>
+              <li>Click <strong>Email/Password</strong>, toggle <strong>Enable</strong>, and click <strong>Save</strong>.</li>
+              <li>Add or reset your password account under <strong>Users</strong>, or click <strong>Continue with Google</strong> above right now.</li>
+            </ol>
+            <div class="lp-feedback-actions">
+              <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpFallbackGoogleBtn">Continue with Google Now</button>
+              <a class="lp-btn lp-btn-secondary lp-btn-sm" href="${escapeHTML(consoleUrl)}" target="_blank" rel="noopener noreferrer">Open Firebase Sign-in Method ↗</a>
+            </div>
+          </div>
+        `
             : ''
         }
       </div>
@@ -320,6 +341,18 @@
 
       ${renderFeedbackHTML()}
 
+      <button type="button" class="lp-btn-google lp-btn-google-top" id="lpGoogleAuthBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/>
+          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"/>
+          <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"/>
+          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"/>
+        </svg>
+        <span>Continue with Google</span>
+      </button>
+
+      <div class="lp-divider"><span>or use email &amp; password</span></div>
+
       ${
         authTab === 'signin'
           ? `
@@ -335,7 +368,7 @@
             </div>
             <input type="password" id="lpLoginPassword" autocomplete="current-password" placeholder="Enter your password" required />
           </div>
-          <button type="submit" class="lp-btn lp-btn-primary lp-btn-full" id="lpSignInSubmitBtn">Sign In</button>
+          <button type="submit" class="lp-btn lp-btn-primary lp-btn-full" id="lpSignInSubmitBtn">Sign In with Email</button>
         </form>
       `
           : `
@@ -380,18 +413,6 @@
         </form>
       `
       }
-
-      <div class="lp-divider"><span>or continue with</span></div>
-
-      <button type="button" class="lp-btn-google" id="lpGoogleAuthBtn">
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/>
-          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"/>
-          <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"/>
-          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"/>
-        </svg>
-        <span>Continue with Google</span>
-      </button>
     `;
   }
 
@@ -595,7 +616,23 @@
       membershipSub = 'Renew Monthly, Annual, or By-Lesson access to unlock paid lessons.';
     }
 
+    const isUnverifiedAdminEmail =
+      String(user.email || '').toLowerCase() === 'syndkyaw@gmail.com' && !user.emailVerified;
+
     return `
+      ${
+        isUnverifiedAdminEmail
+          ? `
+        <div class="lp-feedback lp-feedback-info" role="status" style="margin-bottom:14px;">
+          <div><strong>Admin Email Verification Required:</strong> Signed in as ${escapeHTML(user.email)}, but your email is not verified yet. Verify via inbox link or click Continue with Google to unlock the Admin CMS Portal immediately.</div>
+          <div class="lp-feedback-actions">
+            <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpProfileAdminGoogleBtn">Continue with Google</button>
+            <button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" id="lpRefreshVerifyBtn">Check Verification Status</button>
+          </div>
+        </div>
+      `
+          : ''
+      }
       <div class="lp-membership-card lp-membership-${membershipTone}">
         <div class="lp-membership-row">
           <div>
@@ -660,7 +697,10 @@
         <div class="lp-btn-row-between">
           ${
             !user.emailVerified
-              ? `<button type="button" class="lp-link-btn" id="lpResendVerifyBtn">Resend Verification Email</button>`
+              ? `<div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+                   <button type="button" class="lp-link-btn" id="lpResendVerifyBtn">Resend Verification Email</button>
+                   ${!isUnverifiedAdminEmail ? '<button type="button" class="lp-link-btn" id="lpRefreshVerifyBtn">Refresh Status</button>' : ''}
+                 </div>`
               : '<span></span>'
           }
           <button type="submit" class="lp-btn lp-btn-primary" id="lpSaveProfileBtn">Save Profile</button>
@@ -1029,10 +1069,11 @@
           renderModal();
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Unable to sign in.';
+          const code = err && typeof err === 'object' ? err.code : '';
           feedbackBanner = {
             type: 'error',
             text: msg,
-            showGoogleHint: msg.includes('Firebase Authentication Console')
+            isProviderDisabled: code === 'auth/operation-not-allowed' || msg.includes('Firebase Authentication Console')
           };
           renderModal();
         }
@@ -1110,19 +1151,34 @@
           renderModal();
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Registration failed.';
+          const code = err && typeof err === 'object' ? err.code : '';
           feedbackBanner = {
             type: 'error',
             text: msg,
-            showGoogleHint: msg.includes('Firebase Authentication Console')
+            isProviderDisabled: code === 'auth/operation-not-allowed' || msg.includes('Firebase Authentication Console')
           };
           renderModal();
         }
       };
     }
 
-    // Google Auth button (and fallback button inside error banner)
-    const handleGoogle = async () => {
+    // Google Auth button (and fallback button inside error banner / admin verify banner)
+    const handleGoogle = async (triggerBtn) => {
       if (!api) return;
+      const gBtn = document.getElementById('lpGoogleAuthBtn');
+      const fBtn = document.getElementById('lpFallbackGoogleBtn');
+      const pBtn = document.getElementById('lpProfileAdminGoogleBtn');
+      [gBtn, fBtn, pBtn].forEach((b) => {
+        if (b) b.disabled = true;
+      });
+      if (triggerBtn) {
+        const span = triggerBtn.querySelector('span');
+        if (span) {
+          span.textContent = 'Signing in with Google…';
+        } else {
+          triggerBtn.textContent = 'Signing in with Google…';
+        }
+      }
       try {
         await api.signInWithGoogle();
         feedbackBanner = null;
@@ -1151,9 +1207,11 @@
       }
     };
     const googleBtn = document.getElementById('lpGoogleAuthBtn');
-    if (googleBtn) googleBtn.onclick = handleGoogle;
+    if (googleBtn) googleBtn.onclick = () => handleGoogle(googleBtn);
     const fallbackGoogleBtn = document.getElementById('lpFallbackGoogleBtn');
-    if (fallbackGoogleBtn) fallbackGoogleBtn.onclick = handleGoogle;
+    if (fallbackGoogleBtn) fallbackGoogleBtn.onclick = () => handleGoogle(fallbackGoogleBtn);
+    const profileAdminGoogleBtn = document.getElementById('lpProfileAdminGoogleBtn');
+    if (profileAdminGoogleBtn) profileAdminGoogleBtn.onclick = () => handleGoogle(profileAdminGoogleBtn);
 
     // Profile actions
     const openPlansBtn = document.getElementById('lpOpenPlansFromProfileBtn');
@@ -1196,10 +1254,42 @@
         if (!api) return;
         try {
           await api.resendVerificationEmail();
-          feedbackBanner = { type: 'success', text: 'Verification email sent. Please check your inbox.' };
+          feedbackBanner = { type: 'success', text: 'Verification email sent. Check your inbox, click the link, then click Check Verification Status.' };
           renderModal();
         } catch (err) {
           feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Could not send email.' };
+          renderModal();
+        }
+      };
+    }
+
+    const refreshVerifyBtn = document.getElementById('lpRefreshVerifyBtn');
+    if (refreshVerifyBtn) {
+      refreshVerifyBtn.onclick = async () => {
+        if (!api || typeof api.reloadAuthSession !== 'function') return;
+        refreshVerifyBtn.disabled = true;
+        refreshVerifyBtn.textContent = 'Checking…';
+        try {
+          const nextState = await api.reloadAuthSession();
+          if (nextState?.user?.emailVerified) {
+            if (nextState.isAdmin && !window.location.pathname.includes('admin.html')) {
+              showToast('Admin email verified — opening Admin Portal…');
+              closeModal();
+              setTimeout(() => {
+                window.location.href = 'admin.html';
+              }, 300);
+              return;
+            }
+            feedbackBanner = { type: 'success', text: 'Email verification confirmed!' };
+          } else {
+            feedbackBanner = {
+              type: 'info',
+              text: 'Email is not marked verified yet. Click the verification link in your inbox, or use Continue with Google above for instant verification.'
+            };
+          }
+          renderModal();
+        } catch (err) {
+          feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Could not refresh status.' };
           renderModal();
         }
       };

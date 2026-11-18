@@ -332,37 +332,53 @@ function isTokenAdminUser(user: User | null): boolean {
   );
 }
 
-function formatAuthError(err: unknown): Error {
+type CodedAuthError = Error & { code?: string };
+
+function formatAuthError(err: unknown): CodedAuthError {
   const code = (err as { code?: string })?.code || '';
   const rawMsg = err instanceof Error ? err.message : String(err);
+  let out: CodedAuthError;
   switch (code) {
     case 'auth/operation-not-allowed':
-      return new Error(
-        'Email/Password sign-in is not yet enabled in Firebase Authentication Console. Use "Continue with Google" now, or enable Email/Password under Firebase Console > Authentication > Sign-in method.'
+      out = new Error(
+        'Email/Password sign-in is not yet enabled in Firebase Authentication Console. Click "Continue with Google" at the top now, or enable Email/Password under Firebase Console > Authentication > Sign-in method.'
       );
+      break;
     case 'auth/email-already-in-use':
-      return new Error('An account with this email already exists. Please sign in instead, or link Google after signing in.');
+      out = new Error('An account with this email already exists. Please sign in instead, or link Google after signing in.');
+      break;
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
-      return new Error('Invalid email or password. Please check your credentials and try again.');
+      out = new Error('Invalid email or password. Please check your credentials and try again.');
+      break;
     case 'auth/weak-password':
-      return new Error('Password is too weak. Please enter at least 6 characters.');
+      out = new Error('Password is too weak. Please enter at least 6 characters.');
+      break;
     case 'auth/invalid-email':
-      return new Error('Please enter a valid email address.');
+      out = new Error('Please enter a valid email address.');
+      break;
     case 'auth/popup-closed-by-user':
-      return new Error('Google sign-in popup was closed before completing.');
+      out = new Error('Google sign-in popup was closed before completing.');
+      break;
     case 'auth/popup-blocked':
-      return new Error('Popup was blocked by your browser. Please allow popups for this site and try again.');
+      out = new Error('Popup was blocked by your browser. Please allow popups for this site and try again.');
+      break;
     case 'auth/credential-already-in-use':
-      return new Error('That Google account is already linked to another user.');
+      out = new Error('That Google account is already linked to another user.');
+      break;
     case 'auth/provider-already-linked':
-      return new Error('Google sign-in is already linked to your account.');
+      out = new Error('Google sign-in is already linked to your account.');
+      break;
     case 'auth/requires-recent-login':
-      return new Error('Please sign out and sign back in before modifying linked sign-in providers.');
+      out = new Error('Please sign out and sign back in before modifying linked sign-in providers.');
+      break;
     default:
-      return new Error(rawMsg.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\.?$/, '') || 'Authentication failed.');
+      out = new Error(rawMsg.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\.?$/, '') || 'Authentication failed.');
+      break;
   }
+  out.code = code;
+  return out;
 }
 
 // --- Client Reactive Store ---
@@ -588,18 +604,41 @@ async function ensureUserProfileDoc(
       nextProviders.some((p, i) => p !== existing.linkedProviders?.[i]);
 
     const nextEmail = String(user.email || existing.email || '').slice(0, 160);
-    if (needsProviderSync || (nextEmail && nextEmail !== existing.email)) {
+    const isRootAdmin = isTokenAdminUser(user);
+    const needsRoleUpgrade = isRootAdmin && existing.role !== 'admin';
+
+    if (needsProviderSync || (nextEmail && nextEmail !== existing.email) || needsRoleUpgrade) {
+      const updatePayload: Record<string, unknown> = {
+        email: nextEmail,
+        linkedProviders: nextProviders,
+        updatedAt: serverTimestamp()
+      };
+      if (needsRoleUpgrade) {
+        updatePayload.role = 'admin';
+      }
       try {
-        await updateDoc(ref, {
-          email: nextEmail,
-          linkedProviders: nextProviders,
-          updatedAt: serverTimestamp()
-        });
+        await updateDoc(ref, updatePayload);
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, userPath);
       }
     }
-    return existing;
+
+    if (isRootAdmin) {
+      try {
+        const adminRef = doc(db, 'admins', user.uid);
+        const adminSnap = await getDoc(adminRef);
+        if (!adminSnap.exists()) {
+          await setDoc(adminRef, {
+            uid: user.uid,
+            email: nextEmail,
+            grantedAt: serverTimestamp()
+          });
+        }
+      } catch (err) {
+        console.warn('Admin doc sync skipped:', err);
+      }
+    }
+    return isRootAdmin && existing.role !== 'admin' ? { ...existing, role: 'admin', linkedProviders: nextProviders } : existing;
   }
 
   const username = sanitizeUsername(overrides?.username || user.displayName, user.email);
@@ -928,6 +967,25 @@ async function resendVerificationEmail(): Promise<void> {
 async function sendPasswordReset(email: string): Promise<void> {
   try {
     await sendPasswordResetEmail(auth, String(email || '').trim());
+  } catch (err) {
+    throw formatAuthError(err);
+  }
+}
+
+async function reloadAuthSession(): Promise<AuthState> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Please sign in first.');
+  try {
+    await user.reload();
+    await user.getIdToken(true);
+    const refreshedUser = auth.currentUser;
+    if (refreshedUser) {
+      state.user = refreshedUser;
+      await ensureUserProfileDoc(refreshedUser);
+      startUserListeners(refreshedUser);
+    }
+    emitState();
+    return getState();
   } catch (err) {
     throw formatAuthError(err);
   }
@@ -1536,6 +1594,7 @@ function getState(): AuthState {
 }
 
 const LinguaAuth = {
+  projectId: firebaseConfig.projectId || 'melodic-ace-2lvvl',
   CONTACT_INFO,
   MEMBERSHIP_PLANS,
   DEFAULT_SITE_CONFIG,
@@ -1552,6 +1611,7 @@ const LinguaAuth = {
   unlinkGoogleAccount,
   resendVerificationEmail,
   sendPasswordReset,
+  reloadAuthSession,
   logout,
   updateProfileDetails,
   submitSubscriptionRequest,

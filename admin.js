@@ -2867,13 +2867,42 @@
       if (gateTitle) gateTitle.textContent = 'Administrator Sign-In Required';
       if (gateMsg) {
         gateMsg.textContent =
-          'Sign in with the administrator account to edit homepage content, upload media, manage lessons/stories/games, and update learner memberships.';
+          'Sign in with syndkyaw@gmail.com to manage homepage content, stories, reels, lessons, exercises, Wordwall games, and learner memberships.';
       }
       if (gateActions) {
         gateActions.innerHTML = `
-          <button type="button" class="admin-btn admin-btn-primary" id="adminGateSignInBtn">Sign In as Admin</button>
-          <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
+          <div style="width:100%; display:flex; flex-direction:column; gap:10px; align-items:stretch;">
+            <button type="button" class="lp-btn-google lp-btn-google-top" id="adminGateGoogleDirectBtn">
+              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/>
+                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"/>
+                <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"/>
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"/>
+              </svg>
+              <span>Continue with Google (Admin)</span>
+            </button>
+            <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+              <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignInBtn">Sign In with Email</button>
+              <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
+            </div>
+          </div>
         `;
+        const directGoogleBtn = document.getElementById('adminGateGoogleDirectBtn');
+        if (directGoogleBtn) {
+          directGoogleBtn.onclick = async () => {
+            if (!window.LinguaAuth || typeof window.LinguaAuth.signInWithGoogle !== 'function') return;
+            directGoogleBtn.disabled = true;
+            const span = directGoogleBtn.querySelector('span');
+            if (span) span.textContent = 'Signing in with Google…';
+            try {
+              await window.LinguaAuth.signInWithGoogle();
+            } catch (err) {
+              directGoogleBtn.disabled = false;
+              if (span) span.textContent = 'Continue with Google (Admin)';
+              toast(err instanceof Error ? err.message : 'Google sign-in failed.', 'error');
+            }
+          };
+        }
         document.getElementById('adminGateSignInBtn').onclick = () => {
           if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openAuthModal === 'function') {
             window.LinguaAuthUI.openAuthModal('signin');
@@ -2888,15 +2917,20 @@
       }
       if (gateMsg) {
         gateMsg.textContent = isUnverifiedAdminEmail
-          ? `Signed in as ${s.user.email}, but your email is not yet verified. Verify your email address via the link sent to your inbox (and reload this page), or sign in with Google (${s.user.email}) for instant verified admin access.`
+          ? `Signed in as ${s.user.email}, but your email is not yet verified. Click Continue with Google below for instant verified admin access, or click your inbox verification link and then Check Verification Status.`
           : `Signed in as ${s.user.email}. This workspace is restricted to the site administrator account.`;
       }
       if (gateActions) {
         gateActions.innerHTML = isUnverifiedAdminEmail
           ? `
-            <button type="button" class="admin-btn admin-btn-primary" id="adminGateResendBtn">Resend Verification Email</button>
-            <button type="button" class="admin-btn admin-btn-secondary" id="adminGateGoogleBtn">Continue with Google</button>
-            <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
+            <div style="width:100%; display:flex; flex-direction:column; gap:10px; align-items:stretch;">
+              <button type="button" class="admin-btn admin-btn-primary" id="adminGateGoogleBtn">Continue with Google (Instant Verify)</button>
+              <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+                <button type="button" class="admin-btn admin-btn-secondary" id="adminGateRefreshVerifyBtn">Check Verification Status</button>
+                <button type="button" class="admin-btn admin-btn-secondary" id="adminGateResendBtn">Resend Verification Email</button>
+                <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
+              </div>
+            </div>
           `
           : `
             <a href="index.html" class="admin-btn admin-btn-primary">Back to Home</a>
@@ -2907,18 +2941,42 @@
           resendBtn.onclick = async () => {
             try {
               await window.LinguaAuth.resendVerificationEmail();
-              toast('Verification email sent to syndkyaw@gmail.com. After clicking the link, sign out and sign back in.');
+              toast('Verification email sent to syndkyaw@gmail.com. After clicking the link, click Check Verification Status.');
             } catch (err) {
               toast(err instanceof Error ? err.message : 'Could not send verification email.', 'error');
+            }
+          };
+        }
+        const refreshVerifyBtn = document.getElementById('adminGateRefreshVerifyBtn');
+        if (refreshVerifyBtn) {
+          refreshVerifyBtn.onclick = async () => {
+            if (!window.LinguaAuth || typeof window.LinguaAuth.reloadAuthSession !== 'function') return;
+            refreshVerifyBtn.disabled = true;
+            refreshVerifyBtn.textContent = 'Checking…';
+            try {
+              const nextState = await window.LinguaAuth.reloadAuthSession();
+              if (!nextState?.user?.emailVerified) {
+                toast('Email is not marked verified yet. Click the link in your inbox or use Continue with Google.', 'info');
+                refreshVerifyBtn.disabled = false;
+                refreshVerifyBtn.textContent = 'Check Verification Status';
+              }
+            } catch (err) {
+              refreshVerifyBtn.disabled = false;
+              refreshVerifyBtn.textContent = 'Check Verification Status';
+              toast(err instanceof Error ? err.message : 'Could not refresh session.', 'error');
             }
           };
         }
         const googleBtn = document.getElementById('adminGateGoogleBtn');
         if (googleBtn) {
           googleBtn.onclick = async () => {
+            googleBtn.disabled = true;
+            googleBtn.textContent = 'Signing in with Google…';
             try {
               await window.LinguaAuth.signInWithGoogle();
             } catch (err) {
+              googleBtn.disabled = false;
+              googleBtn.textContent = 'Continue with Google (Instant Verify)';
               toast(err instanceof Error ? err.message : 'Google sign-in failed.', 'error');
             }
           };

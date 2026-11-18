@@ -11396,6 +11396,53 @@ body.lp-modal-open {
   color: #f8fafc;
 }
 
+.lp-btn-google-top {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05);
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.lp-btn-google-top:hover:not(:disabled) {
+  border-color: #ea580c;
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.12);
+}
+
+.lp-btn-google:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.lp-console-guide {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(15, 23, 42, 0.12);
+  font-weight: 500;
+}
+
+[data-theme="dark"] .lp-console-guide {
+  border-top-color: rgba(248, 250, 252, 0.14);
+}
+
+.lp-console-guide-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.lp-console-guide-list {
+  margin: 0 0 10px 18px;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.lp-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 /* Membership Card & Providers */
 .lp-membership-card {
   padding: 16px 18px;
