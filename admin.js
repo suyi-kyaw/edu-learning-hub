@@ -2881,15 +2881,48 @@
         };
       }
     } else {
-      if (gateTitle) gateTitle.textContent = 'Access Restricted';
+      const isUnverifiedAdminEmail =
+        String(s.user.email || '').toLowerCase() === 'syndkyaw@gmail.com' && !s.user.emailVerified;
+      if (gateTitle) {
+        gateTitle.textContent = isUnverifiedAdminEmail ? 'Admin Email Verification Required' : 'Access Restricted';
+      }
       if (gateMsg) {
-        gateMsg.textContent = `Signed in as ${s.user.email}. This workspace is restricted to the site administrator account.`;
+        gateMsg.textContent = isUnverifiedAdminEmail
+          ? `Signed in as ${s.user.email}, but your email is not yet verified. Verify your email address via the link sent to your inbox (and reload this page), or sign in with Google (${s.user.email}) for instant verified admin access.`
+          : `Signed in as ${s.user.email}. This workspace is restricted to the site administrator account.`;
       }
       if (gateActions) {
-        gateActions.innerHTML = `
-          <a href="index.html" class="admin-btn admin-btn-primary">Back to Home</a>
-          <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
-        `;
+        gateActions.innerHTML = isUnverifiedAdminEmail
+          ? `
+            <button type="button" class="admin-btn admin-btn-primary" id="adminGateResendBtn">Resend Verification Email</button>
+            <button type="button" class="admin-btn admin-btn-secondary" id="adminGateGoogleBtn">Continue with Google</button>
+            <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
+          `
+          : `
+            <a href="index.html" class="admin-btn admin-btn-primary">Back to Home</a>
+            <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
+          `;
+        const resendBtn = document.getElementById('adminGateResendBtn');
+        if (resendBtn) {
+          resendBtn.onclick = async () => {
+            try {
+              await window.LinguaAuth.resendVerificationEmail();
+              toast('Verification email sent to syndkyaw@gmail.com. After clicking the link, sign out and sign back in.');
+            } catch (err) {
+              toast(err instanceof Error ? err.message : 'Could not send verification email.', 'error');
+            }
+          };
+        }
+        const googleBtn = document.getElementById('adminGateGoogleBtn');
+        if (googleBtn) {
+          googleBtn.onclick = async () => {
+            try {
+              await window.LinguaAuth.signInWithGoogle();
+            } catch (err) {
+              toast(err instanceof Error ? err.message : 'Google sign-in failed.', 'error');
+            }
+          };
+        }
         document.getElementById('adminGateSignOutBtn').onclick = () => {
           if (window.LinguaAuth && typeof window.LinguaAuth.logout === 'function') {
             window.LinguaAuth.logout();
