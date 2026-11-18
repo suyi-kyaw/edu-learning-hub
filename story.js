@@ -1325,12 +1325,27 @@ function renderExercises(
 
   html += `
     </div>
+    <div class="story-complete-review-bar">
+      <div class="story-complete-review-copy">
+        <strong>Finished this lesson?</strong>
+        <span>Complete the story and share your feedback in a quick review.</span>
+      </div>
+      <button type="button" class="btn btn-primary" id="btnFinishStoryReview">
+        ✓ Finish Lesson &amp; Leave Review
+      </button>
+    </div>
   `;
 
 
   container.innerHTML =
     html;
 
+  const finishReviewBtn = document.getElementById("btnFinishStoryReview");
+  if (finishReviewBtn) {
+    finishReviewBtn.addEventListener("click", () => {
+      finishStoryLessonAndReview();
+    });
+  }
 
   initializeExercises();
 
@@ -1930,9 +1945,27 @@ function showPageError(
    STORY PROGRESS TRACKING (LOCALSTORAGE PERSISTENCE)
    ========================================================= */
 
+function isAuthenticatedMember() {
+  return Boolean(window.LinguaAuth && typeof window.LinguaAuth.getState === "function" && window.LinguaAuth.getState().user);
+}
+
+function getScopedProgressKey() {
+  const uid = window.LinguaAuth?.getState()?.user?.uid;
+  return uid ? `linguapath_lesson_progress_${uid}` : "linguapath_lesson_progress";
+}
+
+function getCurrentStoryDisplayTitle() {
+  if (currentLoadedLesson) {
+    return currentLoadedLesson.title
+      ? `${currentLoadedLesson.title}${currentLoadedLesson.chineseTitle ? ` (${currentLoadedLesson.chineseTitle})` : ""}`
+      : currentLoadedLessonId;
+  }
+  return currentLoadedLessonId || "Chinese Story Lesson";
+}
+
 function getStoryLessonProgress(lessonId) {
   try {
-    const raw = localStorage.getItem("linguapath_lesson_progress");
+    const raw = localStorage.getItem(getScopedProgressKey());
     const all = raw ? JSON.parse(raw) : {};
     const cleanId = String(lessonId || "").trim();
     return all[cleanId] || { completed: false, percent: 0 };
@@ -1944,7 +1977,7 @@ function getStoryLessonProgress(lessonId) {
 function saveStoryLessonProgress(lessonId, percent, completed) {
   try {
     const cleanId = String(lessonId || "").trim();
-    const raw = localStorage.getItem("linguapath_lesson_progress");
+    const raw = localStorage.getItem(getScopedProgressKey());
     const all = raw ? JSON.parse(raw) : {};
     const isDone = Boolean(completed || percent >= 100);
     all[cleanId] = {
@@ -1952,7 +1985,14 @@ function saveStoryLessonProgress(lessonId, percent, completed) {
       completed: isDone,
       lastUpdated: Date.now()
     };
-    localStorage.setItem("linguapath_lesson_progress", JSON.stringify(all));
+    localStorage.setItem(getScopedProgressKey(), JSON.stringify(all));
+    if (isAuthenticatedMember() && window.LinguaAuth && typeof window.LinguaAuth.recordLessonCompletedProgress === "function") {
+      if (isDone) {
+        window.LinguaAuth.recordLessonCompletedProgress(cleanId, true).catch(() => {});
+      } else if (completed === false) {
+        window.LinguaAuth.recordLessonCompletedProgress(cleanId, false).catch(() => {});
+      }
+    }
     updateUserLevelUI();
   } catch (e) {
     console.warn("Could not save story progress to localStorage:", e);
@@ -1981,6 +2021,24 @@ function updateStoryProgressUI(lessonId) {
   }
 }
 
+function finishStoryLessonAndReview() {
+  if (currentLoadedLessonId) {
+    saveStoryLessonProgress(currentLoadedLessonId, 100, true);
+    updateStoryProgressUI(currentLoadedLessonId);
+    recordLessonCompletionStreak();
+  }
+  const title = getCurrentStoryDisplayTitle();
+  if (window.LinguaReview && typeof window.LinguaReview.openLessonReviewModal === "function") {
+    window.LinguaReview.openLessonReviewModal({
+      lessonId: currentLoadedLessonId || "story-lesson",
+      title,
+      audience: "Story Lesson"
+    });
+  } else {
+    showStoryCompletionModal(title, currentLoadedLessonId, currentLoadedAllLessons);
+  }
+}
+
 function checkAllExercisesCompleted() {
   const allExercises = document.querySelectorAll(".exercise-item");
   if (!allExercises.length) return;
@@ -1989,20 +2047,21 @@ function checkAllExercisesCompleted() {
   if (correctCount >= allExercises.length) {
     const prog = getStoryLessonProgress(currentLoadedLessonId);
     if (!prog.completed) {
-      saveStoryLessonProgress(currentLoadedLessonId, 100, true);
-      updateStoryProgressUI(currentLoadedLessonId);
-      recordLessonCompletionStreak();
-      const title = currentLoadedLesson
-        ? (currentLoadedLesson.title ? `${currentLoadedLesson.title} (${currentLoadedLesson.chineseTitle || ""})` : currentLoadedLessonId)
-        : currentLoadedLessonId;
-      showStoryCompletionModal(title, currentLoadedLessonId, currentLoadedAllLessons);
+      finishStoryLessonAndReview();
     }
   }
 }
 
 function getTotalCompletedLessonsCount() {
+  if (!isAuthenticatedMember()) return 0;
+  if (window.LinguaAuth && typeof window.LinguaAuth.getUserProgress === "function") {
+    const cloud = window.LinguaAuth.getUserProgress();
+    if (cloud && Array.isArray(cloud.completedLessonIds)) {
+      return cloud.completedLessonIds.length;
+    }
+  }
   try {
-    const raw = localStorage.getItem("linguapath_lesson_progress");
+    const raw = localStorage.getItem(getScopedProgressKey());
     if (!raw) return 0;
     const all = JSON.parse(raw);
     let count = 0;
@@ -2021,10 +2080,16 @@ function showStoryCompletionModal(lessonTitle, lessonId, lessons) {
   const modal = document.getElementById("completionModal");
   if (!modal) return;
 
-  const count = getTotalCompletedLessonsCount();
+  const isMember = isAuthenticatedMember();
+  const count = isMember ? getTotalCompletedLessonsCount() : 0;
   const streakData = getDailyStreakData();
   const totalAvailable = (lessons && lessons.length) ? lessons.length : 2;
   const levelInfo = getUserLevelInfo(count);
+
+  const statsBox = modal.querySelector(".completion-stats-box");
+  if (statsBox) {
+    statsBox.style.display = isMember ? "" : "none";
+  }
 
   const titleEl = document.getElementById("completionLessonTitle");
   if (titleEl) {
@@ -2071,17 +2136,33 @@ function showStoryCompletionModal(lessonTitle, lessonId, lessons) {
   if (actionsContainer) {
     actionsContainer.innerHTML = "";
 
+    const reviewBtn = document.createElement("button");
+    reviewBtn.type = "button";
+    reviewBtn.className = "btn btn-primary";
+    reviewBtn.textContent = "⭐ Leave a Lesson Review";
+    reviewBtn.addEventListener("click", () => {
+      closeStoryCompletionModal();
+      if (window.LinguaReview && typeof window.LinguaReview.openLessonReviewModal === "function") {
+        window.LinguaReview.openLessonReviewModal({
+          lessonId: lessonId || currentLoadedLessonId || "story-lesson",
+          title: lessonTitle || getCurrentStoryDisplayTitle(),
+          audience: "Story Lesson"
+        });
+      }
+    });
+    actionsContainer.appendChild(reviewBtn);
+
     if (nextLesson) {
       const nextBtn = document.createElement("a");
       nextBtn.href = `story.html?id=${encodeURIComponent(nextLesson.id || nextLesson.lessonId)}`;
-      nextBtn.className = "btn btn-primary";
+      nextBtn.className = "btn btn-secondary";
       nextBtn.textContent = `Next: ${nextLesson.title || "Next Lesson"} →`;
       actionsContainer.appendChild(nextBtn);
     }
 
     const hubBtn = document.createElement("a");
     hubBtn.href = "index.html#lessons";
-    hubBtn.className = nextLesson ? "btn btn-secondary" : "btn btn-primary";
+    hubBtn.className = "btn btn-secondary";
     hubBtn.textContent = "Learning Hub";
     actionsContainer.appendChild(hubBtn);
 
@@ -2180,50 +2261,20 @@ function getDaysDifference(dateStr1, dateStr2) {
 }
 
 function getDailyStreakData() {
+  if (!isAuthenticatedMember()) {
+    return { currentStreak: 0, lastCompletedDate: null, streakDates: [], bestStreak: 0 };
+  }
   try {
-    const raw = localStorage.getItem(STREAK_STORAGE_KEY);
-    const today = getLocalDateString();
-
-    if (!raw) {
-      // Check if user has previously completed lessons
-      const totalCompleted = getTotalCompletedLessonsCount();
-      if (totalCompleted > 0) {
-        return {
-          currentStreak: 1,
-          lastCompletedDate: today,
-          streakDates: [today],
-          bestStreak: 1
-        };
-      }
+    const cloud = window.LinguaAuth.getUserProgress();
+    if (cloud) {
       return {
-        currentStreak: 0,
-        lastCompletedDate: null,
-        streakDates: [],
-        bestStreak: 0
+        currentStreak: Number(cloud.currentStreak) || 0,
+        lastCompletedDate: cloud.lastCompletedDate || null,
+        streakDates: Array.isArray(cloud.streakDates) ? cloud.streakDates : [],
+        bestStreak: Number(cloud.bestStreak) || 0
       };
     }
-
-    const data = JSON.parse(raw);
-    const currentStreak = Number(data.currentStreak) || 0;
-    const lastCompletedDate = data.lastCompletedDate || null;
-    const streakDates = Array.isArray(data.streakDates) ? data.streakDates : [];
-    const bestStreak = Number(data.bestStreak) || currentStreak;
-
-    if (!lastCompletedDate) {
-      return { currentStreak: 0, lastCompletedDate: null, streakDates, bestStreak };
-    }
-
-    const diff = getDaysDifference(lastCompletedDate, today);
-    if (diff === 0) {
-      // Completed today
-      return { currentStreak: Math.max(1, currentStreak), lastCompletedDate, streakDates, bestStreak };
-    } else if (diff === 1) {
-      // Completed yesterday, streak intact awaiting today
-      return { currentStreak: Math.max(1, currentStreak), lastCompletedDate, streakDates, bestStreak };
-    } else {
-      // Missed days
-      return { currentStreak: 0, lastCompletedDate, streakDates, bestStreak };
-    }
+    return { currentStreak: 0, lastCompletedDate: null, streakDates: [], bestStreak: 0 };
   } catch (e) {
     console.warn("Could not read streak data:", e);
     return { currentStreak: 0, lastCompletedDate: null, streakDates: [], bestStreak: 0 };
@@ -2231,45 +2282,11 @@ function getDailyStreakData() {
 }
 
 function recordLessonCompletionStreak() {
-  try {
-    const today = getLocalDateString();
-    const streakData = getDailyStreakData();
-    let currentStreak = streakData.currentStreak;
-    let streakDates = [...(streakData.streakDates || [])];
-
-    if (!streakData.lastCompletedDate) {
-      currentStreak = 1;
-      streakDates = [today];
-    } else {
-      const diff = getDaysDifference(streakData.lastCompletedDate, today);
-      if (diff === 0) {
-        currentStreak = Math.max(1, currentStreak);
-        if (!streakDates.includes(today)) streakDates.push(today);
-      } else if (diff === 1) {
-        currentStreak = currentStreak + 1;
-        if (!streakDates.includes(today)) streakDates.push(today);
-      } else {
-        currentStreak = 1;
-        if (!streakDates.includes(today)) streakDates.push(today);
-      }
-    }
-
-    const bestStreak = Math.max(streakData.bestStreak || 0, currentStreak);
-    const updated = {
-      currentStreak,
-      lastCompletedDate: today,
-      streakDates,
-      bestStreak,
-      lastUpdated: Date.now()
-    };
-
-    localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(updated));
-    updateHeaderStreakUI();
-    return updated;
-  } catch (e) {
-    console.warn("Could not save streak data:", e);
-    return { currentStreak: 1, lastCompletedDate: getLocalDateString(), bestStreak: 1 };
+  if (!isAuthenticatedMember()) {
+    return { currentStreak: 0, lastCompletedDate: null, bestStreak: 0 };
   }
+  updateHeaderStreakUI();
+  return getDailyStreakData();
 }
 
 function updateHeaderStreakUI() {
@@ -2454,34 +2471,31 @@ function setupUserLevelInteractions() {
 const DAILY_REMINDER_STORAGE_KEY = "linguapath_daily_reminder";
 
 function getDailyReminderSettings() {
-  try {
-    const raw = localStorage.getItem(DAILY_REMINDER_STORAGE_KEY);
-    if (!raw) {
-      return {
-        enabled: true,
-        time: "18:00",
-        lastNotifiedDate: null
-      };
-    }
-    const data = JSON.parse(raw);
-    return {
-      enabled: data.enabled !== false,
-      time: data.time || "18:00",
-      lastNotifiedDate: data.lastNotifiedDate || null
-    };
-  } catch (e) {
-    return { enabled: true, time: "18:00", lastNotifiedDate: null };
+  if (!isAuthenticatedMember()) {
+    return { enabled: false, time: "18:00", lastNotifiedDate: null };
   }
+  const cloud = window.LinguaAuth.getUserProgress();
+  if (cloud) {
+    return {
+      enabled: cloud.reminderEnabled !== false,
+      time: cloud.reminderTime || "18:00",
+      lastNotifiedDate: cloud.lastNotifiedDate || null
+    };
+  }
+  return { enabled: true, time: "18:00", lastNotifiedDate: null };
 }
 
 function saveDailyReminderSettings(settings) {
-  try {
-    localStorage.setItem(DAILY_REMINDER_STORAGE_KEY, JSON.stringify(settings));
-    updateReminderBellUI();
-    updateReminderGoalStatusUI();
-  } catch (e) {
-    console.warn("Could not save reminder settings:", e);
+  if (!isAuthenticatedMember()) return;
+  if (window.LinguaAuth && typeof window.LinguaAuth.saveReminderPreferences === "function") {
+    window.LinguaAuth.saveReminderPreferences({
+      enabled: settings.enabled,
+      time: settings.time,
+      lastNotifiedDate: settings.lastNotifiedDate || ""
+    }).catch(() => {});
   }
+  updateReminderBellUI();
+  updateReminderGoalStatusUI();
 }
 
 function hasCompletedDailyGoalToday() {
@@ -2491,7 +2505,7 @@ function hasCompletedDailyGoalToday() {
     return true;
   }
   try {
-    const raw = localStorage.getItem("linguapath_lesson_progress");
+    const raw = localStorage.getItem(getScopedProgressKey());
     if (raw) {
       const all = JSON.parse(raw);
       for (const k of Object.keys(all)) {
@@ -2605,6 +2619,7 @@ function showInAppReminderToast(title, message, actionUrl) {
 }
 
 function checkAndTriggerDailyReminder() {
+  if (!isAuthenticatedMember()) return;
   const settings = getDailyReminderSettings();
   if (!settings.enabled) return;
 
@@ -2743,6 +2758,12 @@ function updateReminderGoalStatusUI() {
 }
 
 function openReminderModal() {
+  if (!isAuthenticatedMember()) {
+    if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openAuthModal === "function") {
+      window.LinguaAuthUI.openAuthModal("signin");
+    }
+    return;
+  }
   const modal = document.getElementById("reminderModal");
   if (!modal) return;
 
@@ -2786,7 +2807,6 @@ function closeReminderModal() {
 }
 
 function setupReminderUI() {
-  const bellBtn = document.getElementById("reminderBellBtn");
   const modal = document.getElementById("reminderModal");
   const closeBtn = document.getElementById("closeReminderModalBtn");
   const saveBtn = document.getElementById("saveReminderBtn");
@@ -2798,11 +2818,17 @@ function setupReminderUI() {
 
   updateReminderBellUI();
 
-  if (bellBtn) {
-    bellBtn.addEventListener("click", () => {
+  document.addEventListener("click", (e) => {
+    const bellBtn = e.target.closest("#reminderBellBtn");
+    if (bellBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof window.closeLinguaMenu === "function") {
+        window.closeLinguaMenu();
+      }
       openReminderModal();
-    });
-  }
+    }
+  });
 
   if (closeBtn) {
     closeBtn.addEventListener("click", closeReminderModal);
@@ -3708,5 +3734,16 @@ document.addEventListener(
     startDailyReminderScheduler();
     loadStoryLesson();
     initStoriesAndReelsSystem();
+
+    window.addEventListener("lingua-auth-change", () => {
+      updateHeaderStreakUI();
+      updateUserLevelUI();
+      updateReminderBellUI();
+      updateReminderGoalStatusUI();
+      checkAndTriggerDailyReminder();
+      if (currentLoadedLessonId) {
+        updateStoryProgressUI(currentLoadedLessonId);
+      }
+    });
   }
 );

@@ -1,0 +1,373 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile & Membership",
+      "description": "Learner account profile storing personal details, linked auth providers, role, and active membership status.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth user UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Display name or learner username",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address",
+          "maxLength": 160
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Contact phone or Viber number",
+          "maxLength": 32
+        },
+        "dob": {
+          "type": "string",
+          "description": "Date of birth in YYYY-MM-DD format",
+          "maxLength": 16,
+          "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "admin"],
+          "description": "User access role"
+        },
+        "membershipStatus": {
+          "type": "string",
+          "enum": ["free", "pending", "active", "expired"],
+          "description": "Current subscription status updated upon admin QR payment verification"
+        },
+        "membershipPlan": {
+          "type": "string",
+          "enum": ["none", "monthly", "annual", "per_lesson"],
+          "description": "Active or requested membership tier"
+        },
+        "membershipExpiresAt": {
+          "type": "string",
+          "description": "ISO expiration date string for time-bound plans or empty string",
+          "maxLength": 40
+        },
+        "subscribedLessonIds": {
+          "type": "array",
+          "description": "List of individually unlocked paid lesson IDs (max 100)"
+        },
+        "linkedProviders": {
+          "type": "array",
+          "description": "Connected sign-in providers (password, google.com)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when account was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last profile update"
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "email",
+        "phoneNumber",
+        "dob",
+        "role",
+        "membershipStatus",
+        "membershipPlan",
+        "membershipExpiresAt",
+        "subscribedLessonIds",
+        "linkedProviders",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SubscriptionRequest": {
+      "title": "Subscription Payment Request",
+      "description": "Learner request to subscribe to a paid plan or lesson via Email or Viber QR payment verification.",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "description": "Document ID matching the request",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Requester Firebase Auth UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Requester username snapshot",
+          "maxLength": 60
+        },
+        "userEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Requester email snapshot",
+          "maxLength": 160
+        },
+        "userPhone": {
+          "type": "string",
+          "description": "Requester phone snapshot",
+          "maxLength": 32
+        },
+        "planType": {
+          "type": "string",
+          "enum": ["monthly", "annual", "per_lesson"],
+          "description": "Requested subscription plan type"
+        },
+        "lessonId": {
+          "type": "string",
+          "description": "Target lesson ID when planType is per_lesson, otherwise empty string",
+          "maxLength": 128
+        },
+        "lessonTitle": {
+          "type": "string",
+          "description": "Target lesson title or All-Access label",
+          "maxLength": 160
+        },
+        "amountLabel": {
+          "type": "string",
+          "description": "Display price label for requested plan",
+          "maxLength": 40
+        },
+        "contactChannel": {
+          "type": "string",
+          "enum": ["email", "viber"],
+          "description": "Preferred channel for receiving QR payment details"
+        },
+        "contactHandle": {
+          "type": "string",
+          "description": "User email or Viber phone/handle for contact",
+          "maxLength": 80
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional payment reference or message from learner",
+          "maxLength": 400
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"],
+          "description": "Verification status managed by admin"
+        },
+        "adminNote": {
+          "type": "string",
+          "description": "Optional note recorded by admin during verification",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of request creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update"
+        }
+      },
+      "required": [
+        "requestId",
+        "userId",
+        "username",
+        "userEmail",
+        "userPhone",
+        "planType",
+        "lessonId",
+        "lessonTitle",
+        "amountLabel",
+        "contactChannel",
+        "contactHandle",
+        "note",
+        "status",
+        "adminNote",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "LessonCatalogItem": {
+      "title": "Lesson Pricing Configuration",
+      "description": "Access level (free or paid) and price configured per lesson on curriculum upload.",
+      "type": "object",
+      "properties": {
+        "lessonId": {
+          "type": "string",
+          "description": "Lesson identifier matching curriculum ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Lesson title",
+          "maxLength": 160
+        },
+        "audience": {
+          "type": "string",
+          "enum": ["Adult", "Kids"],
+          "description": "Curriculum track"
+        },
+        "accessType": {
+          "type": "string",
+          "enum": ["free", "paid"],
+          "description": "Whether the lesson is free or requires subscription"
+        },
+        "price": {
+          "type": "number",
+          "description": "Per-lesson unlock price in USD"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Admin UID who last updated lesson access",
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of catalog update"
+        }
+      },
+      "required": [
+        "lessonId",
+        "title",
+        "audience",
+        "accessType",
+        "price",
+        "updatedBy",
+        "updatedAt"
+      ]
+    },
+    "AdminUser": {
+      "title": "Admin Allowlist Record",
+      "description": "Trusted document marking an account as an administrator.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Admin Firebase Auth UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Admin email",
+          "maxLength": 160
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp"
+        }
+      },
+      "required": ["uid", "email", "grantedAt"]
+    },
+    "UserProgress": {
+      "title": "Learner Progress, Streak & Daily Reminder",
+      "description": "Per-user learning streak, completed lesson IDs for Learning Rank, and daily reminder settings.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "currentStreak": {
+          "type": "integer",
+          "description": "Current consecutive daily learning streak"
+        },
+        "bestStreak": {
+          "type": "integer",
+          "description": "Highest daily learning streak achieved"
+        },
+        "lastCompletedDate": {
+          "type": "string",
+          "description": "YYYY-MM-DD local date of last completed lesson or empty string",
+          "maxLength": 16,
+          "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$"
+        },
+        "streakDates": {
+          "type": "array",
+          "description": "Recent YYYY-MM-DD dates with completed lessons (max 366)"
+        },
+        "completedLessonIds": {
+          "type": "array",
+          "description": "Distinct completed lesson IDs used to compute Learning Rank (max 200)"
+        },
+        "reminderEnabled": {
+          "type": "boolean",
+          "description": "Whether daily practice reminder notifications are enabled"
+        },
+        "reminderTime": {
+          "type": "string",
+          "description": "24-hour HH:MM daily reminder time",
+          "maxLength": 8,
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+        },
+        "lastNotifiedDate": {
+          "type": "string",
+          "description": "YYYY-MM-DD date when daily reminder was last dispatched or empty string",
+          "maxLength": 16,
+          "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last progress update"
+        }
+      },
+      "required": [
+        "uid",
+        "currentStreak",
+        "bestStreak",
+        "lastCompletedDate",
+        "streakDates",
+        "completedLessonIds",
+        "reminderEnabled",
+        "reminderTime",
+        "lastNotifiedDate",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private learner profile and admin-controlled membership state."
+    },
+    "/userProgress/{userId}": {
+      "schema": { "$ref": "#/entities/UserProgress" },
+      "description": "Private authenticated learner streak, Learning Rank lesson completions, and Daily Reminder settings."
+    },
+    "/subscriptionRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/SubscriptionRequest" },
+      "description": "Pending and processed Email/Viber QR payment subscription requests."
+    },
+    "/lessonCatalog/{lessonId}": {
+      "schema": { "$ref": "#/entities/LessonCatalogItem" },
+      "description": "Publicly readable Free/Paid lesson pricing metadata configured during uploads."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Trusted administrator lookup collection."
+    }
+  }
+}

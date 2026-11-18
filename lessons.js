@@ -23,6 +23,16 @@
   let activeWorkspaceTab = 'video'; // 'video', 'exercises', 'writing'
   let activeWritingCharIndex = 0;
   let exerciseAnswersState = {}; // { questionIndex: { selectedOption, isCorrect } }
+  const autoReviewedLessons = new Set();
+
+  function isAuthenticatedMember() {
+    return Boolean(window.LinguaAuth && typeof window.LinguaAuth.getState === 'function' && window.LinguaAuth.getState().user);
+  }
+
+  function getScopedProgressKey() {
+    const uid = window.LinguaAuth?.getState()?.user?.uid;
+    return uid ? `linguapath_lesson_progress_${uid}` : 'linguapath_lesson_progress';
+  }
 
   // Canvas drawing state
   let canvas = null;
@@ -493,6 +503,74 @@
       allExercises = FALLBACK_EXERCISES;
       allWriting = FALLBACK_WRITING;
     }
+
+    // Apply any saved local pricing overrides onto in-memory lessons
+    applyLocalPricingOverrides(allLessons);
+  }
+
+  function getLocalPricingOverrides() {
+    try {
+      const raw = localStorage.getItem('linguapath_local_lesson_pricing');
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function applyLocalPricingOverrides(list) {
+    const localMap = getLocalPricingOverrides();
+    if (!Array.isArray(list)) return;
+    list.forEach((l) => {
+      const id = String(l.id || '').trim();
+      if (id && localMap[id]) {
+        l.accessType = localMap[id].accessType;
+        l.price = localMap[id].price;
+      }
+    });
+  }
+
+  function resolveLessonPricing(lesson) {
+    if (window.LinguaAuth && typeof window.LinguaAuth.getLessonPricing === 'function') {
+      const state = window.LinguaAuth.getState();
+      const id = String(lesson?.id || lesson?.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-');
+      // If Firestore lessonCatalog has an entry, it takes highest priority
+      if (state.lessonCatalog && state.lessonCatalog[id]) {
+        return window.LinguaAuth.getLessonPricing(lesson);
+      }
+      // Next check local override map if set
+      const localMap = getLocalPricingOverrides();
+      if (localMap[id]) {
+        return {
+          accessType: localMap[id].accessType === 'paid' ? 'paid' : 'free',
+          price: Number(localMap[id].price) || (localMap[id].accessType === 'paid' ? 9 : 0)
+        };
+      }
+      return window.LinguaAuth.getLessonPricing(lesson);
+    }
+
+    const rawAccess = String(lesson?.accessType || lesson?.access || '').trim().toLowerCase();
+    if (rawAccess === 'free') return { accessType: 'free', price: 0 };
+    if (rawAccess === 'paid') return { accessType: 'paid', price: Number(lesson?.price) || 9 };
+    const cat = String(lesson?.categoryKey || '').toLowerCase();
+    const id = String(lesson?.id || '').toLowerCase();
+    if (cat === 'basics' || cat === 'pinyin' || id.includes('basics') || id.includes('pinyin')) {
+      return { accessType: 'free', price: 0 };
+    }
+    return { accessType: 'paid', price: Number(lesson?.price) || 9 };
+  }
+
+  function canUserAccessLesson(lesson) {
+    const pricing = resolveLessonPricing(lesson);
+    if (pricing.accessType === 'free') return true;
+    if (window.LinguaAuth && typeof window.LinguaAuth.canAccessLesson === 'function') {
+      // Pass merged pricing fields so canAccessLesson respects local override if Firestore catalog doesn't have it yet
+      return window.LinguaAuth.canAccessLesson({
+        ...lesson,
+        accessType: pricing.accessType,
+        price: pricing.price
+      });
+    }
+    return false;
   }
 
   // --- Render Categories Navigation Bar ---
@@ -545,10 +623,63 @@
     }
   }
 
+  // --- Render Upload & Pricing Action Bar ---
+  function renderCurriculumManageBar() {
+    const section = document.getElementById('curriculumListSection');
+    const grid = document.getElementById('lessonsGrid');
+    if (!section || !grid) return;
+
+    let bar = document.getElementById('curriculumAccessManageBar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'curriculumAccessManageBar';
+      bar.className = 'curriculum-manage-bar';
+      grid.parentNode.insertBefore(bar, grid);
+    }
+
+    const authState = window.LinguaAuth ? window.LinguaAuth.getState() : { user: null, isAdmin: false, profile: null };
+    const hasActiveSub = window.LinguaAuth && window.LinguaAuth.hasActiveMembership();
+
+    let accessSummary = 'Free foundational lessons open · Paid lessons require membership';
+    if (authState.isAdmin) {
+      accessSummary = 'Admin signed in · Set Free/Paid access & publish live';
+    } else if (hasActiveSub) {
+      accessSummary = 'Active Membership · All Paid Lessons Unlocked';
+    } else if (authState.user) {
+      accessSummary = 'Free Tier · Subscribe anytime to unlock paid lessons';
+    }
+
+    bar.innerHTML = `
+      <span class="curriculum-access-summary">${escapeHTML(accessSummary)}</span>
+      <div class="curriculum-manage-actions">
+        ${
+          !hasActiveSub && !authState.isAdmin
+            ? `<button type="button" class="btn-manage-inline btn-manage-upgrade" id="btnGridViewPlans">View Membership Plans</button>`
+            : ''
+        }
+        <button type="button" class="btn-manage-inline" id="btnGridManagePricing">Upload &amp; Set Free/Paid</button>
+      </div>
+    `;
+
+    const viewPlansBtn = document.getElementById('btnGridViewPlans');
+    if (viewPlansBtn) {
+      viewPlansBtn.onclick = () => {
+        if (window.LinguaAuthUI) window.LinguaAuthUI.openSubscribeModal();
+      };
+    }
+
+    const manageBtn = document.getElementById('btnGridManagePricing');
+    if (manageBtn) {
+      manageBtn.onclick = () => openExcelManagerModal();
+    }
+  }
+
   // --- Render Lesson Cards Grid ---
   function renderLessonGrid() {
     const grid = document.getElementById('lessonsGrid');
     if (!grid) return;
+
+    renderCurriculumManageBar();
 
     const audienceLessons = allLessons.filter(l => String(l.audience || 'Adult').toLowerCase() === currentAudience.toLowerCase());
     const filtered = audienceLessons.filter(l => {
@@ -557,7 +688,7 @@
 
     if (!filtered.length) {
       grid.innerHTML = `
-        <div style="grid-column: 1/-1; text-align: center; padding: 50px 20px; background: #fff7ed; border: 1.5px dashed #fed7aa; border-radius: 20px;">
+        <div style="grid-column: 1/-1; text-align: center; padding: 50px 20px; background: var(--bg-warm, #fff7ed); border: 1.5px dashed var(--primary-border, #fed7aa); border-radius: 20px;">
           <h3>No lessons found in this category</h3>
           <p>Please select another category above to view lessons.</p>
         </div>
@@ -575,16 +706,29 @@
       const level = lesson.level || 'Beginner';
       const poster = lesson.posterUrl || lesson.poster || `assets/images/story-0${(idx % 5) + 1}.jpg`;
       const categoryName = lesson.category || (currentAudience === 'Kids' ? 'Fun Adventure' : 'Everyday Basics');
+      const pricing = resolveLessonPricing(lesson);
+      const isPaid = pricing.accessType === 'paid';
+      const isUnlocked = canUserAccessLesson(lesson);
+      const isLocked = isPaid && !isUnlocked;
+
+      const accessMetaText = !isPaid
+        ? 'Free Lesson'
+        : isUnlocked
+        ? `Paid ($${pricing.price}) · Unlocked`
+        : `Paid · $${pricing.price}`;
 
       const isKids = currentAudience === 'Kids';
 
       return `
-        <article class="lesson-card" id="card-${escapeHTML(lessonId)}">
+        <article class="lesson-card ${isLocked ? 'lesson-card-locked' : ''}" id="card-${escapeHTML(lessonId)}">
           <div class="lesson-card-image">
             <img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';" loading="lazy">
           </div>
           <div class="lesson-card-content">
-            <div class="lesson-category-tag">${escapeHTML(categoryName)}</div>
+            <div class="lesson-meta-line">
+              <span class="lesson-category-tag">${escapeHTML(categoryName)}</span>
+              <span class="lesson-access-tag ${!isPaid ? 'is-free' : isUnlocked ? 'is-unlocked' : 'is-paid'}">${escapeHTML(accessMetaText)}</span>
+            </div>
             <span class="lesson-level">⭐ ${escapeHTML(level)}</span>
             <h3>${escapeHTML(title)}</h3>
             ${cnTitle ? `<div class="lesson-chinese-title chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(cnTitle)}</div>` : ''}
@@ -592,15 +736,11 @@
             ${meaning ? `<div class="lesson-meaning">${escapeHTML(meaning)}</div>` : ''}
             <p class="lesson-description">${escapeHTML(desc)}</p>
 
-            <div class="lesson-features-badges">
-              <span class="lesson-feature-pill">📺 Video</span>
-              <span class="lesson-feature-pill">✏️ Exercises</span>
-              <span class="lesson-feature-pill">🖌️ Stroke Writing</span>
-            </div>
+            <div class="lesson-features-line">📺 Video · ✏️ Exercises · 🖌️ Stroke Writing</div>
 
             <div class="lesson-card-actions" style="margin-top: auto;">
-              <button type="button" class="btn ${isKids ? 'btn-kids-play' : 'btn-primary'} lesson-button" style="width: 100%; text-align: center;" data-lesson-id="${escapeHTML(lessonId)}">
-                🚀 Start Lesson →
+              <button type="button" class="btn ${isLocked ? 'lesson-button-locked' : (isKids ? 'btn-kids-play' : 'btn-primary')} lesson-button" style="width: 100%; text-align: center;" data-lesson-id="${escapeHTML(lessonId)}">
+                ${isLocked ? `🔒 Unlock Lesson ($${escapeHTML(pricing.price)}) →` : '🚀 Start Lesson →'}
               </button>
             </div>
           </div>
@@ -617,11 +757,33 @@
     });
   }
 
+  let pendingDeepLinkLessonId = null;
+
   // --- Open Lesson Workspace (3 Core Sections) ---
   function openLessonWorkspace(lessonId, updateUrl = true) {
     const lesson = allLessons.find(l => String(l.id || '').trim().toLowerCase() === String(lessonId || '').trim().toLowerCase()) || allLessons[0];
     if (!lesson) return;
 
+    // Gate Paid Lessons unless user has active subscription / per-lesson unlock / admin
+    if (!canUserAccessLesson(lesson)) {
+      const authState = window.LinguaAuth ? window.LinguaAuth.getState() : null;
+      // If deep-linking right on initial page load before Firebase Auth finishes hydrating, defer gate briefly
+      if (authState && !authState.ready && !updateUrl) {
+        pendingDeepLinkLessonId = lesson.id;
+        return;
+      }
+      if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openSubscribeModal === 'function') {
+        const pricing = resolveLessonPricing(lesson);
+        window.LinguaAuthUI.openSubscribeModal({
+          ...lesson,
+          accessType: pricing.accessType,
+          price: pricing.price
+        });
+      }
+      return;
+    }
+
+    pendingDeepLinkLessonId = null;
     activeLesson = lesson;
     activeWorkspaceTab = 'video';
     activeWritingCharIndex = 0;
@@ -724,12 +886,17 @@
         <button type="button" class="btn-back-to-curriculum" id="btnBackToCurriculum">
           ← Back to Curriculum Lessons
         </button>
-        <div class="workspace-breadcrumbs">
-          <span>${isKids ? '🐼 Kids Track' : '💼 Adult Track'}</span>
-          <span class="sep">›</span>
-          <span>${escapeHTML(catName)}</span>
-          <span class="sep">›</span>
-          <span style="color: #ea580c;">${escapeHTML(lesson.title)}</span>
+        <div class="workspace-top-right">
+          <div class="workspace-breadcrumbs">
+            <span>${isKids ? '🐼 Kids Track' : '💼 Adult Track'}</span>
+            <span class="sep">›</span>
+            <span>${escapeHTML(catName)}</span>
+            <span class="sep">›</span>
+            <span style="color: #ea580c;">${escapeHTML(lesson.title)}</span>
+          </div>
+          <button type="button" class="btn-workspace-finish" id="btnHeroFinishReview">
+            ✓ Finish &amp; Review
+          </button>
         </div>
       </div>
 
@@ -753,6 +920,10 @@
     `;
 
     document.getElementById('btnBackToCurriculum').onclick = () => closeLessonWorkspace();
+    const heroFinishBtn = document.getElementById('btnHeroFinishReview');
+    if (heroFinishBtn) {
+      heroFinishBtn.onclick = () => completeCurriculumLesson(lesson, { score: 100 });
+    }
     const speakBtn = document.getElementById('btnSpeakLessonTitle');
     if (speakBtn && lesson.chineseTitle) {
       speakBtn.onclick = () => speakChinese(lesson.chineseTitle);
@@ -1659,9 +1830,10 @@
     if (!lessonId) return;
     try {
       const cleanId = String(lessonId).trim();
+      const storageKey = getScopedProgressKey();
       let allProgress = {};
       try {
-        allProgress = JSON.parse(localStorage.getItem('linguapath_lesson_progress') || '{}');
+        allProgress = JSON.parse(localStorage.getItem(storageKey) || '{}');
       } catch (e) {}
 
       const prev = allProgress[cleanId] || {};
@@ -1672,12 +1844,41 @@
         score: Math.max(prev.score || 0, score || 0),
         lastUpdated: Date.now()
       };
-      localStorage.setItem('linguapath_lesson_progress', JSON.stringify(allProgress));
+      localStorage.setItem(storageKey, JSON.stringify(allProgress));
+
+      if (isAuthenticatedMember() && window.LinguaAuth && typeof window.LinguaAuth.recordLessonCompletedProgress === 'function' && isDone) {
+        window.LinguaAuth.recordLessonCompletedProgress(cleanId, true).catch(() => {});
+      }
     } catch (e) {
       console.warn('Could not save lesson progress to localStorage:', e);
     }
   }
   window.saveLessonProgressRecord = saveLessonProgressRecord;
+
+  function completeCurriculumLesson(lesson, options = {}) {
+    if (!lesson) return;
+    const score = typeof options.score === 'number' ? options.score : 100;
+    if (lesson.id) {
+      saveLessonProgressRecord(lesson.id, score, true);
+    }
+    if (window.LinguaAuthUI && typeof window.LinguaAuthUI.syncMemberMenuTools === 'function') {
+      window.LinguaAuthUI.syncMemberMenuTools();
+    }
+    renderLessonGrid();
+
+    const lessonTitle = lesson.title
+      ? `${lesson.title}${lesson.chineseTitle ? ` (${lesson.chineseTitle})` : ''}`
+      : lesson.id || 'Mandarin Lesson';
+
+    if (window.LinguaReview && typeof window.LinguaReview.openLessonReviewModal === 'function') {
+      window.LinguaReview.openLessonReviewModal({
+        lessonId: lesson.id || 'lesson',
+        title: lessonTitle,
+        audience: `${currentAudience} Track`
+      });
+    }
+  }
+  window.completeCurriculumLesson = completeCurriculumLesson;
 
   function saveUserScore(points) {
     try {
@@ -1686,9 +1887,8 @@
       const newScore = currentScore + addPoints;
       localStorage.setItem('linguapath_user_score', String(newScore));
 
-      const streakBadge = document.getElementById('dailyStreakCount');
-      if (streakBadge && streakBadge.dataset.streak) {
-        streakBadge.textContent = streakBadge.dataset.streak + ' 🔥';
+      if (isAuthenticatedMember() && window.LinguaAuthUI && typeof window.LinguaAuthUI.syncMemberMenuTools === 'function') {
+        window.LinguaAuthUI.syncMemberMenuTools();
       }
     } catch (e) {
       console.warn('Could not save user score:', e);
@@ -3226,6 +3426,22 @@
 
     renderPronunciationFeedback(result, sentence);
     updatePronunciationNavDots();
+
+    const isLastSentence = currentPronunciationIndex >= activePronunciationSentences.length - 1;
+    if (
+      isLastSentence &&
+      result.score >= 60 &&
+      activePronunciationLesson &&
+      !autoReviewedLessons.has(activePronunciationLesson.id)
+    ) {
+      autoReviewedLessons.add(activePronunciationLesson.id);
+      const finishedLesson = activePronunciationLesson;
+      setTimeout(() => {
+        if (activeLesson && activeLesson.id === finishedLesson.id) {
+          completeCurriculumLesson(finishedLesson, { score: result.score });
+        }
+      }, 650);
+    }
   }
 
   function renderPronunciationFeedback(result, sentence) {
@@ -3356,6 +3572,8 @@
       btnNext.onclick = () => {
         if (!isLastSentence) {
           switchPronunciationSentence(currentPronunciationIndex + 1);
+        } else if (activePronunciationLesson) {
+          completeCurriculumLesson(activePronunciationLesson, { score: result.score });
         } else {
           switchPronunciationSentence(0);
         }
@@ -3532,6 +3750,16 @@
             <button type="submit" class="btn-pron-evaluate">Evaluate</button>
           </form>
         </div>
+
+        <div class="workspace-complete-bar">
+          <div>
+            <strong>Finished this lesson?</strong>
+            <span>Mark complete and leave a lesson review for our team.</span>
+          </div>
+          <button type="button" class="btn btn-primary" id="btnPronFinishLessonReview">
+            ✓ Finish Lesson &amp; Leave Review
+          </button>
+        </div>
       </div>
     `;
 
@@ -3587,6 +3815,14 @@
           const sentence = activePronunciationSentences[currentPronunciationIndex];
           evaluateAndRenderPronunciation(input.value.trim(), sentence);
         }
+      };
+    }
+
+    // Hook Finish Lesson & Review CTA
+    const finishLessonBtn = document.getElementById('btnPronFinishLessonReview');
+    if (finishLessonBtn) {
+      finishLessonBtn.onclick = () => {
+        completeCurriculumLesson(lesson, { score: 100 });
       };
     }
   }
@@ -3907,6 +4143,71 @@
     if (existingToolbar) existingToolbar.remove();
   }
 
+  function setExcelStatusBanner(text, tone = 'info') {
+    const el = document.getElementById('excelManagerStatusBanner');
+    if (!el) return;
+    el.className = `lp-feedback lp-feedback-${tone}`;
+    el.style.display = 'block';
+    el.textContent = text;
+  }
+
+  function renderExcelPricingTableRows() {
+    const listWrap = document.getElementById('excelPricingTableBody');
+    if (!listWrap) return;
+
+    const lessonsList = allLessons.length ? allLessons : FALLBACK_LESSONS;
+    listWrap.innerHTML = lessonsList
+      .map((l, idx) => {
+        const id = String(l.id || `lesson-${idx + 1}`).trim();
+        const pricing = resolveLessonPricing(l);
+        return `
+          <div class="excel-pricing-row" data-pricing-row="${escapeHTML(id)}">
+            <div class="excel-pricing-info">
+              <strong>${escapeHTML(l.title || id)}</strong>
+              <span>${escapeHTML(l.audience || 'Adult')} · ${escapeHTML(l.category || 'General')} (${escapeHTML(id)})</span>
+            </div>
+            <div class="excel-pricing-controls">
+              <select class="lp-inline-select" data-pricing-access="${escapeHTML(id)}" aria-label="Access type for ${escapeHTML(l.title || id)}">
+                <option value="free" ${pricing.accessType === 'free' ? 'selected' : ''}>Free</option>
+                <option value="paid" ${pricing.accessType === 'paid' ? 'selected' : ''}>Paid</option>
+              </select>
+              <div class="excel-price-input-wrap">
+                <span>$</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="9999"
+                  step="1"
+                  class="lp-inline-price"
+                  data-pricing-price="${escapeHTML(id)}"
+                  value="${pricing.accessType === 'free' ? 0 : pricing.price}"
+                  ${pricing.accessType === 'free' ? 'disabled' : ''}
+                  aria-label="Price for ${escapeHTML(l.title || id)}"
+                />
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    listWrap.querySelectorAll('[data-pricing-access]').forEach((sel) => {
+      sel.onchange = () => {
+        const lid = sel.dataset.pricingAccess;
+        const priceInput = listWrap.querySelector(`[data-pricing-price="${lid}"]`);
+        if (priceInput) {
+          if (sel.value === 'free') {
+            priceInput.value = '0';
+            priceInput.disabled = true;
+          } else {
+            priceInput.disabled = false;
+            if (!Number(priceInput.value)) priceInput.value = '9';
+          }
+        }
+      };
+    });
+  }
+
   function openExcelManagerModal() {
     const existingModal = document.getElementById('excelManagerModal');
     if (existingModal) existingModal.remove();
@@ -3918,21 +4219,23 @@
       <div class="excel-modal-card">
         <div class="excel-modal-header">
           <div class="excel-modal-title">
-            <span>📊 Lesson Data Management Center</span>
+            <span>📊 Lesson Upload &amp; Free / Paid Pricing</span>
           </div>
           <button type="button" class="excel-modal-close-btn" id="btnCloseExcelModal" aria-label="Close">✕</button>
         </div>
 
-        <p style="font-size: 0.92rem; color: #64748b; margin-bottom: 16px; line-height: 1.5;">
-          Easily export all Adult &amp; Kids Mandarin lessons to an Excel workbook (.xlsx) or CSV file. Edit lesson titles, pinyin, practice characters, and descriptions in Excel, then upload to update the app in real time!
+        <p style="font-size: 0.92rem; color: var(--text-muted, #64748b); margin-bottom: 14px; line-height: 1.5;">
+          Export or upload Adult &amp; Kids Mandarin lessons (.xlsx / .csv) and choose which lessons are Free vs. Paid.
         </p>
+
+        <div id="excelManagerStatusBanner" style="display:none; margin-bottom: 14px;"></div>
 
         <div class="excel-grid-cards">
           <!-- Download Option -->
           <div class="excel-option-box">
             <div class="excel-option-title">📥 1. Export Lessons Data to Excel / CSV</div>
             <div class="excel-option-desc">
-              Download the complete curriculum dataset (Lessons, Practice Exercises, Stroke Writing, Vocabulary) as an edit-ready Excel file (.xlsx) or CSV.
+              Download the complete curriculum dataset (including <code>accessType</code> and <code>price</code> columns) to edit offline.
             </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
               <button type="button" class="btn-excel-action btn-excel-download" id="btnExportExcelFile">
@@ -3948,20 +4251,36 @@
           <div class="excel-option-box">
             <div class="excel-option-title">📤 2. Upload Updated Excel / CSV File</div>
             <div class="excel-option-desc">
-              Select your updated Excel file (.xlsx or .csv) to refresh all lesson cards, titles, categories, practice exercises, and stroke writing across the entire site instantly.
+              Upload your updated workbook (.xlsx or .csv). After uploading, review Free / Paid lesson access right below.
             </div>
             <input type="file" id="excelFileInput" class="excel-file-input" accept=".xlsx, .xls, .csv" />
             <button type="button" class="btn-excel-action btn-excel-upload" id="btnUploadExcelFile">
-              📤 Upload &amp; Update Lessons Data
+              📤 Upload &amp; Import Lessons
             </button>
+          </div>
+
+          <!-- Free vs Paid Pricing Editor -->
+          <div class="excel-option-box">
+            <div class="excel-option-title-row">
+              <div>
+                <div class="excel-option-title">🏷️ 3. Set Free / Paid Lessons &amp; Pricing</div>
+                <div class="excel-option-desc" style="margin-bottom: 8px;">
+                  Choose which lessons are Free for all learners and which require a Paid subscription or single-lesson unlock.
+                </div>
+              </div>
+              <button type="button" class="btn-excel-action btn-excel-download" id="btnSaveLessonPricing" style="width: auto; padding: 10px 18px;">
+                💾 Save Free / Paid Settings
+              </button>
+            </div>
+            <div id="excelPricingTableBody" class="excel-pricing-table"></div>
           </div>
 
           <!-- Reset Option -->
           <div class="excel-option-box" style="padding: 14px 20px;">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
               <div>
-                <div class="excel-option-title" style="font-size: 0.95rem; margin: 0;">🔄 Reset to Default Lessons</div>
-                <div class="excel-option-desc" style="margin: 0; font-size: 0.82rem;">Revert any uploaded changes back to default curriculum data.</div>
+                <div class="excel-option-title" style="font-size: 0.95rem; margin: 0;">🔄 Reset Uploaded Curriculum</div>
+                <div class="excel-option-desc" style="margin: 0; font-size: 0.82rem;">Revert custom uploaded curriculum &amp; local pricing back to defaults.</div>
               </div>
               <button type="button" class="btn-excel-action btn-excel-reset" id="btnResetDefaultLessons" style="width: auto; padding: 8px 16px; font-size: 0.85rem;">
                 Reset
@@ -3973,6 +4292,7 @@
     `;
 
     document.body.appendChild(modal);
+    renderExcelPricingTableRows();
 
     const closeBtn = document.getElementById('btnCloseExcelModal');
     if (closeBtn) closeBtn.onclick = () => modal.remove();
@@ -3988,21 +4308,88 @@
       uploadBtn.onclick = () => {
         const fileInput = document.getElementById('excelFileInput');
         if (!fileInput || !fileInput.files.length) {
-          alert('Please select an Excel file (.xlsx) or CSV file first.');
+          setExcelStatusBanner('Please choose an Excel (.xlsx) or CSV (.csv) file first.', 'error');
           return;
         }
         importLessonsFromExcel(fileInput.files[0]);
       };
     }
 
+    const savePricingBtn = document.getElementById('btnSaveLessonPricing');
+    if (savePricingBtn) {
+      savePricingBtn.onclick = async () => {
+        const rows = document.querySelectorAll('#excelPricingTableBody [data-pricing-row]');
+        const localMap = getLocalPricingOverrides();
+        const catalogItems = [];
+
+        rows.forEach((row) => {
+          const lid = row.dataset.pricingRow;
+          const accessSel = row.querySelector(`[data-pricing-access="${lid}"]`);
+          const priceInput = row.querySelector(`[data-pricing-price="${lid}"]`);
+          const accessType = accessSel?.value === 'paid' ? 'paid' : 'free';
+          const price = accessType === 'free' ? 0 : Math.max(0, Number(priceInput?.value || 9));
+          localMap[lid] = { accessType, price };
+
+          const lessonObj = allLessons.find((l) => String(l.id || '').trim() === lid);
+          if (lessonObj) {
+            lessonObj.accessType = accessType;
+            lessonObj.price = price;
+          }
+          catalogItems.push({
+            lessonId: lid,
+            title: lessonObj?.title || lid,
+            audience: lessonObj?.audience || 'Adult',
+            accessType,
+            price
+          });
+        });
+
+        try {
+          localStorage.setItem('linguapath_local_lesson_pricing', JSON.stringify(localMap));
+          const customPayload = {
+            sheets: {
+              Lessons: allLessons,
+              Exercises: allExercises,
+              Writing: allWriting,
+              Vocabulary: allVocabulary
+            }
+          };
+          localStorage.setItem('linguapath_custom_lessons', JSON.stringify(customPayload));
+        } catch (e) {}
+
+        renderLessonGrid();
+
+        const authState = window.LinguaAuth ? window.LinguaAuth.getState() : null;
+        if (authState && authState.isAdmin && window.LinguaAuth.saveLessonCatalogItems) {
+          savePricingBtn.disabled = true;
+          savePricingBtn.textContent = 'Publishing…';
+          try {
+            await window.LinguaAuth.saveLessonCatalogItems(catalogItems);
+            setExcelStatusBanner('Saved & published Free/Paid settings live to all users!', 'success');
+            if (window.LinguaAuthUI) window.LinguaAuthUI.showToast('Lesson Free/Paid pricing published.');
+          } catch (err) {
+            setExcelStatusBanner('Saved locally, but cloud publish failed: ' + (err instanceof Error ? err.message : String(err)), 'error');
+          } finally {
+            savePricingBtn.disabled = false;
+            savePricingBtn.textContent = '💾 Save Free / Paid Settings';
+          }
+        } else {
+          setExcelStatusBanner(
+            'Free/Paid settings applied on this browser. Sign in with your Admin account to publish them live for all learners.',
+            'info'
+          );
+          if (window.LinguaAuthUI) window.LinguaAuthUI.showToast('Pricing saved locally.');
+        }
+      };
+    }
+
     const resetBtn = document.getElementById('btnResetDefaultLessons');
     if (resetBtn) {
       resetBtn.onclick = () => {
-        if (confirm('Are you sure you want to reset custom lesson data to default?')) {
-          localStorage.removeItem('linguapath_custom_lessons');
-          alert('Custom lesson data reset. Reloading defaults...');
-          window.location.reload();
-        }
+        localStorage.removeItem('linguapath_custom_lessons');
+        localStorage.removeItem('linguapath_local_lesson_pricing');
+        setExcelStatusBanner('Custom uploaded data reset. Reloading defaults…', 'info');
+        setTimeout(() => window.location.reload(), 600);
       };
     }
   }
@@ -4010,11 +4397,19 @@
   // --- Export Lessons to Excel / CSV ---
   function exportLessonsToExcel(format = 'xlsx') {
     if (typeof XLSX === 'undefined') {
-      alert('SheetJS (XLSX) library is loading. Please try again in a moment.');
+      setExcelStatusBanner('SheetJS library is still loading. Please try again in a moment.', 'error');
       return;
     }
 
-    const exportLessonsList = allLessons.length ? allLessons : FALLBACK_LESSONS;
+    const rawLessonsList = allLessons.length ? allLessons : FALLBACK_LESSONS;
+    const exportLessonsList = rawLessonsList.map((l) => {
+      const pricing = resolveLessonPricing(l);
+      return {
+        ...l,
+        accessType: pricing.accessType,
+        price: pricing.price
+      };
+    });
     const exportExercisesList = allExercises.length ? allExercises : FALLBACK_EXERCISES;
     const exportWritingList = allWriting.length ? allWriting : FALLBACK_WRITING;
 
@@ -4055,13 +4450,13 @@
       try {
         const data = new Uint8Array(e.target.result);
         if (typeof XLSX === 'undefined') {
-          alert('SheetJS library is not loaded.');
+          setExcelStatusBanner('SheetJS library is not loaded.', 'error');
           return;
         }
 
         const workbook = XLSX.read(data, { type: 'array' });
         if (!workbook.SheetNames.includes('Lessons') && !workbook.SheetNames.length) {
-          alert('Error: Uploaded file does not contain valid lesson data.');
+          setExcelStatusBanner('Error: Uploaded file does not contain valid lesson data.', 'error');
           return;
         }
 
@@ -4069,7 +4464,7 @@
         const newLessons = XLSX.utils.sheet_to_json(workbook.Sheets[mainSheetName], { defval: '' });
 
         if (!newLessons.length) {
-          alert('Error: Uploaded file contains 0 lesson rows.');
+          setExcelStatusBanner('Error: Uploaded file contains 0 lesson rows.', 'error');
           return;
         }
 
@@ -4077,7 +4472,10 @@
         const newWriting = workbook.SheetNames.includes('Writing') ? XLSX.utils.sheet_to_json(workbook.Sheets['Writing'], { defval: '' }) : allWriting;
         const newVocabulary = workbook.SheetNames.includes('Vocabulary') ? XLSX.utils.sheet_to_json(workbook.Sheets['Vocabulary'], { defval: '' }) : allVocabulary;
 
-        allLessons = newLessons;
+        allLessons = newLessons.map((l) => {
+          const p = resolveLessonPricing(l);
+          return { ...l, accessType: p.accessType, price: p.price };
+        });
         allExercises = newExercises;
         allWriting = newWriting;
         allVocabulary = newVocabulary;
@@ -4103,16 +4501,20 @@
           console.warn('Server upload note:', err);
         }
 
-        alert(`✅ Successfully imported ${allLessons.length} lessons from ${file.name}!`);
-
-        const modal = document.getElementById('excelManagerModal');
-        if (modal) modal.remove();
-
         renderCategoryBar();
         renderLessonGrid();
         renderContinueLessonBanner();
+        renderExcelPricingTableRows();
+
+        setExcelStatusBanner(
+          `Imported ${allLessons.length} lessons from "${file.name}". Review Free / Paid status in Section 3 below and click "Save Free / Paid Settings".`,
+          'success'
+        );
+        if (window.LinguaAuthUI) {
+          window.LinguaAuthUI.showToast(`Imported ${allLessons.length} lessons.`);
+        }
       } catch (err) {
-        alert('Failed to parse file: ' + err.message);
+        setExcelStatusBanner('Failed to parse file: ' + err.message, 'error');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -4123,6 +4525,7 @@
     const params = new URLSearchParams(window.location.search);
     const categoryParam = params.get('category');
     const lessonParam = params.get('lesson');
+    const managePricingParam = params.get('managePricing');
 
     const categories = currentAudience === 'Kids' ? KIDS_CATEGORIES : ADULT_CATEGORIES;
 
@@ -4135,6 +4538,10 @@
     renderCategoryBar();
     renderLessonGrid();
     renderContinueLessonBanner();
+
+    if (managePricingParam === '1') {
+      openExcelManagerModal();
+    }
 
     if (lessonParam) {
       openLessonWorkspace(lessonParam, false);
@@ -4154,6 +4561,16 @@
     setupWorkspaceTabs();
     await loadLessonsWorkbook();
     handleUrlParams();
+
+    window.addEventListener('lingua-auth-change', (e) => {
+      const authState = e?.detail;
+      renderLessonGrid();
+      if (pendingDeepLinkLessonId && authState && authState.ready) {
+        const lid = pendingDeepLinkLessonId;
+        pendingDeepLinkLessonId = null;
+        openLessonWorkspace(lid, false);
+      }
+    });
 
     window.addEventListener('popstate', () => {
       handleUrlParams();

@@ -1,0 +1,335 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny all paths unless explicitly permitted
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================
+    // Global Hardened Helpers
+    // =========================================================
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Verified email check prevents unverified email spoofing
+    function isTokenAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email == 'syndkyaw@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    // Used on single-doc operations where an exists() lookup is permitted
+    function isAdmin() {
+      return isTokenAdmin() ||
+        (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // =========================================================
+    // Validation Blueprints
+    // =========================================================
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'username', 'email', 'phoneNumber', 'dob',
+          'role', 'membershipStatus', 'membershipPlan',
+          'membershipExpiresAt', 'subscribedLessonIds',
+          'linkedProviders', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'username', 'email', 'phoneNumber', 'dob',
+          'role', 'membershipStatus', 'membershipPlan',
+          'membershipExpiresAt', 'subscribedLessonIds',
+          'linkedProviders', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.username is string && data.username.size() >= 1 && data.username.size() <= 60 &&
+        data.email is string && data.email.size() <= 160 &&
+        data.phoneNumber is string && data.phoneNumber.size() <= 32 &&
+        data.dob is string && data.dob.size() <= 16 &&
+        data.dob.matches('^(\\d{4}-\\d{2}-\\d{2})?$') &&
+        data.role in ['student', 'admin'] &&
+        data.membershipStatus in ['free', 'pending', 'active', 'expired'] &&
+        data.membershipPlan in ['none', 'monthly', 'annual', 'per_lesson'] &&
+        data.membershipExpiresAt is string && data.membershipExpiresAt.size() <= 40 &&
+        data.subscribedLessonIds is list && data.subscribedLessonIds.size() <= 100 &&
+        (data.subscribedLessonIds.size() == 0 || (data.subscribedLessonIds[0] is string && data.subscribedLessonIds[0].size() <= 128)) &&
+        data.linkedProviders is list && data.linkedProviders.size() <= 5 &&
+        (data.linkedProviders.size() == 0 || (data.linkedProviders[0] is string && data.linkedProviders[0].size() <= 40)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserProgress(data) {
+      return data.keys().hasAll([
+          'uid', 'currentStreak', 'bestStreak', 'lastCompletedDate',
+          'streakDates', 'completedLessonIds', 'reminderEnabled',
+          'reminderTime', 'lastNotifiedDate', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'currentStreak', 'bestStreak', 'lastCompletedDate',
+          'streakDates', 'completedLessonIds', 'reminderEnabled',
+          'reminderTime', 'lastNotifiedDate', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.currentStreak is int && data.currentStreak >= 0 && data.currentStreak <= 10000 &&
+        data.bestStreak is int && data.bestStreak >= 0 && data.bestStreak <= 10000 &&
+        data.lastCompletedDate is string && data.lastCompletedDate.size() <= 16 &&
+        data.lastCompletedDate.matches('^(\\d{4}-\\d{2}-\\d{2})?$') &&
+        data.streakDates is list && data.streakDates.size() <= 366 &&
+        (data.streakDates.size() == 0 || (data.streakDates[0] is string && data.streakDates[0].size() <= 16)) &&
+        data.completedLessonIds is list && data.completedLessonIds.size() <= 200 &&
+        (data.completedLessonIds.size() == 0 || (data.completedLessonIds[0] is string && data.completedLessonIds[0].size() <= 128)) &&
+        data.reminderEnabled is bool &&
+        data.reminderTime is string && data.reminderTime.size() <= 8 &&
+        data.reminderTime.matches('^([01]\\d|2[0-3]):[0-5]\\d$') &&
+        data.lastNotifiedDate is string && data.lastNotifiedDate.size() <= 16 &&
+        data.lastNotifiedDate.matches('^(\\d{4}-\\d{2}-\\d{2})?$') &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSubscriptionRequest(data) {
+      return data.keys().hasAll([
+          'requestId', 'userId', 'username', 'userEmail', 'userPhone',
+          'planType', 'lessonId', 'lessonTitle', 'amountLabel',
+          'contactChannel', 'contactHandle', 'note', 'status', 'adminNote',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'requestId', 'userId', 'username', 'userEmail', 'userPhone',
+          'planType', 'lessonId', 'lessonTitle', 'amountLabel',
+          'contactChannel', 'contactHandle', 'note', 'status', 'adminNote',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.requestId) &&
+        isValidId(data.userId) &&
+        data.username is string && data.username.size() <= 60 &&
+        data.userEmail is string && data.userEmail.size() <= 160 &&
+        data.userPhone is string && data.userPhone.size() <= 32 &&
+        data.planType in ['monthly', 'annual', 'per_lesson'] &&
+        data.lessonId is string && data.lessonId.size() <= 128 &&
+        data.lessonTitle is string && data.lessonTitle.size() <= 160 &&
+        data.amountLabel is string && data.amountLabel.size() <= 40 &&
+        data.contactChannel in ['email', 'viber'] &&
+        data.contactHandle is string && data.contactHandle.size() <= 80 &&
+        data.note is string && data.note.size() <= 400 &&
+        data.status in ['pending', 'approved', 'rejected'] &&
+        data.adminNote is string && data.adminNote.size() <= 300 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidLessonCatalogItem(data) {
+      return data.keys().hasAll([
+          'lessonId', 'title', 'audience', 'accessType', 'price', 'updatedBy', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'lessonId', 'title', 'audience', 'accessType', 'price', 'updatedBy', 'updatedAt'
+        ]) &&
+        isValidId(data.lessonId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+        data.audience in ['Adult', 'Kids'] &&
+        data.accessType in ['free', 'paid'] &&
+        data.price is number && data.price >= 0 && data.price <= 9999 &&
+        isValidId(data.updatedBy) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'grantedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'grantedAt']) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() <= 160 &&
+        data.grantedAt is timestamp;
+    }
+
+    // =========================================================
+    // Collection Rules
+    // =========================================================
+
+    // 1. User Profiles (Strict PII Isolation: Owner or Admin only)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isTokenAdmin();
+
+      allow create: if isSignedIn() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().role == 'student' &&
+            incoming().membershipStatus == 'free' &&
+            incoming().membershipPlan == 'none' &&
+            incoming().membershipExpiresAt == '' &&
+            incoming().subscribedLessonIds.size() == 0
+          )
+        );
+
+      allow update: if isSignedIn() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'username', 'email', 'phoneNumber', 'dob', 'linkedProviders', 'updatedAt'
+            ]) &&
+            incoming().role == existing().role &&
+            incoming().membershipStatus == existing().membershipStatus &&
+            incoming().membershipPlan == existing().membershipPlan &&
+            incoming().membershipExpiresAt == existing().membershipExpiresAt &&
+            incoming().subscribedLessonIds == existing().subscribedLessonIds
+          )
+        );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 2. Learner Progress, Daily Streak & Reminder Preferences (Owner or Admin only)
+    match /userProgress/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isTokenAdmin();
+
+      allow create: if isSignedIn() &&
+        isValidId(userId) &&
+        isValidUserProgress(incoming()) &&
+        (isOwner(userId) || isAdmin()) &&
+        incoming().uid == userId &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isValidId(userId) &&
+        isValidUserProgress(incoming()) &&
+        (isOwner(userId) || isAdmin()) &&
+        incoming().uid == existing().uid &&
+        incoming().updatedAt == request.time &&
+        (
+          // Action: Record lesson completion, streak & rank update
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'currentStreak', 'bestStreak', 'lastCompletedDate',
+            'streakDates', 'completedLessonIds', 'updatedAt'
+          ]) ||
+          // Action: Update daily reminder settings or last notified date
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'reminderEnabled', 'reminderTime', 'lastNotifiedDate', 'updatedAt'
+          ]) ||
+          // Action: Sync full progress snapshot
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'currentStreak', 'bestStreak', 'lastCompletedDate',
+            'streakDates', 'completedLessonIds',
+            'reminderEnabled', 'reminderTime', 'lastNotifiedDate', 'updatedAt'
+          ])
+        );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 3. Subscription Payment Requests (Email / Viber QR Workflow)
+    match /subscriptionRequests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isTokenAdmin());
+
+      allow create: if isSignedIn() &&
+        isValidId(requestId) &&
+        isValidSubscriptionRequest(incoming()) &&
+        incoming().requestId == requestId &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().adminNote == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+
+      allow update: if isSignedIn() &&
+        isValidId(requestId) &&
+        isValidSubscriptionRequest(incoming()) &&
+        incoming().requestId == existing().requestId &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote', 'updatedAt'])
+          ) ||
+          (
+            isOwner(existing().userId) &&
+            existing().status == 'pending' &&
+            incoming().status == 'pending' &&
+            incoming().adminNote == existing().adminNote &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'contactChannel', 'contactHandle', 'note', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(requestId) && (
+        isAdmin() ||
+        (isOwner(existing().userId) && existing().status == 'pending')
+      );
+    }
+
+    // 4. Lesson Catalog Pricing (Set on upload; publicly readable, admin writable)
+    match /lessonCatalog/{lessonId} {
+      allow get: if isValidId(lessonId);
+      allow list: if true;
+
+      allow create: if isAdmin() &&
+        isValidId(lessonId) &&
+        isValidLessonCatalogItem(incoming()) &&
+        incoming().lessonId == lessonId &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isAdmin() &&
+        isValidId(lessonId) &&
+        isValidLessonCatalogItem(incoming()) &&
+        incoming().lessonId == existing().lessonId &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin() && isValidId(lessonId);
+    }
+
+    // 5. Admin Allowlist
+    match /admins/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isTokenAdmin();
+      allow create, update: if isTokenAdmin() && isValidId(userId) && isValidAdminUser(incoming());
+      allow delete: if isTokenAdmin() && isValidId(userId);
+    }
+
+    // 6. Connection Validation Document
+    match /test/{docId} {
+      allow get: if isValidId(docId);
+    }
+  }
+}
