@@ -497,7 +497,9 @@
 
         <div id="smtpStatusBox" class="admin-backend-status ${state.authState?.smtpConfigured ? 'is-success' : ''}">
           ${
-            state.authState?.smtpConfigured
+            state.authState?.isLocalMode
+              ? 'Static Browser Mode: Connect a Hosted Node Server URL above to enable automatic SMTP password-reset emails.'
+              : state.authState?.smtpConfigured
               ? 'SMTP environment variables detected on server. Click Send Test Email to verify inbox delivery.'
               : 'SMTP is not configured yet on the Node server. Set SMTP_HOST, SMTP_USER, and SMTP_PASS to enable automatic Forgot Password emails.'
           }
@@ -874,20 +876,22 @@
     const smtpTestBtn = document.getElementById('btnTestSmtp');
     const smtpStatusBox = document.getElementById('smtpStatusBox');
     if (smtpTestBtn && window.LinguaAuth && typeof window.LinguaAuth.getSmtpStatus === 'function') {
-      window.LinguaAuth
-        .getSmtpStatus()
-        .then((info) => {
-          if (!smtpStatusBox) return;
-          if (info.configured) {
-            smtpStatusBox.className = 'admin-backend-status is-success';
-            smtpStatusBox.textContent = `SMTP configured (${info.host}:${info.port} · ${info.userMasked || 'user'}). Click Send Test Email to verify delivery.`;
-          } else {
-            smtpStatusBox.className = 'admin-backend-status';
-            smtpStatusBox.textContent =
-              'SMTP not configured on server yet (missing SMTP_HOST, SMTP_USER, or SMTP_PASS). Forgot Password emails require SMTP credentials.';
-          }
-        })
-        .catch(() => {});
+      if (!state.authState?.isLocalMode) {
+        window.LinguaAuth
+          .getSmtpStatus()
+          .then((info) => {
+            if (!smtpStatusBox) return;
+            if (info.configured) {
+              smtpStatusBox.className = 'admin-backend-status is-success';
+              smtpStatusBox.textContent = `SMTP configured (${info.host}:${info.port} · ${info.userMasked || 'user'}). Click Send Test Email to verify delivery.`;
+            } else {
+              smtpStatusBox.className = 'admin-backend-status';
+              smtpStatusBox.textContent =
+                'SMTP not configured on server yet (missing SMTP_HOST, SMTP_USER, or SMTP_PASS). Forgot Password emails require SMTP credentials.';
+            }
+          })
+          .catch(() => {});
+      }
 
       smtpTestBtn.onclick = async () => {
         const to = (document.getElementById('cfgSmtpTestEmail')?.value || '').trim();
@@ -3253,6 +3257,109 @@
     gate.hidden = false;
     workspace.hidden = true;
 
+    const backendApiBase =
+      window.LinguaBackend && typeof window.LinguaBackend.getApiBase === 'function'
+        ? window.LinguaBackend.getApiBase()
+        : '';
+    const isStaticSite =
+      Boolean(s.isLocalMode) ||
+      Boolean(window.LinguaBackend?.isStaticGithubHost?.()) ||
+      Boolean(backendApiBase);
+
+    const gateBackendHtml = isStaticSite
+      ? `
+        <div style="margin-top:22px; padding-top:18px; border-top:1px solid #e2e8f0; text-align:left;">
+          <div style="font-size:0.82rem; font-weight:800; margin-bottom:4px;">Hosted Node Backend Connection</div>
+          <p style="font-size:0.78rem; color:#64748b; margin:0 0 10px; line-height:1.45;">
+            ${
+              backendApiBase
+                ? 'Connected to your hosted Node server. Switch or reset anytime:'
+                : 'Running in Static Browser Mode. You can create your browser Admin above, or paste your deployed HTTPS Node server URL below to connect to your shared server database:'
+            }
+          </p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input
+              type="url"
+              class="admin-input"
+              id="adminGateBackendUrl"
+              value="${escapeHTML(backendApiBase)}"
+              placeholder="https://your-linguapath-server.onrender.com"
+              style="flex:1; min-width:210px;"
+            />
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="adminGateConnectBtn">Test &amp; Connect</button>
+            ${
+              backendApiBase
+                ? `<button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="adminGateResetBackendBtn">Use Browser Mode</button>`
+                : ''
+            }
+          </div>
+          <div id="adminGateBackendStatus" class="admin-backend-status ${backendApiBase ? 'is-success' : ''}">
+            ${escapeHTML(
+              backendApiBase
+                ? `Connected server: ${backendApiBase}`
+                : 'Static Browser Mode active (no external Node URL set).'
+            )}
+          </div>
+        </div>
+      `
+      : '';
+
+    const bindGateBackendEvents = () => {
+      const connectBtn = document.getElementById('adminGateConnectBtn');
+      const resetBtn = document.getElementById('adminGateResetBackendBtn');
+      const urlInput = document.getElementById('adminGateBackendUrl');
+      const statusEl = document.getElementById('adminGateBackendStatus');
+
+      if (connectBtn && window.LinguaBackend) {
+        connectBtn.onclick = async () => {
+          const candidate = (urlInput?.value || '').trim();
+          if (!candidate) {
+            if (statusEl) {
+              statusEl.className = 'admin-backend-status is-error';
+              statusEl.textContent = 'Enter your hosted HTTPS Node server URL first.';
+            }
+            return;
+          }
+          connectBtn.disabled = true;
+          connectBtn.textContent = 'Connecting…';
+          if (statusEl) {
+            statusEl.className = 'admin-backend-status';
+            statusEl.textContent = 'Testing /api/site-config over HTTPS/CORS…';
+          }
+          const probe = await window.LinguaBackend.testConnection(candidate);
+          if (!probe.ok) {
+            connectBtn.disabled = false;
+            connectBtn.textContent = 'Test & Connect';
+            if (statusEl) {
+              statusEl.className = 'admin-backend-status is-error';
+              statusEl.textContent = probe.error || 'Could not reach server.';
+            }
+            return;
+          }
+          try {
+            const saved = window.LinguaBackend.setApiBase(candidate);
+            updateBackendBadge();
+            toast(`Connected to ${saved} (${probe.latencyMs}ms).`);
+          } catch (err) {
+            connectBtn.disabled = false;
+            connectBtn.textContent = 'Test & Connect';
+            if (statusEl) {
+              statusEl.className = 'admin-backend-status is-error';
+              statusEl.textContent = err instanceof Error ? err.message : 'Invalid backend URL.';
+            }
+          }
+        };
+      }
+
+      if (resetBtn && window.LinguaBackend) {
+        resetBtn.onclick = () => {
+          window.LinguaBackend.clearApiBase();
+          updateBackendBadge();
+          toast('Switched back to Static Browser Mode.');
+        };
+      }
+    };
+
     if (!s.user) {
       const unclaimed = !s.adminClaimed;
       if (gateTitle) {
@@ -3266,17 +3373,19 @@
       if (gateActions) {
         gateActions.innerHTML = unclaimed
           ? `
-            <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+            <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; width:100%;">
               <button type="button" class="admin-btn admin-btn-primary" id="adminGateRegisterBtn">Create Admin Account (syndkyaw@gmail.com)</button>
               <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignInBtn">Sign In</button>
               <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
             </div>
+            <div style="width:100%;">${gateBackendHtml}</div>
           `
           : `
-            <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+            <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; width:100%;">
               <button type="button" class="admin-btn admin-btn-primary" id="adminGateSignInBtn">Sign In as Admin</button>
               <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
             </div>
+            <div style="width:100%;">${gateBackendHtml}</div>
           `;
         const regBtn = document.getElementById('adminGateRegisterBtn');
         if (regBtn) {
@@ -3294,6 +3403,7 @@
             }
           };
         }
+        bindGateBackendEvents();
       }
     } else {
       if (gateTitle) {
@@ -3304,14 +3414,18 @@
       }
       if (gateActions) {
         gateActions.innerHTML = `
-          <a href="index.html" class="admin-btn admin-btn-primary">Back to Home</a>
-          <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
+          <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; width:100%;">
+            <a href="index.html" class="admin-btn admin-btn-primary">Back to Home</a>
+            <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
+          </div>
+          <div style="width:100%;">${gateBackendHtml}</div>
         `;
         document.getElementById('adminGateSignOutBtn').onclick = () => {
           if (window.LinguaAuth && typeof window.LinguaAuth.logout === 'function') {
             window.LinguaAuth.logout();
           }
         };
+        bindGateBackendEvents();
       }
     }
   }

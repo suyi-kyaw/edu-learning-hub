@@ -196,6 +196,9 @@ export const MEMBERSHIP_PLANS = {
 };
 
 const AUTH_TOKEN_STORAGE_KEY = 'linguapath_auth_token';
+const LOCAL_STORE_STORAGE_KEY = 'linguapath_local_auth_store_v1';
+const LOCAL_SESSION_STORAGE_KEY = 'linguapath_local_session_uid';
+const ADMIN_EMAIL = 'syndkyaw@gmail.com';
 
 // --- Pure Utility Functions ---
 
@@ -248,6 +251,171 @@ function setStoredToken(token: string | null): void {
   } catch {
     // ignore storage errors
   }
+}
+
+function getLocalSessionUid(): string | null {
+  try {
+    const val = localStorage.getItem(LOCAL_SESSION_STORAGE_KEY);
+    return val ? val.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function setLocalSessionUid(uid: string | null): void {
+  try {
+    if (uid) {
+      localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, uid);
+    } else {
+      localStorage.removeItem(LOCAL_SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+interface LocalStoredUser {
+  profile: UserProfile;
+  salt: string;
+  passwordHash: string;
+}
+
+interface LocalAuthStore {
+  users: Record<string, LocalStoredUser>;
+  requests: SubscriptionRequest[];
+  progress: Record<string, UserProgress>;
+  lessonCatalog: Record<string, LessonCatalogItem>;
+  siteConfig?: Partial<SiteConfig>;
+}
+
+function readLocalStore(): LocalAuthStore {
+  const empty: LocalAuthStore = {
+    users: {},
+    requests: [],
+    progress: {},
+    lessonCatalog: {}
+  };
+  try {
+    const raw = localStorage.getItem(LOCAL_STORE_STORAGE_KEY);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw) as Partial<LocalAuthStore>;
+    return {
+      users: parsed?.users && typeof parsed.users === 'object' ? parsed.users : {},
+      requests: Array.isArray(parsed?.requests) ? parsed.requests : [],
+      progress: parsed?.progress && typeof parsed.progress === 'object' ? parsed.progress : {},
+      lessonCatalog:
+        parsed?.lessonCatalog && typeof parsed.lessonCatalog === 'object' ? parsed.lessonCatalog : {},
+      siteConfig:
+        parsed?.siteConfig && typeof parsed.siteConfig === 'object' ? parsed.siteConfig : undefined
+    };
+  } catch {
+    return empty;
+  }
+}
+
+function writeLocalStore(store: LocalAuthStore): void {
+  try {
+    localStorage.setItem(LOCAL_STORE_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+function generateRandomHex(bytes = 16): string {
+  try {
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+      const arr = new Uint8Array(bytes);
+      window.crypto.getRandomValues(arr);
+      return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch {
+    // fallback below
+  }
+  let out = '';
+  for (let i = 0; i < bytes * 2; i++) {
+    out += Math.floor(Math.random() * 16).toString(16);
+  }
+  return out;
+}
+
+async function hashLocalPassword(password: string, salt: string): Promise<string> {
+  const input = `${salt}:${password}`;
+  try {
+    if (window.crypto?.subtle && typeof TextEncoder !== 'undefined') {
+      const data = new TextEncoder().encode(input);
+      const digest = await window.crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch {
+    // fallback below
+  }
+  // Deterministic fallback hash if crypto.subtle is unavailable
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b9;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ (ch + i), 0x85ebca6b) >>> 0;
+  }
+  return `${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
+}
+
+function isLocalAdminClaimed(store: LocalAuthStore): boolean {
+  return Object.values(store.users).some(
+    (entry) =>
+      entry?.profile?.role === 'admin' ||
+      String(entry?.profile?.email || '').trim().toLowerCase() === ADMIN_EMAIL
+  );
+}
+
+function generateLocalTempPassword(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let pw = '';
+  try {
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+      const buf = new Uint8Array(12);
+      window.crypto.getRandomValues(buf);
+      for (let i = 0; i < buf.length; i++) {
+        pw += alphabet[buf[i] % alphabet.length];
+      }
+      return pw;
+    }
+  } catch {
+    // fallback below
+  }
+  for (let i = 0; i < 12; i++) {
+    pw += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return pw;
+}
+
+function buildLocalSessionPayload(store: LocalAuthStore, uid: string): Record<string, unknown> | null {
+  const entry = store.users[uid];
+  if (!entry || !entry.profile) return null;
+  const profile = { ...entry.profile };
+  const isAdm = profile.role === 'admin';
+  const myRequests = store.requests.filter((r) => r.userId === uid);
+  const userProgress = store.progress[uid] || createDefaultUserProgress(uid);
+  const allUsers = isAdm ? Object.values(store.users).map((u) => ({ ...u.profile })) : [];
+  const allRequests = isAdm ? [...store.requests] : [];
+
+  return {
+    user: {
+      uid: profile.uid,
+      email: profile.email,
+      displayName: profile.username,
+      role: profile.role,
+      mustChangePassword: Boolean(profile.mustChangePassword)
+    },
+    profile,
+    userProgress,
+    myRequests,
+    lessonCatalog: store.lessonCatalog || {},
+    adminClaimed: isLocalAdminClaimed(store),
+    smtpConfigured: false,
+    allUsers,
+    allRequests
+  };
 }
 
 type CodedAuthError = Error & { code?: string; status?: number };
@@ -321,6 +489,7 @@ async function apiRequest<T = Record<string, unknown>>(
 
 export interface AuthState {
   ready: boolean;
+  isLocalMode: boolean;
   user: AuthUserSummary | null;
   profile: UserProfile | null;
   userProgress: UserProgress | null;
@@ -337,6 +506,7 @@ export interface AuthState {
 
 const state: AuthState = {
   ready: false,
+  isLocalMode: !hasBackendAvailable(),
   user: null,
   profile: null,
   userProgress: null,
@@ -488,6 +658,7 @@ function applySessionPayload(data: Record<string, unknown>): void {
 
 function clearAuthSession(): void {
   setStoredToken(null);
+  setLocalSessionUid(null);
   state.user = null;
   state.profile = null;
   state.userProgress = null;
@@ -498,8 +669,11 @@ function clearAuthSession(): void {
 }
 
 async function hydratePublicAndSession(): Promise<void> {
+  const backendActive = hasBackendAvailable();
+  state.isLocalMode = !backendActive;
+
   // 1. Hydrate siteConfig (from backend or static fallback data/site-config.json)
-  if (hasBackendAvailable()) {
+  if (backendActive) {
     try {
       const cfgRes = await fetch(resolveBackendApiUrl('/api/site-config?t=' + Date.now()), {
         mode: 'cors',
@@ -516,20 +690,24 @@ async function hydratePublicAndSession(): Promise<void> {
       // Fallback below
     }
   } else {
+    let baseCfg: Partial<SiteConfig> = {};
     try {
       const staticCfg = await fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' });
       if (staticCfg.ok) {
-        const parsed = (await staticCfg.json()) as Partial<SiteConfig>;
-        state.siteConfig = normalizeSiteConfig(parsed);
-        emitSiteConfigChange();
+        baseCfg = (await staticCfg.json()) as Partial<SiteConfig>;
       }
     } catch {
       // keep defaults
     }
+    const localStore = readLocalStore();
+    state.siteConfig = normalizeSiteConfig(
+      localStore.siteConfig ? { ...baseCfg, ...localStore.siteConfig } : baseCfg
+    );
+    emitSiteConfigChange();
   }
 
-  // 2. Hydrate public catalog, auth status, and current user session if a token exists
-  if (hasBackendAvailable()) {
+  // 2. Hydrate public catalog, auth status, and current user session
+  if (backendActive) {
     const token = getStoredToken();
     try {
       const [statusJson, catalogJson] = await Promise.all([
@@ -563,6 +741,34 @@ async function hydratePublicAndSession(): Promise<void> {
           state.lastError = coded.message;
         }
       }
+    } else {
+      // Clear any browser-local-only session when switching onto a live Node backend
+      state.user = null;
+      state.profile = null;
+      state.userProgress = null;
+      state.isAdmin = false;
+      state.myRequests = [];
+      state.allRequests = [];
+      state.allUsers = [];
+    }
+  } else {
+    const localStore = readLocalStore();
+    state.lessonCatalog = localStore.lessonCatalog || {};
+    state.adminClaimed = isLocalAdminClaimed(localStore);
+    state.smtpConfigured = false;
+    const localUid = getLocalSessionUid();
+    const payload = localUid ? buildLocalSessionPayload(localStore, localUid) : null;
+    if (payload) {
+      applySessionPayload(payload);
+    } else {
+      setLocalSessionUid(null);
+      state.user = null;
+      state.profile = null;
+      state.userProgress = null;
+      state.isAdmin = false;
+      state.myRequests = [];
+      state.allRequests = [];
+      state.allUsers = [];
     }
   }
 
@@ -584,16 +790,76 @@ async function registerWithEmail(params: {
   dob: string;
   password: string;
 }): Promise<UserProfile> {
+  const cleanUsername = String(params.username || '').trim().slice(0, 60);
+  const cleanEmail = String(params.email || '').trim().toLowerCase().slice(0, 160);
+  const cleanPhone = String(params.phoneNumber || '').trim().slice(0, 32);
+  const cleanDob = String(params.dob || '').trim().slice(0, 20);
+  const rawPassword = String(params.password || '');
+
+  if (!hasBackendAvailable()) {
+    if (!cleanUsername || !cleanEmail) {
+      throw new Error('User Name and Email Address are required.');
+    }
+    if (rawPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters long.');
+    }
+    const store = readLocalStore();
+    const existing = Object.values(store.users).find(
+      (u) => String(u?.profile?.email || '').trim().toLowerCase() === cleanEmail
+    );
+    if (existing) {
+      const err: CodedAuthError = new Error('An account with this email address already exists on this browser.');
+      err.code = 'email-exists';
+      throw err;
+    }
+
+    const uid = `lp_${Date.now().toString(36)}_${generateRandomHex(4)}`;
+    const nowIso = new Date().toISOString();
+    const shouldClaimAdmin = cleanEmail === ADMIN_EMAIL && !isLocalAdminClaimed(store);
+    const salt = generateRandomHex(16);
+    const passwordHash = await hashLocalPassword(rawPassword, salt);
+
+    const profile: UserProfile = {
+      uid,
+      username: cleanUsername,
+      email: cleanEmail,
+      phoneNumber: cleanPhone,
+      dob: cleanDob,
+      role: shouldClaimAdmin ? 'admin' : 'student',
+      membershipStatus: shouldClaimAdmin ? 'active' : 'free',
+      membershipPlan: shouldClaimAdmin ? 'annual' : 'none',
+      membershipExpiresAt: '',
+      subscribedLessonIds: [],
+      linkedProviders: ['password'],
+      mustChangePassword: false,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    store.users[uid] = { profile, salt, passwordHash };
+    store.progress[uid] = createDefaultUserProgress(uid);
+    writeLocalStore(store);
+    setLocalSessionUid(uid);
+
+    state.isLocalMode = true;
+    const payload = buildLocalSessionPayload(store, uid);
+    if (payload) applySessionPayload(payload);
+    state.ready = true;
+    emitState();
+    return state.profile as UserProfile;
+  }
+
   const data = await apiRequest<Record<string, unknown>>('/api/auth/register', {
     method: 'POST',
     body: {
-      username: String(params.username || '').trim(),
-      email: String(params.email || '').trim(),
-      phoneNumber: String(params.phoneNumber || '').trim(),
-      dob: String(params.dob || '').trim(),
-      password: String(params.password || '')
+      username: cleanUsername,
+      email: cleanEmail,
+      phoneNumber: cleanPhone,
+      dob: cleanDob,
+      password: rawPassword
     }
   });
+  state.isLocalMode = false;
   applySessionPayload(data);
   state.ready = true;
   emitState();
@@ -601,13 +867,51 @@ async function registerWithEmail(params: {
 }
 
 async function loginWithEmail(email: string, password: string): Promise<AuthUserSummary> {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const rawPassword = String(password || '');
+
+  if (!hasBackendAvailable()) {
+    if (!cleanEmail || !rawPassword) {
+      throw new Error('Please enter both your email and password.');
+    }
+    const store = readLocalStore();
+    const matched = Object.values(store.users).find(
+      (u) => String(u?.profile?.email || '').trim().toLowerCase() === cleanEmail
+    );
+    if (!matched) {
+      const err: CodedAuthError = new Error(
+        cleanEmail === ADMIN_EMAIL && !isLocalAdminClaimed(store)
+          ? 'No account found on this browser for syndkyaw@gmail.com. Click Register to create your admin account here, or connect your Hosted Node Server URL below to sign in to your server account.'
+          : `No account found on this browser for ${cleanEmail}. Click Register to create your account here, or connect your Hosted Node Server URL below to sign in to your server account.`
+      );
+      err.code = 'user-not-found';
+      throw err;
+    }
+
+    const candidateHash = await hashLocalPassword(rawPassword, matched.salt);
+    if (candidateHash !== matched.passwordHash) {
+      const err: CodedAuthError = new Error('Incorrect email or password.');
+      err.code = 'invalid-credentials';
+      throw err;
+    }
+
+    setLocalSessionUid(matched.profile.uid);
+    state.isLocalMode = true;
+    const payload = buildLocalSessionPayload(store, matched.profile.uid);
+    if (payload) applySessionPayload(payload);
+    state.ready = true;
+    emitState();
+    return state.user as AuthUserSummary;
+  }
+
   const data = await apiRequest<Record<string, unknown>>('/api/auth/login', {
     method: 'POST',
     body: {
-      email: String(email || '').trim(),
-      password: String(password || '')
+      email: cleanEmail,
+      password: rawPassword
     }
   });
+  state.isLocalMode = false;
   applySessionPayload(data);
   state.ready = true;
   emitState();
@@ -615,6 +919,13 @@ async function loginWithEmail(email: string, password: string): Promise<AuthUser
 }
 
 async function sendPasswordReset(email: string): Promise<string> {
+  if (!hasBackendAvailable()) {
+    const err: CodedAuthError = new Error(
+      'Automatic password-reset emails require a Hosted Node Server with SMTP. Connect your Hosted Node Server URL below, or register a fresh account on this browser.'
+    );
+    err.code = 'smtp-requires-backend';
+    throw err;
+  }
   const data = await apiRequest<{ message?: string }>('/api/auth/forgot-password', {
     method: 'POST',
     body: { email: String(email || '').trim() }
@@ -623,6 +934,31 @@ async function sendPasswordReset(email: string): Promise<string> {
 }
 
 async function changePassword(currentPassword: string, newPassword: string): Promise<UserProfile> {
+  if (!hasBackendAvailable()) {
+    if (!state.user) throw new Error('Please sign in first.');
+    if (!currentPassword || !newPassword || newPassword.length < 6) {
+      throw new Error('Enter your current password and a new password (min. 6 characters).');
+    }
+    const store = readLocalStore();
+    const entry = store.users[state.user.uid];
+    if (!entry) throw new Error('Account record not found on this browser.');
+    const curHash = await hashLocalPassword(currentPassword, entry.salt);
+    if (curHash !== entry.passwordHash) {
+      throw new Error('Current password is incorrect.');
+    }
+    const nextSalt = generateRandomHex(16);
+    entry.salt = nextSalt;
+    entry.passwordHash = await hashLocalPassword(newPassword, nextSalt);
+    entry.profile.mustChangePassword = false;
+    entry.profile.updatedAt = new Date().toISOString();
+    writeLocalStore(store);
+
+    state.profile = { ...entry.profile };
+    state.user.mustChangePassword = false;
+    emitState();
+    return state.profile as UserProfile;
+  }
+
   const data = await apiRequest<{ profile?: UserProfile }>('/api/auth/change-password', {
     method: 'POST',
     requireAuth: true,
@@ -639,6 +975,19 @@ async function changePassword(currentPassword: string, newPassword: string): Pro
 }
 
 async function reloadAuthSession(): Promise<AuthState> {
+  if (!hasBackendAvailable()) {
+    const localUid = getLocalSessionUid();
+    if (!localUid) throw new Error('Please sign in first.');
+    const store = readLocalStore();
+    const payload = buildLocalSessionPayload(store, localUid);
+    if (!payload) throw new Error('Please sign in first.');
+    state.isLocalMode = true;
+    applySessionPayload(payload);
+    state.ready = true;
+    emitState();
+    return getState();
+  }
+
   if (!getStoredToken()) {
     throw new Error('Please sign in first.');
   }
@@ -660,13 +1009,35 @@ async function updateProfileDetails(params: {
   phoneNumber: string;
   dob: string;
 }): Promise<void> {
+  const cleanUsername = String(params.username || '').trim().slice(0, 60);
+  const cleanPhone = String(params.phoneNumber || '').trim().slice(0, 32);
+  const cleanDob = String(params.dob || '').trim().slice(0, 20);
+
+  if (!hasBackendAvailable()) {
+    if (!state.user) throw new Error('Please sign in first.');
+    if (!cleanUsername) throw new Error('User Name cannot be empty.');
+    const store = readLocalStore();
+    const entry = store.users[state.user.uid];
+    if (!entry) throw new Error('Account record not found.');
+    entry.profile.username = cleanUsername;
+    entry.profile.phoneNumber = cleanPhone;
+    entry.profile.dob = cleanDob;
+    entry.profile.updatedAt = new Date().toISOString();
+    writeLocalStore(store);
+
+    state.profile = { ...entry.profile };
+    state.user.displayName = cleanUsername;
+    emitState();
+    return;
+  }
+
   const data = await apiRequest<{ profile?: UserProfile }>('/api/auth/profile', {
     method: 'PUT',
     requireAuth: true,
     body: {
-      username: String(params.username || '').trim(),
-      phoneNumber: String(params.phoneNumber || '').trim(),
-      dob: String(params.dob || '').trim()
+      username: cleanUsername,
+      phoneNumber: cleanPhone,
+      dob: cleanDob
     }
   });
   if (data.profile) {
@@ -687,6 +1058,46 @@ async function submitSubscriptionRequest(params: {
   contactHandle: string;
   note?: string;
 }): Promise<SubscriptionRequest> {
+  if (!hasBackendAvailable()) {
+    if (!state.user || !state.profile) throw new Error('Please sign in first.');
+    const store = readLocalStore();
+    const nowIso = new Date().toISOString();
+    const planType = params.planType === 'annual' || params.planType === 'per_lesson' ? params.planType : 'monthly';
+    const request: SubscriptionRequest = {
+      requestId: `req_${Date.now().toString(36)}_${generateRandomHex(3)}`,
+      userId: state.user.uid,
+      username: state.profile.username || state.user.displayName || 'Learner',
+      userEmail: state.profile.email || state.user.email,
+      userPhone: state.profile.phoneNumber || '',
+      planType,
+      lessonId: params.lessonId ? sanitizeDocId(params.lessonId) : '',
+      lessonTitle:
+        String(params.lessonTitle || '').trim() ||
+        (planType === 'annual'
+          ? 'Annual All-Access'
+          : planType === 'per_lesson'
+          ? 'Single Lesson Pass'
+          : 'Monthly All-Access'),
+      amountLabel:
+        String(params.amountLabel || '').trim() ||
+        (planType === 'annual' ? '$149 / yr' : planType === 'per_lesson' ? '$9' : '$19 / mo'),
+      contactChannel: params.contactChannel === 'email' ? 'email' : 'viber',
+      contactHandle: String(params.contactHandle || '').trim(),
+      note: String(params.note || '').trim().slice(0, 400),
+      status: 'pending',
+      adminNote: '',
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+    store.requests.unshift(request);
+    writeLocalStore(store);
+
+    state.myRequests = store.requests.filter((r) => r.userId === state.user?.uid);
+    if (getComputedAdmin()) state.allRequests = [...store.requests];
+    emitState();
+    return request;
+  }
+
   const data = await apiRequest<{ request: SubscriptionRequest; myRequests?: SubscriptionRequest[] }>('/api/requests', {
     method: 'POST',
     requireAuth: true,
@@ -702,6 +1113,19 @@ async function submitSubscriptionRequest(params: {
 }
 
 async function cancelPendingRequest(requestId: string): Promise<void> {
+  if (!hasBackendAvailable()) {
+    if (!state.user) throw new Error('Please sign in first.');
+    const store = readLocalStore();
+    store.requests = store.requests.filter(
+      (r) => !(r.requestId === requestId && r.userId === state.user?.uid && r.status === 'pending')
+    );
+    writeLocalStore(store);
+    state.myRequests = store.requests.filter((r) => r.userId === state.user?.uid);
+    if (getComputedAdmin()) state.allRequests = [...store.requests];
+    emitState();
+    return;
+  }
+
   const data = await apiRequest<{ myRequests?: SubscriptionRequest[] }>(
     `/api/requests/${encodeURIComponent(requestId)}`,
     {
@@ -723,6 +1147,43 @@ async function approveSubscriptionRequest(
   reqDoc: SubscriptionRequest,
   adminNote = 'Verified via QR payment'
 ): Promise<void> {
+  if (!hasBackendAvailable()) {
+    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+    const store = readLocalStore();
+    const targetReq = store.requests.find((r) => r.requestId === reqDoc.requestId);
+    if (!targetReq) throw new Error('Subscription request not found.');
+    const nowIso = new Date().toISOString();
+    targetReq.status = 'approved';
+    targetReq.adminNote = adminNote;
+    targetReq.updatedAt = nowIso;
+
+    const uEntry = store.users[targetReq.userId];
+    if (uEntry && uEntry.profile) {
+      uEntry.profile.membershipStatus = 'active';
+      uEntry.profile.membershipPlan = targetReq.planType;
+      if (targetReq.planType === 'per_lesson' && targetReq.lessonId) {
+        const set = new Set(uEntry.profile.subscribedLessonIds || []);
+        set.add(targetReq.lessonId);
+        uEntry.profile.subscribedLessonIds = Array.from(set);
+      } else {
+        const d = new Date();
+        d.setDate(d.getDate() + (targetReq.planType === 'annual' ? 365 : 30));
+        uEntry.profile.membershipExpiresAt = d.toISOString().slice(0, 10);
+      }
+      uEntry.profile.updatedAt = nowIso;
+      if (state.user.uid === uEntry.profile.uid) {
+        state.profile = { ...uEntry.profile };
+      }
+    }
+
+    writeLocalStore(store);
+    state.allRequests = [...store.requests];
+    state.allUsers = Object.values(store.users).map((u) => ({ ...u.profile }));
+    state.myRequests = store.requests.filter((r) => r.userId === state.user?.uid);
+    emitState();
+    return;
+  }
+
   const data = await apiRequest<{
     allRequests?: SubscriptionRequest[];
     allUsers?: UserProfile[];
@@ -737,6 +1198,22 @@ async function approveSubscriptionRequest(
 }
 
 async function rejectSubscriptionRequest(requestId: string, adminNote = 'Payment could not be verified'): Promise<void> {
+  if (!hasBackendAvailable()) {
+    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+    const store = readLocalStore();
+    const targetReq = store.requests.find((r) => r.requestId === requestId);
+    if (targetReq) {
+      targetReq.status = 'rejected';
+      targetReq.adminNote = adminNote;
+      targetReq.updatedAt = new Date().toISOString();
+      writeLocalStore(store);
+    }
+    state.allRequests = [...store.requests];
+    state.myRequests = store.requests.filter((r) => r.userId === state.user?.uid);
+    emitState();
+    return;
+  }
+
   const data = await apiRequest<{ allRequests?: SubscriptionRequest[] }>(
     `/api/admin/requests/${encodeURIComponent(requestId)}/reject`,
     {
@@ -758,6 +1235,30 @@ async function updateUserMembershipAdmin(
     subscribedLessonIds?: string[];
   }
 ): Promise<void> {
+  if (!hasBackendAvailable()) {
+    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+    const store = readLocalStore();
+    const entry = store.users[userId];
+    if (!entry || !entry.profile) throw new Error('User not found.');
+    entry.profile.membershipStatus = updates.membershipStatus;
+    entry.profile.membershipPlan = updates.membershipPlan;
+    if (updates.membershipExpiresAt !== undefined) {
+      entry.profile.membershipExpiresAt = String(updates.membershipExpiresAt || '').trim();
+    }
+    if (Array.isArray(updates.subscribedLessonIds)) {
+      entry.profile.subscribedLessonIds = updates.subscribedLessonIds.map((x) => sanitizeDocId(x));
+    }
+    entry.profile.updatedAt = new Date().toISOString();
+    writeLocalStore(store);
+
+    state.allUsers = Object.values(store.users).map((u) => ({ ...u.profile }));
+    if (state.user.uid === userId) {
+      state.profile = { ...entry.profile };
+    }
+    emitState();
+    return;
+  }
+
   const data = await apiRequest<{ user?: UserProfile; allUsers?: UserProfile[] }>(
     `/api/admin/users/${encodeURIComponent(userId)}/membership`,
     {
@@ -777,6 +1278,36 @@ async function adminResetUserPassword(
   userId: string,
   options: { newPassword?: string; sendEmail?: boolean } = {}
 ): Promise<{ emailed: boolean; emailError?: string | null; temporaryPassword: string; user?: UserProfile }> {
+  if (!hasBackendAvailable()) {
+    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+    const store = readLocalStore();
+    const entry = store.users[userId];
+    if (!entry || !entry.profile) throw new Error('User not found.');
+    const temporaryPassword = options.newPassword?.trim() || generateLocalTempPassword();
+    if (temporaryPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters.');
+    }
+    const nextSalt = generateRandomHex(16);
+    entry.salt = nextSalt;
+    entry.passwordHash = await hashLocalPassword(temporaryPassword, nextSalt);
+    entry.profile.mustChangePassword = true;
+    entry.profile.updatedAt = new Date().toISOString();
+    writeLocalStore(store);
+
+    state.allUsers = Object.values(store.users).map((u) => ({ ...u.profile }));
+    if (state.user.uid === userId) {
+      state.profile = { ...entry.profile };
+      state.user.mustChangePassword = true;
+    }
+    emitState();
+    return {
+      emailed: false,
+      emailError: 'Automatic emails require a Hosted Node Server with SMTP.',
+      temporaryPassword,
+      user: { ...entry.profile }
+    };
+  }
+
   const data = await apiRequest<{
     emailed: boolean;
     emailError?: string | null;
@@ -802,6 +1333,30 @@ async function saveLessonCatalogItems(
     price: number;
   }>
 ): Promise<void> {
+  if (!hasBackendAvailable()) {
+    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+    const store = readLocalStore();
+    const nowIso = new Date().toISOString();
+    const nextCatalog: Record<string, LessonCatalogItem> = { ...(store.lessonCatalog || {}) };
+    for (const item of items || []) {
+      const id = sanitizeDocId(item.lessonId);
+      nextCatalog[id] = {
+        lessonId: id,
+        title: String(item.title || id).trim(),
+        audience: item.audience === 'Kids' ? 'Kids' : 'Adult',
+        accessType: item.accessType === 'paid' ? 'paid' : 'free',
+        price: Math.max(0, Number(item.price) || 0),
+        updatedBy: state.user.email,
+        updatedAt: nowIso
+      };
+    }
+    store.lessonCatalog = nextCatalog;
+    writeLocalStore(store);
+    state.lessonCatalog = nextCatalog;
+    emitState();
+    return;
+  }
+
   const data = await apiRequest<{ lessonCatalog?: Record<string, LessonCatalogItem> }>('/api/admin/catalog', {
     method: 'PUT',
     requireAuth: true,
@@ -814,6 +1369,9 @@ async function saveLessonCatalogItems(
 }
 
 async function getIdToken(): Promise<string | null> {
+  if (!hasBackendAvailable()) {
+    return getLocalSessionUid() ? 'local-browser-session' : null;
+  }
   return getStoredToken();
 }
 
@@ -823,6 +1381,17 @@ function getSiteConfig(): SiteConfig {
 
 async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig> {
   const merged = normalizeSiteConfig({ ...state.siteConfig, ...partial });
+  if (!hasBackendAvailable()) {
+    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+    const store = readLocalStore();
+    store.siteConfig = { ...merged, updatedBy: state.user.email, updatedAt: new Date().toISOString() };
+    writeLocalStore(store);
+    state.siteConfig = normalizeSiteConfig(store.siteConfig);
+    emitSiteConfigChange();
+    emitState();
+    return state.siteConfig;
+  }
+
   const data = await apiRequest<{ config?: Partial<SiteConfig> }>('/api/admin/site-config', {
     method: 'PUT',
     requireAuth: true,
@@ -842,10 +1411,23 @@ async function getSmtpStatus(): Promise<{
   userMasked: string;
   from: string;
 }> {
+  if (!hasBackendAvailable()) {
+    return {
+      configured: false,
+      host: '',
+      port: 587,
+      secure: false,
+      userMasked: '',
+      from: ''
+    };
+  }
   return apiRequest('/api/admin/smtp-status', { requireAuth: true });
 }
 
 async function sendTestSmtpEmail(to?: string): Promise<{ message: string }> {
+  if (!hasBackendAvailable()) {
+    throw new Error('SMTP test emails require connecting your Hosted Node Server URL.');
+  }
   return apiRequest('/api/admin/test-smtp', {
     method: 'POST',
     requireAuth: true,
@@ -1032,6 +1614,13 @@ async function persistUserProgress(next: UserProgress): Promise<UserProgress> {
 
   state.userProgress = { ...payload };
   emitState();
+
+  if (!hasBackendAvailable()) {
+    const store = readLocalStore();
+    store.progress[state.user.uid] = { ...payload, updatedAt: new Date().toISOString() };
+    writeLocalStore(store);
+    return state.userProgress as UserProgress;
+  }
 
   const data = await apiRequest<{ userProgress?: UserProgress }>('/api/progress', {
     method: 'PUT',

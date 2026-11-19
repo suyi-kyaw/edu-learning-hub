@@ -42,7 +42,8 @@
     contactChannel: 'viber'
   };
   let pendingPostAuthSubscribe = null;
-  let feedbackBanner = null; // { type: 'success' | 'error' | 'info', text: string, showGoogleHint?: boolean }
+  let feedbackBanner = null; // { type: 'success' | 'error' | 'info', text: string, showBackendHint?: boolean }
+  let showBackendConnectBox = false;
   let lastAuthUserUid = null;
 
   function escapeHTML(str) {
@@ -380,6 +381,42 @@
         </form>
       `
       }
+      ${
+        state?.isLocalMode
+          ? `
+        <div class="lp-backend-inline-box" style="margin-top:14px; padding-top:12px; border-top:1px solid #e2e8f0;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:0.8rem; color:#64748b;">
+            <span><strong>Static GitHub Pages Mode</strong> · Saves on this browser</span>
+            <button type="button" class="lp-link-btn" id="lpToggleBackendBoxBtn">${
+              showBackendConnectBox ? 'Hide Server Connection' : 'Connect Hosted Node Server →'
+            }</button>
+          </div>
+          ${
+            showBackendConnectBox
+              ? `
+            <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
+              <label for="lpBackendUrlInput" style="font-size:0.78rem; font-weight:700;">Hosted Node Server HTTPS URL</label>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <input
+                  type="url"
+                  id="lpBackendUrlInput"
+                  style="flex:1; min-width:190px; padding:8px 10px; border-radius:10px; border:1px solid #cbd5e1; font-size:0.86rem;"
+                  value="${escapeHTML(window.LinguaBackend?.getApiBase?.() || '')}"
+                  placeholder="https://your-linguapath-server.onrender.com"
+                />
+                <button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" id="lpConnectBackendBtn">Connect</button>
+              </div>
+              <div id="lpBackendInlineMsg" style="font-size:0.76rem; color:#64748b; line-height:1.4;">
+                Have a deployed Node server? Paste its HTTPS URL to sign in with your synced server account &amp; Admin database.
+              </div>
+            </div>
+          `
+              : ''
+          }
+        </div>
+      `
+          : ''
+      }
     `;
   }
 
@@ -582,6 +619,13 @@
     }
 
     return `
+      ${
+        state.isLocalMode
+          ? `<div class="lp-context-callout" role="status">
+               <strong>Static Browser Mode:</strong> Your account and progress are saved on this browser. Connect a Hosted Node Server URL in the Admin Portal to sync across devices.
+             </div>`
+          : ''
+      }
       ${
         mustChangePw
           ? `<div class="lp-context-callout" role="status">
@@ -1015,11 +1059,78 @@
           }
           renderModal();
         } catch (err) {
+          const code = err && typeof err === 'object' ? err.code : '';
+          if (['user-not-found', 'no-backend', 'network-error', 'smtp-requires-backend'].includes(code)) {
+            showBackendConnectBox = true;
+          }
           feedbackBanner = {
             type: 'error',
             text: err instanceof Error ? err.message : 'Unable to sign in.'
           };
           renderModal();
+        }
+      };
+    }
+
+    // Inline Hosted Node Server connect box (for static GitHub Pages)
+    const toggleBackendBtn = document.getElementById('lpToggleBackendBoxBtn');
+    if (toggleBackendBtn) {
+      toggleBackendBtn.onclick = () => {
+        showBackendConnectBox = !showBackendConnectBox;
+        renderModal();
+      };
+    }
+
+    const connectBackendBtn = document.getElementById('lpConnectBackendBtn');
+    if (connectBackendBtn && window.LinguaBackend) {
+      connectBackendBtn.onclick = async () => {
+        const input = document.getElementById('lpBackendUrlInput');
+        const msgEl = document.getElementById('lpBackendInlineMsg');
+        const candidate = (input?.value || '').trim();
+        if (!candidate) {
+          if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = 'Enter your hosted Node server URL (starting with https://).';
+          }
+          return;
+        }
+        connectBackendBtn.disabled = true;
+        connectBackendBtn.textContent = 'Connecting…';
+        if (msgEl) {
+          msgEl.style.color = '#64748b';
+          msgEl.textContent = 'Checking server /api/site-config…';
+        }
+        const probe = await window.LinguaBackend.testConnection(candidate);
+        if (!probe.ok) {
+          connectBackendBtn.disabled = false;
+          connectBackendBtn.textContent = 'Connect';
+          if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = probe.error || 'Could not connect to server.';
+          }
+          return;
+        }
+        try {
+          const savedEmail = document.getElementById('lpLoginEmail')?.value || '';
+          const saved = window.LinguaBackend.setApiBase(candidate);
+          showBackendConnectBox = false;
+          feedbackBanner = {
+            type: 'success',
+            text: `Connected to ${saved} (${probe.latencyMs}ms). Sign in with your server account now.`
+          };
+          showToast('Hosted Node server connected!');
+          renderModal();
+          if (savedEmail) {
+            const emailEl = document.getElementById('lpLoginEmail');
+            if (emailEl) emailEl.value = savedEmail;
+          }
+        } catch (err) {
+          connectBackendBtn.disabled = false;
+          connectBackendBtn.textContent = 'Connect';
+          if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = err instanceof Error ? err.message : 'Invalid backend URL.';
+          }
         }
       };
     }
@@ -1045,6 +1156,10 @@
           showToast('Temporary password email sent.');
           renderModal();
         } catch (err) {
+          const code = err && typeof err === 'object' ? err.code : '';
+          if (code === 'smtp-requires-backend' || code === 'no-backend') {
+            showBackendConnectBox = true;
+          }
           feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Unable to send reset email.' };
           renderModal();
         }
