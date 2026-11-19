@@ -361,6 +361,9 @@
   <!-- Shared Footer Container -->
   <div id="sharedFooter"></div>
 
+  <!-- Runtime Backend URL & Media Asset Resolver -->
+  <script src="backend-config.js"></script>
+
   <!-- Firebase Auth & Membership Client -->
   <script src="vendor/firebase-app.js"></script>
   <script src="auth-ui.js"></script>
@@ -541,18 +544,28 @@
 
     // Load Games data
     async function fetchGamesData() {
-      // Strategy 1: Call API
-      try {
-        const res = await fetch('/api/lessons-data?t=' + Date.now());
-        if (res.ok) {
-          const data = await res.json();
-          if (data.sheets && data.sheets.Games && data.sheets.Games.length) {
-            renderGames(data.sheets.Games);
-            return;
+      // Strategy 1: Call API when a Node backend is available (same-origin or external HTTPS URL)
+      const backendReady =
+        !window.LinguaBackend ||
+        typeof window.LinguaBackend.hasBackend !== 'function' ||
+        window.LinguaBackend.hasBackend();
+      if (backendReady) {
+        try {
+          const apiEndpoint =
+            window.LinguaBackend && typeof window.LinguaBackend.apiUrl === 'function'
+              ? window.LinguaBackend.apiUrl('/api/lessons-data?t=' + Date.now())
+              : '/api/lessons-data?t=' + Date.now();
+          const res = await fetch(apiEndpoint, { mode: 'cors', cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.sheets && data.sheets.Games && data.sheets.Games.length) {
+              renderGames(data.sheets.Games);
+              return;
+            }
           }
+        } catch (e) {
+          console.warn('API /api/lessons-data fetch note:', e);
         }
-      } catch (e) {
-        console.warn('API /api/lessons-data fetch note:', e);
       }
 
       // Strategy 2: Direct binary parsing via SheetJS

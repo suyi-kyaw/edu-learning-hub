@@ -111,8 +111,13 @@
       hydrateFooterContact(window.LinguaAuth.getSiteConfig());
       return;
     }
+    if (window.LinguaBackend && !window.LinguaBackend.hasBackend()) {
+      return;
+    }
     try {
-      const r = await fetch('/api/site-config?t=' + Date.now());
+      const apiPath = '/api/site-config?t=' + Date.now();
+      const url = window.LinguaBackend ? window.LinguaBackend.apiUrl(apiPath) : apiPath;
+      const r = await fetch(url);
       if (r.ok) {
         const j = await r.json();
         if (j && j.config) hydrateFooterContact(j.config);

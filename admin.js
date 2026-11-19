@@ -69,6 +69,53 @@
     if (el) el.textContent = text;
   }
 
+  function apiUrl(path) {
+    if (window.LinguaBackend && typeof window.LinguaBackend.apiUrl === 'function') {
+      return window.LinguaBackend.apiUrl(path);
+    }
+    return path;
+  }
+
+  function assetUrl(url) {
+    if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function') {
+      return window.LinguaBackend.assetUrl(url);
+    }
+    return url;
+  }
+
+  function hasBackend() {
+    if (window.LinguaBackend && typeof window.LinguaBackend.hasBackend === 'function') {
+      return window.LinguaBackend.hasBackend();
+    }
+    return true;
+  }
+
+  function updateBackendBadge() {
+    const badge = document.getElementById('adminBackendBadge');
+    if (!badge) return;
+    const base = window.LinguaBackend && typeof window.LinguaBackend.getApiBase === 'function'
+      ? window.LinguaBackend.getApiBase()
+      : '';
+    const isStatic = window.LinguaBackend && typeof window.LinguaBackend.isStaticGithubHost === 'function'
+      ? window.LinguaBackend.isStaticGithubHost()
+      : false;
+    badge.classList.remove('is-connected', 'is-warning');
+    if (base) {
+      let labelHost = base;
+      try {
+        labelHost = new URL(base).host;
+      } catch (_) {}
+      badge.textContent = `Connected: ${labelHost}`;
+      badge.classList.add('is-connected');
+    } else if (isStatic) {
+      badge.textContent = 'Static Mode — Backend URL Needed';
+      badge.classList.add('is-warning');
+    } else {
+      badge.textContent = 'Same-Origin Node Server';
+      badge.classList.add('is-connected');
+    }
+  }
+
   function isSameId(a, b) {
     return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
   }
@@ -99,6 +146,11 @@
   }
 
   async function adminFetch(url, options = {}) {
+    if (!hasBackend()) {
+      throw new Error(
+        'Static GitHub Pages cannot save Excel sheets or media uploads directly. Enter your hosted HTTPS Node server URL in Homepage & Contact -> Hosted Node Backend Connection.'
+      );
+    }
     const authApi = window.LinguaAuth;
     if (!authApi || typeof authApi.getIdToken !== 'function') {
       throw new Error('Authentication SDK is not initialized.');
@@ -109,7 +161,8 @@
     }
     const headers = new Headers(options.headers || {});
     headers.set('Authorization', `Bearer ${token}`);
-    const res = await fetch(url, { ...options, headers });
+    const resolvedUrl = apiUrl(url);
+    const res = await fetch(resolvedUrl, { ...options, mode: 'cors', headers });
     let data = null;
     try {
       data = await res.json();
@@ -127,14 +180,36 @@
     if (state.loading && !force) return;
     state.loading = true;
     setSyncStatus('Loading data…');
+    updateBackendBadge();
     try {
       const stamp = Date.now();
-      const [cfgRes, storiesRes, reelsRes, lessonsRes] = await Promise.all([
-        fetch(`/api/site-config?t=${stamp}`).then((r) => r.json()).catch(() => null),
-        fetch(`/api/stories-data?t=${stamp}`).then((r) => r.json()).catch(() => null),
-        fetch(`/api/reels-stories-data?t=${stamp}`).then((r) => r.json()).catch(() => null),
-        fetch(`/api/lessons-data?t=${stamp}`).then((r) => r.json()).catch(() => null)
-      ]);
+      const backendActive = hasBackend();
+      let cfgRes = null;
+      let storiesRes = null;
+      let reelsRes = null;
+      let lessonsRes = null;
+      let usedStaticFallback = false;
+
+      if (backendActive) {
+        [cfgRes, storiesRes, reelsRes, lessonsRes] = await Promise.all([
+          fetch(apiUrl(`/api/site-config?t=${stamp}`), { mode: 'cors' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch(apiUrl(`/api/stories-data?t=${stamp}`), { mode: 'cors' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch(apiUrl(`/api/reels-stories-data?t=${stamp}`), { mode: 'cors' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch(apiUrl(`/api/lessons-data?t=${stamp}`), { mode: 'cors' }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        ]);
+      }
+
+      if (!storiesRes || !storiesRes.sheets || !reelsRes || !reelsRes.sheets || !lessonsRes || !lessonsRes.sheets) {
+        usedStaticFallback = !backendActive || (!storiesRes && !reelsRes && !lessonsRes);
+        const [fbStories, fbReels, fbLessons] = await Promise.all([
+          storiesRes && storiesRes.sheets ? Promise.resolve(storiesRes) : fetch(`data/stories.json?t=${stamp}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          reelsRes && reelsRes.sheets ? Promise.resolve(reelsRes) : fetch(`data/reels_stories.json?t=${stamp}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          lessonsRes && lessonsRes.sheets ? Promise.resolve(lessonsRes) : fetch(`data/lessons.json?t=${stamp}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        ]);
+        storiesRes = fbStories || storiesRes;
+        reelsRes = fbReels || reelsRes;
+        lessonsRes = fbLessons || lessonsRes;
+      }
 
       const authSiteCfg =
         window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === 'function'
@@ -166,7 +241,9 @@
       }
 
       state.loadedOnce = true;
-      setSyncStatus('Synced');
+      setSyncStatus(
+        usedStaticFallback ? 'Static snapshot (Connect Node URL to save)' : 'Synced'
+      );
       updateNavCounts();
       renderActiveTab();
     } catch (err) {
@@ -226,20 +303,21 @@
     if (!clean) {
       return `<span style="font-size:0.78rem; color:#64748b;">No ${escapeHTML(kind)} selected</span>`;
     }
+    const resolved = assetUrl(clean);
     if (kind === 'video') {
       return `
-        <video src="${escapeHTML(clean)}" muted playsinline controls preload="metadata"></video>
+        <video src="${escapeHTML(resolved)}" muted playsinline controls preload="metadata"></video>
         <span style="font-size:0.78rem; color:#64748b; word-break:break-all;">${escapeHTML(clean)}</span>
       `;
     }
     if (kind === 'audio') {
       return `
-        <audio src="${escapeHTML(clean)}" controls preload="none" style="height:32px; max-width:220px;"></audio>
+        <audio src="${escapeHTML(resolved)}" controls preload="none" style="height:32px; max-width:220px;"></audio>
         <span style="font-size:0.78rem; color:#64748b; word-break:break-all;">${escapeHTML(clean)}</span>
       `;
     }
     return `
-      <img src="${escapeHTML(clean)}" alt="Preview" onerror="this.style.opacity='0.3'" />
+      <img src="${escapeHTML(resolved)}" alt="Preview" onerror="this.style.opacity='0.3'" />
       <span style="font-size:0.78rem; color:#64748b; word-break:break-all;">${escapeHTML(clean)}</span>
     `;
   }
@@ -345,7 +423,56 @@
     const featReels = new Set((cfg.featuredReelIds || []).map((x) => x.toLowerCase()));
     const featGames = new Set((cfg.featuredGameIds || []).map((x) => x.toLowerCase()));
 
+    const currentApiBase =
+      window.LinguaBackend && typeof window.LinguaBackend.getApiBase === 'function'
+        ? window.LinguaBackend.getApiBase()
+        : '';
+    const isStaticHost =
+      window.LinguaBackend && typeof window.LinguaBackend.isStaticGithubHost === 'function'
+        ? window.LinguaBackend.isStaticGithubHost()
+        : false;
+    const probeClass = currentApiBase || !isStaticHost ? 'is-success' : '';
+    const probeSummary = currentApiBase
+      ? `Connected external Node server: ${currentApiBase} (Origin: ${window.location.origin})`
+      : isStaticHost
+      ? `Running on static host (${window.location.hostname}). Enter your hosted HTTPS Node server URL below to enable Excel saves, uploads, and live API reads.`
+      : `Using same-origin Node server at ${window.location.origin}.`;
+
     viewport.innerHTML = `
+      <div class="admin-panel-card">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Hosted Node Backend Connection (GitHub Pages &amp; External Server)</h2>
+            <p>
+              GitHub Pages (${escapeHTML(window.location.hostname || 'static host')}) only serves static files.
+              Point this Admin Portal to your deployed HTTPS Node server (e.g. Render, Railway, or Fly.io) so Excel saves, uploads, and user membership APIs run live.
+            </p>
+          </div>
+        </div>
+
+        <div class="admin-field" style="margin-bottom:8px;">
+          <label for="cfgBackendApiUrl">Hosted Node Server HTTPS URL</label>
+          <div class="admin-backend-row">
+            <input
+              type="url"
+              class="admin-input"
+              id="cfgBackendApiUrl"
+              value="${escapeHTML(currentApiBase)}"
+              placeholder="https://your-linguapath-server.onrender.com"
+            />
+            <button type="button" class="admin-btn admin-btn-secondary" id="btnTestBackendUrl">Test Connection</button>
+            <button type="button" class="admin-btn admin-btn-primary" id="btnSaveBackendUrl">Save Backend URL</button>
+            <button type="button" class="admin-btn admin-btn-secondary" id="btnResetBackendUrl">Reset to Local Origin</button>
+          </div>
+        </div>
+
+        <div id="backendProbeStatus" class="admin-backend-status ${probeClass}">${escapeHTML(probeSummary)}</div>
+        <p style="margin:8px 0 0; font-size:0.78rem; color:#64748b; line-height:1.45;">
+          Tip: Saving sets this browser override in <code>localStorage</code> and lets you share links with <code>?apiBase=https://...</code>.
+          To connect all public GitHub Pages visitors automatically, paste the URL into <code>DEFAULT_PRODUCTION_BACKEND_URL</code> in <code>backend-config.js</code> and redeploy GitHub Pages.
+        </p>
+      </div>
+
       <form id="adminHomeForm">
         <div class="admin-panel-card">
           <div class="admin-panel-head">
@@ -634,6 +761,84 @@
     `;
 
     wireMediaPickers(viewport);
+
+    const urlInput = document.getElementById('cfgBackendApiUrl');
+    const probeEl = document.getElementById('backendProbeStatus');
+    const btnTest = document.getElementById('btnTestBackendUrl');
+    const btnSave = document.getElementById('btnSaveBackendUrl');
+    const btnReset = document.getElementById('btnResetBackendUrl');
+
+    const setProbeUI = (msg, kind) => {
+      if (!probeEl) return;
+      probeEl.textContent = msg;
+      probeEl.classList.remove('is-success', 'is-error');
+      if (kind === 'success') probeEl.classList.add('is-success');
+      if (kind === 'error') probeEl.classList.add('is-error');
+    };
+
+    if (btnTest && window.LinguaBackend) {
+      btnTest.onclick = async () => {
+        const candidate = (urlInput ? urlInput.value : '').trim();
+        btnTest.disabled = true;
+        btnTest.textContent = 'Testing…';
+        setProbeUI('Checking /api/site-config over HTTPS/CORS…', '');
+        const res = await window.LinguaBackend.testConnection(candidate);
+        btnTest.disabled = false;
+        btnTest.textContent = 'Test Connection';
+        if (res.ok) {
+          setProbeUI(`Connected! /api/site-config responded in ${res.latencyMs}ms.`, 'success');
+          toast(`Backend reachable (${res.latencyMs}ms).`);
+        } else {
+          setProbeUI(res.error || 'Connection test failed.', 'error');
+          toast(res.error || 'Connection test failed.', 'error');
+        }
+      };
+    }
+
+    if (btnSave && window.LinguaBackend) {
+      btnSave.onclick = async () => {
+        const candidate = (urlInput ? urlInput.value : '').trim();
+        if (!candidate) {
+          window.LinguaBackend.clearApiBase();
+          updateBackendBadge();
+          setProbeUI('Cleared custom backend override. Using local origin.', '');
+          await loadAllContentData(true);
+          return;
+        }
+        try {
+          btnSave.disabled = true;
+          const saved = window.LinguaBackend.setApiBase(candidate);
+          if (urlInput) urlInput.value = saved;
+          updateBackendBadge();
+          setProbeUI(`Saved ${saved}. Verifying live data sync…`, 'success');
+          const probe = await window.LinguaBackend.testConnection(saved);
+          if (probe.ok) {
+            setProbeUI(`Saved & connected to ${saved} (${probe.latencyMs}ms). Syncing workbooks…`, 'success');
+            await loadAllContentData(true);
+            toast('Hosted Node backend connected!');
+          } else {
+            setProbeUI(`Saved ${saved}, but server check failed: ${probe.error}`, 'error');
+            toast(probe.error || 'Saved URL, but could not reach server.', 'error');
+          }
+        } catch (err) {
+          setProbeUI(err instanceof Error ? err.message : 'Invalid backend URL.', 'error');
+          toast(err instanceof Error ? err.message : 'Invalid backend URL.', 'error');
+        } finally {
+          btnSave.disabled = false;
+        }
+      };
+    }
+
+    if (btnReset && window.LinguaBackend) {
+      btnReset.onclick = async () => {
+        window.LinguaBackend.clearApiBase();
+        if (urlInput) urlInput.value = window.LinguaBackend.getApiBase();
+        updateBackendBadge();
+        setProbeUI('Reset to default local origin behavior.', '');
+        await loadAllContentData(true);
+        toast('Backend URL override cleared.');
+      };
+    }
 
     const form = document.getElementById('adminHomeForm');
     form.onsubmit = async (e) => {
@@ -2903,14 +3108,54 @@
               directGoogleBtn.disabled = false;
               if (span) span.textContent = 'Continue with Google (Admin)';
               const msg = err instanceof Error ? err.message : 'Google sign-in failed.';
+              const errCode = (err && typeof err === 'object' && 'code' in err ? String(err.code) : '') || '';
+              const isUnauthorizedDomain =
+                errCode === 'auth/unauthorized-domain' || /unauthorized-domain|not authorized/i.test(msg);
+              const projectId =
+                (window.LinguaAuth && typeof window.LinguaAuth.getFirebaseProjectId === 'function'
+                  ? window.LinguaAuth.getFirebaseProjectId()
+                  : 'melodic-ace-2lvvl') || 'melodic-ace-2lvvl';
+              const hostName = window.location.hostname || 'suyi-kyaw.github.io';
+              const domainsUrl = `https://console.firebase.google.com/project/${encodeURIComponent(
+                projectId
+              )}/authentication/settings`;
+              const cloudUpgradeUrl = `https://console.cloud.google.com/customer-identity?project=${encodeURIComponent(
+                projectId
+              )}`;
+
               if (gateErrorBox) {
                 gateErrorBox.hidden = false;
-                gateErrorBox.innerHTML = `
-                  <div>${escapeHTML(msg)}</div>
-                  <div style="margin-top:8px;">
-                    <a class="admin-btn admin-btn-primary admin-btn-sm" href="${escapeHTML(window.location.href)}" target="_blank" rel="noopener noreferrer">Open Admin Portal in New Tab ↗</a>
-                  </div>
-                `;
+                if (isUnauthorizedDomain) {
+                  gateErrorBox.innerHTML = `
+                    <div><strong>Domain Not Authorized (${escapeHTML(hostName)}):</strong> ${escapeHTML(msg)}</div>
+                    <div class="lp-domain-copy-row" style="margin-top:8px;">
+                      <code class="lp-domain-pill">${escapeHTML(hostName)}</code>
+                      <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="adminGateCopyDomainBtn">Copy Domain</button>
+                    </div>
+                    <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+                      <a class="admin-btn admin-btn-primary admin-btn-sm" href="${escapeHTML(domainsUrl)}" target="_blank" rel="noopener noreferrer">Open Authorized Domains ↗</a>
+                      <a class="admin-btn admin-btn-secondary admin-btn-sm" href="${escapeHTML(cloudUpgradeUrl)}" target="_blank" rel="noopener noreferrer">Google Cloud Upgrade ↗</a>
+                    </div>
+                  `;
+                  const copyBtn = document.getElementById('adminGateCopyDomainBtn');
+                  if (copyBtn) {
+                    copyBtn.onclick = () => {
+                      if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(hostName).then(
+                          () => toast(`Copied ${hostName} to clipboard.`),
+                          () => toast(`Copy failed — add ${hostName} manually.`, 'info')
+                        );
+                      }
+                    };
+                  }
+                } else {
+                  gateErrorBox.innerHTML = `
+                    <div>${escapeHTML(msg)}</div>
+                    <div style="margin-top:8px;">
+                      <a class="admin-btn admin-btn-primary admin-btn-sm" href="${escapeHTML(window.location.href)}" target="_blank" rel="noopener noreferrer">Open Admin Portal in New Tab ↗</a>
+                    </div>
+                  `;
+                }
               }
               toast(msg, 'error');
             }
@@ -3021,6 +3266,23 @@
     if (refreshBtn) {
       refreshBtn.onclick = () => loadAllContentData(true);
     }
+
+    const backendBadgeBtn = document.getElementById('adminBackendBadge');
+    if (backendBadgeBtn) {
+      backendBadgeBtn.onclick = () => {
+        state.activeTab = 'home';
+        window.history.replaceState(null, '', '#home');
+        renderActiveTab();
+        const urlInput = document.getElementById('cfgBackendApiUrl');
+        if (urlInput) {
+          urlInput.focus();
+          urlInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      };
+    }
+
+    updateBackendBadge();
+    window.addEventListener('linguapath-backend-change', () => updateBackendBadge());
 
     const modalBackdrop = document.getElementById('adminModalBackdrop');
     if (modalBackdrop) {

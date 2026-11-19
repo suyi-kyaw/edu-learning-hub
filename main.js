@@ -31,6 +31,27 @@ function escapeHTML(value) {
     .replace(/'/g, "&#039;");
 }
 
+function backendApiUrl(path) {
+  if (window.LinguaBackend && typeof window.LinguaBackend.apiUrl === "function") {
+    return window.LinguaBackend.apiUrl(path);
+  }
+  return path;
+}
+
+function backendAssetUrl(path) {
+  if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === "function") {
+    return window.LinguaBackend.assetUrl(path);
+  }
+  return path;
+}
+
+function backendAvailable() {
+  if (window.LinguaBackend && typeof window.LinguaBackend.hasBackend === "function") {
+    return window.LinguaBackend.hasBackend();
+  }
+  return true;
+}
+
 
 /* =========================================================
    DOM READY
@@ -81,8 +102,36 @@ document.addEventListener("DOMContentLoaded", () => {
 async function loadWorkbook() {
   let loaded = false;
 
-  // Strategy 1: Direct Excel parsing if SheetJS (XLSX) is present
-  if (typeof XLSX !== "undefined") {
+  // Strategy 1: Live API endpoint when a Node backend is available (same-origin or configured external HTTPS URL)
+  if (backendAvailable()) {
+    try {
+      const apiResponse = await fetch(backendApiUrl("/api/lessons-data?t=" + Date.now()), {
+        mode: "cors",
+        cache: "no-store"
+      });
+
+      if (apiResponse.ok) {
+        const apiData = await apiResponse.json();
+
+        if (apiData.success && apiData.sheets) {
+          lessonData = apiData.sheets["Lessons"] || [];
+          vocabularyData = apiData.sheets["Vocabulary"] || [];
+          storyData = apiData.sheets["Story"] || [];
+          exercisesData = apiData.sheets["Exercises"] || [];
+          writingData = apiData.sheets["Writing"] || [];
+
+          if (lessonData.length > 0) {
+            loaded = true;
+          }
+        }
+      }
+    } catch (apiError) {
+      console.warn("Server API fallback note:", apiError);
+    }
+  }
+
+  // Strategy 2: Direct Excel parsing if SheetJS (XLSX) is present
+  if (!loaded && typeof XLSX !== "undefined") {
     try {
       const response = await fetch("data/lessons.xlsx");
 
@@ -136,31 +185,6 @@ async function loadWorkbook() {
       }
     } catch (excelError) {
       console.warn("Client-side Excel parsing note:", excelError);
-    }
-  }
-
-  // Strategy 2: Server API endpoint /api/lessons-data (parsed from data/lessons.xlsx)
-  if (!loaded) {
-    try {
-      const apiResponse = await fetch("/api/lessons-data");
-
-      if (apiResponse.ok) {
-        const apiData = await apiResponse.json();
-
-        if (apiData.success && apiData.sheets) {
-          lessonData = apiData.sheets["Lessons"] || [];
-          vocabularyData = apiData.sheets["Vocabulary"] || [];
-          storyData = apiData.sheets["Story"] || [];
-          exercisesData = apiData.sheets["Exercises"] || [];
-          writingData = apiData.sheets["Writing"] || [];
-
-          if (lessonData.length > 0) {
-            loaded = true;
-          }
-        }
-      }
-    } catch (apiError) {
-      console.warn("Server API fallback note:", apiError);
     }
   }
 
@@ -409,7 +433,7 @@ function playExcelAudio(
   }
 
   const audio =
-    new Audio(audioPath);
+    new Audio(backendAssetUrl(audioPath));
 
   if (button) {
     button.textContent =
@@ -2769,7 +2793,7 @@ function applyHomepageSiteConfig(cfg) {
 
   const bannerEl = document.getElementById("homeHeroBannerImg");
   if (bannerEl && cfg.heroBannerUrl) {
-    bannerEl.src = cfg.heroBannerUrl;
+    bannerEl.src = backendAssetUrl(cfg.heroBannerUrl);
   }
 
   setText("homeStoriesLabel", cfg.storiesLabel);
@@ -2838,8 +2862,8 @@ function renderHomepageFeaturedReels(cfg) {
     .slice(0, 6)
     .map((reel) => {
       const title = String(reel.title || "Mandarin Reel");
-      const videoUrl = String(reel.video_path || "assets/video/Reels Red Envelope.mp4");
-      const thumbUrl = String(reel.thumbnail_path || "assets/images/story-poster.jpg");
+      const videoUrl = backendAssetUrl(String(reel.video_path || "assets/video/Reels Red Envelope.mp4"));
+      const thumbUrl = backendAssetUrl(String(reel.thumbnail_path || "assets/images/story-poster.jpg"));
       const duration = formatReelDuration(reel.duration_sec || 30);
       const badge = getReelBadgeMeta(reel.holiday_id, reel.type);
       const zhLine = String(reel.text_cn || "").slice(0, 26);
@@ -2904,7 +2928,7 @@ function renderHomepageFeaturedStories(cfg) {
       const zh = String(story.chineseTitle || "");
       const pinyin = String(story.pinyin || "");
       const desc = String(story.description || "Read interactive story scenes and vocabulary.");
-      const poster = String(story.poster || "assets/images/story-poster.jpg");
+      const poster = backendAssetUrl(String(story.poster || "assets/images/story-poster.jpg"));
       const level = String(story.level || "Beginner");
       return `
         <a href="story.html?lesson=${encodeURIComponent(sid)}" class="home-featured-story-card">
@@ -2984,30 +3008,54 @@ async function initHomepageHydration() {
     applyHomepageSiteConfig(window.LinguaAuth.getSiteConfig());
   }
 
-  // Load config + dynamic datasets in parallel
+  // Load config + dynamic datasets in parallel (live backend when configured, otherwise static JSON snapshots)
   try {
-    const [cfgRes, reelsRes, storiesRes, lessonsRes] = await Promise.allSettled([
-      fetch("/api/site-config?t=" + Date.now()).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/reels-stories-data?t=" + Date.now()).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/stories-data?t=" + Date.now()).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/lessons-data?t=" + Date.now()).then((r) => (r.ok ? r.json() : null))
-    ]);
+    const stamp = Date.now();
+    let cfgData = null;
 
-    if (reelsRes.status === "fulfilled" && reelsRes.value?.sheets?.Videos) {
-      cachedHomeReels = reelsRes.value.sheets.Videos;
+    if (backendAvailable()) {
+      const [cfgRes, reelsRes, storiesRes, lessonsRes] = await Promise.allSettled([
+        fetch(backendApiUrl("/api/site-config?t=" + stamp), { mode: "cors" }).then((r) => (r.ok ? r.json() : null)),
+        fetch(backendApiUrl("/api/reels-stories-data?t=" + stamp), { mode: "cors" }).then((r) => (r.ok ? r.json() : null)),
+        fetch(backendApiUrl("/api/stories-data?t=" + stamp), { mode: "cors" }).then((r) => (r.ok ? r.json() : null)),
+        fetch(backendApiUrl("/api/lessons-data?t=" + stamp), { mode: "cors" }).then((r) => (r.ok ? r.json() : null))
+      ]);
+      if (cfgRes.status === "fulfilled" && cfgRes.value?.config) {
+        cfgData = cfgRes.value.config;
+      }
+      if (reelsRes.status === "fulfilled" && reelsRes.value?.sheets?.Videos) {
+        cachedHomeReels = reelsRes.value.sheets.Videos;
+      }
+      if (storiesRes.status === "fulfilled" && storiesRes.value?.sheets?.Lessons) {
+        cachedHomeStories = storiesRes.value.sheets.Lessons;
+      }
+      if (lessonsRes.status === "fulfilled" && lessonsRes.value?.sheets?.Games) {
+        cachedHomeGames = lessonsRes.value.sheets.Games;
+      }
     }
-    if (storiesRes.status === "fulfilled" && storiesRes.value?.sheets?.Lessons) {
-      cachedHomeStories = storiesRes.value.sheets.Lessons;
-    }
-    if (lessonsRes.status === "fulfilled" && lessonsRes.value?.sheets?.Games) {
-      cachedHomeGames = lessonsRes.value.sheets.Games;
+
+    if (!cachedHomeReels.length || !cachedHomeStories.length || !cachedHomeGames.length) {
+      const [fbReels, fbStories, fbLessons] = await Promise.allSettled([
+        cachedHomeReels.length ? Promise.resolve(null) : fetch("data/reels_stories.json?t=" + stamp).then((r) => (r.ok ? r.json() : null)),
+        cachedHomeStories.length ? Promise.resolve(null) : fetch("data/stories.json?t=" + stamp).then((r) => (r.ok ? r.json() : null)),
+        cachedHomeGames.length ? Promise.resolve(null) : fetch("data/lessons.json?t=" + stamp).then((r) => (r.ok ? r.json() : null))
+      ]);
+      if (!cachedHomeReels.length && fbReels.status === "fulfilled" && fbReels.value?.sheets?.Videos) {
+        cachedHomeReels = fbReels.value.sheets.Videos;
+      }
+      if (!cachedHomeStories.length && fbStories.status === "fulfilled" && fbStories.value?.sheets?.Lessons) {
+        cachedHomeStories = fbStories.value.sheets.Lessons;
+      }
+      if (!cachedHomeGames.length && fbLessons.status === "fulfilled" && fbLessons.value?.sheets?.Games) {
+        cachedHomeGames = fbLessons.value.sheets.Games;
+      }
     }
 
     const activeCfg =
       (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === "function"
         ? window.LinguaAuth.getSiteConfig()
         : null) ||
-      (cfgRes.status === "fulfilled" && cfgRes.value?.config) ||
+      cfgData ||
       cachedHomeSiteConfig;
 
     if (activeCfg) {

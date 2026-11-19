@@ -93,11 +93,13 @@ const DEFAULT_SITE_CONFIG = {
   featuredGameIds: ['game-01']
 };
 
-// Enable CORS and preflight handling
+// Enable CORS, Cross-Origin Resource Sharing for assets, and preflight handling
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Max-Age', '86400');
+  res.header('Cross-Origin-Resource-Policy', 'cross-origin');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
@@ -348,6 +350,16 @@ app.get('/api/reels-stories-data', (req, res) => {
     console.error('API reels-stories-data error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+app.get('/api/health', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json({
+    success: true,
+    service: 'linguapath-backend',
+    projectId: firebaseProjectId,
+    timestamp: Date.now()
+  });
 });
 
 app.get('/api/site-config', (req, res) => {
@@ -680,10 +692,11 @@ app.post(
   }
 );
 
-// Serve static files from root directory (no-cache on code/markup so bundle updates apply immediately)
+// Serve static files from root directory (no-cache on code/markup + CORP cross-origin for uploads)
 app.use(
   express.static(__dirname, {
     setHeaders(res, filePath) {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       if (/\.(js|css|html)$/i.test(filePath)) {
         res.setHeader('Cache-Control', 'no-cache');
       }

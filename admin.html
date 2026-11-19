@@ -88,6 +88,7 @@
         </div>
 
         <div class="admin-topbar-actions">
+          <button type="button" id="adminBackendBadge" class="admin-backend-badge" title="Click to configure hosted Node backend URL">Checking backend…</button>
           <span id="adminSyncStatus" style="font-size:0.8rem; color:#64748b; font-weight:600;">Ready</span>
           <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="adminRefreshBtn">Refresh Data</button>
           <a href="index.html" class="admin-btn admin-btn-secondary admin-btn-sm">View Public Site ↗</a>
@@ -105,6 +106,9 @@
 
   <!-- SheetJS for Exercise Spreadsheets & Template Generation -->
   <script src="vendor/xlsx.full.min.js"></script>
+
+  <!-- Runtime Backend URL & Media Asset Resolver -->
+  <script src="backend-config.js"></script>
 
   <!-- Firebase Auth & Firestore Client -->
   <script src="vendor/firebase-app.js"></script>

@@ -594,20 +594,32 @@ function startCatalogListener(): void {
   );
 }
 
+function resolveBackendApiUrl(path: string): string {
+  const resolver = (window as unknown as { LinguaBackend?: { apiUrl?: (p: string) => string } }).LinguaBackend;
+  return resolver && typeof resolver.apiUrl === 'function' ? resolver.apiUrl(path) : path;
+}
+
+function hasBackendAvailable(): boolean {
+  const resolver = (window as unknown as { LinguaBackend?: { hasBackend?: () => boolean } }).LinguaBackend;
+  return resolver && typeof resolver.hasBackend === 'function' ? resolver.hasBackend() : true;
+}
+
 function startSiteConfigListener(): void {
   if (unsubSiteConfig) return;
 
-  // Hydrate initially from server/static JSON cache so visitors get instant saved copy
-  fetch('/api/site-config?t=' + Date.now())
-    .then((r) => (r.ok ? r.json() : null))
-    .catch(() => null)
-    .then((json) => {
-      if (json && json.config) {
-        state.siteConfig = normalizeSiteConfig(json.config);
-        emitSiteConfigChange();
-        emitState();
-      }
-    });
+  // Hydrate initially from hosted/local Node server when available so visitors get instant saved copy
+  if (hasBackendAvailable()) {
+    fetch(resolveBackendApiUrl('/api/site-config?t=' + Date.now()))
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((json) => {
+        if (json && json.config) {
+          state.siteConfig = normalizeSiteConfig(json.config);
+          emitSiteConfigChange();
+          emitState();
+        }
+      });
+  }
 
   const cfgRef = doc(db, 'siteConfig', 'homepage');
   unsubSiteConfig = onSnapshot(
@@ -1370,19 +1382,22 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig>
   emitSiteConfigChange();
   emitState();
 
-  // Also sync local JSON cache on the Express backend when available
-  try {
-    const token = await user.getIdToken();
-    await fetch('/api/admin/site-config', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(merged)
-    });
-  } catch (err) {
-    console.warn('Backend site-config cache sync note:', err);
+  // Also sync local JSON cache on the configured Express backend when available
+  if (hasBackendAvailable()) {
+    try {
+      const token = await user.getIdToken();
+      await fetch(resolveBackendApiUrl('/api/admin/site-config'), {
+        method: 'PUT',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(merged)
+      });
+    } catch (err) {
+      console.warn('Backend site-config cache sync note:', err);
+    }
   }
 
   return merged;

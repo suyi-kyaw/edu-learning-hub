@@ -7,7 +7,7 @@
     "dev": "node server.js",
     "build": "esbuild src/firebase/client.ts --bundle --format=iife --minify --outfile=vendor/firebase-app.js",
     "start": "node server.js",
-    "lint": "npx eslint firestore.rules && node -c server.js && node -c header.js && node -c footer.js && node -c auth-ui.js && node -c main.js && node -c admin.js"
+    "lint": "npx eslint firestore.rules && node -c backend-config.js && node -c server.js && node -c header.js && node -c footer.js && node -c auth-ui.js && node -c main.js && node -c admin.js"
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",

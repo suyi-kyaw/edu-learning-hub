@@ -25,6 +25,27 @@
   let exerciseAnswersState = {}; // { questionIndex: { selectedOption, isCorrect } }
   const autoReviewedLessons = new Set();
 
+  function backendApiUrl(path) {
+    if (window.LinguaBackend && typeof window.LinguaBackend.apiUrl === 'function') {
+      return window.LinguaBackend.apiUrl(path);
+    }
+    return path;
+  }
+
+  function backendAssetUrl(path) {
+    if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function') {
+      return window.LinguaBackend.assetUrl(path);
+    }
+    return path;
+  }
+
+  function backendAvailable() {
+    if (window.LinguaBackend && typeof window.LinguaBackend.hasBackend === 'function') {
+      return window.LinguaBackend.hasBackend();
+    }
+    return true;
+  }
+
   function isAuthenticatedMember() {
     return Boolean(window.LinguaAuth && typeof window.LinguaAuth.getState === 'function' && window.LinguaAuth.getState().user);
   }
@@ -433,10 +454,13 @@
       console.warn("localStorage custom lessons load note:", e);
     }
 
-    // Strategy 1: Fetch API /api/lessons-data
-    if (!loaded) {
+    // Strategy 1: Fetch API /api/lessons-data when a Node backend is available
+    if (!loaded && backendAvailable()) {
       try {
-        const res = await fetch('/api/lessons-data?t=' + Date.now());
+        const res = await fetch(backendApiUrl('/api/lessons-data?t=' + Date.now()), {
+          mode: 'cors',
+          cache: 'no-store'
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.sheets) {
@@ -704,7 +728,7 @@
       const meaning = lesson.meaning || '';
       const desc = lesson.description || '';
       const level = lesson.level || 'Beginner';
-      const poster = lesson.posterUrl || lesson.poster || `assets/images/story-0${(idx % 5) + 1}.jpg`;
+      const poster = backendAssetUrl(lesson.posterUrl || lesson.poster || `assets/images/story-0${(idx % 5) + 1}.jpg`);
       const categoryName = lesson.category || (currentAudience === 'Kids' ? 'Fun Adventure' : 'Everyday Basics');
       const pricing = resolveLessonPricing(lesson);
       const isPaid = pricing.accessType === 'paid';
@@ -989,8 +1013,8 @@
     const panel = document.getElementById('panel-video');
     if (!panel) return;
 
-    const videoUrl = lesson.videoUrl || lesson.video || 'assets/video/lesson-01.mp4';
-    const poster = lesson.posterUrl || lesson.poster || 'assets/images/story-poster.jpg';
+    const videoUrl = backendAssetUrl(lesson.videoUrl || lesson.video || 'assets/video/lesson-01.mp4');
+    const poster = backendAssetUrl(lesson.posterUrl || lesson.poster || 'assets/images/story-poster.jpg');
 
     // Find vocabulary or story lines for this lesson
     const vocabItems = allVocabulary.filter(v => String(v.lessonId || '').trim().toLowerCase() === String(lesson.id || '').trim().toLowerCase());
@@ -4492,22 +4516,25 @@
 
         localStorage.setItem('linguapath_custom_lessons', JSON.stringify(customPayload));
 
-        try {
-          const token =
-            window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function'
-              ? await window.LinguaAuth.getIdToken()
-              : null;
-          const headers = { 'Content-Type': 'application/octet-stream' };
-          if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
+        if (backendAvailable()) {
+          try {
+            const token =
+              window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function'
+                ? await window.LinguaAuth.getIdToken()
+                : null;
+            const headers = { 'Content-Type': 'application/octet-stream' };
+            if (token) {
+              headers['Authorization'] = `Bearer ${token}`;
+            }
+            await fetch(backendApiUrl('/api/upload-excel'), {
+              method: 'POST',
+              mode: 'cors',
+              headers,
+              body: data
+            });
+          } catch (err) {
+            console.warn('Server upload note:', err);
           }
-          await fetch('/api/upload-excel', {
-            method: 'POST',
-            headers,
-            body: data
-          });
-        } catch (err) {
-          console.warn('Server upload note:', err);
         }
 
         renderCategoryBar();

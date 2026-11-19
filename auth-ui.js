@@ -279,46 +279,99 @@
     }
   }
 
-  function getConsoleProvidersUrl() {
+  function getFirebaseProjectId() {
     const api = getAuthApi();
-    const projectId = (api && api.projectId) || 'melodic-ace-2lvvl';
-    return `https://console.firebase.google.com/project/${encodeURIComponent(projectId)}/authentication/providers`;
+    return (api && api.projectId) || 'melodic-ace-2lvvl';
+  }
+
+  function getConsoleProvidersUrl() {
+    return `https://console.firebase.google.com/project/${encodeURIComponent(getFirebaseProjectId())}/authentication/providers`;
+  }
+
+  function getConsoleDomainsUrl() {
+    return `https://console.firebase.google.com/project/${encodeURIComponent(getFirebaseProjectId())}/authentication/settings`;
+  }
+
+  function getCloudUpgradeUrl() {
+    return `https://console.cloud.google.com/welcome?project=${encodeURIComponent(getFirebaseProjectId())}`;
+  }
+
+  function getCurrentHostname() {
+    if (typeof window === 'undefined' || !window.location) return 'suyi-kyaw.github.io';
+    return window.location.hostname || 'localhost';
   }
 
   // --- Modal Rendering ---
   function renderFeedbackHTML() {
     if (!feedbackBanner || !feedbackBanner.text) return '';
+    const isUnauthorizedDomain = Boolean(feedbackBanner.isUnauthorizedDomain);
     const isProviderDisabled = Boolean(feedbackBanner.isProviderDisabled || feedbackBanner.showGoogleHint);
+    const isInvalidCredential = Boolean(feedbackBanner.isInvalidCredential);
     const isPopupIssue = Boolean(feedbackBanner.isPopupIssue);
-    const consoleUrl = getConsoleProvidersUrl();
+    const consoleProvidersUrl = getConsoleProvidersUrl();
+    const consoleDomainsUrl = getConsoleDomainsUrl();
+    const cloudUpgradeUrl = getCloudUpgradeUrl();
+    const currentHost = getCurrentHostname();
     const fullTabUrl = typeof window !== 'undefined' ? window.location.href : '/';
+
+    let guideHtml = '';
+    if (isUnauthorizedDomain) {
+      guideHtml = `
+        <div class="lp-console-guide">
+          <div class="lp-console-guide-title">How to authorize this domain in Firebase:</div>
+          <div class="lp-domain-copy-row">
+            <code class="lp-domain-pill">${escapeHTML(currentHost)}</code>
+            <button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" data-copy-text="${escapeHTML(currentHost)}">Copy Domain</button>
+          </div>
+          <ol class="lp-console-guide-list">
+            <li>If Firebase Console locks settings, open Google Cloud Console and <strong>Upgrade</strong> project <code>${escapeHTML(getFirebaseProjectId())}</code>.</li>
+            <li>Open <strong>Firebase Console &rarr; Authentication &rarr; Settings &rarr; Authorized domains</strong>.</li>
+            <li>Click <strong>Add domain</strong>, paste <code>${escapeHTML(currentHost)}</code>, save, and click <strong>Continue with Google</strong> again.</li>
+          </ol>
+          <div class="lp-feedback-actions">
+            <a class="lp-btn lp-btn-primary lp-btn-sm" href="${escapeHTML(consoleDomainsUrl)}" target="_blank" rel="noopener noreferrer">Open Authorized Domains ↗</a>
+            <a class="lp-btn lp-btn-secondary lp-btn-sm" href="${escapeHTML(cloudUpgradeUrl)}" target="_blank" rel="noopener noreferrer">Google Cloud Upgrade ↗</a>
+          </div>
+        </div>
+      `;
+    } else if (isProviderDisabled) {
+      guideHtml = `
+        <div class="lp-console-guide">
+          <div class="lp-console-guide-title">How to enable Email &amp; Password login on Firebase:</div>
+          <ol class="lp-console-guide-list">
+            <li>If settings are locked, open Google Cloud Console and <strong>Upgrade</strong> project <code>${escapeHTML(getFirebaseProjectId())}</code>.</li>
+            <li>Open <strong>Firebase Console &rarr; Authentication &rarr; Sign-in method</strong>, toggle <strong>Email/Password</strong> to <strong>Enable</strong>, and save.</li>
+            <li>Open <strong>Authentication &rarr; Users</strong> to confirm <strong>syndkyaw@gmail.com</strong> exists with a password, or use <strong>Continue with Google</strong>.</li>
+          </ol>
+          <div class="lp-feedback-actions">
+            <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpFallbackGoogleBtn">Continue with Google Now</button>
+            <a class="lp-btn lp-btn-secondary lp-btn-sm" href="${escapeHTML(consoleProvidersUrl)}" target="_blank" rel="noopener noreferrer">Open Sign-in Method ↗</a>
+            <a class="lp-btn lp-btn-secondary lp-btn-sm" href="${escapeHTML(cloudUpgradeUrl)}" target="_blank" rel="noopener noreferrer">Cloud Upgrade ↗</a>
+          </div>
+        </div>
+      `;
+    } else if (isInvalidCredential) {
+      guideHtml = `
+        <div class="lp-console-guide">
+          <div class="lp-console-guide-title">Admin / Account Password Checklist:</div>
+          <ol class="lp-console-guide-list">
+            <li>If you created the account via Google Sign-In only, click <strong>Continue with Google</strong> above or click <strong>Forgot password?</strong> to set a password for that email.</li>
+            <li>Verify under <strong>Firebase Console &rarr; Authentication &rarr; Users</strong> that the user exists and Email/Password is enabled.</li>
+          </ol>
+        </div>
+      `;
+    } else if (isPopupIssue) {
+      guideHtml = `
+        <div class="lp-feedback-actions">
+          <a class="lp-btn lp-btn-primary lp-btn-sm" href="${escapeHTML(fullTabUrl)}" target="_blank" rel="noopener noreferrer">Open App in New Tab to Sign In ↗</a>
+        </div>
+      `;
+    }
+
     return `
       <div class="lp-feedback lp-feedback-${escapeHTML(feedbackBanner.type || 'info')}" role="alert">
         <div>${escapeHTML(feedbackBanner.text)}</div>
-        ${
-          isProviderDisabled
-            ? `
-          <div class="lp-console-guide">
-            <div class="lp-console-guide-title">Why password login is blocked on Firebase right now:</div>
-            <ol class="lp-console-guide-list">
-              <li>New AI Studio Starter Tier Firebase projects turn <strong>Google Sign-In</strong> on and leave <strong>Email/Password</strong> disabled on Google&apos;s servers.</li>
-              <li>Click <strong>Continue with Google</strong> below using <strong>syndkyaw@gmail.com</strong> to open the Admin CMS Portal immediately.</li>
-              <li>If you specifically need password login, upgrade/claim the project in Google Cloud, enable <strong>Email/Password</strong> under Firebase Console &rarr; Authentication &rarr; Sign-in method, and add <strong>syndkyaw@gmail.com</strong> under Users.</li>
-            </ol>
-            <div class="lp-feedback-actions">
-              <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpFallbackGoogleBtn">Continue with Google Now</button>
-              <a class="lp-btn lp-btn-secondary lp-btn-sm" href="${escapeHTML(consoleUrl)}" target="_blank" rel="noopener noreferrer">Open Firebase Sign-in Method ↗</a>
-            </div>
-          </div>
-        `
-            : isPopupIssue
-            ? `
-          <div class="lp-feedback-actions">
-            <a class="lp-btn lp-btn-primary lp-btn-sm" href="${escapeHTML(fullTabUrl)}" target="_blank" rel="noopener noreferrer">Open App in New Tab to Sign In ↗</a>
-          </div>
-        `
-            : ''
-        }
+        ${guideHtml}
       </div>
     `;
   }
@@ -1081,11 +1134,13 @@
           renderModal();
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Unable to sign in.';
-          const code = err && typeof err === 'object' ? err.code : '';
+          const code = err && typeof err === 'object' ? String(err.code || '') : '';
+          const invalidCredCodes = new Set(['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found']);
           feedbackBanner = {
             type: 'error',
             text: msg,
-            isProviderDisabled: code === 'auth/operation-not-allowed' || msg.includes('Firebase Authentication Console')
+            isProviderDisabled: code === 'auth/operation-not-allowed' || msg.includes('Firebase Authentication Console'),
+            isInvalidCredential: invalidCredCodes.has(code)
           };
           renderModal();
         }
@@ -1219,13 +1274,13 @@
         renderModal();
       } catch (err) {
         const code = err && typeof err === 'object' ? String(err.code || '') : '';
+        const isUnauthorizedDomain = code === 'auth/unauthorized-domain';
         const popupCodes = new Set([
           'auth/popup-blocked',
           'auth/popup-closed-by-user',
           'auth/cancelled-popup-request',
           'auth/internal-error',
-          'auth/web-storage-unsupported',
-          'auth/unauthorized-domain'
+          'auth/web-storage-unsupported'
         ]);
         const inIframe = (() => {
           try {
@@ -1237,7 +1292,8 @@
         feedbackBanner = {
           type: 'error',
           text: err instanceof Error ? err.message : 'Google sign-in failed.',
-          isPopupIssue: popupCodes.has(code) || inIframe
+          isUnauthorizedDomain,
+          isPopupIssue: !isUnauthorizedDomain && (popupCodes.has(code) || inIframe)
         };
         renderModal();
       }

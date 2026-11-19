@@ -27,6 +27,27 @@ function escapeHTML(value) {
     .replace(/'/g, "&#039;");
 }
 
+function backendApiUrl(path) {
+  if (window.LinguaBackend && typeof window.LinguaBackend.apiUrl === "function") {
+    return window.LinguaBackend.apiUrl(path);
+  }
+  return path;
+}
+
+function backendAssetUrl(path) {
+  if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === "function") {
+    return window.LinguaBackend.assetUrl(path);
+  }
+  return path;
+}
+
+function backendAvailable() {
+  if (window.LinguaBackend && typeof window.LinguaBackend.hasBackend === "function") {
+    return window.LinguaBackend.hasBackend();
+  }
+  return true;
+}
+
 function getStoryFallbackSvg(chinese, pinyin, english) {
   const c = escapeHTML(chinese || "中文故事");
   const p = escapeHTML(pinyin || "Zhōngwén Gùshì");
@@ -355,7 +376,7 @@ function playAudio(
   }
 
   if (audioPath) {
-    const audio = new Audio(audioPath);
+    const audio = new Audio(backendAssetUrl(audioPath));
     currentAudioInstance = audio;
 
     if (button) {
@@ -551,13 +572,13 @@ function renderVideo(
     if (video) {
 
       videoElement.src =
-        video;
+        backendAssetUrl(video);
 
     }
 
 
     if (poster) {
-      videoElement.poster = poster;
+      videoElement.poster = backendAssetUrl(poster);
       videoElement.onerror = () => {
         if (videoElement.poster.endsWith(".jpg")) {
           videoElement.poster = videoElement.poster.replace(/\.jpg$/, ".svg");
@@ -670,10 +691,12 @@ function renderStoryImages(
       (row, index) => {
 
         const image =
-          getValue(
-            row,
-            "image",
-            "Image"
+          backendAssetUrl(
+            getValue(
+              row,
+              "image",
+              "Image"
+            )
           );
 
 
@@ -1555,8 +1578,32 @@ async function loadStoryLesson() {
     let allExerciseRows = [];
     let loaded = false;
 
-    // Strategy 1: Direct Excel parsing if XLSX is available in the browser
-    if (typeof XLSX !== "undefined") {
+    // Strategy 1: Server API endpoint /api/stories-data when backend is available
+    if (backendAvailable()) {
+      try {
+        const apiResponse = await fetch(backendApiUrl("/api/stories-data?t=" + Date.now()), {
+          mode: "cors",
+          cache: "no-store"
+        });
+        if (apiResponse.ok) {
+          const apiData = await apiResponse.json();
+          if (apiData.success && apiData.sheets) {
+            lessons = apiData.sheets["Lessons"] || [];
+            allStoryRows = apiData.sheets["Story"] || [];
+            allVocabularyRows = apiData.sheets["Vocabulary"] || [];
+            allExerciseRows = apiData.sheets["Exercises"] || [];
+            if (lessons.length > 0 || allStoryRows.length > 0) {
+              loaded = true;
+            }
+          }
+        }
+      } catch (apiErr) {
+        console.warn("Server API fallback note for story:", apiErr);
+      }
+    }
+
+    // Strategy 2: Direct Excel parsing if XLSX is available in the browser
+    if (!loaded && typeof XLSX !== "undefined") {
       try {
         const response = await fetch(EXCEL_FILE, { cache: "no-cache" });
         if (response.ok) {
@@ -1575,27 +1622,6 @@ async function loadStoryLesson() {
         }
       } catch (excelErr) {
         console.warn("Client-side story Excel parsing note:", excelErr);
-      }
-    }
-
-    // Strategy 2: Server API endpoint /api/stories-data
-    if (!loaded) {
-      try {
-        const apiResponse = await fetch("/api/stories-data", { cache: "no-cache" });
-        if (apiResponse.ok) {
-          const apiData = await apiResponse.json();
-          if (apiData.success && apiData.sheets) {
-            lessons = apiData.sheets["Lessons"] || [];
-            allStoryRows = apiData.sheets["Story"] || [];
-            allVocabularyRows = apiData.sheets["Vocabulary"] || [];
-            allExerciseRows = apiData.sheets["Exercises"] || [];
-            if (lessons.length > 0 || allStoryRows.length > 0) {
-              loaded = true;
-            }
-          }
-        }
-      } catch (apiErr) {
-        console.warn("Server API fallback note for story:", apiErr);
       }
     }
 
@@ -3319,8 +3345,8 @@ function createReelCardElement(item) {
   const durationText = item.duration_sec ? `${item.duration_sec}s` : "15s";
   const isFav = isReelFavorited(item.id);
 
-  const thumbSrc = item.thumbnail_path || "assets/images/story-poster.jpg";
-  const videoSrc = item.video_path || "assets/video/lesson-01.mp4";
+  const thumbSrc = backendAssetUrl(item.thumbnail_path || "assets/images/story-poster.jpg");
+  const videoSrc = backendAssetUrl(item.video_path || "assets/video/lesson-01.mp4");
 
   card.innerHTML = `
     <div class="reel-card-thumb-wrap">
@@ -3467,11 +3493,12 @@ function openReelModalPlayer(item) {
   }
 
   // Set video source and play
-  const videoSrc = item.video_path || "assets/video/lesson-01.mp4";
-  const posterSrc = item.thumbnail_path || "assets/images/story-poster.jpg";
+  const videoSrc = backendAssetUrl(item.video_path || "assets/video/lesson-01.mp4");
+  const posterSrc = backendAssetUrl(item.thumbnail_path || "assets/images/story-poster.jpg");
 
   video.poster = posterSrc;
-  if (video.src !== videoSrc && !video.src.endsWith(videoSrc)) {
+  const currentVideoAttr = video.getAttribute("src") || "";
+  if (currentVideoAttr !== videoSrc) {
     video.src = videoSrc;
   }
   video.currentTime = 0;
@@ -3519,8 +3546,27 @@ function applySubtitleToggles() {
 async function loadReelsAndStoriesWorkbook() {
   let loaded = false;
 
-  // Strategy 1: Direct Excel parsing via SheetJS (XLSX)
-  if (typeof XLSX !== "undefined") {
+  // Strategy 1: Server API endpoint /api/reels-stories-data when backend is available
+  if (backendAvailable()) {
+    try {
+      const apiRes = await fetch(backendApiUrl(`/api/reels-stories-data?t=${Date.now()}`), {
+        mode: "cors",
+        cache: "no-store"
+      });
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        if (data && data.sheets && data.sheets.Videos && data.sheets.Videos.length > 0) {
+          allLoadedVideos = data.sheets.Videos;
+          loaded = true;
+        }
+      }
+    } catch (e) {
+      console.warn("Server API fallback for reels_stories note:", e);
+    }
+  }
+
+  // Strategy 2: Direct Excel parsing via SheetJS (XLSX)
+  if (!loaded && typeof XLSX !== "undefined") {
     try {
       const response = await fetch(`${REELS_EXCEL_FILE}?t=${Date.now()}`);
       if (response.ok) {
@@ -3536,22 +3582,6 @@ async function loadReelsAndStoriesWorkbook() {
       }
     } catch (e) {
       console.warn("Client XLSX parse for reels_stories.xlsx note:", e);
-    }
-  }
-
-  // Strategy 2: Server API endpoint /api/reels-stories-data
-  if (!loaded) {
-    try {
-      const apiRes = await fetch(`/api/reels-stories-data?t=${Date.now()}`);
-      if (apiRes.ok) {
-        const data = await apiRes.json();
-        if (data && data.sheets && data.sheets.Videos && data.sheets.Videos.length > 0) {
-          allLoadedVideos = data.sheets.Videos;
-          loaded = true;
-        }
-      }
-    } catch (e) {
-      console.warn("Server API fallback for reels_stories note:", e);
     }
   }
 
