@@ -31,7 +31,7 @@
     siteConfig: null,
     storiesData: { Lessons: [], Story: [], Vocabulary: [], Exercises: [] },
     reelsData: { Videos: [] },
-    lessonsData: { Lessons: [], Vocabulary: [], Writing: [], Exercises: [], Games: [] },
+    lessonsData: { Lessons: [], Vocabulary: [], Writing: [], Exercises: [], Games: [], Pronunciation: [] },
     filters: {
       storySearch: '',
       reelSearch: '',
@@ -280,7 +280,8 @@
           Vocabulary: Array.isArray(lessonsRes.sheets.Vocabulary) ? lessonsRes.sheets.Vocabulary : [],
           Writing: Array.isArray(lessonsRes.sheets.Writing) ? lessonsRes.sheets.Writing : [],
           Exercises: Array.isArray(lessonsRes.sheets.Exercises) ? lessonsRes.sheets.Exercises : [],
-          Games: Array.isArray(lessonsRes.sheets.Games) ? lessonsRes.sheets.Games : []
+          Games: Array.isArray(lessonsRes.sheets.Games) ? lessonsRes.sheets.Games : [],
+          Pronunciation: Array.isArray(lessonsRes.sheets.Pronunciation) ? lessonsRes.sheets.Pronunciation : []
         };
       }
 
@@ -1938,6 +1939,8 @@
   function renderLessonsTab(viewport) {
     const lessons = state.lessonsData.Lessons || [];
     const exercises = state.lessonsData.Exercises || [];
+    const writings = state.lessonsData.Writing || [];
+    const pronunciations = state.lessonsData.Pronunciation || [];
     const aud = state.filters.lessonAudience;
     const q = state.filters.lessonSearch.toLowerCase();
 
@@ -1957,7 +1960,7 @@
         <div class="admin-panel-head">
           <div>
             <h2>Adult &amp; Kids Curriculum Lessons (${lessons.length})</h2>
-            <p>Add, edit, or delete lessons, Free/Paid access pricing, media files, Vocabulary/Writing, and Excel Exercises.</p>
+            <p>Add, edit, or delete lessons, Free/Paid access pricing, media files, Vocabulary/Writing, Pronunciation Check lines, and Excel Exercises.</p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button type="button" class="admin-btn admin-btn-secondary" id="btnUploadLessonExercises">Upload Exercises (.xlsx)</button>
@@ -1986,6 +1989,8 @@
                 <th>Lesson Title</th>
                 <th>Access / Price</th>
                 <th class="num">Exercises</th>
+                <th class="num">Writing</th>
+                <th class="num">Pronunciation</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -1998,6 +2003,8 @@
                           ? window.LinguaAuth.getLessonPricing(l)
                           : { accessType: 'free', price: 0 };
                         const exCount = exercises.filter((x) => isSameId(x.lessonId, l.id)).length;
+                        const writingCount = writings.filter((x) => isSameId(x.lessonId, l.id)).length;
+                        const pronCount = pronunciations.filter((x) => isSameId(x.lessonId, l.id)).length;
                         return `
                         <tr>
                           <td><code>${escapeHTML(l.id)}</code></td>
@@ -2014,6 +2021,8 @@
                             </span>
                           </td>
                           <td class="num">${exCount}</td>
+                          <td class="num">${writingCount}</td>
+                          <td class="num">${pronCount}</td>
                           <td>
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-edit-lesson="${escapeHTML(
@@ -2022,6 +2031,12 @@
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-lesson="${escapeHTML(
                                 l.id
                               )}">Exercises</button>
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-writing-lesson="${escapeHTML(
+                                l.id
+                              )}">Writing</button>
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-pron-lesson="${escapeHTML(
+                                l.id
+                              )}">Pronunciation</button>
                               <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-del-lesson="${escapeHTML(
                                 l.id
                               )}">Delete</button>
@@ -2031,7 +2046,7 @@
                       `;
                       })
                       .join('')
-                  : `<tr><td colspan="6" style="text-align:center; color:#64748b; padding:24px;">No matching lessons found.</td></tr>`
+                  : `<tr><td colspan="8" style="text-align:center; color:#64748b; padding:24px;">No matching lessons found.</td></tr>`
               }
             </tbody>
           </table>
@@ -2059,6 +2074,12 @@
     });
     viewport.querySelectorAll('[data-ex-lesson]').forEach((btn) => {
       btn.onclick = () => openExerciseSpreadsheetModal('lessons', btn.getAttribute('data-ex-lesson'));
+    });
+    viewport.querySelectorAll('[data-writing-lesson]').forEach((btn) => {
+      btn.onclick = () => openWritingEditorModal(btn.getAttribute('data-writing-lesson'));
+    });
+    viewport.querySelectorAll('[data-pron-lesson]').forEach((btn) => {
+      btn.onclick = () => openPronunciationEditorModal(btn.getAttribute('data-pron-lesson'));
     });
     viewport.querySelectorAll('[data-del-lesson]').forEach((btn) => {
       btn.onclick = () => {
@@ -2463,6 +2484,472 @@
         toast(err instanceof Error ? err.message : 'Failed to save lesson.', 'error');
       }
     };
+  }
+
+  // --- Writing & Stroke Order Editor Modal ---
+  function openWritingEditorModal(lessonId) {
+    const lessons = state.lessonsData.Lessons || [];
+    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'adult-basics-01');
+
+    const renderWritingModalContent = () => {
+      const lesson = lessons.find((x) => isSameId(x.id, currentLessonId)) || { id: currentLessonId, title: currentLessonId };
+      let lessonWriting = (state.lessonsData.Writing || [])
+        .filter((w) => isSameId(w.lessonId, currentLessonId))
+        .map((w) => ({ ...w }));
+
+      const renderWritingList = () => {
+        const container = document.getElementById('wmWritingTableContainer');
+        if (!container) return;
+
+        container.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <strong>Lesson:</strong>
+              <select id="wmLessonSwitcher" class="admin-select" style="max-width:280px;">
+                ${lessons
+                  .map(
+                    (l) =>
+                      `<option value="${escapeHTML(l.id)}" ${isSameId(l.id, currentLessonId) ? 'selected' : ''}>${escapeHTML(
+                        l.id
+                      )} — ${escapeHTML(l.title)}</option>`
+                  )
+                  .join('')}
+              </select>
+            </div>
+            <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="wmAddCharBtn">+ Add Character</button>
+          </div>
+
+          <div class="admin-table-wrap" style="max-height:420px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px;">
+            <table class="admin-table" style="font-size:0.85rem;">
+              <thead>
+                <tr>
+                  <th style="width:55px;">#</th>
+                  <th style="width:120px;">Hanzi Character</th>
+                  <th style="width:130px;">Pinyin</th>
+                  <th>English Meaning</th>
+                  <th style="width:85px;">Strokes</th>
+                  <th style="width:125px;">Radical</th>
+                  <th style="width:70px;">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  lessonWriting.length
+                    ? lessonWriting
+                        .map(
+                          (w, idx) => `
+                        <tr>
+                          <td>
+                            <input type="number" class="admin-input" style="width:48px;" data-wm-field="${idx}:order" value="${escapeHTML(
+                            w.order || idx + 1
+                          )}" />
+                          </td>
+                          <td>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                              <input type="text" class="admin-input" style="width:55px; text-align:center; font-size:1.15rem; font-weight:700;" data-wm-field="${idx}:character" value="${escapeHTML(
+                            w.character || ''
+                          )}" placeholder="字" />
+                              <span class="chinese-kaiti" style="font-size:1.35rem; min-width:24px; color:#1e293b;">${escapeHTML(
+                            w.character || ''
+                          )}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <input type="text" class="admin-input" data-wm-field="${idx}:pinyin" value="${escapeHTML(
+                            w.pinyin || ''
+                          )}" placeholder="e.g. zǎo" />
+                          </td>
+                          <td>
+                            <input type="text" class="admin-input" data-wm-field="${idx}:meaning" value="${escapeHTML(
+                            w.meaning || ''
+                          )}" placeholder="e.g. morning / early" />
+                          </td>
+                          <td>
+                            <input type="number" class="admin-input" style="width:65px;" data-wm-field="${idx}:strokeCount" value="${escapeHTML(
+                            w.strokeCount || 6
+                          )}" min="1" max="64" />
+                          </td>
+                          <td>
+                            <input type="text" class="admin-input" data-wm-field="${idx}:radical" value="${escapeHTML(
+                            w.radical || ''
+                          )}" placeholder="e.g. 日 (Sun)" />
+                          </td>
+                          <td>
+                            <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-wm-del="${idx}">Delete</button>
+                          </td>
+                        </tr>
+                      `
+                        )
+                        .join('')
+                    : `<tr><td colspan="7" style="text-align:center; color:#64748b; padding:24px;">No characters configured for this lesson yet. Click "+ Add Character" to add one.</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        const switcher = document.getElementById('wmLessonSwitcher');
+        if (switcher) {
+          switcher.onchange = (e) => {
+            currentLessonId = e.target.value;
+            renderWritingModalContent();
+          };
+        }
+
+        container.querySelectorAll('[data-wm-field]').forEach((inp) => {
+          inp.oninput = () => {
+            const [idxStr, fieldKey] = inp.getAttribute('data-wm-field').split(':');
+            const idx = Number(idxStr);
+            if (lessonWriting[idx]) {
+              lessonWriting[idx][fieldKey] = inp.value;
+              if (fieldKey === 'character') {
+                const row = inp.closest('tr');
+                const preview = row ? row.querySelector('.chinese-kaiti') : null;
+                if (preview) preview.textContent = inp.value;
+              }
+            }
+          };
+        });
+
+        container.querySelectorAll('[data-wm-del]').forEach((btn) => {
+          btn.onclick = () => {
+            const idx = Number(btn.getAttribute('data-wm-del'));
+            lessonWriting.splice(idx, 1);
+            renderWritingList();
+          };
+        });
+
+        const addBtn = document.getElementById('wmAddCharBtn');
+        if (addBtn) {
+          addBtn.onclick = () => {
+            lessonWriting.push({
+              lessonId: currentLessonId,
+              order: lessonWriting.length + 1,
+              character: '',
+              pinyin: '',
+              meaning: '',
+              strokeCount: 6,
+              radical: ''
+            });
+            renderWritingList();
+          };
+        }
+      };
+
+      openModal(`
+        <div class="admin-panel-head" style="margin-bottom:14px;">
+          <div>
+            <h2>Writing &amp; Stroke Order Characters: ${escapeHTML(lesson.title || currentLessonId)}</h2>
+            <p>Add and edit which Hanzi characters learners practice writing with animated stroke order for lesson <code>${escapeHTML(
+              currentLessonId
+            )}</code>.</p>
+          </div>
+          <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="wmCloseBtn">✕</button>
+        </div>
+
+        <div id="wmWritingTableContainer"></div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px; border-top:1px solid #e2e8f0; padding-top:14px;">
+          <button type="button" class="admin-btn admin-btn-secondary" id="wmCancelBtn">Cancel</button>
+          <button type="button" class="admin-btn admin-btn-primary" id="wmSaveBtn">💾 Save Writing Characters</button>
+        </div>
+      `);
+
+      renderWritingList();
+
+      document.getElementById('wmCloseBtn').onclick = closeModal;
+      document.getElementById('wmCancelBtn').onclick = closeModal;
+
+      document.getElementById('wmSaveBtn').onclick = async () => {
+        const saveBtn = document.getElementById('wmSaveBtn');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+
+        try {
+          const cleaned = lessonWriting
+            .filter((w) => String(w.character || '').trim())
+            .map((w, i) => ({
+              lessonId: currentLessonId,
+              order: Number(w.order) || i + 1,
+              character: String(w.character || '').trim(),
+              pinyin: String(w.pinyin || '').trim(),
+              meaning: String(w.meaning || '').trim(),
+              strokeCount: Number(w.strokeCount) || 6,
+              radical: String(w.radical || '').trim()
+            }));
+
+          const otherWriting = (state.lessonsData.Writing || []).filter((w) => !isSameId(w.lessonId, currentLessonId));
+          const nextWriting = [...otherWriting, ...cleaned];
+
+          setSyncStatus('Saving writing characters…');
+          const res = await getContentStore().saveLessonsSheets({
+            Writing: nextWriting
+          });
+          state.lessonsData = { ...state.lessonsData, ...res.sheets };
+          closeModal();
+          renderActiveTab();
+          setSyncStatus('Saved locally');
+          toast(`Saved ${cleaned.length} writing character(s) for "${lesson.title}". Export lessons.xlsx to publish.`);
+        } catch (err) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = '💾 Save Writing Characters';
+          toast(err instanceof Error ? err.message : 'Failed to save writing characters.', 'error');
+        }
+      };
+    };
+
+    renderWritingModalContent();
+  }
+
+  // --- Pronunciation Check Practice Lines Editor Modal ---
+  const DEFAULT_PRONUNCIATION_TEMPLATES = {
+    'adult-basics-01': [
+      { order: 1, chinese: '早上好！今天天气真好。', pinyin: 'Zǎoshang hǎo! Jīntiān tiānqì zhēn hǎo.', meaning: 'Good morning! The weather is really nice today.', focus: 'Morning greetings & daily pleasantries' },
+      { order: 2, chinese: '您好，请问洗手间在哪里？', pinyin: 'Nín hǎo, qǐngwèn xǐshǒujiān zài nǎlǐ?', meaning: 'Hello, excuse me, where is the restroom?', focus: 'Polite inquiries (您好 / 请问)' },
+      { order: 3, chinese: '非常感谢您的热心帮助。', pinyin: 'Fēicháng gǎnxiè nín de rèxīn bāngzhù.', meaning: 'Thank you very much for your kind help.', focus: 'Gratitude & formal etiquette' },
+      { order: 4, chinese: '不客气，明天见！', pinyin: 'Bú kèqi, míngtiān jiàn!', meaning: "You're welcome, see you tomorrow!", focus: 'Closing pleasantries' }
+    ],
+    'adult-basics-02': [
+      { order: 1, chinese: '你好，我叫大卫，很高兴认识你。', pinyin: 'Nǐ hǎo, wǒ jiào Dàwèi, hěn gāoxìng rènshí nǐ.', meaning: 'Hello, my name is David, nice to meet you.', focus: 'Self-introduction & greetings' },
+      { order: 2, chinese: '我是美国人，目前在北京工作。', pinyin: 'Wǒ shì Měiguó rén, mùqián zài Běijīng gōngzuò.', meaning: 'I am American, currently working in Beijing.', focus: 'Nationality & location' },
+      { order: 3, chinese: '我的手机号码是一三八零零一二。', pinyin: 'Wǒ de shǒujī hàomǎ shì yīsānbā línglíng yī\'èr.', meaning: 'My cell phone number is 138-0012.', focus: 'Digits & phone number rhythm' },
+      { order: 4, chinese: '请问这个一件多少钱？', pinyin: 'Qǐngwèn zhège yí jiàn duōshao qián?', meaning: 'Excuse me, how much is this one piece?', focus: 'Basic prices & measure words' }
+    ],
+    'adult-travel-01': [
+      { order: 1, chinese: '服务员，请给我们一份菜单。', pinyin: 'Fúwùyuán, qǐng gěi wǒmen yí fèn càidān.', meaning: 'Waiter, please bring us a menu.', focus: 'Restaurant etiquette' },
+      { order: 2, chinese: '我们点一份宫保鸡丁和水饺。', pinyin: 'Wǒmen diǎn yí fèn gōngbǎo jīdīng hé shuǐjiǎo.', meaning: "We'd like to order Kung Pao chicken and dumplings.", focus: 'Ordering signature dishes' },
+      { order: 3, chinese: '请不要放辣椒，我们不吃辣。', pinyin: 'Qǐng búyào fàng làjiāo, wǒmen bù chī là.', meaning: "Please don't put chili, we don't eat spicy.", focus: 'Dietary preferences' },
+      { order: 4, chinese: '你好买单，可以用微信支付吗？', pinyin: 'Nǐ hǎo mǎidān, kěyǐ yòng Wēixìn zhīfù ma?', meaning: 'Hello, check please, can I pay using WeChat?', focus: 'Digital payments & bill settlement' }
+    ],
+    'adult-travel-02': [
+      { order: 1, chinese: '请问去最近的地铁站怎么走？', pinyin: 'Qǐngwèn qù zuìjìn de dìtiězhàn zěnme zǒu?', meaning: 'Excuse me, how do I walk to the nearest subway station?', focus: 'Asking directions' },
+      { order: 2, chinese: '向前一直走，在十字路口向右转。', pinyin: 'Xiàng qián yìzhí zǒu, zài shízì lùkǒu xiàng yòu zhuǎn.', meaning: 'Walk straight ahead, then turn right at the crossroads.', focus: 'Navigation directions' },
+      { order: 3, chinese: '我要买一张去上海的高铁二等座。', pinyin: 'Wǒ yào mǎi yì zhāng qù Shànghǎi de gāotiě èrděngzuò.', meaning: "I'd like to buy a second-class bullet train ticket to Shanghai.", focus: 'Train tickets & transit' }
+    ]
+  };
+
+  function openPronunciationEditorModal(lessonId) {
+    const lessons = state.lessonsData.Lessons || [];
+    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'adult-basics-01');
+
+    const renderPronModalContent = () => {
+      const lesson = lessons.find((x) => isSameId(x.id, currentLessonId)) || { id: currentLessonId, title: currentLessonId };
+
+      let lessonPron = (state.lessonsData.Pronunciation || [])
+        .filter((p) => isSameId(p.lessonId, currentLessonId))
+        .map((p) => ({ ...p }));
+
+      // If no pronunciation lines currently in state, prefill with defaults
+      if (!lessonPron.length) {
+        const template = DEFAULT_PRONUNCIATION_TEMPLATES[currentLessonId.toLowerCase()] || [];
+        if (template.length) {
+          lessonPron = template.map((t, idx) => ({ ...t, lessonId: currentLessonId, order: idx + 1 }));
+        } else if (lesson.chineseTitle) {
+          lessonPron = [
+            {
+              lessonId: currentLessonId,
+              order: 1,
+              chinese: lesson.chineseTitle,
+              pinyin: lesson.pinyin || '',
+              meaning: lesson.meaning || lesson.title,
+              focus: 'Lesson Core Phrase'
+            },
+            {
+              lessonId: currentLessonId,
+              order: 2,
+              chinese: '你好！很高兴学中文。',
+              pinyin: 'Nǐ hǎo! Hěn gāoxìng xué Zhōngwén.',
+              meaning: 'Hello! Very happy to learn Chinese.',
+              focus: 'General Greeting Practice'
+            }
+          ];
+        }
+      }
+
+      const renderPronList = () => {
+        const container = document.getElementById('pmPronTableContainer');
+        if (!container) return;
+
+        container.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <strong>Lesson:</strong>
+              <select id="pmLessonSwitcher" class="admin-select" style="max-width:280px;">
+                ${lessons
+                  .map(
+                    (l) =>
+                      `<option value="${escapeHTML(l.id)}" ${isSameId(l.id, currentLessonId) ? 'selected' : ''}>${escapeHTML(
+                        l.id
+                      )} — ${escapeHTML(l.title)}</option>`
+                  )
+                  .join('')}
+              </select>
+            </div>
+            <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="pmAddLineBtn">+ Add Practice Line</button>
+          </div>
+
+          <div class="admin-table-wrap" style="max-height:420px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px;">
+            <table class="admin-table" style="font-size:0.85rem;">
+              <thead>
+                <tr>
+                  <th style="width:55px;">#</th>
+                  <th style="width:240px;">Chinese Speech Target</th>
+                  <th style="width:200px;">Pinyin &amp; Tones</th>
+                  <th>English Translation</th>
+                  <th style="width:160px;">Focus / Topic Tag</th>
+                  <th style="width:70px;">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  lessonPron.length
+                    ? lessonPron
+                        .map(
+                          (p, idx) => `
+                        <tr>
+                          <td>
+                            <input type="number" class="admin-input" style="width:48px;" data-pm-field="${idx}:order" value="${escapeHTML(
+                            p.order || idx + 1
+                          )}" />
+                          </td>
+                          <td>
+                            <textarea class="admin-textarea" style="height:58px; font-size:0.95rem; font-weight:600;" data-pm-field="${idx}:chinese" placeholder="e.g. 早上好！今天天气真好。">${escapeHTML(
+                            p.chinese || ''
+                          )}</textarea>
+                          </td>
+                          <td>
+                            <textarea class="admin-textarea" style="height:58px;" data-pm-field="${idx}:pinyin" placeholder="e.g. Zǎoshang hǎo! Jīntiān tiānqì zhēn hǎo.">${escapeHTML(
+                            p.pinyin || ''
+                          )}</textarea>
+                          </td>
+                          <td>
+                            <textarea class="admin-textarea" style="height:58px;" data-pm-field="${idx}:meaning" placeholder="e.g. Good morning! The weather is really nice today.">${escapeHTML(
+                            p.meaning || ''
+                          )}</textarea>
+                          </td>
+                          <td>
+                            <input type="text" class="admin-input" data-pm-field="${idx}:focus" value="${escapeHTML(
+                            p.focus || ''
+                          )}" placeholder="e.g. Greetings" />
+                          </td>
+                          <td>
+                            <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-pm-del="${idx}">Delete</button>
+                          </td>
+                        </tr>
+                      `
+                        )
+                        .join('')
+                    : `<tr><td colspan="6" style="text-align:center; color:#64748b; padding:24px;">No pronunciation practice lines configured yet. Click "+ Add Practice Line" above.</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        const switcher = document.getElementById('pmLessonSwitcher');
+        if (switcher) {
+          switcher.onchange = (e) => {
+            currentLessonId = e.target.value;
+            renderPronModalContent();
+          };
+        }
+
+        container.querySelectorAll('[data-pm-field]').forEach((inp) => {
+          inp.oninput = () => {
+            const [idxStr, fieldKey] = inp.getAttribute('data-pm-field').split(':');
+            const idx = Number(idxStr);
+            if (lessonPron[idx]) {
+              lessonPron[idx][fieldKey] = inp.value;
+            }
+          };
+        });
+
+        container.querySelectorAll('[data-pm-del]').forEach((btn) => {
+          btn.onclick = () => {
+            const idx = Number(btn.getAttribute('data-pm-del'));
+            lessonPron.splice(idx, 1);
+            renderPronList();
+          };
+        });
+
+        const addBtn = document.getElementById('pmAddLineBtn');
+        if (addBtn) {
+          addBtn.onclick = () => {
+            lessonPron.push({
+              lessonId: currentLessonId,
+              order: lessonPron.length + 1,
+              chinese: '',
+              pinyin: '',
+              meaning: '',
+              focus: lesson.title || 'Mandarin Speech'
+            });
+            renderPronList();
+          };
+        }
+      };
+
+      openModal(`
+        <div class="admin-panel-head" style="margin-bottom:14px;">
+          <div>
+            <h2>Pronunciation Check Lines: ${escapeHTML(lesson.title || currentLessonId)}</h2>
+            <p>Configure speech recognition practice lines for lesson <code>${escapeHTML(
+              currentLessonId
+            )}</code>. Stored in <code>Pronunciation</code> sheet of <code>lessons.xlsx</code>.</p>
+          </div>
+          <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="pmCloseBtn">✕</button>
+        </div>
+
+        <div id="pmPronTableContainer"></div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px; border-top:1px solid #e2e8f0; padding-top:14px;">
+          <button type="button" class="admin-btn admin-btn-secondary" id="pmCancelBtn">Cancel</button>
+          <button type="button" class="admin-btn admin-btn-primary" id="pmSaveBtn">💾 Save Pronunciation Lines</button>
+        </div>
+      `);
+
+      renderPronList();
+
+      document.getElementById('pmCloseBtn').onclick = closeModal;
+      document.getElementById('pmCancelBtn').onclick = closeModal;
+
+      document.getElementById('pmSaveBtn').onclick = async () => {
+        const saveBtn = document.getElementById('pmSaveBtn');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+
+        try {
+          const cleaned = lessonPron
+            .filter((p) => String(p.chinese || '').trim())
+            .map((p, i) => ({
+              lessonId: currentLessonId,
+              order: Number(p.order) || i + 1,
+              chinese: String(p.chinese || '').trim(),
+              pinyin: String(p.pinyin || '').trim(),
+              meaning: String(p.meaning || '').trim(),
+              focus: String(p.focus || '').trim() || lesson.title
+            }));
+
+          const otherPron = (state.lessonsData.Pronunciation || []).filter((p) => !isSameId(p.lessonId, currentLessonId));
+          const nextPron = [...otherPron, ...cleaned];
+
+          setSyncStatus('Saving pronunciation lines…');
+          const res = await getContentStore().saveLessonsSheets({
+            Pronunciation: nextPron
+          });
+          state.lessonsData = { ...state.lessonsData, ...res.sheets };
+          closeModal();
+          renderActiveTab();
+          setSyncStatus('Saved locally');
+          toast(`Saved ${cleaned.length} pronunciation practice line(s) for "${lesson.title}". Export lessons.xlsx to publish.`);
+        } catch (err) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = '💾 Save Pronunciation Lines';
+          toast(err instanceof Error ? err.message : 'Failed to save pronunciation lines.', 'error');
+        }
+      };
+    };
+
+    renderPronModalContent();
   }
 
   // --- Tab 5: Wordwall Games ---

@@ -16,6 +16,7 @@
   let allExercises = [];
   let allWriting = [];
   let allVocabulary = [];
+  let allPronunciation = [];
 
   let currentAudience = 'Adult'; // 'Adult' or 'Kids'
   let activeCategoryKey = 'basics'; // 'basics' or 'travel' or 'business' / 'pinyin' etc.
@@ -447,6 +448,7 @@
           if (parsed.sheets.Exercises) allExercises = parsed.sheets.Exercises;
           if (parsed.sheets.Writing) allWriting = parsed.sheets.Writing;
           if (parsed.sheets.Vocabulary) allVocabulary = parsed.sheets.Vocabulary;
+          if (parsed.sheets.Pronunciation) allPronunciation = parsed.sheets.Pronunciation;
           loaded = true;
         }
       }
@@ -463,6 +465,7 @@
           if (storeRes.sheets.Exercises && storeRes.sheets.Exercises.length) allExercises = storeRes.sheets.Exercises;
           if (storeRes.sheets.Writing && storeRes.sheets.Writing.length) allWriting = storeRes.sheets.Writing;
           if (storeRes.sheets.Vocabulary && storeRes.sheets.Vocabulary.length) allVocabulary = storeRes.sheets.Vocabulary;
+          if (storeRes.sheets.Pronunciation && storeRes.sheets.Pronunciation.length) allPronunciation = storeRes.sheets.Pronunciation;
           if (allLessons.length) loaded = true;
         }
       } catch (err) {
@@ -489,6 +492,9 @@
           if (lessonsWorkbook.SheetNames.includes('Vocabulary')) {
             allVocabulary = XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Vocabulary'], { defval: '' });
           }
+          if (lessonsWorkbook.SheetNames.includes('Pronunciation')) {
+            allPronunciation = XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Pronunciation'], { defval: '' });
+          }
           if (allLessons.length) loaded = true;
         }
       } catch (err) {
@@ -507,6 +513,7 @@
             if (data.sheets.Exercises && data.sheets.Exercises.length) allExercises = data.sheets.Exercises;
             if (data.sheets.Writing && data.sheets.Writing.length) allWriting = data.sheets.Writing;
             if (data.sheets.Vocabulary && data.sheets.Vocabulary.length) allVocabulary = data.sheets.Vocabulary;
+            if (data.sheets.Pronunciation && data.sheets.Pronunciation.length) allPronunciation = data.sheets.Pronunciation;
             if (allLessons.length) loaded = true;
           }
         }
@@ -3000,6 +3007,22 @@
   function getLessonPronunciationSentences(lesson) {
     if (!lesson) return [];
     const lessonId = String(lesson.id || '').trim().toLowerCase();
+
+    // Prioritize custom Pronunciation lines from lessons.xlsx / LinguaContentStore
+    const customPron = (allPronunciation || []).filter(
+      p => String(p.lessonId || '').trim().toLowerCase() === lessonId && String(p.chinese || '').trim()
+    );
+    if (customPron.length > 0) {
+      return customPron
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+        .map((p, idx) => ({
+          chinese: String(p.chinese || '').trim(),
+          pinyin: String(p.pinyin || '').trim(),
+          meaning: String(p.meaning || `Practice line ${idx + 1} for ${lesson.title}`).trim(),
+          focus: String(p.focus || lesson.title || 'Mandarin Speech').trim()
+        }));
+    }
+
     for (const [key, list] of Object.entries(PRONUNCIATION_PRACTICE_BANK)) {
       if (key.toLowerCase() === lessonId) return list;
     }
@@ -4370,7 +4393,8 @@
               Lessons: allLessons,
               Exercises: allExercises,
               Writing: allWriting,
-              Vocabulary: allVocabulary
+              Vocabulary: allVocabulary,
+              Pronunciation: allPronunciation
             }
           };
           localStorage.setItem('linguapath_custom_lessons', JSON.stringify(customPayload));
@@ -4448,6 +4472,11 @@
       XLSX.utils.book_append_sheet(wb, vocabSheet, 'Vocabulary');
     }
 
+    if (allPronunciation && allPronunciation.length) {
+      const pronSheet = XLSX.utils.json_to_sheet(allPronunciation);
+      XLSX.utils.book_append_sheet(wb, pronSheet, 'Pronunciation');
+    }
+
     if (format === 'csv') {
       const csvContent = XLSX.utils.sheet_to_csv(lessonsSheet);
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -4490,6 +4519,7 @@
         const newExercises = workbook.SheetNames.includes('Exercises') ? XLSX.utils.sheet_to_json(workbook.Sheets['Exercises'], { defval: '' }) : allExercises;
         const newWriting = workbook.SheetNames.includes('Writing') ? XLSX.utils.sheet_to_json(workbook.Sheets['Writing'], { defval: '' }) : allWriting;
         const newVocabulary = workbook.SheetNames.includes('Vocabulary') ? XLSX.utils.sheet_to_json(workbook.Sheets['Vocabulary'], { defval: '' }) : allVocabulary;
+        const newPronunciation = workbook.SheetNames.includes('Pronunciation') ? XLSX.utils.sheet_to_json(workbook.Sheets['Pronunciation'], { defval: '' }) : allPronunciation;
 
         allLessons = newLessons.map((l) => {
           const p = resolveLessonPricing(l);
@@ -4498,13 +4528,15 @@
         allExercises = newExercises;
         allWriting = newWriting;
         allVocabulary = newVocabulary;
+        allPronunciation = newPronunciation;
 
         const customPayload = {
           sheets: {
             Lessons: allLessons,
             Exercises: allExercises,
             Writing: allWriting,
-            Vocabulary: allVocabulary
+            Vocabulary: allVocabulary,
+            Pronunciation: allPronunciation
           }
         };
 
@@ -4604,6 +4636,20 @@
 
     window.addEventListener('popstate', () => {
       handleUrlParams();
+    });
+
+    window.addEventListener('linguapath-content-change', (e) => {
+      if (e?.detail?.domain === 'lessons' && e?.detail?.sheets) {
+        if (e.detail.sheets.Lessons) allLessons = e.detail.sheets.Lessons;
+        if (e.detail.sheets.Writing) allWriting = e.detail.sheets.Writing;
+        if (e.detail.sheets.Pronunciation) allPronunciation = e.detail.sheets.Pronunciation;
+        if (e.detail.sheets.Exercises) allExercises = e.detail.sheets.Exercises;
+        if (activeLesson) {
+          if (activeWorkspaceTab === 'writing') renderWritingSection(activeLesson);
+          else if (activeWorkspaceTab === 'pronunciation') renderPronunciationSection(activeLesson);
+          else if (activeWorkspaceTab === 'exercises') renderExercisesSection(activeLesson);
+        }
+      }
     });
   }
 

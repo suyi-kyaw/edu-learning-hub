@@ -111,7 +111,7 @@
       xlsxPath: 'data/lessons.xlsx',
       jsonPath: 'data/lessons.json',
       fileName: 'lessons.xlsx',
-      sheets: ['Lessons', 'Vocabulary', 'Writing', 'Exercises', 'Games']
+      sheets: ['Lessons', 'Vocabulary', 'Writing', 'Exercises', 'Games', 'Pronunciation']
     },
     stories: {
       xlsxPath: 'data/stories.xlsx',
@@ -140,7 +140,8 @@
         'radical', 'strokeAnimationUrl', 'svgPath', 'strokeOrderSteps'
       ],
       Exercises: ['lessonId', 'order', 'type', 'question', 'optionA', 'optionB', 'optionC', 'optionD', 'answer', 'explanation'],
-      Games: ['id', 'order', 'title', 'category', 'badge', 'description', 'embed_code', 'embed_url', 'width', 'height', 'active']
+      Games: ['id', 'order', 'title', 'category', 'badge', 'description', 'embed_code', 'embed_url', 'width', 'height', 'active'],
+      Pronunciation: ['lessonId', 'order', 'chinese', 'pinyin', 'meaning', 'focus']
     },
     stories: {
       Lessons: ['id', 'title', 'chineseTitle', 'pinyin', 'meaning', 'level', 'description', 'video', 'poster'],
