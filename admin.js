@@ -843,258 +843,313 @@
 
   // --- Reusable Exercise Spreadsheet Importer Modal ---
   function openExerciseSpreadsheetModal(target = 'lessons', presetLessonId = '') {
-    state.pendingExercisesRows = [];
-    state.pendingExercisesMeta = {
-      target: target === 'stories' ? 'stories' : 'lessons',
-      lessonId: presetLessonId,
-      mode: 'merge_lesson',
-      fileName: ''
-    };
+    const isStories = target === 'stories';
+    const allExercises = cloneArray(isStories ? state.storiesData.Exercises : state.lessonsData.Exercises);
+    const lessonsList = isStories ? state.storiesData.Lessons : state.lessonsData.Lessons;
 
-    const lessonsList =
-      state.pendingExercisesMeta.target === 'stories' ? state.storiesData.Lessons : state.lessonsData.Lessons;
+    state.editingExercisesTarget = target;
+    state.editingExercisesLessonId = presetLessonId || (lessonsList[0] ? lessonsList[0].id : '');
+    state.editingExercisesList = allExercises;
 
-    openModal(`
-      <div class="admin-panel-head" style="margin-bottom:14px;">
-        <div>
-          <h2>Upload Exercises via Spreadsheet</h2>
-          <p>Upload an Excel (.xlsx / .xls) or CSV file with exercises, preview parsed rows, and apply to Lessons or Stories.</p>
-        </div>
-        <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exCloseModalBtn">✕</button>
-      </div>
+    const renderEditorBody = () => {
+      const activeLessonId = state.editingExercisesLessonId;
+      const filtered = state.editingExercisesList.filter(
+        (e) => !activeLessonId || isSameId(e.lessonId, activeLessonId)
+      );
 
-      <div class="admin-grid-3" style="margin-bottom:14px;">
-        <div class="admin-field">
-          <label for="exTargetSelect">Destination Workbook</label>
-          <select id="exTargetSelect" class="admin-select">
-            <option value="lessons" ${state.pendingExercisesMeta.target === 'lessons' ? 'selected' : ''}>Curriculum Lessons (lessons.xlsx)</option>
-            <option value="stories" ${state.pendingExercisesMeta.target === 'stories' ? 'selected' : ''}>Stories (stories.xlsx)</option>
-          </select>
-        </div>
+      const container = document.getElementById('exEditorContent');
+      if (!container) return;
 
-        <div class="admin-field">
-          <label for="exScopeLesson">Default / Filter Lesson ID (Optional)</label>
-          <select id="exScopeLesson" class="admin-select">
-            <option value="">All / Use spreadsheet lessonId column</option>
-            ${lessonsList
-              .map(
-                (l) =>
-                  `<option value="${escapeHTML(l.id)}" ${isSameId(l.id, presetLessonId) ? 'selected' : ''}>${escapeHTML(
-                    l.id
-                  )} — ${escapeHTML(l.title)}</option>`
-              )
-              .join('')}
-          </select>
-        </div>
-
-        <div class="admin-field">
-          <label for="exImportMode">Import Mode</label>
-          <select id="exImportMode" class="admin-select">
-            <option value="merge_lesson">Replace only matching lessonIds (Recommended)</option>
-            <option value="replace_all">Replace entire Exercises sheet</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="admin-panel-card" style="padding:14px; margin-bottom:14px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-          <div>
-            <strong style="font-size:0.86rem;">Step 1: Choose Spreadsheet (.xlsx, .xls, .csv)</strong>
-            <div style="font-size:0.78rem; color:#64748b;">Columns: lessonId, order, type, question, optionA, optionB, optionC, optionD, answer, explanation</div>
-          </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exDownloadTplBtn">Download Template (.xlsx)</button>
-            <label class="admin-btn admin-btn-primary admin-btn-sm" style="margin:0; cursor:pointer;">
-              <span>Choose Spreadsheet</span>
-              <input type="file" id="exFileInput" accept=".xlsx,.xls,.csv" hidden />
-            </label>
+      container.innerHTML = `
+        <div style="margin-bottom:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+              <strong style="font-size:0.86rem;">Optional: Bulk Excel Spreadsheet Import / Export</strong>
+              <div style="font-size:0.78rem; color:#64748b;">Upload or download exercises as an Excel (.xlsx) file.</div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exDownloadTplBtn">Download Template</button>
+              <label class="admin-btn admin-btn-secondary admin-btn-sm" style="margin:0; cursor:pointer;">
+                <span>Import .xlsx</span>
+                <input type="file" id="exFileInput" accept=".xlsx,.xls,.csv" hidden />
+              </label>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div id="exPreviewContainer" style="margin-bottom:16px;">
-        <p style="font-size:0.84rem; color:#64748b;">Select a spreadsheet file above to preview and validate exercises before importing.</p>
-      </div>
-
-      <div style="display:flex; justify-content:flex-end; gap:10px;">
-        <button type="button" class="admin-btn admin-btn-secondary" id="exCancelBtn">Cancel</button>
-        <button type="button" class="admin-btn admin-btn-primary" id="exCommitBtn" disabled>Import Exercises</button>
-      </div>
-    `);
-
-    document.getElementById('exCloseModalBtn').onclick = closeModal;
-    document.getElementById('exCancelBtn').onclick = closeModal;
-
-    const targetSelect = document.getElementById('exTargetSelect');
-    const lessonSelect = document.getElementById('exScopeLesson');
-    const modeSelect = document.getElementById('exImportMode');
-    const fileInput = document.getElementById('exFileInput');
-    const previewContainer = document.getElementById('exPreviewContainer');
-    const commitBtn = document.getElementById('exCommitBtn');
-
-    targetSelect.onchange = () => {
-      openExerciseSpreadsheetModal(targetSelect.value, '');
-    };
-
-    document.getElementById('exDownloadTplBtn').onclick = () => {
-      if (typeof window.XLSX === 'undefined') {
-        toast('Excel library is still loading.', 'error');
-        return;
-      }
-      const sampleId = lessonSelect.value || (targetSelect.value === 'stories' ? 'lesson-01' : 'adult-basics-01');
-      const existingRows = (
-        targetSelect.value === 'stories' ? state.storiesData.Exercises : state.lessonsData.Exercises
-      ).filter((r) => !lessonSelect.value || isSameId(r.lessonId, lessonSelect.value));
-
-      const templateRows = existingRows.length
-        ? existingRows
-        : [
-            {
-              lessonId: sampleId,
-              order: 1,
-              type: 'multiple-choice',
-              question: 'How do you say "Good morning" in Mandarin?',
-              optionA: '早上好 (Zǎoshang hǎo)',
-              optionB: '晚安 (Wǎn’ān)',
-              optionC: '再见 (Zàijiàn)',
-              optionD: '谢谢 (Xièxie)',
-              answer: '早上好 (Zǎoshang hǎo)',
-              explanation: '早上好 (zǎoshang hǎo) means good morning.'
-            }
-          ];
-      const ws = window.XLSX.utils.json_to_sheet(templateRows);
-      const wb = window.XLSX.utils.book_new();
-      window.XLSX.utils.book_append_sheet(wb, ws, 'Exercises');
-      window.XLSX.writeFile(wb, `linguapath-${targetSelect.value}-exercises-template.xlsx`);
-      toast('Downloaded exercises template (.xlsx).');
-    };
-
-    const reparseRows = (rawRows) => {
-      const defaultLid = lessonSelect.value.trim();
-      const normalized = rawRows.map((r, i) => {
-        const lid = String(r.lessonId || r.LessonId || r['Lesson ID'] || defaultLid || '').trim();
-        const question = String(r.question || r.Question || '').trim();
-        const optionA = String(r.optionA ?? r.OptionA ?? '').trim();
-        const optionB = String(r.optionB ?? r.OptionB ?? '').trim();
-        const optionC = String(r.optionC ?? r.OptionC ?? '').trim();
-        const optionD = String(r.optionD ?? r.OptionD ?? '').trim();
-        const answer = String(r.answer || r.Answer || r.correct || optionA || '').trim();
-        const valid = Boolean(lid && question && (optionA || optionB || answer));
-        return {
-          lessonId: lid,
-          order: Number(r.order || r.Order) || i + 1,
-          type: String(r.type || r.Type || 'multiple-choice').trim(),
-          question,
-          optionA,
-          optionB,
-          optionC,
-          optionD,
-          answer,
-          explanation: String(r.explanation || r.Explanation || '').trim(),
-          _valid: valid
-        };
-      });
-
-      const validRows = normalized.filter((r) => r._valid);
-      state.pendingExercisesRows = validRows.map(({ _valid, ...rest }) => rest);
-      commitBtn.disabled = validRows.length === 0;
-
-      previewContainer.innerHTML = `
-        <div style="font-size:0.84rem; margin-bottom:8px;">
-          <strong>Parsed ${normalized.length} row(s):</strong>
-          <span class="admin-status-active">${validRows.length} valid</span>
-          ${normalized.length - validRows.length > 0 ? ` · <span class="admin-status-expired">${normalized.length - validRows.length} missing required lessonId/question</span>` : ''}
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <strong>Exercises for:</strong>
+            <select id="exModalLessonSelect" class="admin-select" style="max-width:280px;">
+              <option value="">All Lessons / Stories (${state.editingExercisesList.length} total)</option>
+              ${lessonsList
+                .map(
+                  (l) =>
+                    `<option value="${escapeHTML(l.id)}" ${isSameId(l.id, activeLessonId) ? 'selected' : ''}>${escapeHTML(
+                      l.id
+                    )} — ${escapeHTML(l.title)}</option>`
+                )
+                .join('')}
+            </select>
+          </div>
+          <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="exAddRowBtn">+ Add New Exercise</button>
         </div>
-        <div class="admin-table-wrap" style="max-height:260px;">
-          <table class="admin-table">
+
+        <div class="admin-table-wrap" style="max-height:420px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px;">
+          <table class="admin-table" style="font-size:0.85rem;">
             <thead>
               <tr>
-                <th>Lesson ID</th>
-                <th>#</th>
-                <th>Question</th>
-                <th>Answer</th>
-                <th>Status</th>
+                <th style="width:70px;">#</th>
+                <th style="width:130px;">Lesson ID</th>
+                <th>Question &amp; Options (A, B, C, D)</th>
+                <th style="width:140px;">Correct Answer</th>
+                <th style="width:160px;">Explanation</th>
+                <th style="width:70px;">Action</th>
               </tr>
             </thead>
             <tbody>
-              ${normalized
-                .slice(0, 40)
-                .map(
-                  (r) => `
-                <tr>
-                  <td>${escapeHTML(r.lessonId || '—')}</td>
-                  <td>${escapeHTML(r.order)}</td>
-                  <td>${escapeHTML(r.question || 'Missing question')}</td>
-                  <td>${escapeHTML(r.answer || '—')}</td>
-                  <td><span class="${r._valid ? 'admin-status-active' : 'admin-status-expired'}">${
-                    r._valid ? 'Valid' : 'Invalid'
-                  }</span></td>
-                </tr>
-              `
-                )
-                .join('')}
+              ${
+                filtered.length
+                  ? filtered
+                      .map((ex, idx) => {
+                        const globalIndex = state.editingExercisesList.indexOf(ex);
+                        return `
+                        <tr>
+                          <td>
+                            <input type="number" class="admin-input" style="width:60px;" data-ex-field="${globalIndex}:order" value="${escapeHTML(
+                          ex.order || idx + 1
+                        )}" />
+                          </td>
+                          <td>
+                            <input type="text" class="admin-input" data-ex-field="${globalIndex}:lessonId" value="${escapeHTML(
+                          ex.lessonId || activeLessonId || ''
+                        )}" />
+                          </td>
+                          <td>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                              <input type="text" class="admin-input" placeholder="Question text..." data-ex-field="${globalIndex}:question" value="${escapeHTML(
+                          ex.question || ''
+                        )}" />
+                              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                                <input type="text" class="admin-input" placeholder="Option A" data-ex-field="${globalIndex}:optionA" value="${escapeHTML(
+                          ex.optionA || ''
+                        )}" />
+                                <input type="text" class="admin-input" placeholder="Option B" data-ex-field="${globalIndex}:optionB" value="${escapeHTML(
+                          ex.optionB || ''
+                        )}" />
+                                <input type="text" class="admin-input" placeholder="Option C" data-ex-field="${globalIndex}:optionC" value="${escapeHTML(
+                          ex.optionC || ''
+                        )}" />
+                                <input type="text" class="admin-input" placeholder="Option D" data-ex-field="${globalIndex}:optionD" value="${escapeHTML(
+                          ex.optionD || ''
+                        )}" />
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <input type="text" class="admin-input" placeholder="Correct Answer" data-ex-field="${globalIndex}:answer" value="${escapeHTML(
+                          ex.answer || ''
+                        )}" />
+                          </td>
+                          <td>
+                            <textarea class="admin-textarea" placeholder="Explanation..." style="height:70px;" data-ex-field="${globalIndex}:explanation">${escapeHTML(
+                          ex.explanation || ''
+                        )}</textarea>
+                          </td>
+                          <td>
+                            <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-ex-del="${globalIndex}">Delete</button>
+                          </td>
+                        </tr>
+                      `;
+                      })
+                      .join('')
+                  : `<tr><td colspan="6" style="text-align:center; color:#64748b; padding:24px;">No exercises found for this lesson. Click "+ Add New Exercise" above or import via spreadsheet.</td></tr>`
+              }
             </tbody>
           </table>
         </div>
       `;
+
+      const lessonDropdown = document.getElementById('exModalLessonSelect');
+      if (lessonDropdown) {
+        lessonDropdown.onchange = (e) => {
+          state.editingExercisesLessonId = e.target.value;
+          renderEditorBody();
+        };
+      }
+
+      const addBtn = document.getElementById('exAddRowBtn');
+      if (addBtn) {
+        addBtn.onclick = () => {
+          state.editingExercisesList.push({
+            lessonId: state.editingExercisesLessonId || (lessonsList[0] ? lessonsList[0].id : 'lesson-01'),
+            order: state.editingExercisesList.length + 1,
+            type: 'multiple-choice',
+            question: '',
+            optionA: '',
+            optionB: '',
+            optionC: '',
+            optionD: '',
+            answer: '',
+            explanation: ''
+          });
+          renderEditorBody();
+        };
+      }
+
+      container.querySelectorAll('[data-ex-field]').forEach((inp) => {
+        inp.oninput = () => {
+          const [gIdxStr, fieldKey] = inp.getAttribute('data-ex-field').split(':');
+          const gIdx = Number(gIdxStr);
+          if (state.editingExercisesList[gIdx]) {
+            state.editingExercisesList[gIdx][fieldKey] = inp.value;
+          }
+        };
+      });
+
+      container.querySelectorAll('[data-ex-del]').forEach((btn) => {
+        btn.onclick = () => {
+          const gIdx = Number(btn.getAttribute('data-ex-del'));
+          state.editingExercisesList.splice(gIdx, 1);
+          renderEditorBody();
+        };
+      });
+
+      const fileInput = document.getElementById('exFileInput');
+      if (fileInput) {
+        fileInput.onchange = async () => {
+          const file = fileInput.files && fileInput.files[0];
+          if (!file) return;
+          if (typeof window.XLSX === 'undefined') {
+            toast('Excel library is still loading.', 'error');
+            return;
+          }
+          try {
+            const buf = await file.arrayBuffer();
+            const wb = window.XLSX.read(buf, { type: 'array' });
+            const sheetName = wb.SheetNames.includes('Exercises') ? 'Exercises' : wb.SheetNames[0];
+            if (!sheetName) {
+              toast('No worksheet found in file.', 'error');
+              return;
+            }
+            const rows = window.XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+            const parsed = rows.map((r, i) => ({
+              lessonId: String(r.lessonId || r.LessonId || r['Lesson ID'] || state.editingExercisesLessonId || '').trim(),
+              order: Number(r.order || r.Order) || i + 1,
+              type: String(r.type || r.Type || 'multiple-choice').trim(),
+              question: String(r.question || r.Question || '').trim(),
+              optionA: String(r.optionA ?? r.OptionA ?? '').trim(),
+              optionB: String(r.optionB ?? r.OptionB ?? '').trim(),
+              optionC: String(r.optionC ?? r.OptionC ?? '').trim(),
+              optionD: String(r.optionD ?? r.OptionD ?? '').trim(),
+              answer: String(r.answer || r.Answer || r.correct || '').trim(),
+              explanation: String(r.explanation || r.Explanation || '').trim()
+            }));
+            state.editingExercisesList = state.editingExercisesList.concat(parsed);
+            renderEditorBody();
+            toast(`Imported ${parsed.length} exercise rows from ${file.name}. Review and click Save All Exercises to persist.`);
+          } catch (err) {
+            toast(err instanceof Error ? err.message : 'Failed to parse Excel file.', 'error');
+          } finally {
+            fileInput.value = '';
+          }
+        };
+      }
+
+      const tplBtn = document.getElementById('exDownloadTplBtn');
+      if (tplBtn) {
+        tplBtn.onclick = () => {
+          if (typeof window.XLSX === 'undefined') {
+            toast('Excel library is still loading.', 'error');
+            return;
+          }
+          const sampleRows = filtered.length ? filtered : [
+            {
+              lessonId: state.editingExercisesLessonId || 'lesson-01',
+              order: 1,
+              type: 'multiple-choice',
+              question: 'Sample question?',
+              optionA: 'Option A',
+              optionB: 'Option B',
+              optionC: 'Option C',
+              optionD: 'Option D',
+              answer: 'Option A',
+              explanation: 'Sample explanation'
+            }
+          ];
+          const ws = window.XLSX.utils.json_to_sheet(sampleRows);
+          const wb = window.XLSX.utils.book_new();
+          window.XLSX.utils.book_append_sheet(wb, ws, 'Exercises');
+          window.XLSX.writeFile(wb, `linguapath-${target}-exercises-template.xlsx`);
+          toast('Downloaded exercise template (.xlsx).');
+        };
+      }
     };
 
-    fileInput.onchange = async () => {
-      const file = fileInput.files && fileInput.files[0];
-      if (!file) return;
-      if (typeof window.XLSX === 'undefined') {
-        toast('Excel library is still loading.', 'error');
-        return;
-      }
-      try {
-        const buf = await file.arrayBuffer();
-        const wb = window.XLSX.read(buf, { type: 'array' });
-        const sheetName = wb.SheetNames.includes('Exercises') ? 'Exercises' : wb.SheetNames[0];
-        if (!sheetName) {
-          toast('No worksheet found in file.', 'error');
-          return;
+    openModal(`
+      <div class="admin-panel-head" style="margin-bottom:14px;">
+        <div>
+          <h2>Interactive Exercise Editor &amp; Importer (${target.toUpperCase()})</h2>
+          <p>View, edit, add, or delete quiz exercises for lessons. Use Excel import/export as an optional helper.</p>
+        </div>
+        <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exCloseModalBtn">✕</button>
+      </div>
+
+      <div id="exEditorContent"></div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px; border-top:1px solid #e2e8f0; padding-top:14px;">
+        <button type="button" class="admin-btn admin-btn-secondary" id="exCancelBtn">Cancel</button>
+        <button type="button" class="admin-btn admin-btn-primary" id="exCommitBtn">💾 Save All Exercises</button>
+      </div>
+    `);
+
+    renderEditorBody();
+
+    document.getElementById('exCloseModalBtn').onclick = closeModal;
+    document.getElementById('exCancelBtn').onclick = closeModal;
+
+    const commitBtn = document.getElementById('exCommitBtn');
+    if (commitBtn) {
+      commitBtn.onclick = async () => {
+        commitBtn.disabled = true;
+        commitBtn.textContent = 'Saving…';
+        try {
+          const cleaned = state.editingExercisesList.map((r, i) => ({
+            lessonId: String(r.lessonId || '').trim(),
+            order: Number(r.order) || i + 1,
+            type: String(r.type || 'multiple-choice').trim(),
+            question: String(r.question || '').trim(),
+            optionA: String(r.optionA || '').trim(),
+            optionB: String(r.optionB || '').trim(),
+            optionC: String(r.optionC || '').trim(),
+            optionD: String(r.optionD || '').trim(),
+            answer: String(r.answer || '').trim(),
+            explanation: String(r.explanation || '').trim()
+          })).filter((r) => r.question);
+
+          const res = await getContentStore().importExercisesLocal({
+            target: target,
+            mode: 'replace_all',
+            rows: cleaned
+          });
+
+          if (target === 'stories') {
+            state.storiesData.Exercises = res.exercises || cleaned;
+          } else {
+            state.lessonsData.Exercises = res.exercises || cleaned;
+          }
+
+          closeModal();
+          renderActiveTab();
+          setSyncStatus('Saved locally');
+          toast(`Saved ${cleaned.length} exercise(s) successfully! Export ${target}.xlsx to publish.`);
+        } catch (err) {
+          commitBtn.disabled = false;
+          commitBtn.textContent = '💾 Save All Exercises';
+          toast(err instanceof Error ? err.message : 'Failed to save exercises.', 'error');
         }
-        const rows = window.XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
-        state.pendingExercisesMeta.rawRows = rows;
-        reparseRows(rows);
-      } catch (err) {
-        toast(err instanceof Error ? err.message : 'Failed to parse spreadsheet.', 'error');
-      }
-    };
-
-    lessonSelect.onchange = () => {
-      if (Array.isArray(state.pendingExercisesMeta.rawRows)) {
-        reparseRows(state.pendingExercisesMeta.rawRows);
-      }
-    };
-
-    commitBtn.onclick = async () => {
-      if (!state.pendingExercisesRows.length) return;
-      commitBtn.disabled = true;
-      commitBtn.textContent = 'Importing…';
-      try {
-        const res = await getContentStore().importExercisesLocal({
-          target: targetSelect.value,
-          mode: modeSelect.value,
-          lessonId: lessonSelect.value.trim(),
-          rows: state.pendingExercisesRows
-        });
-        if (targetSelect.value === 'stories') {
-          state.storiesData.Exercises = res.exercises || [];
-        } else {
-          state.lessonsData.Exercises = res.exercises || [];
-        }
-        closeModal();
-        renderActiveTab();
-        setSyncStatus('Saved locally');
-        const exportName = targetSelect.value === 'stories' ? 'stories.xlsx' : 'lessons.xlsx';
-        toast(`Imported ${res.importedCount} exercise(s) locally. Export ${exportName} to publish.`);
-      } catch (err) {
-        commitBtn.disabled = false;
-        commitBtn.textContent = 'Import Exercises';
-        toast(err instanceof Error ? err.message : 'Failed to import exercises.', 'error');
-      }
-    };
+      };
+    }
   }
 
   // --- Tab 2: Stories & Exercises ---
