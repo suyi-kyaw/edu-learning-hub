@@ -1340,6 +1340,54 @@ async function logout(): Promise<void> {
   clearAuthSession();
   state.ready = true;
   emitState();
+  try {
+    if (typeof window !== 'undefined' && window.location) {
+      const currentPath = window.location.pathname || '';
+      if (!currentPath.endsWith('index.html') && currentPath !== '/' && currentPath !== '') {
+        window.location.href = 'index.html';
+      }
+    }
+  } catch (_) {}
+}
+
+async function adminUpdateUserDetails(
+  userId: string,
+  updates: {
+    username?: string;
+    email?: string;
+    phoneNumber?: string;
+    dob?: string;
+    role?: 'admin' | 'student';
+    membershipStatus?: UserProfile['membershipStatus'];
+    membershipPlan?: UserProfile['membershipPlan'];
+    membershipExpiresAt?: string;
+  }
+): Promise<void> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const dataset = getMergedDataset();
+  const entry = dataset.users[userId];
+  if (!entry) throw new Error('User not found.');
+
+  const nowIso = new Date().toISOString();
+  const nextProfile: UserProfile = {
+    ...entry.profile,
+    username: updates.username !== undefined ? String(updates.username).trim().slice(0, 60) : entry.profile.username,
+    email: updates.email !== undefined ? String(updates.email).trim().toLowerCase().slice(0, 160) : entry.profile.email,
+    phoneNumber: updates.phoneNumber !== undefined ? String(updates.phoneNumber).trim().slice(0, 32) : entry.profile.phoneNumber,
+    dob: updates.dob !== undefined ? normalizeExcelDob(updates.dob) : entry.profile.dob,
+    role: updates.role === 'admin' || updates.role === 'student' ? updates.role : entry.profile.role,
+    membershipStatus: updates.membershipStatus !== undefined ? updates.membershipStatus : entry.profile.membershipStatus,
+    membershipPlan: updates.membershipPlan !== undefined ? updates.membershipPlan : entry.profile.membershipPlan,
+    membershipExpiresAt: updates.membershipExpiresAt !== undefined ? normalizeExcelDob(updates.membershipExpiresAt) : entry.profile.membershipExpiresAt,
+    updatedAt: nowIso
+  };
+
+  const overlay = readOverlayStore();
+  overlay.users[userId] = { profile: nextProfile, passwordHash: entry.passwordHash };
+  writeOverlayStore(overlay);
+
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  emitState();
 }
 
 async function updateProfileDetails(params: {
@@ -2147,6 +2195,7 @@ const LinguaAuth = {
   approveSubscriptionRequest,
   rejectSubscriptionRequest,
   updateUserMembershipAdmin,
+  adminUpdateUserDetails,
   adminResetUserPassword,
   saveLessonCatalogItems,
   exportUsersWorkbook,

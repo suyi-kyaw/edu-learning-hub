@@ -2666,6 +2666,107 @@
     };
   }
 
+  function openUserDetailModal(user) {
+    if (!user) return;
+    openModal(`
+      <div class="admin-panel-head" style="margin-bottom:14px;">
+        <div>
+          <h2>User Profile &amp; Membership · ${escapeHTML(user.username || user.email)}</h2>
+          <p>View and edit profile information, role, subscription status, and expiration.</p>
+        </div>
+        <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="udCloseBtn">✕</button>
+      </div>
+
+      <form id="userDetailForm">
+        <div class="admin-grid-2">
+          <div class="admin-field">
+            <label for="udUsername">Username *</label>
+            <input type="text" class="admin-input" id="udUsername" value="${escapeHTML(user.username || '')}" required />
+          </div>
+          <div class="admin-field">
+            <label for="udEmail">Email Address *</label>
+            <input type="email" class="admin-input" id="udEmail" value="${escapeHTML(user.email || '')}" required />
+          </div>
+          <div class="admin-field">
+            <label for="udPhone">Phone Number</label>
+            <input type="text" class="admin-input" id="udPhone" value="${escapeHTML(user.phoneNumber || '')}" />
+          </div>
+          <div class="admin-field">
+            <label for="udDob">Date of Birth</label>
+            <input type="date" class="admin-input" id="udDob" value="${escapeHTML(user.dob || '')}" />
+          </div>
+          <div class="admin-field">
+            <label for="udRole">System Role</label>
+            <select class="admin-select" id="udRole">
+              <option value="student" ${user.role !== 'admin' ? 'selected' : ''}>student</option>
+              <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>admin</option>
+            </select>
+          </div>
+          <div class="admin-field">
+            <label for="udStatus">Membership Status</label>
+            <select class="admin-select" id="udStatus">
+              <option value="free" ${user.membershipStatus === 'free' ? 'selected' : ''}>free</option>
+              <option value="pending" ${user.membershipStatus === 'pending' ? 'selected' : ''}>pending</option>
+              <option value="active" ${user.membershipStatus === 'active' ? 'selected' : ''}>active</option>
+              <option value="expired" ${user.membershipStatus === 'expired' ? 'selected' : ''}>expired</option>
+            </select>
+          </div>
+          <div class="admin-field">
+            <label for="udPlan">Membership Plan</label>
+            <select class="admin-select" id="udPlan">
+              <option value="none" ${user.membershipPlan === 'none' ? 'selected' : ''}>none</option>
+              <option value="monthly" ${user.membershipPlan === 'monthly' ? 'selected' : ''}>monthly</option>
+              <option value="annual" ${user.membershipPlan === 'annual' ? 'selected' : ''}>annual</option>
+              <option value="per_lesson" ${user.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson</option>
+            </select>
+          </div>
+          <div class="admin-field">
+            <label for="udExpiry">Membership Expiry Date</label>
+            <input type="date" class="admin-input" id="udExpiry" value="${escapeHTML(user.membershipExpiresAt || '')}" />
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; border-top:1px solid #e2e8f0; padding-top:14px;">
+          <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="udResetPwBtn">🔑 Reset Temporary Password</button>
+          <div style="display:flex; gap:10px;">
+            <button type="button" class="admin-btn admin-btn-secondary" id="udCancelBtn">Cancel</button>
+            <button type="submit" class="admin-btn admin-btn-primary">Save Changes</button>
+          </div>
+        </div>
+      </form>
+    `);
+
+    document.getElementById('udCloseBtn').onclick = closeModal;
+    document.getElementById('udCancelBtn').onclick = closeModal;
+
+    document.getElementById('udResetPwBtn').onclick = () => {
+      closeModal();
+      const resetBtn = document.querySelector(`[data-u-resetpw="${CSS.escape(user.uid)}"]`);
+      if (resetBtn) resetBtn.click();
+    };
+
+    document.getElementById('userDetailForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const payload = {
+        username: document.getElementById('udUsername').value.trim(),
+        email: document.getElementById('udEmail').value.trim().toLowerCase(),
+        phoneNumber: document.getElementById('udPhone').value.trim(),
+        dob: document.getElementById('udDob').value.trim(),
+        role: document.getElementById('udRole').value,
+        membershipStatus: document.getElementById('udStatus').value,
+        membershipPlan: document.getElementById('udPlan').value,
+        membershipExpiresAt: document.getElementById('udExpiry').value.trim()
+      };
+      try {
+        await window.LinguaAuth.adminUpdateUserDetails(user.uid, payload);
+        closeModal();
+        toast(`Updated profile for "${payload.username || payload.email}".`);
+      } catch (err) {
+        toast(err instanceof Error ? err.message : 'Failed to update user profile.', 'error');
+      }
+    };
+  }
+
   // --- Tab 6: Users & Memberships ---
   function renderUsersTab(viewport) {
     const authState = state.authState || { allRequests: [], allUsers: [] };
@@ -2844,6 +2945,9 @@
                           </td>
                           <td>
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-u-edit="${escapeHTML(
+                                u.uid
+                              )}">View / Edit</button>
                               <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" data-u-save="${escapeHTML(
                                 u.uid
                               )}">Update</button>
@@ -2932,6 +3036,14 @@
         } catch (err) {
           toast(err instanceof Error ? err.message : 'Rejection failed.', 'error');
         }
+      };
+    });
+
+    viewport.querySelectorAll('[data-u-edit]').forEach((btn) => {
+      btn.onclick = () => {
+        const uid = btn.getAttribute('data-u-edit');
+        const user = users.find((x) => x.uid === uid);
+        openUserDetailModal(user);
       };
     });
 
