@@ -231,24 +231,36 @@ function getXlsxGlobal(): XlsxModuleLike | null {
   return (window as unknown as { XLSX?: XlsxModuleLike }).XLSX || null;
 }
 
-let xlsxLoadPromise: Promise<XlsxModuleLike | null> | null = null;
-function ensureXlsxLoaded(): Promise<XlsxModuleLike | null> {
-  const existing = getXlsxGlobal();
-  if (existing) return Promise.resolve(existing);
-  if (xlsxLoadPromise) return xlsxLoadPromise;
-  xlsxLoadPromise = new Promise((resolve) => {
+function loadScriptTag(src: string): Promise<boolean> {
+  return new Promise((resolve) => {
     try {
       const script = document.createElement('script');
-      script.src = 'vendor/xlsx.full.min.js';
+      script.src = src;
       script.async = true;
-      script.onload = () => resolve(getXlsxGlobal());
-      script.onerror = () => resolve(getXlsxGlobal());
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
       document.head.appendChild(script);
     } catch {
-      resolve(null);
+      resolve(false);
     }
   });
-  return xlsxLoadPromise;
+}
+
+let xlsxLoadPromise: Promise<XlsxModuleLike | null> | null = null;
+async function ensureXlsxLoaded(): Promise<XlsxModuleLike | null> {
+  const existing = getXlsxGlobal();
+  if (existing) return existing;
+  if (!xlsxLoadPromise) {
+    xlsxLoadPromise = (async () => {
+      await loadScriptTag('vendor/xlsx.full.min.js');
+      if (getXlsxGlobal()) return getXlsxGlobal();
+      await loadScriptTag('https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js');
+      return getXlsxGlobal();
+    })();
+  }
+  const mod = await xlsxLoadPromise;
+  if (!mod) xlsxLoadPromise = null;
+  return mod;
 }
 
 // --- Pure Utility Functions ---
@@ -498,13 +510,14 @@ interface ExcelDataset {
   siteConfig?: Partial<SiteConfig>;
 }
 
-const baseWorkbookStore: ExcelDataset & { loaded: boolean; lastLoadedAt: string } = {
+const baseWorkbookStore: ExcelDataset & { loaded: boolean; lastLoadedAt: string; lastError: string } = {
   users: {},
   requests: {},
   progress: {},
   lessonCatalog: {},
   loaded: false,
-  lastLoadedAt: ''
+  lastLoadedAt: '',
+  lastError: ''
 };
 
 function createEmptyDataset(): ExcelDataset {
@@ -734,9 +747,15 @@ async function loadBaseWorkbookFromExcel(forceReload = false): Promise<void> {
   if (baseWorkbookStore.loaded && !forceReload) return;
   try {
     const xlsx = await ensureXlsxLoaded();
-    if (!xlsx) return;
+    if (!xlsx) {
+      baseWorkbookStore.lastError = 'Excel reader (SheetJS) failed to load.';
+      return;
+    }
     const res = await fetch(`${USERS_EXCEL_PATH}?t=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) return;
+    if (!res.ok) {
+      baseWorkbookStore.lastError = `Could not load ${USERS_EXCEL_PATH} (HTTP ${res.status}).`;
+      return;
+    }
     const buf = await res.arrayBuffer();
     const wb = xlsx.read(buf, { type: 'array' });
     const parsed = parseWorkbookToDataset(wb, xlsx);
@@ -746,8 +765,9 @@ async function loadBaseWorkbookFromExcel(forceReload = false): Promise<void> {
     baseWorkbookStore.lessonCatalog = parsed.lessonCatalog;
     baseWorkbookStore.loaded = true;
     baseWorkbookStore.lastLoadedAt = new Date().toISOString();
-  } catch {
-    // Keep any already loaded / overlay state cleanly
+    baseWorkbookStore.lastError = '';
+  } catch (err) {
+    baseWorkbookStore.lastError = err instanceof Error ? err.message : 'Failed to parse users.xlsx.';
   }
 }
 
@@ -1197,6 +1217,9 @@ async function loginWithEmail(email: string, password: string): Promise<AuthUser
     (entry) => entry.profile.email.toLowerCase() === cleanEmail
   );
   if (!matchedEntry) {
+    if (!baseWorkbookStore.loaded && baseWorkbookStore.lastError) {
+      throw new Error(baseWorkbookStore.lastError);
+    }
     throw new Error(`No account found in users.xlsx for ${cleanEmail}. Click Register to create one.`);
   }
 

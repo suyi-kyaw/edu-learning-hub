@@ -522,12 +522,12 @@
   function ensureAuthScriptsLoaded() {
     if (!window.LinguaAuth && !document.querySelector('script[src*="vendor/firebase-app.js"]')) {
       const s1 = document.createElement('script');
-      s1.src = 'vendor/firebase-app.js';
+      s1.src = 'vendor/firebase-app.js?v=excel2';
       s1.defer = true;
       s1.onload = () => {
         if (!window.LinguaAuthUI && !document.querySelector('script[src*="auth-ui.js"]')) {
           const s2 = document.createElement('script');
-          s2.src = 'auth-ui.js';
+          s2.src = 'auth-ui.js?v=excel2';
           s2.defer = true;
           document.body.appendChild(s2);
         }
@@ -535,7 +535,7 @@
       document.body.appendChild(s1);
     } else if (!window.LinguaAuthUI && !document.querySelector('script[src*="auth-ui.js"]')) {
       const s2 = document.createElement('script');
-      s2.src = 'auth-ui.js';
+      s2.src = 'auth-ui.js?v=excel2';
       s2.defer = true;
       document.body.appendChild(s2);
     }
