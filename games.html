@@ -361,10 +361,18 @@
   <!-- Shared Footer Container -->
   <div id="sharedFooter"></div>
 
-  <!-- Runtime Backend URL & Media Asset Resolver -->
+  <!-- Data Script -->
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script>
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"><\/script>');
+    }
+  </script>
+
+  <!-- Runtime Static Asset Resolver -->
   <script src="backend-config.js"></script>
 
-  <!-- Firebase Auth & Membership Client -->
+  <!-- Excel-Backed Auth & Membership Client -->
   <script src="vendor/firebase-app.js"></script>
   <script src="auth-ui.js"></script>
 
@@ -373,14 +381,6 @@
 
   <!-- Shared Footer Script -->
   <script src="footer.js" defer></script>
-
-  <!-- Data Script -->
-  <script src="vendor/xlsx.full.min.js"></script>
-  <script>
-    if (typeof XLSX === "undefined") {
-      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"><\/script>');
-    }
-  </script>
 
   <!-- Audio Engine & iOS Safari Unlocker -->
   <script src="audio-engine.js"></script>

@@ -1,9 +1,11 @@
 /**
  * =========================================================
- * LINGUAPATH - AUTHENTICATION, MEMBERSHIP & PROGRESS CLIENT
- * Pure Node/Express REST client (no Firebase SDK).
- * Supports both local/same-origin preview and GitHub Pages
- * connected to an external HTTPS Node server via LinguaBackend.
+ * LINGUAPATH - STATIC EXCEL-BACKED AUTHENTICATION & CMS CLIENT
+ * Reads data/users.xlsx directly in the browser using SheetJS,
+ * compares salted SHA-256 hashes or plain-text Excel edits,
+ * overlays local browser registrations/progress, and lets the
+ * Admin export/import updated users.xlsx workbooks with zero
+ * Node server or Firebase dependency.
  * =========================================================
  */
 
@@ -114,6 +116,14 @@ export interface SiteConfig {
   updatedAt?: unknown;
 }
 
+export interface ExcelSyncSummary {
+  baseUsersCount: number;
+  overlayDeltaCount: number;
+  totalMergedUsers: number;
+  workbookLoaded: boolean;
+  lastLoadedAt: string;
+}
+
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
   configId: 'homepage',
   heroEyebrow: 'Learn Chinese Step by Step',
@@ -195,10 +205,51 @@ export const MEMBERSHIP_PLANS = {
   }
 };
 
-const AUTH_TOKEN_STORAGE_KEY = 'linguapath_auth_token';
-const LOCAL_STORE_STORAGE_KEY = 'linguapath_local_auth_store_v1';
-const LOCAL_SESSION_STORAGE_KEY = 'linguapath_local_session_uid';
+const USERS_EXCEL_PATH = 'data/users.xlsx';
+const OVERLAY_STORAGE_KEY = 'linguapath_excel_overlay_v1';
+const LEGACY_LOCAL_STORE_KEY = 'linguapath_local_auth_store_v1';
+const SESSION_UID_STORAGE_KEY = 'linguapath_local_session_uid';
 const ADMIN_EMAIL = 'syndkyaw@gmail.com';
+
+// --- SheetJS Typings ---
+interface XlsxModuleLike {
+  read: (data: ArrayBuffer | Uint8Array, opts?: { type: string }) => {
+    SheetNames: string[];
+    Sheets: Record<string, unknown>;
+  };
+  utils: {
+    sheet_to_json: <T = Record<string, unknown>>(sheet: unknown, opts?: { defval?: unknown }) => T[];
+    json_to_sheet: (rows: unknown[], opts?: { header?: string[] }) => unknown;
+    aoa_to_sheet: (rows: unknown[][]) => unknown;
+    book_new: () => { SheetNames: string[]; Sheets: Record<string, unknown> };
+    book_append_sheet: (wb: unknown, sheet: unknown, name: string) => void;
+  };
+  writeFile: (wb: unknown, filename: string) => void;
+}
+
+function getXlsxGlobal(): XlsxModuleLike | null {
+  return (window as unknown as { XLSX?: XlsxModuleLike }).XLSX || null;
+}
+
+let xlsxLoadPromise: Promise<XlsxModuleLike | null> | null = null;
+function ensureXlsxLoaded(): Promise<XlsxModuleLike | null> {
+  const existing = getXlsxGlobal();
+  if (existing) return Promise.resolve(existing);
+  if (xlsxLoadPromise) return xlsxLoadPromise;
+  xlsxLoadPromise = new Promise((resolve) => {
+    try {
+      const script = document.createElement('script');
+      script.src = 'vendor/xlsx.full.min.js';
+      script.async = true;
+      script.onload = () => resolve(getXlsxGlobal());
+      script.onerror = () => resolve(getXlsxGlobal());
+      document.head.appendChild(script);
+    } catch {
+      resolve(null);
+    }
+  });
+  return xlsxLoadPromise;
+}
 
 // --- Pure Utility Functions ---
 
@@ -222,105 +273,6 @@ function sanitizeDocId(raw: string): string {
   return cleaned.slice(0, 128) || 'item-' + Date.now();
 }
 
-function resolveBackendApiUrl(path: string): string {
-  const resolver = (window as unknown as { LinguaBackend?: { apiUrl?: (p: string) => string } }).LinguaBackend;
-  return resolver && typeof resolver.apiUrl === 'function' ? resolver.apiUrl(path) : path;
-}
-
-function hasBackendAvailable(): boolean {
-  const resolver = (window as unknown as { LinguaBackend?: { hasBackend?: () => boolean } }).LinguaBackend;
-  return resolver && typeof resolver.hasBackend === 'function' ? resolver.hasBackend() : true;
-}
-
-function getStoredToken(): string | null {
-  try {
-    const val = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-    return val ? val.trim() : null;
-  } catch {
-    return null;
-  }
-}
-
-function setStoredToken(token: string | null): void {
-  try {
-    if (token) {
-      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
-    } else {
-      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    }
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function getLocalSessionUid(): string | null {
-  try {
-    const val = localStorage.getItem(LOCAL_SESSION_STORAGE_KEY);
-    return val ? val.trim() : null;
-  } catch {
-    return null;
-  }
-}
-
-function setLocalSessionUid(uid: string | null): void {
-  try {
-    if (uid) {
-      localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, uid);
-    } else {
-      localStorage.removeItem(LOCAL_SESSION_STORAGE_KEY);
-    }
-  } catch {
-    // ignore storage errors
-  }
-}
-
-interface LocalStoredUser {
-  profile: UserProfile;
-  salt: string;
-  passwordHash: string;
-}
-
-interface LocalAuthStore {
-  users: Record<string, LocalStoredUser>;
-  requests: SubscriptionRequest[];
-  progress: Record<string, UserProgress>;
-  lessonCatalog: Record<string, LessonCatalogItem>;
-  siteConfig?: Partial<SiteConfig>;
-}
-
-function readLocalStore(): LocalAuthStore {
-  const empty: LocalAuthStore = {
-    users: {},
-    requests: [],
-    progress: {},
-    lessonCatalog: {}
-  };
-  try {
-    const raw = localStorage.getItem(LOCAL_STORE_STORAGE_KEY);
-    if (!raw) return empty;
-    const parsed = JSON.parse(raw) as Partial<LocalAuthStore>;
-    return {
-      users: parsed?.users && typeof parsed.users === 'object' ? parsed.users : {},
-      requests: Array.isArray(parsed?.requests) ? parsed.requests : [],
-      progress: parsed?.progress && typeof parsed.progress === 'object' ? parsed.progress : {},
-      lessonCatalog:
-        parsed?.lessonCatalog && typeof parsed.lessonCatalog === 'object' ? parsed.lessonCatalog : {},
-      siteConfig:
-        parsed?.siteConfig && typeof parsed.siteConfig === 'object' ? parsed.siteConfig : undefined
-    };
-  } catch {
-    return empty;
-  }
-}
-
-function writeLocalStore(store: LocalAuthStore): void {
-  try {
-    localStorage.setItem(LOCAL_STORE_STORAGE_KEY, JSON.stringify(store));
-  } catch {
-    // ignore storage quota errors
-  }
-}
-
 function generateRandomHex(bytes = 16): string {
   try {
     if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
@@ -338,8 +290,88 @@ function generateRandomHex(bytes = 16): string {
   return out;
 }
 
-async function hashLocalPassword(password: string, salt: string): Promise<string> {
-  const input = `${salt}:${password}`;
+// Standard pure-JS SHA-256 fallback (for environments without crypto.subtle)
+function sha256HexSync(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  const K = new Uint32Array([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ]);
+  let h0 = 0x6a09e667;
+  let h1 = 0xbb67ae85;
+  let h2 = 0x3c6ef372;
+  let h3 = 0xa54ff53a;
+  let h4 = 0x510e527f;
+  let h5 = 0x9b05688c;
+  let h6 = 0x1f83d9ab;
+  let h7 = 0x5be0cd19;
+
+  const bitLen = bytes.length * 8;
+  const paddedLen = Math.ceil((bytes.length + 9) / 64) * 64;
+  const padded = new Uint8Array(paddedLen);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const view = new DataView(padded.buffer);
+  view.setUint32(paddedLen - 8, Math.floor(bitLen / 0x100000000), false);
+  view.setUint32(paddedLen - 4, bitLen >>> 0, false);
+
+  const w = new Uint32Array(64);
+  const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n));
+
+  for (let offset = 0; offset < paddedLen; offset += 64) {
+    for (let i = 0; i < 16; i++) {
+      w[i] = view.getUint32(offset + i * 4, false);
+    }
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+    let a = h0;
+    let b = h1;
+    let c = h2;
+    let d = h3;
+    let e = h4;
+    let f = h5;
+    let g = h6;
+    let h = h7;
+
+    for (let i = 0; i < 64; i++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const temp1 = (h + S1 + ch + K[i] + w[i]) >>> 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (S0 + maj) >>> 0;
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temp1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) >>> 0;
+    }
+    h0 = (h0 + a) >>> 0;
+    h1 = (h1 + b) >>> 0;
+    h2 = (h2 + c) >>> 0;
+    h3 = (h3 + d) >>> 0;
+    h4 = (h4 + e) >>> 0;
+    h5 = (h5 + f) >>> 0;
+    h6 = (h6 + g) >>> 0;
+    h7 = (h7 + h) >>> 0;
+  }
+
+  return [h0, h1, h2, h3, h4, h5, h6, h7].map((n) => n.toString(16).padStart(8, '0')).join('');
+}
+
+async function computeSha256Hex(input: string): Promise<string> {
   try {
     if (window.crypto?.subtle && typeof TextEncoder !== 'undefined') {
       const data = new TextEncoder().encode(input);
@@ -349,55 +381,489 @@ async function hashLocalPassword(password: string, salt: string): Promise<string
   } catch {
     // fallback below
   }
-  // Deterministic fallback hash if crypto.subtle is unavailable
-  let h1 = 0x811c9dc5;
-  let h2 = 0x9e3779b9;
-  for (let i = 0; i < input.length; i++) {
-    const ch = input.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 0x01000193) >>> 0;
-    h2 = Math.imul(h2 ^ (ch + i), 0x85ebca6b) >>> 0;
-  }
-  return `${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
+  return sha256HexSync(input);
 }
 
-function isLocalAdminClaimed(store: LocalAuthStore): boolean {
-  return Object.values(store.users).some(
+async function createSaltedPasswordHash(password: string): Promise<string> {
+  const salt = generateRandomHex(16);
+  const hex = await computeSha256Hex(`${salt}:${password}`);
+  return `sha256$${salt}$${hex}`;
+}
+
+async function verifyPasswordCredential(candidatePassword: string, storedCredential: string): Promise<boolean> {
+  const raw = String(storedCredential ?? '');
+  if (!raw) return false;
+  const match = raw.match(/^sha256\$([^$]+)\$([a-f0-9]{64})$/i);
+  if (match) {
+    const [, salt, expectedHex] = match;
+    const computedHex = await computeSha256Hex(`${salt}:${candidatePassword}`);
+    return computedHex.toLowerCase() === expectedHex.toLowerCase();
+  }
+  // Support plain-text edits made directly in Excel (users.xlsx)
+  return candidatePassword === raw;
+}
+
+function normalizePhoneCompare(raw?: unknown): string {
+  return String(raw ?? '')
+    .trim()
+    .replace(/[\s\-().+]+/g, '');
+}
+
+function canonicalPhoneVariants(raw?: unknown): string[] {
+  const digits = String(raw ?? '').replace(/\D+/g, '');
+  if (!digits) return [];
+  const variants = new Set<string>([digits]);
+  if (digits.startsWith('950') && digits.length >= 10) {
+    const local = '0' + digits.slice(3);
+    variants.add(local);
+    variants.add(local.slice(1));
+  } else if (digits.startsWith('95') && digits.length >= 10) {
+    const local = '0' + digits.slice(2);
+    variants.add(local);
+    variants.add(digits.slice(2));
+  } else if (digits.startsWith('0') && digits.length >= 8) {
+    variants.add(digits.slice(1));
+    variants.add('95' + digits.slice(1));
+  }
+  return Array.from(variants);
+}
+
+function phonesMatch(a?: unknown, b?: unknown): boolean {
+  const normA = normalizePhoneCompare(a);
+  const normB = normalizePhoneCompare(b);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+  const varsA = canonicalPhoneVariants(a);
+  const varsB = new Set(canonicalPhoneVariants(b));
+  return varsA.some((v) => varsB.has(v));
+}
+
+function normalizeExcelDob(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === '') return '';
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 1000 && raw < 100000) {
+    const ms = Math.round((raw - 25569) * 86400 * 1000);
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toISOString().slice(0, 10);
+    }
+  }
+  const str = String(raw).trim().replace(/\//g, '-');
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+  return str.slice(0, 20);
+}
+
+function normalizeBool(raw: unknown, fallback = false): boolean {
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') return raw !== 0;
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (s === 'true' || s === '1' || s === 'yes') return true;
+  if (s === 'false' || s === '0' || s === 'no') return false;
+  return fallback;
+}
+
+function parseCommaList(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return Array.from(new Set(raw.map((x) => String(x || '').trim()).filter(Boolean)));
+  }
+  return Array.from(
+    new Set(
+      String(raw ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function parseIsoTimestamp(val: unknown): number {
+  if (typeof val !== 'string' || !val.trim()) return 0;
+  const ms = Date.parse(val);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+// --- Excel Store & Local Overlay Architecture ---
+
+interface ExcelUserRecord {
+  profile: UserProfile;
+  passwordHash: string;
+}
+
+interface ExcelDataset {
+  users: Record<string, ExcelUserRecord>;
+  requests: Record<string, SubscriptionRequest>;
+  progress: Record<string, UserProgress>;
+  lessonCatalog: Record<string, LessonCatalogItem>;
+  siteConfig?: Partial<SiteConfig>;
+}
+
+const baseWorkbookStore: ExcelDataset & { loaded: boolean; lastLoadedAt: string } = {
+  users: {},
+  requests: {},
+  progress: {},
+  lessonCatalog: {},
+  loaded: false,
+  lastLoadedAt: ''
+};
+
+function createEmptyDataset(): ExcelDataset {
+  return {
+    users: {},
+    requests: {},
+    progress: {},
+    lessonCatalog: {}
+  };
+}
+
+function readOverlayStore(): ExcelDataset {
+  const empty = createEmptyDataset();
+  try {
+    const raw = localStorage.getItem(OVERLAY_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ExcelDataset>;
+      return {
+        users: parsed?.users && typeof parsed.users === 'object' ? parsed.users : {},
+        requests: parsed?.requests && typeof parsed.requests === 'object' ? parsed.requests : {},
+        progress: parsed?.progress && typeof parsed.progress === 'object' ? parsed.progress : {},
+        lessonCatalog:
+          parsed?.lessonCatalog && typeof parsed.lessonCatalog === 'object' ? parsed.lessonCatalog : {},
+        siteConfig: parsed?.siteConfig && typeof parsed.siteConfig === 'object' ? parsed.siteConfig : undefined
+      };
+    }
+
+    // Smoothly migrate any earlier local-mode browser registrations if present
+    const legacyRaw = localStorage.getItem(LEGACY_LOCAL_STORE_KEY);
+    if (legacyRaw) {
+      const legacy = JSON.parse(legacyRaw) as {
+        users?: Record<string, { profile: UserProfile; salt?: string; passwordHash?: string }>;
+        requests?: SubscriptionRequest[];
+        progress?: Record<string, UserProgress>;
+        lessonCatalog?: Record<string, LessonCatalogItem>;
+        siteConfig?: Partial<SiteConfig>;
+      };
+      const migrated: ExcelDataset = createEmptyDataset();
+      if (legacy.users) {
+        for (const [uid, entry] of Object.entries(legacy.users)) {
+          if (entry?.profile?.email) {
+            const formattedHash =
+              entry.salt && entry.passwordHash && !String(entry.passwordHash).startsWith('sha256$')
+                ? `sha256$${entry.salt}$${entry.passwordHash}`
+                : String(entry.passwordHash || '');
+            migrated.users[uid] = { profile: entry.profile, passwordHash: formattedHash };
+          }
+        }
+      }
+      if (Array.isArray(legacy.requests)) {
+        for (const req of legacy.requests) {
+          if (req?.requestId) migrated.requests[req.requestId] = req;
+        }
+      }
+      if (legacy.progress) migrated.progress = legacy.progress;
+      if (legacy.lessonCatalog) migrated.lessonCatalog = legacy.lessonCatalog;
+      if (legacy.siteConfig) migrated.siteConfig = legacy.siteConfig;
+      return migrated;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return empty;
+}
+
+function writeOverlayStore(overlay: ExcelDataset): void {
+  try {
+    localStorage.setItem(OVERLAY_STORAGE_KEY, JSON.stringify(overlay));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getSessionUid(): string | null {
+  try {
+    const val = localStorage.getItem(SESSION_UID_STORAGE_KEY);
+    return val ? val.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function setSessionUid(uid: string | null): void {
+  try {
+    if (uid) {
+      localStorage.setItem(SESSION_UID_STORAGE_KEY, uid);
+    } else {
+      localStorage.removeItem(SESSION_UID_STORAGE_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function parseWorkbookToDataset(wb: { SheetNames: string[]; Sheets: Record<string, unknown> }, xlsx: XlsxModuleLike): ExcelDataset {
+  const dataset = createEmptyDataset();
+  const findSheet = (name: string) => {
+    const matchName = wb.SheetNames.find((n) => n.toLowerCase() === name.toLowerCase());
+    return matchName ? wb.Sheets[matchName] : null;
+  };
+
+  // 1. Users Sheet
+  const usersSheet = findSheet('Users') || (wb.SheetNames.length ? wb.Sheets[wb.SheetNames[0]] : null);
+  if (usersSheet) {
+    const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(usersSheet, { defval: '' });
+    for (const row of rows) {
+      const email = String(row.email || row.Email || '').trim().toLowerCase().slice(0, 160);
+      if (!email) continue;
+      const uid = String(row.uid || row.UID || '').trim() || `usr_${email.replace(/[^a-z0-9]/g, '_')}`;
+      const rawPwHash = String(row.passwordHash || '').trim();
+      const rawPlainPw = String(row.password || row.Password || '').trim();
+      // If Admin filled a plain `password` column in Excel, prioritize it; otherwise use `passwordHash`
+      const effectiveCredential = rawPlainPw || rawPwHash;
+
+      const rawRole = String(row.role || 'student').trim().toLowerCase();
+      const role: 'admin' | 'student' = rawRole === 'admin' ? 'admin' : 'student';
+
+      const rawStatus = String(row.membershipStatus || 'free').trim().toLowerCase();
+      const membershipStatus: UserProfile['membershipStatus'] =
+        rawStatus === 'active' || rawStatus === 'pending' || rawStatus === 'expired' ? rawStatus : 'free';
+
+      const rawPlan = String(row.membershipPlan || 'none').trim().toLowerCase();
+      const membershipPlan: UserProfile['membershipPlan'] =
+        rawPlan === 'monthly' || rawPlan === 'annual' || rawPlan === 'per_lesson' ? rawPlan : 'none';
+
+      const profile: UserProfile = {
+        uid,
+        username: String(row.username || row.name || email.split('@')[0] || 'Learner').trim().slice(0, 60),
+        email,
+        phoneNumber: String(row.phoneNumber || row.phone || '').trim().slice(0, 32),
+        dob: normalizeExcelDob(row.dob),
+        role,
+        membershipStatus,
+        membershipPlan,
+        membershipExpiresAt: normalizeExcelDob(row.membershipExpiresAt),
+        subscribedLessonIds: parseCommaList(row.subscribedLessonIds),
+        linkedProviders: ['password'],
+        mustChangePassword: normalizeBool(row.mustChangePassword, false),
+        createdAt: String(row.createdAt || '').trim(),
+        updatedAt: String(row.updatedAt || '').trim()
+      };
+
+      dataset.users[uid] = { profile, passwordHash: effectiveCredential };
+    }
+  }
+
+  // 2. Requests Sheet
+  const reqSheet = findSheet('Requests');
+  if (reqSheet) {
+    const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(reqSheet, { defval: '' });
+    for (const row of rows) {
+      const requestId = String(row.requestId || '').trim();
+      const userId = String(row.userId || '').trim();
+      if (!requestId || !userId) continue;
+      const planRaw = String(row.planType || 'monthly').trim().toLowerCase();
+      const planType: SubscriptionRequest['planType'] =
+        planRaw === 'annual' || planRaw === 'per_lesson' ? planRaw : 'monthly';
+      const statusRaw = String(row.status || 'pending').trim().toLowerCase();
+      const status: SubscriptionRequest['status'] =
+        statusRaw === 'approved' || statusRaw === 'rejected' ? statusRaw : 'pending';
+      dataset.requests[requestId] = {
+        requestId,
+        userId,
+        username: String(row.username || '').trim(),
+        userEmail: String(row.userEmail || '').trim().toLowerCase(),
+        userPhone: String(row.userPhone || '').trim(),
+        planType,
+        lessonId: String(row.lessonId || '').trim(),
+        lessonTitle: String(row.lessonTitle || '').trim(),
+        amountLabel: String(row.amountLabel || '').trim(),
+        contactChannel: String(row.contactChannel || '').trim().toLowerCase() === 'email' ? 'email' : 'viber',
+        contactHandle: String(row.contactHandle || '').trim(),
+        note: String(row.note || '').trim(),
+        status,
+        adminNote: String(row.adminNote || '').trim(),
+        createdAt: String(row.createdAt || '').trim(),
+        updatedAt: String(row.updatedAt || '').trim()
+      };
+    }
+  }
+
+  // 3. Progress Sheet
+  const progSheet = findSheet('Progress');
+  if (progSheet) {
+    const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(progSheet, { defval: '' });
+    for (const row of rows) {
+      const uid = String(row.uid || '').trim();
+      if (!uid) continue;
+      dataset.progress[uid] = {
+        uid,
+        currentStreak: Number(row.currentStreak) || 0,
+        bestStreak: Number(row.bestStreak) || 0,
+        lastCompletedDate: normalizeExcelDob(row.lastCompletedDate),
+        streakDates: parseCommaList(row.streakDates),
+        completedLessonIds: parseCommaList(row.completedLessonIds),
+        reminderEnabled: normalizeBool(row.reminderEnabled, true),
+        reminderTime: sanitizeTimeStr(String(row.reminderTime || '18:00')),
+        lastNotifiedDate: normalizeExcelDob(row.lastNotifiedDate),
+        updatedAt: String(row.updatedAt || '').trim()
+      };
+    }
+  }
+
+  // 4. Catalog Sheet
+  const catSheet = findSheet('Catalog');
+  if (catSheet) {
+    const rows = xlsx.utils.sheet_to_json<Record<string, unknown>>(catSheet, { defval: '' });
+    for (const row of rows) {
+      const lessonId = sanitizeDocId(String(row.lessonId || ''));
+      if (!row.lessonId) continue;
+      dataset.lessonCatalog[lessonId] = {
+        lessonId,
+        title: String(row.title || lessonId).trim(),
+        audience: String(row.audience || '').trim().toLowerCase() === 'kids' ? 'Kids' : 'Adult',
+        accessType: String(row.accessType || '').trim().toLowerCase() === 'paid' ? 'paid' : 'free',
+        price: Math.max(0, Number(row.price) || 0),
+        updatedBy: String(row.updatedBy || '').trim(),
+        updatedAt: String(row.updatedAt || '').trim()
+      };
+    }
+  }
+
+  return dataset;
+}
+
+async function loadBaseWorkbookFromExcel(forceReload = false): Promise<void> {
+  if (baseWorkbookStore.loaded && !forceReload) return;
+  try {
+    const xlsx = await ensureXlsxLoaded();
+    if (!xlsx) return;
+    const res = await fetch(`${USERS_EXCEL_PATH}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const buf = await res.arrayBuffer();
+    const wb = xlsx.read(buf, { type: 'array' });
+    const parsed = parseWorkbookToDataset(wb, xlsx);
+    baseWorkbookStore.users = parsed.users;
+    baseWorkbookStore.requests = parsed.requests;
+    baseWorkbookStore.progress = parsed.progress;
+    baseWorkbookStore.lessonCatalog = parsed.lessonCatalog;
+    baseWorkbookStore.loaded = true;
+    baseWorkbookStore.lastLoadedAt = new Date().toISOString();
+  } catch {
+    // Keep any already loaded / overlay state cleanly
+  }
+}
+
+function getMergedDataset(): ExcelDataset {
+  const overlay = readOverlayStore();
+  const merged = createEmptyDataset();
+
+  // Merge Users (newer timestamp wins; ties favor Excel unless overlay was created by local registration)
+  for (const [uid, rec] of Object.entries(baseWorkbookStore.users)) {
+    merged.users[uid] = { profile: { ...rec.profile }, passwordHash: rec.passwordHash };
+  }
+  for (const [uid, ovRec] of Object.entries(overlay.users)) {
+    if (!ovRec?.profile?.email) continue;
+    const existingByUid = merged.users[uid];
+    const existingByEmailKey = Object.keys(merged.users).find(
+      (k) => merged.users[k].profile.email.toLowerCase() === ovRec.profile.email.toLowerCase()
+    );
+    const targetKey = existingByUid ? uid : existingByEmailKey || uid;
+    const baseTarget = merged.users[targetKey];
+    if (!baseTarget) {
+      merged.users[targetKey] = { profile: { ...ovRec.profile }, passwordHash: ovRec.passwordHash };
+    } else {
+      const ovTime = parseIsoTimestamp(ovRec.profile.updatedAt);
+      const baseTime = parseIsoTimestamp(baseTarget.profile.updatedAt);
+      if (ovTime >= baseTime) {
+        merged.users[targetKey] = { profile: { ...ovRec.profile }, passwordHash: ovRec.passwordHash };
+      }
+    }
+  }
+
+  // Merge Requests
+  for (const [id, r] of Object.entries(baseWorkbookStore.requests)) {
+    merged.requests[id] = { ...r };
+  }
+  for (const [id, r] of Object.entries(overlay.requests)) {
+    const baseR = merged.requests[id];
+    if (!baseR || parseIsoTimestamp(r.updatedAt) >= parseIsoTimestamp(baseR.updatedAt)) {
+      merged.requests[id] = { ...r };
+    }
+  }
+
+  // Merge Progress
+  for (const [uid, p] of Object.entries(baseWorkbookStore.progress)) {
+    merged.progress[uid] = { ...p };
+  }
+  for (const [uid, p] of Object.entries(overlay.progress)) {
+    const baseP = merged.progress[uid];
+    if (!baseP || parseIsoTimestamp(p.updatedAt) >= parseIsoTimestamp(baseP.updatedAt)) {
+      merged.progress[uid] = { ...p };
+    }
+  }
+
+  // Merge Catalog
+  for (const [id, c] of Object.entries(baseWorkbookStore.lessonCatalog)) {
+    merged.lessonCatalog[id] = { ...c };
+  }
+  for (const [id, c] of Object.entries(overlay.lessonCatalog)) {
+    const baseC = merged.lessonCatalog[id];
+    if (!baseC || parseIsoTimestamp(c.updatedAt) >= parseIsoTimestamp(baseC.updatedAt)) {
+      merged.lessonCatalog[id] = { ...c };
+    }
+  }
+
+  merged.siteConfig = overlay.siteConfig;
+  return merged;
+}
+
+function getExcelSyncSummary(): ExcelSyncSummary {
+  const overlay = readOverlayStore();
+  const merged = getMergedDataset();
+  const baseCount = Object.keys(baseWorkbookStore.users).length;
+  let delta = 0;
+  for (const [uid, ovRec] of Object.entries(overlay.users)) {
+    const baseRec =
+      baseWorkbookStore.users[uid] ||
+      Object.values(baseWorkbookStore.users).find(
+        (b) => b.profile.email.toLowerCase() === ovRec.profile.email.toLowerCase()
+      );
+    if (!baseRec) {
+      delta++;
+    } else if (parseIsoTimestamp(ovRec.profile.updatedAt) > parseIsoTimestamp(baseRec.profile.updatedAt)) {
+      delta++;
+    }
+  }
+  return {
+    baseUsersCount: baseCount,
+    overlayDeltaCount: delta,
+    totalMergedUsers: Object.keys(merged.users).length,
+    workbookLoaded: baseWorkbookStore.loaded,
+    lastLoadedAt: baseWorkbookStore.lastLoadedAt
+  };
+}
+
+function isAdminClaimedInDataset(dataset: ExcelDataset): boolean {
+  return Object.values(dataset.users).some(
     (entry) =>
       entry?.profile?.role === 'admin' ||
       String(entry?.profile?.email || '').trim().toLowerCase() === ADMIN_EMAIL
   );
 }
 
-function generateLocalTempPassword(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  let pw = '';
-  try {
-    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
-      const buf = new Uint8Array(12);
-      window.crypto.getRandomValues(buf);
-      for (let i = 0; i < buf.length; i++) {
-        pw += alphabet[buf[i] % alphabet.length];
-      }
-      return pw;
-    }
-  } catch {
-    // fallback below
-  }
-  for (let i = 0; i < 12; i++) {
-    pw += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return pw;
+function sortedRequestsList(dataset: ExcelDataset): SubscriptionRequest[] {
+  return Object.values(dataset.requests).sort(
+    (a, b) => parseIsoTimestamp(b.createdAt) - parseIsoTimestamp(a.createdAt)
+  );
 }
 
-function buildLocalSessionPayload(store: LocalAuthStore, uid: string): Record<string, unknown> | null {
-  const entry = store.users[uid];
+function buildSessionPayload(dataset: ExcelDataset, uid: string): Record<string, unknown> | null {
+  const entry = dataset.users[uid];
   if (!entry || !entry.profile) return null;
   const profile = { ...entry.profile };
   const isAdm = profile.role === 'admin';
-  const myRequests = store.requests.filter((r) => r.userId === uid);
-  const userProgress = store.progress[uid] || createDefaultUserProgress(uid);
-  const allUsers = isAdm ? Object.values(store.users).map((u) => ({ ...u.profile })) : [];
-  const allRequests = isAdm ? [...store.requests] : [];
+  const allReqs = sortedRequestsList(dataset);
+  const myRequests = allReqs.filter((r) => r.userId === uid);
+  const userProgress = dataset.progress[uid] || createDefaultUserProgress(uid);
+  const allUsers = isAdm ? Object.values(dataset.users).map((u) => ({ ...u.profile })) : [];
 
   return {
     user: {
@@ -410,92 +876,23 @@ function buildLocalSessionPayload(store: LocalAuthStore, uid: string): Record<st
     profile,
     userProgress,
     myRequests,
-    lessonCatalog: store.lessonCatalog || {},
-    adminClaimed: isLocalAdminClaimed(store),
-    smtpConfigured: false,
+    lessonCatalog: dataset.lessonCatalog || {},
+    adminClaimed: isAdminClaimedInDataset(dataset),
     allUsers,
-    allRequests
+    allRequests: isAdm ? allReqs : []
   };
-}
-
-type CodedAuthError = Error & { code?: string; status?: number };
-
-async function apiRequest<T = Record<string, unknown>>(
-  path: string,
-  options: { method?: string; body?: unknown; requireAuth?: boolean } = {}
-): Promise<T> {
-  if (!hasBackendAvailable()) {
-    const err: CodedAuthError = new Error(
-      'Node backend URL is not configured for this static site. Open Admin Portal -> Hosted Node Backend Connection or set DEFAULT_PRODUCTION_BACKEND_URL in backend-config.js.'
-    );
-    err.code = 'no-backend';
-    throw err;
-  }
-
-  const token = getStoredToken();
-  if (options.requireAuth && !token) {
-    const err: CodedAuthError = new Error('Please sign in first.');
-    err.code = 'unauthenticated';
-    throw err;
-  }
-
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  let bodyStr: string | undefined;
-  if (options.body !== undefined) {
-    headers['Content-Type'] = 'application/json';
-    bodyStr = JSON.stringify(options.body);
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(resolveBackendApiUrl(path), {
-      method: options.method || 'GET',
-      mode: 'cors',
-      cache: 'no-store',
-      headers,
-      body: bodyStr
-    });
-  } catch {
-    const netErr: CodedAuthError = new Error(
-      'Could not reach the LinguaPath server. Check your internet connection or hosted Node backend URL.'
-    );
-    netErr.code = 'network-error';
-    throw netErr;
-  }
-
-  let data: Record<string, unknown> = {};
-  try {
-    data = (await res.json()) as Record<string, unknown>;
-  } catch {
-    data = {};
-  }
-
-  if (!res.ok || data.success === false) {
-    const err: CodedAuthError = new Error(
-      typeof data.error === 'string' && data.error ? data.error : `Request failed (HTTP ${res.status}).`
-    );
-    if (typeof data.code === 'string') err.code = data.code;
-    err.status = res.status;
-    throw err;
-  }
-
-  return data as T;
 }
 
 // --- Client Reactive Store ---
 
 export interface AuthState {
   ready: boolean;
-  isLocalMode: boolean;
   user: AuthUserSummary | null;
   profile: UserProfile | null;
   userProgress: UserProgress | null;
   isAdmin: boolean;
   adminClaimed: boolean;
-  smtpConfigured: boolean;
+  excelSummary: ExcelSyncSummary;
   myRequests: SubscriptionRequest[];
   allRequests: SubscriptionRequest[];
   allUsers: UserProfile[];
@@ -506,13 +903,18 @@ export interface AuthState {
 
 const state: AuthState = {
   ready: false,
-  isLocalMode: !hasBackendAvailable(),
   user: null,
   profile: null,
   userProgress: null,
   isAdmin: false,
   adminClaimed: false,
-  smtpConfigured: false,
+  excelSummary: {
+    baseUsersCount: 0,
+    overlayDeltaCount: 0,
+    totalMergedUsers: 0,
+    workbookLoaded: false,
+    lastLoadedAt: ''
+  },
   myRequests: [],
   allRequests: [],
   allUsers: [],
@@ -527,7 +929,12 @@ function getComputedAdmin(): boolean {
   return Boolean(state.user?.role === 'admin' || state.profile?.role === 'admin');
 }
 
+function refreshExcelSummaryState(): void {
+  state.excelSummary = getExcelSyncSummary();
+}
+
 function emitState(): void {
+  refreshExcelSummaryState();
   const snapshot: AuthState = {
     ...state,
     isAdmin: getComputedAdmin()
@@ -539,11 +946,15 @@ function emitState(): void {
       console.error('LinguaAuth subscriber error:', err);
     }
   }
-  window.dispatchEvent(new CustomEvent('lingua-auth-change', { detail: snapshot }));
+  if (typeof CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('lingua-auth-change', { detail: snapshot }));
+  }
 }
 
 function emitSiteConfigChange(): void {
-  window.dispatchEvent(new CustomEvent('lingua-site-config-change', { detail: state.siteConfig }));
+  if (typeof CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('lingua-site-config-change', { detail: state.siteConfig }));
+  }
 }
 
 function normalizeStrList(raw: unknown, maxItems: number, maxLen: number, fallback: string[]): string[] {
@@ -612,9 +1023,6 @@ function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteC
 }
 
 function applySessionPayload(data: Record<string, unknown>): void {
-  if (typeof data.token === 'string' && data.token) {
-    setStoredToken(data.token);
-  }
   if (data.user && typeof data.user === 'object') {
     state.user = data.user as AuthUserSummary;
   }
@@ -638,9 +1046,6 @@ function applySessionPayload(data: Record<string, unknown>): void {
   if (typeof data.adminClaimed === 'boolean') {
     state.adminClaimed = data.adminClaimed;
   }
-  if (typeof data.smtpConfigured === 'boolean') {
-    state.smtpConfigured = data.smtpConfigured;
-  }
   if (state.user?.role === 'admin' || state.profile?.role === 'admin') {
     if (Array.isArray(data.allRequests)) {
       state.allRequests = data.allRequests as SubscriptionRequest[];
@@ -657,8 +1062,7 @@ function applySessionPayload(data: Record<string, unknown>): void {
 }
 
 function clearAuthSession(): void {
-  setStoredToken(null);
-  setLocalSessionUid(null);
+  setSessionUid(null);
   state.user = null;
   state.profile = null;
   state.userProgress = null;
@@ -668,118 +1072,47 @@ function clearAuthSession(): void {
   state.allUsers = [];
 }
 
-async function hydratePublicAndSession(): Promise<void> {
-  const backendActive = hasBackendAvailable();
-  state.isLocalMode = !backendActive;
-
-  // 1. Hydrate siteConfig (from backend or static fallback data/site-config.json)
-  if (backendActive) {
-    try {
-      const cfgRes = await fetch(resolveBackendApiUrl('/api/site-config?t=' + Date.now()), {
-        mode: 'cors',
-        cache: 'no-store'
-      });
-      if (cfgRes.ok) {
-        const cfgJson = (await cfgRes.json()) as { config?: Partial<SiteConfig> };
-        if (cfgJson && cfgJson.config) {
-          state.siteConfig = normalizeSiteConfig(cfgJson.config);
-          emitSiteConfigChange();
-        }
-      }
-    } catch {
-      // Fallback below
-    }
-  } else {
-    let baseCfg: Partial<SiteConfig> = {};
-    try {
-      const staticCfg = await fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' });
-      if (staticCfg.ok) {
-        baseCfg = (await staticCfg.json()) as Partial<SiteConfig>;
-      }
-    } catch {
-      // keep defaults
-    }
-    const localStore = readLocalStore();
-    state.siteConfig = normalizeSiteConfig(
-      localStore.siteConfig ? { ...baseCfg, ...localStore.siteConfig } : baseCfg
-    );
-    emitSiteConfigChange();
-  }
-
-  // 2. Hydrate public catalog, auth status, and current user session
-  if (backendActive) {
-    const token = getStoredToken();
-    try {
-      const [statusJson, catalogJson] = await Promise.all([
-        fetch(resolveBackendApiUrl('/api/auth/status?t=' + Date.now()), { mode: 'cors', cache: 'no-store' })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
-        fetch(resolveBackendApiUrl('/api/catalog?t=' + Date.now()), { mode: 'cors', cache: 'no-store' })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null)
-      ]);
-      if (statusJson) {
-        if (typeof statusJson.adminClaimed === 'boolean') state.adminClaimed = statusJson.adminClaimed;
-        if (typeof statusJson.smtpConfigured === 'boolean') state.smtpConfigured = statusJson.smtpConfigured;
-      }
-      if (catalogJson && catalogJson.lessonCatalog && typeof catalogJson.lessonCatalog === 'object') {
-        state.lessonCatalog = catalogJson.lessonCatalog as Record<string, LessonCatalogItem>;
-      }
-    } catch {
-      // ignore
-    }
-
-    if (token) {
-      try {
-        const me = await apiRequest<Record<string, unknown>>('/api/auth/me?t=' + Date.now(), { requireAuth: true });
-        applySessionPayload(me);
-      } catch (err) {
-        const coded = err as CodedAuthError;
-        if (coded.status === 401 || coded.code === 'unauthenticated') {
-          clearAuthSession();
-        } else {
-          state.lastError = coded.message;
-        }
-      }
-    } else {
-      // Clear any browser-local-only session when switching onto a live Node backend
-      state.user = null;
-      state.profile = null;
-      state.userProgress = null;
-      state.isAdmin = false;
-      state.myRequests = [];
-      state.allRequests = [];
-      state.allUsers = [];
-    }
-  } else {
-    const localStore = readLocalStore();
-    state.lessonCatalog = localStore.lessonCatalog || {};
-    state.adminClaimed = isLocalAdminClaimed(localStore);
-    state.smtpConfigured = false;
-    const localUid = getLocalSessionUid();
-    const payload = localUid ? buildLocalSessionPayload(localStore, localUid) : null;
+function syncMemoryFromDataset(dataset: ExcelDataset, uidOverride?: string | null): void {
+  state.lessonCatalog = dataset.lessonCatalog || {};
+  state.adminClaimed = isAdminClaimedInDataset(dataset);
+  const uid = uidOverride !== undefined ? uidOverride : getSessionUid();
+  if (uid) {
+    const payload = buildSessionPayload(dataset, uid);
     if (payload) {
       applySessionPayload(payload);
-    } else {
-      setLocalSessionUid(null);
-      state.user = null;
-      state.profile = null;
-      state.userProgress = null;
-      state.isAdmin = false;
-      state.myRequests = [];
-      state.allRequests = [];
-      state.allUsers = [];
+      return;
     }
   }
+  clearAuthSession();
+}
 
+async function hydratePublicAndSession(forceExcelReload = false): Promise<void> {
+  // 1. Load static site-config.json merged with browser site-config edits
+  let baseCfg: Partial<SiteConfig> = {};
+  try {
+    const staticCfg = await fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' });
+    if (staticCfg.ok) {
+      baseCfg = (await staticCfg.json()) as Partial<SiteConfig>;
+    }
+  } catch {
+    // keep defaults
+  }
+
+  // 2. Load data/users.xlsx and merge browser overlay
+  await loadBaseWorkbookFromExcel(forceExcelReload);
+  const dataset = getMergedDataset();
+
+  state.siteConfig = normalizeSiteConfig(
+    dataset.siteConfig ? { ...baseCfg, ...dataset.siteConfig } : baseCfg
+  );
+  emitSiteConfigChange();
+
+  syncMemoryFromDataset(dataset);
   state.ready = true;
   emitState();
 }
 
 hydratePublicAndSession();
-window.addEventListener('linguapath-backend-change', () => {
-  hydratePublicAndSession();
-});
 
 // --- Public Auth, Profile, Subscription & Admin Methods ---
 
@@ -793,74 +1126,58 @@ async function registerWithEmail(params: {
   const cleanUsername = String(params.username || '').trim().slice(0, 60);
   const cleanEmail = String(params.email || '').trim().toLowerCase().slice(0, 160);
   const cleanPhone = String(params.phoneNumber || '').trim().slice(0, 32);
-  const cleanDob = String(params.dob || '').trim().slice(0, 20);
+  const cleanDob = normalizeExcelDob(params.dob);
   const rawPassword = String(params.password || '');
 
-  if (!hasBackendAvailable()) {
-    if (!cleanUsername || !cleanEmail) {
-      throw new Error('User Name and Email Address are required.');
-    }
-    if (rawPassword.length < 6) {
-      throw new Error('Password must be at least 6 characters long.');
-    }
-    const store = readLocalStore();
-    const existing = Object.values(store.users).find(
-      (u) => String(u?.profile?.email || '').trim().toLowerCase() === cleanEmail
-    );
-    if (existing) {
-      const err: CodedAuthError = new Error('An account with this email address already exists on this browser.');
-      err.code = 'email-exists';
-      throw err;
-    }
-
-    const uid = `lp_${Date.now().toString(36)}_${generateRandomHex(4)}`;
-    const nowIso = new Date().toISOString();
-    const shouldClaimAdmin = cleanEmail === ADMIN_EMAIL && !isLocalAdminClaimed(store);
-    const salt = generateRandomHex(16);
-    const passwordHash = await hashLocalPassword(rawPassword, salt);
-
-    const profile: UserProfile = {
-      uid,
-      username: cleanUsername,
-      email: cleanEmail,
-      phoneNumber: cleanPhone,
-      dob: cleanDob,
-      role: shouldClaimAdmin ? 'admin' : 'student',
-      membershipStatus: shouldClaimAdmin ? 'active' : 'free',
-      membershipPlan: shouldClaimAdmin ? 'annual' : 'none',
-      membershipExpiresAt: '',
-      subscribedLessonIds: [],
-      linkedProviders: ['password'],
-      mustChangePassword: false,
-      createdAt: nowIso,
-      updatedAt: nowIso
-    };
-
-    store.users[uid] = { profile, salt, passwordHash };
-    store.progress[uid] = createDefaultUserProgress(uid);
-    writeLocalStore(store);
-    setLocalSessionUid(uid);
-
-    state.isLocalMode = true;
-    const payload = buildLocalSessionPayload(store, uid);
-    if (payload) applySessionPayload(payload);
-    state.ready = true;
-    emitState();
-    return state.profile as UserProfile;
+  if (!cleanUsername || !cleanEmail) {
+    throw new Error('User Name and Email Address are required.');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    throw new Error('Please enter a valid email address.');
+  }
+  if (rawPassword.length < 6) {
+    throw new Error('Password must be at least 6 characters long.');
   }
 
-  const data = await apiRequest<Record<string, unknown>>('/api/auth/register', {
-    method: 'POST',
-    body: {
-      username: cleanUsername,
-      email: cleanEmail,
-      phoneNumber: cleanPhone,
-      dob: cleanDob,
-      password: rawPassword
-    }
-  });
-  state.isLocalMode = false;
-  applySessionPayload(data);
+  await loadBaseWorkbookFromExcel(false);
+  const merged = getMergedDataset();
+  const duplicate = Object.values(merged.users).find(
+    (u) => u.profile.email.toLowerCase() === cleanEmail
+  );
+  if (duplicate) {
+    throw new Error('An account with this email address already exists. Please sign in instead.');
+  }
+
+  const uid = `usr_${Date.now().toString(36)}_${generateRandomHex(4)}`;
+  const nowIso = new Date().toISOString();
+  const shouldClaimAdmin = cleanEmail === ADMIN_EMAIL && !isAdminClaimedInDataset(merged);
+  const passwordHash = await createSaltedPasswordHash(rawPassword);
+
+  const profile: UserProfile = {
+    uid,
+    username: cleanUsername,
+    email: cleanEmail,
+    phoneNumber: cleanPhone,
+    dob: cleanDob,
+    role: shouldClaimAdmin ? 'admin' : 'student',
+    membershipStatus: shouldClaimAdmin ? 'active' : 'free',
+    membershipPlan: shouldClaimAdmin ? 'annual' : 'none',
+    membershipExpiresAt: '',
+    subscribedLessonIds: [],
+    linkedProviders: ['password'],
+    mustChangePassword: false,
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
+
+  const overlay = readOverlayStore();
+  overlay.users[uid] = { profile, passwordHash };
+  overlay.progress[uid] = createDefaultUserProgress(uid);
+  writeOverlayStore(overlay);
+  setSessionUid(uid);
+
+  const nextDataset = getMergedDataset();
+  syncMemoryFromDataset(nextDataset, uid);
   state.ready = true;
   emitState();
   return state.profile as UserProfile;
@@ -869,132 +1186,130 @@ async function registerWithEmail(params: {
 async function loginWithEmail(email: string, password: string): Promise<AuthUserSummary> {
   const cleanEmail = String(email || '').trim().toLowerCase();
   const rawPassword = String(password || '');
-
-  if (!hasBackendAvailable()) {
-    if (!cleanEmail || !rawPassword) {
-      throw new Error('Please enter both your email and password.');
-    }
-    const store = readLocalStore();
-    const matched = Object.values(store.users).find(
-      (u) => String(u?.profile?.email || '').trim().toLowerCase() === cleanEmail
-    );
-    if (!matched) {
-      const err: CodedAuthError = new Error(
-        cleanEmail === ADMIN_EMAIL && !isLocalAdminClaimed(store)
-          ? 'No account found on this browser for syndkyaw@gmail.com. Click Register to create your admin account here, or connect your Hosted Node Server URL below to sign in to your server account.'
-          : `No account found on this browser for ${cleanEmail}. Click Register to create your account here, or connect your Hosted Node Server URL below to sign in to your server account.`
-      );
-      err.code = 'user-not-found';
-      throw err;
-    }
-
-    const candidateHash = await hashLocalPassword(rawPassword, matched.salt);
-    if (candidateHash !== matched.passwordHash) {
-      const err: CodedAuthError = new Error('Incorrect email or password.');
-      err.code = 'invalid-credentials';
-      throw err;
-    }
-
-    setLocalSessionUid(matched.profile.uid);
-    state.isLocalMode = true;
-    const payload = buildLocalSessionPayload(store, matched.profile.uid);
-    if (payload) applySessionPayload(payload);
-    state.ready = true;
-    emitState();
-    return state.user as AuthUserSummary;
+  if (!cleanEmail || !rawPassword) {
+    throw new Error('Please enter both your email and password.');
   }
 
-  const data = await apiRequest<Record<string, unknown>>('/api/auth/login', {
-    method: 'POST',
-    body: {
-      email: cleanEmail,
-      password: rawPassword
-    }
-  });
-  state.isLocalMode = false;
-  applySessionPayload(data);
+  // Always check fresh data/users.xlsx merged with browser registrations
+  await loadBaseWorkbookFromExcel(true);
+  const dataset = getMergedDataset();
+  const matchedEntry = Object.values(dataset.users).find(
+    (entry) => entry.profile.email.toLowerCase() === cleanEmail
+  );
+  if (!matchedEntry) {
+    throw new Error(`No account found in users.xlsx for ${cleanEmail}. Click Register to create one.`);
+  }
+
+  const valid = await verifyPasswordCredential(rawPassword, matchedEntry.passwordHash);
+  if (!valid) {
+    throw new Error('Incorrect email or password.');
+  }
+
+  const uid = matchedEntry.profile.uid;
+  setSessionUid(uid);
+  syncMemoryFromDataset(dataset, uid);
   state.ready = true;
   emitState();
   return state.user as AuthUserSummary;
 }
 
-async function sendPasswordReset(email: string): Promise<string> {
-  if (!hasBackendAvailable()) {
-    const err: CodedAuthError = new Error(
-      'Automatic password-reset emails require a Hosted Node Server with SMTP. Connect your Hosted Node Server URL below, or register a fresh account on this browser.'
-    );
-    err.code = 'smtp-requires-backend';
-    throw err;
+async function resetPasswordWithVerification(params: {
+  email: string;
+  dob: string;
+  phoneNumber: string;
+  newPassword: string;
+}): Promise<string> {
+  const cleanEmail = String(params.email || '').trim().toLowerCase();
+  const cleanDob = normalizeExcelDob(params.dob);
+  const cleanPhone = normalizePhoneCompare(params.phoneNumber);
+  const newPassword = String(params.newPassword || '');
+
+  if (!cleanEmail || !cleanDob || !cleanPhone) {
+    throw new Error('Please enter your Email, Date of Birth, and Phone / Viber Number to verify your identity.');
   }
-  const data = await apiRequest<{ message?: string }>('/api/auth/forgot-password', {
-    method: 'POST',
-    body: { email: String(email || '').trim() }
+  if (newPassword.length < 6) {
+    throw new Error('New password must be at least 6 characters long.');
+  }
+
+  await loadBaseWorkbookFromExcel(false);
+  const dataset = getMergedDataset();
+  const matchedEntry = Object.values(dataset.users).find(
+    (entry) => entry.profile.email.toLowerCase() === cleanEmail
+  );
+  if (!matchedEntry) {
+    throw new Error(`No account found for ${cleanEmail}.`);
+  }
+
+  const storedDob = normalizeExcelDob(matchedEntry.profile.dob);
+  const storedPhone = normalizePhoneCompare(matchedEntry.profile.phoneNumber);
+  if (!storedDob || !storedPhone) {
+    throw new Error(
+      'This account cannot be self-reset without both Date of Birth and Phone saved. Ask the site Admin to reset your password in Admin Portal or users.xlsx.'
+    );
+  }
+  if (storedDob !== cleanDob || !phonesMatch(matchedEntry.profile.phoneNumber, params.phoneNumber)) {
+    throw new Error('Verification details did not match our records. Check your Date of Birth and Phone Number.');
+  }
+
+  const nextHash = await createSaltedPasswordHash(newPassword);
+  const nowIso = new Date().toISOString();
+  const overlay = readOverlayStore();
+  overlay.users[matchedEntry.profile.uid] = {
+    profile: {
+      ...matchedEntry.profile,
+      mustChangePassword: false,
+      updatedAt: nowIso
+    },
+    passwordHash: nextHash
+  };
+  writeOverlayStore(overlay);
+  emitState();
+  return 'Password reset successfully! Sign in now with your new password.';
+}
+
+async function sendPasswordReset(email: string): Promise<string> {
+  return resetPasswordWithVerification({
+    email,
+    dob: '',
+    phoneNumber: '',
+    newPassword: ''
   });
-  return String(data.message || 'If an account exists for that email, a temporary password has been sent.');
 }
 
 async function changePassword(currentPassword: string, newPassword: string): Promise<UserProfile> {
-  if (!hasBackendAvailable()) {
-    if (!state.user) throw new Error('Please sign in first.');
-    if (!currentPassword || !newPassword || newPassword.length < 6) {
-      throw new Error('Enter your current password and a new password (min. 6 characters).');
-    }
-    const store = readLocalStore();
-    const entry = store.users[state.user.uid];
-    if (!entry) throw new Error('Account record not found on this browser.');
-    const curHash = await hashLocalPassword(currentPassword, entry.salt);
-    if (curHash !== entry.passwordHash) {
-      throw new Error('Current password is incorrect.');
-    }
-    const nextSalt = generateRandomHex(16);
-    entry.salt = nextSalt;
-    entry.passwordHash = await hashLocalPassword(newPassword, nextSalt);
-    entry.profile.mustChangePassword = false;
-    entry.profile.updatedAt = new Date().toISOString();
-    writeLocalStore(store);
-
-    state.profile = { ...entry.profile };
-    state.user.mustChangePassword = false;
-    emitState();
-    return state.profile as UserProfile;
+  if (!state.user) throw new Error('Please sign in first.');
+  if (!currentPassword || !newPassword || newPassword.length < 6) {
+    throw new Error('Enter your current password and a new password (min. 6 characters).');
   }
 
-  const data = await apiRequest<{ profile?: UserProfile }>('/api/auth/change-password', {
-    method: 'POST',
-    requireAuth: true,
-    body: { currentPassword, newPassword }
-  });
-  if (data.profile) {
-    state.profile = data.profile;
-    if (state.user) {
-      state.user.mustChangePassword = Boolean(data.profile.mustChangePassword);
-    }
-    emitState();
+  const dataset = getMergedDataset();
+  const entry = dataset.users[state.user.uid];
+  if (!entry) throw new Error('Account record not found.');
+
+  const valid = await verifyPasswordCredential(currentPassword, entry.passwordHash);
+  if (!valid) {
+    throw new Error('Current password is incorrect.');
   }
+
+  const nextHash = await createSaltedPasswordHash(newPassword);
+  const nowIso = new Date().toISOString();
+  const nextProfile: UserProfile = {
+    ...entry.profile,
+    mustChangePassword: false,
+    updatedAt: nowIso
+  };
+
+  const overlay = readOverlayStore();
+  overlay.users[state.user.uid] = { profile: nextProfile, passwordHash: nextHash };
+  writeOverlayStore(overlay);
+
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  emitState();
   return state.profile as UserProfile;
 }
 
 async function reloadAuthSession(): Promise<AuthState> {
-  if (!hasBackendAvailable()) {
-    const localUid = getLocalSessionUid();
-    if (!localUid) throw new Error('Please sign in first.');
-    const store = readLocalStore();
-    const payload = buildLocalSessionPayload(store, localUid);
-    if (!payload) throw new Error('Please sign in first.');
-    state.isLocalMode = true;
-    applySessionPayload(payload);
-    state.ready = true;
-    emitState();
-    return getState();
-  }
-
-  if (!getStoredToken()) {
-    throw new Error('Please sign in first.');
-  }
-  const me = await apiRequest<Record<string, unknown>>('/api/auth/me?t=' + Date.now(), { requireAuth: true });
-  applySessionPayload(me);
-  state.ready = true;
-  emitState();
+  await hydratePublicAndSession(true);
   return getState();
 }
 
@@ -1009,44 +1324,31 @@ async function updateProfileDetails(params: {
   phoneNumber: string;
   dob: string;
 }): Promise<void> {
+  if (!state.user) throw new Error('Please sign in first.');
   const cleanUsername = String(params.username || '').trim().slice(0, 60);
   const cleanPhone = String(params.phoneNumber || '').trim().slice(0, 32);
-  const cleanDob = String(params.dob || '').trim().slice(0, 20);
+  const cleanDob = normalizeExcelDob(params.dob);
+  if (!cleanUsername) throw new Error('User Name cannot be empty.');
 
-  if (!hasBackendAvailable()) {
-    if (!state.user) throw new Error('Please sign in first.');
-    if (!cleanUsername) throw new Error('User Name cannot be empty.');
-    const store = readLocalStore();
-    const entry = store.users[state.user.uid];
-    if (!entry) throw new Error('Account record not found.');
-    entry.profile.username = cleanUsername;
-    entry.profile.phoneNumber = cleanPhone;
-    entry.profile.dob = cleanDob;
-    entry.profile.updatedAt = new Date().toISOString();
-    writeLocalStore(store);
+  const dataset = getMergedDataset();
+  const entry = dataset.users[state.user.uid];
+  if (!entry) throw new Error('Account record not found.');
 
-    state.profile = { ...entry.profile };
-    state.user.displayName = cleanUsername;
-    emitState();
-    return;
-  }
-
-  const data = await apiRequest<{ profile?: UserProfile }>('/api/auth/profile', {
-    method: 'PUT',
-    requireAuth: true,
-    body: {
+  const overlay = readOverlayStore();
+  overlay.users[state.user.uid] = {
+    profile: {
+      ...entry.profile,
       username: cleanUsername,
       phoneNumber: cleanPhone,
-      dob: cleanDob
-    }
-  });
-  if (data.profile) {
-    state.profile = data.profile;
-    if (state.user) {
-      state.user.displayName = data.profile.username;
-    }
-    emitState();
-  }
+      dob: cleanDob,
+      updatedAt: new Date().toISOString()
+    },
+    passwordHash: entry.passwordHash
+  };
+  writeOverlayStore(overlay);
+
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  emitState();
 }
 
 async function submitSubscriptionRequest(params: {
@@ -1058,86 +1360,61 @@ async function submitSubscriptionRequest(params: {
   contactHandle: string;
   note?: string;
 }): Promise<SubscriptionRequest> {
-  if (!hasBackendAvailable()) {
-    if (!state.user || !state.profile) throw new Error('Please sign in first.');
-    const store = readLocalStore();
-    const nowIso = new Date().toISOString();
-    const planType = params.planType === 'annual' || params.planType === 'per_lesson' ? params.planType : 'monthly';
-    const request: SubscriptionRequest = {
-      requestId: `req_${Date.now().toString(36)}_${generateRandomHex(3)}`,
-      userId: state.user.uid,
-      username: state.profile.username || state.user.displayName || 'Learner',
-      userEmail: state.profile.email || state.user.email,
-      userPhone: state.profile.phoneNumber || '',
-      planType,
-      lessonId: params.lessonId ? sanitizeDocId(params.lessonId) : '',
-      lessonTitle:
-        String(params.lessonTitle || '').trim() ||
-        (planType === 'annual'
-          ? 'Annual All-Access'
-          : planType === 'per_lesson'
-          ? 'Single Lesson Pass'
-          : 'Monthly All-Access'),
-      amountLabel:
-        String(params.amountLabel || '').trim() ||
-        (planType === 'annual' ? '$149 / yr' : planType === 'per_lesson' ? '$9' : '$19 / mo'),
-      contactChannel: params.contactChannel === 'email' ? 'email' : 'viber',
-      contactHandle: String(params.contactHandle || '').trim(),
-      note: String(params.note || '').trim().slice(0, 400),
-      status: 'pending',
-      adminNote: '',
-      createdAt: nowIso,
-      updatedAt: nowIso
-    };
-    store.requests.unshift(request);
-    writeLocalStore(store);
+  if (!state.user || !state.profile) throw new Error('Please sign in first.');
+  const nowIso = new Date().toISOString();
+  const planType = params.planType === 'annual' || params.planType === 'per_lesson' ? params.planType : 'monthly';
+  const request: SubscriptionRequest = {
+    requestId: `req_${Date.now().toString(36)}_${generateRandomHex(3)}`,
+    userId: state.user.uid,
+    username: state.profile.username || state.user.displayName || 'Learner',
+    userEmail: state.profile.email || state.user.email,
+    userPhone: state.profile.phoneNumber || '',
+    planType,
+    lessonId: params.lessonId ? sanitizeDocId(params.lessonId) : '',
+    lessonTitle:
+      String(params.lessonTitle || '').trim() ||
+      (planType === 'annual'
+        ? 'Annual All-Access'
+        : planType === 'per_lesson'
+        ? 'Single Lesson Pass'
+        : 'Monthly All-Access'),
+    amountLabel:
+      String(params.amountLabel || '').trim() ||
+      (planType === 'annual' ? '$149 / yr' : planType === 'per_lesson' ? '$9' : '$19 / mo'),
+    contactChannel: params.contactChannel === 'email' ? 'email' : 'viber',
+    contactHandle: String(params.contactHandle || '').trim(),
+    note: String(params.note || '').trim().slice(0, 400),
+    status: 'pending',
+    adminNote: '',
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
 
-    state.myRequests = store.requests.filter((r) => r.userId === state.user?.uid);
-    if (getComputedAdmin()) state.allRequests = [...store.requests];
-    emitState();
-    return request;
-  }
+  const overlay = readOverlayStore();
+  overlay.requests[request.requestId] = request;
+  writeOverlayStore(overlay);
 
-  const data = await apiRequest<{ request: SubscriptionRequest; myRequests?: SubscriptionRequest[] }>('/api/requests', {
-    method: 'POST',
-    requireAuth: true,
-    body: params
-  });
-  if (Array.isArray(data.myRequests)) {
-    state.myRequests = data.myRequests;
-  } else if (data.request) {
-    state.myRequests = [data.request, ...state.myRequests];
-  }
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
   emitState();
-  return data.request;
+  return request;
 }
 
 async function cancelPendingRequest(requestId: string): Promise<void> {
-  if (!hasBackendAvailable()) {
-    if (!state.user) throw new Error('Please sign in first.');
-    const store = readLocalStore();
-    store.requests = store.requests.filter(
-      (r) => !(r.requestId === requestId && r.userId === state.user?.uid && r.status === 'pending')
-    );
-    writeLocalStore(store);
-    state.myRequests = store.requests.filter((r) => r.userId === state.user?.uid);
-    if (getComputedAdmin()) state.allRequests = [...store.requests];
-    emitState();
-    return;
-  }
+  if (!state.user) throw new Error('Please sign in first.');
+  const dataset = getMergedDataset();
+  const target = dataset.requests[requestId];
+  if (!target || target.userId !== state.user.uid || target.status !== 'pending') return;
 
-  const data = await apiRequest<{ myRequests?: SubscriptionRequest[] }>(
-    `/api/requests/${encodeURIComponent(requestId)}`,
-    {
-      method: 'DELETE',
-      requireAuth: true
-    }
-  );
-  if (Array.isArray(data.myRequests)) {
-    state.myRequests = data.myRequests;
-  } else {
-    state.myRequests = state.myRequests.filter((r) => r.requestId !== requestId);
-  }
+  const overlay = readOverlayStore();
+  overlay.requests[requestId] = {
+    ...target,
+    status: 'rejected',
+    adminNote: 'Cancelled by learner',
+    updatedAt: new Date().toISOString()
+  };
+  writeOverlayStore(overlay);
+
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
   emitState();
 }
 
@@ -1147,82 +1424,66 @@ async function approveSubscriptionRequest(
   reqDoc: SubscriptionRequest,
   adminNote = 'Verified via QR payment'
 ): Promise<void> {
-  if (!hasBackendAvailable()) {
-    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-    const store = readLocalStore();
-    const targetReq = store.requests.find((r) => r.requestId === reqDoc.requestId);
-    if (!targetReq) throw new Error('Subscription request not found.');
-    const nowIso = new Date().toISOString();
-    targetReq.status = 'approved';
-    targetReq.adminNote = adminNote;
-    targetReq.updatedAt = nowIso;
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const dataset = getMergedDataset();
+  const targetReq = dataset.requests[reqDoc.requestId];
+  if (!targetReq) throw new Error('Subscription request not found.');
 
-    const uEntry = store.users[targetReq.userId];
-    if (uEntry && uEntry.profile) {
-      uEntry.profile.membershipStatus = 'active';
-      uEntry.profile.membershipPlan = targetReq.planType;
-      if (targetReq.planType === 'per_lesson' && targetReq.lessonId) {
-        const set = new Set(uEntry.profile.subscribedLessonIds || []);
-        set.add(targetReq.lessonId);
-        uEntry.profile.subscribedLessonIds = Array.from(set);
-      } else {
-        const d = new Date();
-        d.setDate(d.getDate() + (targetReq.planType === 'annual' ? 365 : 30));
-        uEntry.profile.membershipExpiresAt = d.toISOString().slice(0, 10);
-      }
-      uEntry.profile.updatedAt = nowIso;
-      if (state.user.uid === uEntry.profile.uid) {
-        state.profile = { ...uEntry.profile };
-      }
+  const nowIso = new Date().toISOString();
+  const overlay = readOverlayStore();
+  overlay.requests[reqDoc.requestId] = {
+    ...targetReq,
+    status: 'approved',
+    adminNote,
+    updatedAt: nowIso
+  };
+
+  const userEntry = dataset.users[targetReq.userId];
+  if (userEntry) {
+    const nextProfile: UserProfile = {
+      ...userEntry.profile,
+      membershipStatus: 'active',
+      membershipPlan: targetReq.planType,
+      updatedAt: nowIso
+    };
+    if (targetReq.planType === 'per_lesson' && targetReq.lessonId) {
+      const set = new Set(nextProfile.subscribedLessonIds || []);
+      set.add(targetReq.lessonId);
+      nextProfile.subscribedLessonIds = Array.from(set);
+    } else {
+      const d = new Date();
+      d.setDate(d.getDate() + (targetReq.planType === 'annual' ? 365 : 30));
+      nextProfile.membershipExpiresAt = d.toISOString().slice(0, 10);
     }
-
-    writeLocalStore(store);
-    state.allRequests = [...store.requests];
-    state.allUsers = Object.values(store.users).map((u) => ({ ...u.profile }));
-    state.myRequests = store.requests.filter((r) => r.userId === state.user?.uid);
-    emitState();
-    return;
+    overlay.users[targetReq.userId] = {
+      profile: nextProfile,
+      passwordHash: userEntry.passwordHash
+    };
   }
 
-  const data = await apiRequest<{
-    allRequests?: SubscriptionRequest[];
-    allUsers?: UserProfile[];
-  }>(`/api/admin/requests/${encodeURIComponent(reqDoc.requestId)}/approve`, {
-    method: 'POST',
-    requireAuth: true,
-    body: { adminNote }
-  });
-  if (Array.isArray(data.allRequests)) state.allRequests = data.allRequests;
-  if (Array.isArray(data.allUsers)) state.allUsers = data.allUsers;
+  writeOverlayStore(overlay);
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
   emitState();
 }
 
-async function rejectSubscriptionRequest(requestId: string, adminNote = 'Payment could not be verified'): Promise<void> {
-  if (!hasBackendAvailable()) {
-    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-    const store = readLocalStore();
-    const targetReq = store.requests.find((r) => r.requestId === requestId);
-    if (targetReq) {
-      targetReq.status = 'rejected';
-      targetReq.adminNote = adminNote;
-      targetReq.updatedAt = new Date().toISOString();
-      writeLocalStore(store);
-    }
-    state.allRequests = [...store.requests];
-    state.myRequests = store.requests.filter((r) => r.userId === state.user?.uid);
-    emitState();
-    return;
+async function rejectSubscriptionRequest(
+  requestId: string,
+  adminNote = 'Payment could not be verified'
+): Promise<void> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const dataset = getMergedDataset();
+  const targetReq = dataset.requests[requestId];
+  if (targetReq) {
+    const overlay = readOverlayStore();
+    overlay.requests[requestId] = {
+      ...targetReq,
+      status: 'rejected',
+      adminNote,
+      updatedAt: new Date().toISOString()
+    };
+    writeOverlayStore(overlay);
   }
-
-  const data = await apiRequest<{ allRequests?: SubscriptionRequest[] }>(
-    `/api/admin/requests/${encodeURIComponent(requestId)}/reject`,
-    {
-      method: 'POST',
-      requireAuth: true,
-      body: { adminNote }
-    }
-  );
-  if (Array.isArray(data.allRequests)) state.allRequests = data.allRequests;
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
   emitState();
 }
 
@@ -1235,93 +1496,85 @@ async function updateUserMembershipAdmin(
     subscribedLessonIds?: string[];
   }
 ): Promise<void> {
-  if (!hasBackendAvailable()) {
-    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-    const store = readLocalStore();
-    const entry = store.users[userId];
-    if (!entry || !entry.profile) throw new Error('User not found.');
-    entry.profile.membershipStatus = updates.membershipStatus;
-    entry.profile.membershipPlan = updates.membershipPlan;
-    if (updates.membershipExpiresAt !== undefined) {
-      entry.profile.membershipExpiresAt = String(updates.membershipExpiresAt || '').trim();
-    }
-    if (Array.isArray(updates.subscribedLessonIds)) {
-      entry.profile.subscribedLessonIds = updates.subscribedLessonIds.map((x) => sanitizeDocId(x));
-    }
-    entry.profile.updatedAt = new Date().toISOString();
-    writeLocalStore(store);
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const dataset = getMergedDataset();
+  const entry = dataset.users[userId];
+  if (!entry) throw new Error('User not found.');
 
-    state.allUsers = Object.values(store.users).map((u) => ({ ...u.profile }));
-    if (state.user.uid === userId) {
-      state.profile = { ...entry.profile };
-    }
-    emitState();
-    return;
-  }
+  const nextProfile: UserProfile = {
+    ...entry.profile,
+    membershipStatus: updates.membershipStatus,
+    membershipPlan: updates.membershipPlan,
+    membershipExpiresAt:
+      updates.membershipExpiresAt !== undefined
+        ? normalizeExcelDob(updates.membershipExpiresAt)
+        : entry.profile.membershipExpiresAt,
+    subscribedLessonIds: Array.isArray(updates.subscribedLessonIds)
+      ? updates.subscribedLessonIds.map((x) => sanitizeDocId(x))
+      : entry.profile.subscribedLessonIds,
+    updatedAt: new Date().toISOString()
+  };
 
-  const data = await apiRequest<{ user?: UserProfile; allUsers?: UserProfile[] }>(
-    `/api/admin/users/${encodeURIComponent(userId)}/membership`,
-    {
-      method: 'PUT',
-      requireAuth: true,
-      body: updates
-    }
-  );
-  if (Array.isArray(data.allUsers)) state.allUsers = data.allUsers;
-  if (data.user && state.user && data.user.uid === state.user.uid) {
-    state.profile = data.user;
-  }
+  const overlay = readOverlayStore();
+  overlay.users[userId] = { profile: nextProfile, passwordHash: entry.passwordHash };
+  writeOverlayStore(overlay);
+
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
   emitState();
+}
+
+function generateTempPassword(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let pw = '';
+  try {
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+      const buf = new Uint8Array(12);
+      window.crypto.getRandomValues(buf);
+      for (let i = 0; i < buf.length; i++) {
+        pw += alphabet[buf[i] % alphabet.length];
+      }
+      return pw;
+    }
+  } catch {
+    // fallback below
+  }
+  for (let i = 0; i < 12; i++) {
+    pw += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return pw;
 }
 
 async function adminResetUserPassword(
   userId: string,
-  options: { newPassword?: string; sendEmail?: boolean } = {}
-): Promise<{ emailed: boolean; emailError?: string | null; temporaryPassword: string; user?: UserProfile }> {
-  if (!hasBackendAvailable()) {
-    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-    const store = readLocalStore();
-    const entry = store.users[userId];
-    if (!entry || !entry.profile) throw new Error('User not found.');
-    const temporaryPassword = options.newPassword?.trim() || generateLocalTempPassword();
-    if (temporaryPassword.length < 6) {
-      throw new Error('Password must be at least 6 characters.');
-    }
-    const nextSalt = generateRandomHex(16);
-    entry.salt = nextSalt;
-    entry.passwordHash = await hashLocalPassword(temporaryPassword, nextSalt);
-    entry.profile.mustChangePassword = true;
-    entry.profile.updatedAt = new Date().toISOString();
-    writeLocalStore(store);
+  options: { newPassword?: string } = {}
+): Promise<{ temporaryPassword: string; user?: UserProfile }> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const dataset = getMergedDataset();
+  const entry = dataset.users[userId];
+  if (!entry) throw new Error('User not found.');
 
-    state.allUsers = Object.values(store.users).map((u) => ({ ...u.profile }));
-    if (state.user.uid === userId) {
-      state.profile = { ...entry.profile };
-      state.user.mustChangePassword = true;
-    }
-    emitState();
-    return {
-      emailed: false,
-      emailError: 'Automatic emails require a Hosted Node Server with SMTP.',
-      temporaryPassword,
-      user: { ...entry.profile }
-    };
+  const temporaryPassword = options.newPassword?.trim() || generateTempPassword();
+  if (temporaryPassword.length < 6) {
+    throw new Error('Password must be at least 6 characters.');
   }
 
-  const data = await apiRequest<{
-    emailed: boolean;
-    emailError?: string | null;
-    temporaryPassword: string;
-    user?: UserProfile;
-    allUsers?: UserProfile[];
-  }>(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, {
-    method: 'POST',
-    requireAuth: true,
-    body: options
-  });
-  if (Array.isArray(data.allUsers)) state.allUsers = data.allUsers;
+  const nextHash = await createSaltedPasswordHash(temporaryPassword);
+  const nextProfile: UserProfile = {
+    ...entry.profile,
+    mustChangePassword: true,
+    updatedAt: new Date().toISOString()
+  };
+
+  const overlay = readOverlayStore();
+  overlay.users[userId] = { profile: nextProfile, passwordHash: nextHash };
+  writeOverlayStore(overlay);
+
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
   emitState();
-  return data;
+  return {
+    temporaryPassword,
+    user: nextProfile
+  };
 }
 
 async function saveLessonCatalogItems(
@@ -1333,46 +1586,28 @@ async function saveLessonCatalogItems(
     price: number;
   }>
 ): Promise<void> {
-  if (!hasBackendAvailable()) {
-    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-    const store = readLocalStore();
-    const nowIso = new Date().toISOString();
-    const nextCatalog: Record<string, LessonCatalogItem> = { ...(store.lessonCatalog || {}) };
-    for (const item of items || []) {
-      const id = sanitizeDocId(item.lessonId);
-      nextCatalog[id] = {
-        lessonId: id,
-        title: String(item.title || id).trim(),
-        audience: item.audience === 'Kids' ? 'Kids' : 'Adult',
-        accessType: item.accessType === 'paid' ? 'paid' : 'free',
-        price: Math.max(0, Number(item.price) || 0),
-        updatedBy: state.user.email,
-        updatedAt: nowIso
-      };
-    }
-    store.lessonCatalog = nextCatalog;
-    writeLocalStore(store);
-    state.lessonCatalog = nextCatalog;
-    emitState();
-    return;
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const overlay = readOverlayStore();
+  const nowIso = new Date().toISOString();
+  for (const item of items || []) {
+    const id = sanitizeDocId(item.lessonId);
+    overlay.lessonCatalog[id] = {
+      lessonId: id,
+      title: String(item.title || id).trim(),
+      audience: item.audience === 'Kids' ? 'Kids' : 'Adult',
+      accessType: item.accessType === 'paid' ? 'paid' : 'free',
+      price: Math.max(0, Number(item.price) || 0),
+      updatedBy: state.user.email,
+      updatedAt: nowIso
+    };
   }
-
-  const data = await apiRequest<{ lessonCatalog?: Record<string, LessonCatalogItem> }>('/api/admin/catalog', {
-    method: 'PUT',
-    requireAuth: true,
-    body: { items }
-  });
-  if (data.lessonCatalog) {
-    state.lessonCatalog = data.lessonCatalog;
-    emitState();
-  }
+  writeOverlayStore(overlay);
+  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  emitState();
 }
 
 async function getIdToken(): Promise<string | null> {
-  if (!hasBackendAvailable()) {
-    return getLocalSessionUid() ? 'local-browser-session' : null;
-  }
-  return getStoredToken();
+  return state.user ? state.user.uid : null;
 }
 
 function getSiteConfig(): SiteConfig {
@@ -1380,59 +1615,218 @@ function getSiteConfig(): SiteConfig {
 }
 
 async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
   const merged = normalizeSiteConfig({ ...state.siteConfig, ...partial });
-  if (!hasBackendAvailable()) {
-    if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-    const store = readLocalStore();
-    store.siteConfig = { ...merged, updatedBy: state.user.email, updatedAt: new Date().toISOString() };
-    writeLocalStore(store);
-    state.siteConfig = normalizeSiteConfig(store.siteConfig);
-    emitSiteConfigChange();
-    emitState();
-    return state.siteConfig;
-  }
+  const overlay = readOverlayStore();
+  overlay.siteConfig = { ...merged, updatedBy: state.user.email, updatedAt: new Date().toISOString() };
+  writeOverlayStore(overlay);
 
-  const data = await apiRequest<{ config?: Partial<SiteConfig> }>('/api/admin/site-config', {
-    method: 'PUT',
-    requireAuth: true,
-    body: merged
-  });
-  state.siteConfig = normalizeSiteConfig(data.config || merged);
+  state.siteConfig = normalizeSiteConfig(overlay.siteConfig);
   emitSiteConfigChange();
   emitState();
   return state.siteConfig;
 }
 
-async function getSmtpStatus(): Promise<{
-  configured: boolean;
-  host: string;
-  port: number;
-  secure: boolean;
-  userMasked: string;
-  from: string;
-}> {
-  if (!hasBackendAvailable()) {
-    return {
-      configured: false,
-      host: '',
-      port: 587,
-      secure: false,
-      userMasked: '',
-      from: ''
-    };
-  }
-  return apiRequest('/api/admin/smtp-status', { requireAuth: true });
+function exportSiteConfigJson(): void {
+  const cfg = getSiteConfig();
+  const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'site-config.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, 150);
 }
 
-async function sendTestSmtpEmail(to?: string): Promise<{ message: string }> {
-  if (!hasBackendAvailable()) {
-    throw new Error('SMTP test emails require connecting your Hosted Node Server URL.');
+async function exportUsersWorkbook(): Promise<{
+  fileName: string;
+  userCount: number;
+  requestCount: number;
+  progressCount: number;
+  catalogCount: number;
+}> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const xlsx = await ensureXlsxLoaded();
+  if (!xlsx) throw new Error('SheetJS library is not loaded.');
+
+  const dataset = getMergedDataset();
+  const userRows = Object.values(dataset.users).map(({ profile, passwordHash }) => ({
+    uid: profile.uid,
+    username: profile.username || '',
+    email: profile.email || '',
+    phoneNumber: profile.phoneNumber || '',
+    dob: profile.dob || '',
+    passwordHash: passwordHash || '',
+    role: profile.role || 'student',
+    membershipStatus: profile.membershipStatus || 'free',
+    membershipPlan: profile.membershipPlan || 'none',
+    membershipExpiresAt: profile.membershipExpiresAt || '',
+    subscribedLessonIds: (profile.subscribedLessonIds || []).join(','),
+    mustChangePassword: profile.mustChangePassword ? 'true' : 'false',
+    createdAt: String(profile.createdAt || ''),
+    updatedAt: String(profile.updatedAt || '')
+  }));
+
+  const reqRows = sortedRequestsList(dataset).map((r) => ({
+    requestId: r.requestId,
+    userId: r.userId,
+    username: r.username,
+    userEmail: r.userEmail,
+    userPhone: r.userPhone,
+    planType: r.planType,
+    lessonId: r.lessonId,
+    lessonTitle: r.lessonTitle,
+    amountLabel: r.amountLabel,
+    contactChannel: r.contactChannel,
+    contactHandle: r.contactHandle,
+    note: r.note,
+    status: r.status,
+    adminNote: r.adminNote,
+    createdAt: String(r.createdAt || ''),
+    updatedAt: String(r.updatedAt || '')
+  }));
+
+  const progRows = Object.values(dataset.progress).map((p) => ({
+    uid: p.uid,
+    currentStreak: p.currentStreak || 0,
+    bestStreak: p.bestStreak || 0,
+    lastCompletedDate: p.lastCompletedDate || '',
+    streakDates: (p.streakDates || []).join(','),
+    completedLessonIds: (p.completedLessonIds || []).join(','),
+    reminderEnabled: p.reminderEnabled !== false ? 'true' : 'false',
+    reminderTime: p.reminderTime || '18:00',
+    lastNotifiedDate: p.lastNotifiedDate || '',
+    updatedAt: String(p.updatedAt || '')
+  }));
+
+  const catRows = Object.values(dataset.lessonCatalog).map((c) => ({
+    lessonId: c.lessonId,
+    title: c.title,
+    audience: c.audience,
+    accessType: c.accessType,
+    price: Number(c.price) || 0,
+    updatedBy: c.updatedBy || '',
+    updatedAt: String(c.updatedAt || '')
+  }));
+
+  const wb = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(
+    wb,
+    userRows.length
+      ? xlsx.utils.json_to_sheet(userRows)
+      : xlsx.utils.aoa_to_sheet([
+          ['uid', 'username', 'email', 'phoneNumber', 'dob', 'passwordHash', 'role', 'membershipStatus', 'membershipPlan', 'membershipExpiresAt', 'subscribedLessonIds', 'mustChangePassword', 'createdAt', 'updatedAt']
+        ]),
+    'Users'
+  );
+  xlsx.utils.book_append_sheet(
+    wb,
+    reqRows.length
+      ? xlsx.utils.json_to_sheet(reqRows)
+      : xlsx.utils.aoa_to_sheet([
+          ['requestId', 'userId', 'username', 'userEmail', 'userPhone', 'planType', 'lessonId', 'lessonTitle', 'amountLabel', 'contactChannel', 'contactHandle', 'note', 'status', 'adminNote', 'createdAt', 'updatedAt']
+        ]),
+    'Requests'
+  );
+  xlsx.utils.book_append_sheet(
+    wb,
+    progRows.length
+      ? xlsx.utils.json_to_sheet(progRows)
+      : xlsx.utils.aoa_to_sheet([
+          ['uid', 'currentStreak', 'bestStreak', 'lastCompletedDate', 'streakDates', 'completedLessonIds', 'reminderEnabled', 'reminderTime', 'lastNotifiedDate', 'updatedAt']
+        ]),
+    'Progress'
+  );
+  xlsx.utils.book_append_sheet(
+    wb,
+    catRows.length
+      ? xlsx.utils.json_to_sheet(catRows)
+      : xlsx.utils.aoa_to_sheet([
+          ['lessonId', 'title', 'audience', 'accessType', 'price', 'updatedBy', 'updatedAt']
+        ]),
+    'Catalog'
+  );
+
+  xlsx.writeFile(wb, 'users.xlsx');
+  return {
+    fileName: 'users.xlsx',
+    userCount: userRows.length,
+    requestCount: reqRows.length,
+    progressCount: progRows.length,
+    catalogCount: catRows.length
+  };
+}
+
+async function importUsersWorkbook(arrayBuffer: ArrayBuffer): Promise<{
+  userCount: number;
+  requestCount: number;
+  progressCount: number;
+  catalogCount: number;
+}> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const xlsx = await ensureXlsxLoaded();
+  if (!xlsx) throw new Error('SheetJS library is not loaded.');
+
+  const wb = xlsx.read(arrayBuffer, { type: 'array' });
+  const parsed = parseWorkbookToDataset(wb, xlsx);
+  const userCount = Object.keys(parsed.users).length;
+  if (userCount === 0) {
+    throw new Error('No valid user rows with email column found in the uploaded Excel file.');
   }
-  return apiRequest('/api/admin/test-smtp', {
-    method: 'POST',
-    requireAuth: true,
-    body: to ? { to } : {}
-  });
+
+  // Stamp imported entries cleanly so they apply immediately in the active browser
+  const stamp = new Date().toISOString();
+  const overlay = readOverlayStore();
+  overlay.users = {};
+  overlay.requests = {};
+  overlay.progress = {};
+  overlay.lessonCatalog = {};
+
+  for (const [uid, rec] of Object.entries(parsed.users)) {
+    const baseRec = baseWorkbookStore.users[uid];
+    const baseMs = baseRec ? parseIsoTimestamp(baseRec.profile.updatedAt) : 0;
+    const recMs = parseIsoTimestamp(rec.profile.updatedAt);
+    overlay.users[uid] = {
+      profile: {
+        ...rec.profile,
+        updatedAt: recMs >= baseMs && rec.profile.updatedAt ? rec.profile.updatedAt : stamp
+      },
+      passwordHash: rec.passwordHash
+    };
+  }
+  for (const [id, r] of Object.entries(parsed.requests)) {
+    overlay.requests[id] = { ...r, updatedAt: r.updatedAt || stamp };
+  }
+  for (const [uid, p] of Object.entries(parsed.progress)) {
+    overlay.progress[uid] = { ...p, updatedAt: p.updatedAt || stamp };
+  }
+  for (const [id, c] of Object.entries(parsed.lessonCatalog)) {
+    overlay.lessonCatalog[id] = { ...c, updatedAt: c.updatedAt || stamp };
+  }
+  writeOverlayStore(overlay);
+
+  const merged = getMergedDataset();
+  syncMemoryFromDataset(merged, state.user.uid);
+  emitState();
+
+  return {
+    userCount,
+    requestCount: Object.keys(parsed.requests).length,
+    progressCount: Object.keys(parsed.progress).length,
+    catalogCount: Object.keys(parsed.lessonCatalog).length
+  };
+}
+
+async function reloadUsersWorkbookFromRepo(): Promise<ExcelSyncSummary> {
+  await loadBaseWorkbookFromExcel(true);
+  const merged = getMergedDataset();
+  syncMemoryFromDataset(merged);
+  emitState();
+  return getExcelSyncSummary();
 }
 
 // --- Access Evaluation Helpers ---
@@ -1609,28 +2003,16 @@ async function persistUserProgress(next: UserProgress): Promise<UserProgress> {
     ).slice(-200),
     reminderEnabled: Boolean(next.reminderEnabled),
     reminderTime: sanitizeTimeStr(next.reminderTime),
-    lastNotifiedDate: sanitizeDateStr(next.lastNotifiedDate)
+    lastNotifiedDate: sanitizeDateStr(next.lastNotifiedDate),
+    updatedAt: new Date().toISOString()
   };
 
   state.userProgress = { ...payload };
+  const overlay = readOverlayStore();
+  overlay.progress[state.user.uid] = { ...payload };
+  writeOverlayStore(overlay);
   emitState();
 
-  if (!hasBackendAvailable()) {
-    const store = readLocalStore();
-    store.progress[state.user.uid] = { ...payload, updatedAt: new Date().toISOString() };
-    writeLocalStore(store);
-    return state.userProgress as UserProgress;
-  }
-
-  const data = await apiRequest<{ userProgress?: UserProgress }>('/api/progress', {
-    method: 'PUT',
-    requireAuth: true,
-    body: payload
-  });
-  if (data.userProgress) {
-    state.userProgress = normalizeUserProgress(data.userProgress, state.user.uid);
-    emitState();
-  }
   return state.userProgress as UserProgress;
 }
 
@@ -1713,6 +2095,7 @@ function subscribe(cb: (s: AuthState) => void): () => void {
 function getState(): AuthState {
   return {
     ...state,
+    excelSummary: getExcelSyncSummary(),
     isAdmin: getComputedAdmin()
   };
 }
@@ -1727,8 +2110,10 @@ const LinguaAuth = {
   getIdToken,
   getSiteConfig,
   saveSiteConfig,
+  exportSiteConfigJson,
   registerWithEmail,
   loginWithEmail,
+  resetPasswordWithVerification,
   sendPasswordReset,
   changePassword,
   reloadAuthSession,
@@ -1741,8 +2126,10 @@ const LinguaAuth = {
   updateUserMembershipAdmin,
   adminResetUserPassword,
   saveLessonCatalogItems,
-  getSmtpStatus,
-  sendTestSmtpEmail,
+  exportUsersWorkbook,
+  importUsersWorkbook,
+  reloadUsersWorkbookFromRepo,
+  getExcelSyncSummary,
   getLessonPricing,
   hasActiveMembership,
   hasPendingRequest,

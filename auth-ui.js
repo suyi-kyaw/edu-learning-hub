@@ -32,7 +32,8 @@
   };
 
   let modalMode = 'closed'; // 'closed' | 'auth' | 'account' | 'subscribe'
-  let authTab = 'signin'; // 'signin' | 'register'
+  let authTab = 'signin'; // 'signin' | 'register' | 'reset'
+  let resetPrefillEmail = '';
   let accountTab = 'profile'; // 'profile' | 'plans' | 'admin'
   let subscribeContext = {
     planType: 'monthly',
@@ -42,8 +43,7 @@
     contactChannel: 'viber'
   };
   let pendingPostAuthSubscribe = null;
-  let feedbackBanner = null; // { type: 'success' | 'error' | 'info', text: string, showBackendHint?: boolean }
-  let showBackendConnectBox = false;
+  let feedbackBanner = null; // { type: 'success' | 'error' | 'info', text: string }
   let lastAuthUserUid = null;
 
   function escapeHTML(str) {
@@ -306,7 +306,13 @@
       <div class="lp-modal-header">
         <div>
           <span class="lp-modal-eyebrow">LinguaPath Account</span>
-          <h2 id="lpAuthModalTitle">${authTab === 'register' ? 'Create Your Learner Profile' : 'Welcome Back'}</h2>
+          <h2 id="lpAuthModalTitle">${
+            authTab === 'register'
+              ? 'Create Your Learner Profile'
+              : authTab === 'reset'
+              ? 'Reset Forgotten Password'
+              : 'Welcome Back'
+          }</h2>
         </div>
         <button type="button" class="lp-modal-close" id="lpCloseAuthModalBtn" aria-label="Close modal">✕</button>
       </div>
@@ -314,20 +320,66 @@
       ${pendingHint}
       ${adminSetupHint}
 
-      <div class="lp-tabs-bar" role="tablist">
-        <button type="button" class="lp-tab-btn ${authTab === 'signin' ? 'active' : ''}" data-auth-tab="signin" role="tab" aria-selected="${authTab === 'signin'}">Sign In</button>
-        <button type="button" class="lp-tab-btn ${authTab === 'register' ? 'active' : ''}" data-auth-tab="register" role="tab" aria-selected="${authTab === 'register'}">Register</button>
-      </div>
+      ${
+        authTab === 'reset'
+          ? ''
+          : `
+        <div class="lp-tabs-bar" role="tablist">
+          <button type="button" class="lp-tab-btn ${authTab === 'signin' ? 'active' : ''}" data-auth-tab="signin" role="tab" aria-selected="${authTab === 'signin'}">Sign In</button>
+          <button type="button" class="lp-tab-btn ${authTab === 'register' ? 'active' : ''}" data-auth-tab="register" role="tab" aria-selected="${authTab === 'register'}">Register</button>
+        </div>
+      `
+      }
 
       ${renderFeedbackHTML()}
 
       ${
-        authTab === 'signin'
+        authTab === 'reset'
+          ? `
+        <div class="lp-context-callout" style="margin-bottom:14px;">
+          Verify your registered <strong>Date of Birth</strong> and <strong>Phone / Viber Number</strong> to set a new password right away, or ask the site Admin to update it in <code>users.xlsx</code>.
+        </div>
+        <form id="lpVerifyResetForm" class="lp-form" novalidate>
+          <div class="lp-field">
+            <label for="lpResetEmail">Email Address *</label>
+            <input type="email" id="lpResetEmail" autocomplete="email" value="${escapeHTML(
+              resetPrefillEmail
+            )}" placeholder="you@example.com" required />
+          </div>
+          <div class="lp-form-grid-2">
+            <div class="lp-field">
+              <label for="lpResetDob">Registered Date of Birth *</label>
+              <input type="date" id="lpResetDob" max="${todayIso}" required />
+            </div>
+            <div class="lp-field">
+              <label for="lpResetPhone">Registered Phone / Viber *</label>
+              <input type="tel" id="lpResetPhone" maxlength="32" placeholder="+95 9 xxx xxx xxx" required />
+            </div>
+          </div>
+          <div class="lp-form-grid-2">
+            <div class="lp-field">
+              <label for="lpResetNewPassword">New Password *</label>
+              <input type="password" id="lpResetNewPassword" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required />
+            </div>
+            <div class="lp-field">
+              <label for="lpResetConfirmPassword">Confirm New Password *</label>
+              <input type="password" id="lpResetConfirmPassword" minlength="6" autocomplete="new-password" placeholder="Repeat password" required />
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;">
+            <button type="button" class="lp-btn lp-btn-secondary" id="lpResetBackToSignInBtn">← Back to Sign In</button>
+            <button type="submit" class="lp-btn lp-btn-primary" style="flex:1;" id="lpResetSubmitBtn">Verify &amp; Set New Password</button>
+          </div>
+        </form>
+      `
+          : authTab === 'signin'
           ? `
         <form id="lpSignInForm" class="lp-form" novalidate>
           <div class="lp-field">
             <label for="lpLoginEmail">Email Address</label>
-            <input type="email" id="lpLoginEmail" autocomplete="email" placeholder="you@example.com" required />
+            <input type="email" id="lpLoginEmail" autocomplete="email" value="${escapeHTML(
+              resetPrefillEmail
+            )}" placeholder="you@example.com" required />
           </div>
           <div class="lp-field">
             <div class="lp-field-label-row">
@@ -380,42 +432,6 @@
           <button type="submit" class="lp-btn lp-btn-primary lp-btn-full" id="lpRegisterSubmitBtn">Create Account</button>
         </form>
       `
-      }
-      ${
-        state?.isLocalMode
-          ? `
-        <div class="lp-backend-inline-box" style="margin-top:14px; padding-top:12px; border-top:1px solid #e2e8f0;">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:0.8rem; color:#64748b;">
-            <span><strong>Static GitHub Pages Mode</strong> · Saves on this browser</span>
-            <button type="button" class="lp-link-btn" id="lpToggleBackendBoxBtn">${
-              showBackendConnectBox ? 'Hide Server Connection' : 'Connect Hosted Node Server →'
-            }</button>
-          </div>
-          ${
-            showBackendConnectBox
-              ? `
-            <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
-              <label for="lpBackendUrlInput" style="font-size:0.78rem; font-weight:700;">Hosted Node Server HTTPS URL</label>
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <input
-                  type="url"
-                  id="lpBackendUrlInput"
-                  style="flex:1; min-width:190px; padding:8px 10px; border-radius:10px; border:1px solid #cbd5e1; font-size:0.86rem;"
-                  value="${escapeHTML(window.LinguaBackend?.getApiBase?.() || '')}"
-                  placeholder="https://your-linguapath-server.onrender.com"
-                />
-                <button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" id="lpConnectBackendBtn">Connect</button>
-              </div>
-              <div id="lpBackendInlineMsg" style="font-size:0.76rem; color:#64748b; line-height:1.4;">
-                Have a deployed Node server? Paste its HTTPS URL to sign in with your synced server account &amp; Admin database.
-              </div>
-            </div>
-          `
-              : ''
-          }
-        </div>
-      `
-          : ''
       }
     `;
   }
@@ -619,13 +635,6 @@
     }
 
     return `
-      ${
-        state.isLocalMode
-          ? `<div class="lp-context-callout" role="status">
-               <strong>Static Browser Mode:</strong> Your account and progress are saved on this browser. Connect a Hosted Node Server URL in the Admin Portal to sync across devices.
-             </div>`
-          : ''
-      }
       ${
         mustChangePw
           ? `<div class="lp-context-callout" role="status">
@@ -1059,10 +1068,7 @@
           }
           renderModal();
         } catch (err) {
-          const code = err && typeof err === 'object' ? err.code : '';
-          if (['user-not-found', 'no-backend', 'network-error', 'smtp-requires-backend'].includes(code)) {
-            showBackendConnectBox = true;
-          }
+          resetPrefillEmail = email;
           feedbackBanner = {
             type: 'error',
             text: err instanceof Error ? err.message : 'Unable to sign in.'
@@ -1072,95 +1078,75 @@
       };
     }
 
-    // Inline Hosted Node Server connect box (for static GitHub Pages)
-    const toggleBackendBtn = document.getElementById('lpToggleBackendBoxBtn');
-    if (toggleBackendBtn) {
-      toggleBackendBtn.onclick = () => {
-        showBackendConnectBox = !showBackendConnectBox;
+    // Forgot password -> switch to identity-verified reset view (no server/SMTP needed)
+    const forgotBtn = document.getElementById('lpForgotPasswordBtn');
+    if (forgotBtn) {
+      forgotBtn.onclick = () => {
+        resetPrefillEmail = document.getElementById('lpLoginEmail')?.value?.trim() || '';
+        authTab = 'reset';
+        feedbackBanner = null;
         renderModal();
       };
     }
 
-    const connectBackendBtn = document.getElementById('lpConnectBackendBtn');
-    if (connectBackendBtn && window.LinguaBackend) {
-      connectBackendBtn.onclick = async () => {
-        const input = document.getElementById('lpBackendUrlInput');
-        const msgEl = document.getElementById('lpBackendInlineMsg');
-        const candidate = (input?.value || '').trim();
-        if (!candidate) {
-          if (msgEl) {
-            msgEl.style.color = '#b91c1c';
-            msgEl.textContent = 'Enter your hosted Node server URL (starting with https://).';
-          }
-          return;
-        }
-        connectBackendBtn.disabled = true;
-        connectBackendBtn.textContent = 'Connecting…';
-        if (msgEl) {
-          msgEl.style.color = '#64748b';
-          msgEl.textContent = 'Checking server /api/site-config…';
-        }
-        const probe = await window.LinguaBackend.testConnection(candidate);
-        if (!probe.ok) {
-          connectBackendBtn.disabled = false;
-          connectBackendBtn.textContent = 'Connect';
-          if (msgEl) {
-            msgEl.style.color = '#b91c1c';
-            msgEl.textContent = probe.error || 'Could not connect to server.';
-          }
-          return;
-        }
-        try {
-          const savedEmail = document.getElementById('lpLoginEmail')?.value || '';
-          const saved = window.LinguaBackend.setApiBase(candidate);
-          showBackendConnectBox = false;
-          feedbackBanner = {
-            type: 'success',
-            text: `Connected to ${saved} (${probe.latencyMs}ms). Sign in with your server account now.`
-          };
-          showToast('Hosted Node server connected!');
-          renderModal();
-          if (savedEmail) {
-            const emailEl = document.getElementById('lpLoginEmail');
-            if (emailEl) emailEl.value = savedEmail;
-          }
-        } catch (err) {
-          connectBackendBtn.disabled = false;
-          connectBackendBtn.textContent = 'Connect';
-          if (msgEl) {
-            msgEl.style.color = '#b91c1c';
-            msgEl.textContent = err instanceof Error ? err.message : 'Invalid backend URL.';
-          }
-        }
+    const backToSignInBtn = document.getElementById('lpResetBackToSignInBtn');
+    if (backToSignInBtn) {
+      backToSignInBtn.onclick = () => {
+        authTab = 'signin';
+        feedbackBanner = null;
+        renderModal();
       };
     }
 
-    // Forgot password (server generates temporary password & emails user)
-    const forgotBtn = document.getElementById('lpForgotPasswordBtn');
-    if (forgotBtn) {
-      forgotBtn.onclick = async () => {
-        if (!api) return;
-        const emailInput = document.getElementById('lpLoginEmail');
-        const email = emailInput?.value?.trim() || '';
-        if (!email) {
-          feedbackBanner = { type: 'info', text: 'Enter your email address above first, then click Forgot password?.' };
+    const verifyResetForm = document.getElementById('lpVerifyResetForm');
+    if (verifyResetForm) {
+      verifyResetForm.onsubmit = async (e) => {
+        e.preventDefault();
+        if (!api || typeof api.resetPasswordWithVerification !== 'function') return;
+        const email = document.getElementById('lpResetEmail')?.value?.trim() || '';
+        const dob = document.getElementById('lpResetDob')?.value?.trim() || '';
+        const phoneNumber = document.getElementById('lpResetPhone')?.value?.trim() || '';
+        const newPassword = document.getElementById('lpResetNewPassword')?.value || '';
+        const confirmPw = document.getElementById('lpResetConfirmPassword')?.value || '';
+        resetPrefillEmail = email;
+
+        if (!email || !dob || !phoneNumber) {
+          feedbackBanner = { type: 'error', text: 'Please fill in Email, Date of Birth, and Phone / Viber Number.' };
           renderModal();
-          setTimeout(() => document.getElementById('lpLoginEmail')?.focus(), 20);
           return;
         }
-        forgotBtn.disabled = true;
-        forgotBtn.textContent = 'Sending…';
+        if (newPassword.length < 6) {
+          feedbackBanner = { type: 'error', text: 'New password must be at least 6 characters long.' };
+          renderModal();
+          return;
+        }
+        if (newPassword !== confirmPw) {
+          feedbackBanner = { type: 'error', text: 'New passwords do not match.' };
+          renderModal();
+          return;
+        }
+
+        const btn = document.getElementById('lpResetSubmitBtn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Verifying…';
+        }
         try {
-          const msg = await api.sendPasswordReset(email);
+          const msg = await api.resetPasswordWithVerification({
+            email,
+            dob,
+            phoneNumber,
+            newPassword
+          });
+          authTab = 'signin';
           feedbackBanner = { type: 'success', text: msg };
-          showToast('Temporary password email sent.');
+          showToast('Password updated — you can sign in now.');
           renderModal();
         } catch (err) {
-          const code = err && typeof err === 'object' ? err.code : '';
-          if (code === 'smtp-requires-backend' || code === 'no-backend') {
-            showBackendConnectBox = true;
-          }
-          feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Unable to send reset email.' };
+          feedbackBanner = {
+            type: 'error',
+            text: err instanceof Error ? err.message : 'Verification failed.'
+          };
           renderModal();
         }
       };

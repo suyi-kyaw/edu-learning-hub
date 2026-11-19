@@ -93,27 +93,9 @@
   function updateBackendBadge() {
     const badge = document.getElementById('adminBackendBadge');
     if (!badge) return;
-    const base = window.LinguaBackend && typeof window.LinguaBackend.getApiBase === 'function'
-      ? window.LinguaBackend.getApiBase()
-      : '';
-    const isStatic = window.LinguaBackend && typeof window.LinguaBackend.isStaticGithubHost === 'function'
-      ? window.LinguaBackend.isStaticGithubHost()
-      : false;
-    badge.classList.remove('is-connected', 'is-warning');
-    if (base) {
-      let labelHost = base;
-      try {
-        labelHost = new URL(base).host;
-      } catch (_) {}
-      badge.textContent = `Connected: ${labelHost}`;
-      badge.classList.add('is-connected');
-    } else if (isStatic) {
-      badge.textContent = 'Static Mode — Backend URL Needed';
-      badge.classList.add('is-warning');
-    } else {
-      badge.textContent = 'Same-Origin Node Server';
-      badge.classList.add('is-connected');
-    }
+    badge.classList.remove('is-warning');
+    badge.classList.add('is-connected');
+    badge.textContent = 'Excel CMS (data/users.xlsx)';
   }
 
   function isSameId(a, b) {
@@ -148,7 +130,7 @@
   async function adminFetch(url, options = {}) {
     if (!hasBackend()) {
       throw new Error(
-        'Static GitHub Pages cannot save Excel sheets or media uploads directly. Enter your hosted HTTPS Node server URL in Homepage & Contact -> Hosted Node Backend Connection.'
+        'This static site cannot overwrite repository Excel or media files automatically. Use Export / Import or update files in your repository.'
       );
     }
     const authApi = window.LinguaAuth;
@@ -241,9 +223,7 @@
       }
 
       state.loadedOnce = true;
-      setSyncStatus(
-        usedStaticFallback ? 'Static snapshot (Connect Node URL to save)' : 'Synced'
-      );
+      setSyncStatus(usedStaticFallback ? 'Static Excel & JSON Loaded' : 'Synced');
       updateNavCounts();
       renderActiveTab();
     } catch (err) {
@@ -423,97 +403,18 @@
     const featReels = new Set((cfg.featuredReelIds || []).map((x) => x.toLowerCase()));
     const featGames = new Set((cfg.featuredGameIds || []).map((x) => x.toLowerCase()));
 
-    const currentApiBase =
-      window.LinguaBackend && typeof window.LinguaBackend.getApiBase === 'function'
-        ? window.LinguaBackend.getApiBase()
-        : '';
-    const isStaticHost =
-      window.LinguaBackend && typeof window.LinguaBackend.isStaticGithubHost === 'function'
-        ? window.LinguaBackend.isStaticGithubHost()
-        : false;
-    const probeClass = currentApiBase || !isStaticHost ? 'is-success' : '';
-    const probeSummary = currentApiBase
-      ? `Connected external Node server: ${currentApiBase} (Origin: ${window.location.origin})`
-      : isStaticHost
-      ? `Running on static host (${window.location.hostname}). Enter your hosted HTTPS Node server URL below to enable Excel saves, uploads, and live API reads.`
-      : `Using same-origin Node server at ${window.location.origin}.`;
-
     viewport.innerHTML = `
-      <div class="admin-panel-card">
-        <div class="admin-panel-head">
-          <div>
-            <h2>Hosted Node Backend Connection (GitHub Pages &amp; External Server)</h2>
-            <p>
-              GitHub Pages (${escapeHTML(window.location.hostname || 'static host')}) only serves static files.
-              Point this Admin Portal to your deployed HTTPS Node server (e.g. Render, Railway, or Fly.io) so Excel saves, uploads, and user membership APIs run live.
-            </p>
-          </div>
-        </div>
-
-        <div class="admin-field" style="margin-bottom:8px;">
-          <label for="cfgBackendApiUrl">Hosted Node Server HTTPS URL</label>
-          <div class="admin-backend-row">
-            <input
-              type="url"
-              class="admin-input"
-              id="cfgBackendApiUrl"
-              value="${escapeHTML(currentApiBase)}"
-              placeholder="https://your-linguapath-server.onrender.com"
-            />
-            <button type="button" class="admin-btn admin-btn-secondary" id="btnTestBackendUrl">Test Connection</button>
-            <button type="button" class="admin-btn admin-btn-primary" id="btnSaveBackendUrl">Save Backend URL</button>
-            <button type="button" class="admin-btn admin-btn-secondary" id="btnResetBackendUrl">Reset to Local Origin</button>
-          </div>
-        </div>
-
-        <div id="backendProbeStatus" class="admin-backend-status ${probeClass}">${escapeHTML(probeSummary)}</div>
-        <p style="margin:8px 0 0; font-size:0.78rem; color:#64748b; line-height:1.45;">
-          Tip: Saving sets this browser override in <code>localStorage</code> and lets you share links with <code>?apiBase=https://...</code>.
-          To connect all public GitHub Pages visitors automatically, paste the URL into <code>DEFAULT_PRODUCTION_BACKEND_URL</code> in <code>backend-config.js</code> and redeploy GitHub Pages.
-        </p>
-      </div>
-
-      <div class="admin-panel-card">
-        <div class="admin-panel-head">
-          <div>
-            <h2>Forgot Password Email Delivery (SMTP)</h2>
-            <p>
-              When learners click <strong>Forgot password?</strong>, the server generates a new temporary password and emails it via SMTP
-              (configured via <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, and <code>SMTP_PASS</code> environment variables on your Node host).
-            </p>
-          </div>
-        </div>
-
-        <div class="admin-backend-row" style="grid-template-columns: 1fr auto;">
-          <input
-            type="email"
-            class="admin-input"
-            id="cfgSmtpTestEmail"
-            value="${escapeHTML(state.authState?.user?.email || cfg.contactEmail || 'syndkyaw@gmail.com')}"
-            placeholder="Recipient email for SMTP test"
-          />
-          <button type="button" class="admin-btn admin-btn-secondary" id="btnTestSmtp">Send Test Email</button>
-        </div>
-
-        <div id="smtpStatusBox" class="admin-backend-status ${state.authState?.smtpConfigured ? 'is-success' : ''}">
-          ${
-            state.authState?.isLocalMode
-              ? 'Static Browser Mode: Connect a Hosted Node Server URL above to enable automatic SMTP password-reset emails.'
-              : state.authState?.smtpConfigured
-              ? 'SMTP environment variables detected on server. Click Send Test Email to verify inbox delivery.'
-              : 'SMTP is not configured yet on the Node server. Set SMTP_HOST, SMTP_USER, and SMTP_PASS to enable automatic Forgot Password emails.'
-          }
-        </div>
-      </div>
-
       <form id="adminHomeForm">
         <div class="admin-panel-card">
           <div class="admin-panel-head">
             <div>
               <h2>Hero Section Copy &amp; Banner Image</h2>
-              <p>Controls the top headline, CTA buttons, and main hero illustration on index.html.</p>
+              <p>Controls the top headline, CTA buttons, and main hero illustration on index.html. Saves locally and lets you export <code>site-config.json</code>.</p>
             </div>
-            <button type="submit" class="admin-btn admin-btn-primary">Save All Homepage Settings</button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="admin-btn admin-btn-secondary" id="btnExportSiteConfig">Export site-config.json</button>
+              <button type="submit" class="admin-btn admin-btn-primary">Save All Homepage Settings</button>
+            </div>
           </div>
 
           <div class="admin-grid-2">
@@ -795,129 +696,12 @@
 
     wireMediaPickers(viewport);
 
-    const urlInput = document.getElementById('cfgBackendApiUrl');
-    const probeEl = document.getElementById('backendProbeStatus');
-    const btnTest = document.getElementById('btnTestBackendUrl');
-    const btnSave = document.getElementById('btnSaveBackendUrl');
-    const btnReset = document.getElementById('btnResetBackendUrl');
-
-    const setProbeUI = (msg, kind) => {
-      if (!probeEl) return;
-      probeEl.textContent = msg;
-      probeEl.classList.remove('is-success', 'is-error');
-      if (kind === 'success') probeEl.classList.add('is-success');
-      if (kind === 'error') probeEl.classList.add('is-error');
-    };
-
-    if (btnTest && window.LinguaBackend) {
-      btnTest.onclick = async () => {
-        const candidate = (urlInput ? urlInput.value : '').trim();
-        btnTest.disabled = true;
-        btnTest.textContent = 'Testing…';
-        setProbeUI('Checking /api/site-config over HTTPS/CORS…', '');
-        const res = await window.LinguaBackend.testConnection(candidate);
-        btnTest.disabled = false;
-        btnTest.textContent = 'Test Connection';
-        if (res.ok) {
-          setProbeUI(`Connected! /api/site-config responded in ${res.latencyMs}ms.`, 'success');
-          toast(`Backend reachable (${res.latencyMs}ms).`);
-        } else {
-          setProbeUI(res.error || 'Connection test failed.', 'error');
-          toast(res.error || 'Connection test failed.', 'error');
-        }
-      };
-    }
-
-    if (btnSave && window.LinguaBackend) {
-      btnSave.onclick = async () => {
-        const candidate = (urlInput ? urlInput.value : '').trim();
-        if (!candidate) {
-          window.LinguaBackend.clearApiBase();
-          updateBackendBadge();
-          setProbeUI('Cleared custom backend override. Using local origin.', '');
-          await loadAllContentData(true);
-          return;
-        }
-        try {
-          btnSave.disabled = true;
-          const saved = window.LinguaBackend.setApiBase(candidate);
-          if (urlInput) urlInput.value = saved;
-          updateBackendBadge();
-          setProbeUI(`Saved ${saved}. Verifying live data sync…`, 'success');
-          const probe = await window.LinguaBackend.testConnection(saved);
-          if (probe.ok) {
-            setProbeUI(`Saved & connected to ${saved} (${probe.latencyMs}ms). Syncing workbooks…`, 'success');
-            await loadAllContentData(true);
-            toast('Hosted Node backend connected!');
-          } else {
-            setProbeUI(`Saved ${saved}, but server check failed: ${probe.error}`, 'error');
-            toast(probe.error || 'Saved URL, but could not reach server.', 'error');
-          }
-        } catch (err) {
-          setProbeUI(err instanceof Error ? err.message : 'Invalid backend URL.', 'error');
-          toast(err instanceof Error ? err.message : 'Invalid backend URL.', 'error');
-        } finally {
-          btnSave.disabled = false;
-        }
-      };
-    }
-
-    if (btnReset && window.LinguaBackend) {
-      btnReset.onclick = async () => {
-        window.LinguaBackend.clearApiBase();
-        if (urlInput) urlInput.value = window.LinguaBackend.getApiBase();
-        updateBackendBadge();
-        setProbeUI('Reset to default local origin behavior.', '');
-        await loadAllContentData(true);
-        toast('Backend URL override cleared.');
-      };
-    }
-
-    const smtpTestBtn = document.getElementById('btnTestSmtp');
-    const smtpStatusBox = document.getElementById('smtpStatusBox');
-    if (smtpTestBtn && window.LinguaAuth && typeof window.LinguaAuth.getSmtpStatus === 'function') {
-      if (!state.authState?.isLocalMode) {
-        window.LinguaAuth
-          .getSmtpStatus()
-          .then((info) => {
-            if (!smtpStatusBox) return;
-            if (info.configured) {
-              smtpStatusBox.className = 'admin-backend-status is-success';
-              smtpStatusBox.textContent = `SMTP configured (${info.host}:${info.port} · ${info.userMasked || 'user'}). Click Send Test Email to verify delivery.`;
-            } else {
-              smtpStatusBox.className = 'admin-backend-status';
-              smtpStatusBox.textContent =
-                'SMTP not configured on server yet (missing SMTP_HOST, SMTP_USER, or SMTP_PASS). Forgot Password emails require SMTP credentials.';
-            }
-          })
-          .catch(() => {});
-      }
-
-      smtpTestBtn.onclick = async () => {
-        const to = (document.getElementById('cfgSmtpTestEmail')?.value || '').trim();
-        smtpTestBtn.disabled = true;
-        smtpTestBtn.textContent = 'Sending…';
-        if (smtpStatusBox) {
-          smtpStatusBox.className = 'admin-backend-status';
-          smtpStatusBox.textContent = 'Sending SMTP verification email…';
-        }
-        try {
-          const res = await window.LinguaAuth.sendTestSmtpEmail(to);
-          if (smtpStatusBox) {
-            smtpStatusBox.className = 'admin-backend-status is-success';
-            smtpStatusBox.textContent = res.message || `Test email sent to ${to}.`;
-          }
-          toast(res.message || 'SMTP test email sent!');
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : 'SMTP test failed.';
-          if (smtpStatusBox) {
-            smtpStatusBox.className = 'admin-backend-status is-error';
-            smtpStatusBox.textContent = msg;
-          }
-          toast(msg, 'error');
-        } finally {
-          smtpTestBtn.disabled = false;
-          smtpTestBtn.textContent = 'Send Test Email';
+    const exportSiteCfgBtn = document.getElementById('btnExportSiteConfig');
+    if (exportSiteCfgBtn) {
+      exportSiteCfgBtn.onclick = () => {
+        if (window.LinguaAuth && typeof window.LinguaAuth.exportSiteConfigJson === 'function') {
+          window.LinguaAuth.exportSiteConfigJson();
+          toast('Downloaded site-config.json — replace data/site-config.json to publish globally.');
         }
       };
     }
@@ -2844,7 +2628,39 @@
         String(u.phoneNumber || '').toLowerCase().includes(q)
     );
 
+    const excelSummary = authState.excelSummary || {
+      baseUsersCount: 0,
+      overlayDeltaCount: 0,
+      totalMergedUsers: users.length,
+      workbookLoaded: false
+    };
+
     viewport.innerHTML = `
+      <div class="admin-panel-card">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Users Excel Workbook (<code>data/users.xlsx</code>)</h2>
+            <p>
+              All sign-ins verify email &amp; password against <code>data/users.xlsx</code> merged with browser registrations.
+              Export <code>users.xlsx</code> after approving members or registering learners and replace <code>data/users.xlsx</code> in your repository to share across all devices.
+            </p>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <button type="button" class="admin-btn admin-btn-primary btn-sm" id="btnExportUsersXlsx">Export users.xlsx</button>
+            <label class="admin-btn admin-btn-secondary admin-btn-sm" style="margin:0; cursor:pointer;">
+              <span>Import users.xlsx</span>
+              <input type="file" id="inputImportUsersXlsx" accept=".xlsx,.xls" hidden />
+            </label>
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnReloadRepoUsersXlsx">Reload Repo File</button>
+          </div>
+        </div>
+        <div class="admin-backend-status is-success" style="margin-top:0;">
+          Merged Users: <strong>${excelSummary.totalMergedUsers}</strong>
+          · Repo <code>data/users.xlsx</code> Rows: <strong>${excelSummary.baseUsersCount}</strong>
+          · Browser Edits / New Signups: <strong>${excelSummary.overlayDeltaCount}</strong>
+        </div>
+      </div>
+
       <div class="admin-panel-card">
         <div class="admin-panel-head">
           <div>
@@ -2995,6 +2811,47 @@
       </div>
     `;
 
+    const btnExportUsers = document.getElementById('btnExportUsersXlsx');
+    if (btnExportUsers) {
+      btnExportUsers.onclick = async () => {
+        try {
+          const out = await window.LinguaAuth.exportUsersWorkbook();
+          toast(`Exported ${out.fileName} (${out.userCount} user rows). Replace data/users.xlsx to publish.`);
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Export failed.', 'error');
+        }
+      };
+    }
+
+    const inputImportUsers = document.getElementById('inputImportUsersXlsx');
+    if (inputImportUsers) {
+      inputImportUsers.onchange = async () => {
+        const file = inputImportUsers.files && inputImportUsers.files[0];
+        if (!file) return;
+        try {
+          const buf = await file.arrayBuffer();
+          const out = await window.LinguaAuth.importUsersWorkbook(buf);
+          toast(`Imported ${out.userCount} users from ${file.name}.`);
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Import failed.', 'error');
+        } finally {
+          inputImportUsers.value = '';
+        }
+      };
+    }
+
+    const btnReloadRepoUsers = document.getElementById('btnReloadRepoUsersXlsx');
+    if (btnReloadRepoUsers) {
+      btnReloadRepoUsers.onclick = async () => {
+        try {
+          const summary = await window.LinguaAuth.reloadUsersWorkbookFromRepo();
+          toast(`Reloaded data/users.xlsx (${summary.baseUsersCount} repo user rows).`);
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Reload failed.', 'error');
+        }
+      };
+    }
+
     document.getElementById('userSearchInput').oninput = (e) => {
       state.filters.userSearch = e.target.value;
       renderUsersTab(viewport);
@@ -3103,13 +2960,12 @@
         const uid = btn.getAttribute('data-u-resetpw');
         const user = users.find((x) => x.uid === uid);
         if (!user) return;
-        const smtpOn = Boolean(state.authState?.smtpConfigured);
 
         openModal(`
           <div class="admin-panel-head" style="margin-bottom:12px;">
             <div>
               <h2>Reset Password · ${escapeHTML(user.username || user.email)}</h2>
-              <p>Set a temporary password for ${escapeHTML(user.email)} (leave blank to auto-generate a strong 12-character temporary password).</p>
+              <p>Set a temporary password for ${escapeHTML(user.email)} (leave blank to auto-generate a strong 12-character temporary password). Export <code>users.xlsx</code> afterward to sync to GitHub.</p>
             </div>
             <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="rpCloseBtn">✕</button>
           </div>
@@ -3119,10 +2975,6 @@
               <label for="rpCustomPw">Custom Temporary Password (Optional, min. 6 chars)</label>
               <input type="text" class="admin-input" id="rpCustomPw" minlength="6" placeholder="Leave blank to auto-generate random password" />
             </div>
-            <label class="admin-check-row" style="margin:12px 0;">
-              <input type="checkbox" id="rpSendEmail" ${smtpOn ? 'checked' : ''} ${smtpOn ? '' : 'disabled'} />
-              <span>Email temporary password to ${escapeHTML(user.email)} ${smtpOn ? '(SMTP Ready)' : '(SMTP Not Configured)'}</span>
-            </label>
             <div id="rpResultBox" class="admin-backend-status" hidden></div>
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
               <button type="button" class="admin-btn admin-btn-secondary" id="rpCancelBtn">Close</button>
@@ -3136,7 +2988,6 @@
         document.getElementById('adminResetPwForm').onsubmit = async (e) => {
           e.preventDefault();
           const customPw = (document.getElementById('rpCustomPw')?.value || '').trim();
-          const sendEmail = Boolean(document.getElementById('rpSendEmail')?.checked);
           const submitBtn = document.getElementById('rpSubmitBtn');
           const resBox = document.getElementById('rpResultBox');
           if (customPw && customPw.length < 6) {
@@ -3149,20 +3000,13 @@
           }
           try {
             const out = await window.LinguaAuth.adminResetUserPassword(uid, {
-              newPassword: customPw || undefined,
-              sendEmail
+              newPassword: customPw || undefined
             });
             if (resBox) {
               resBox.hidden = false;
               resBox.className = 'admin-backend-status is-success';
               resBox.innerHTML = `
-                <div>Password updated! ${
-                  out.emailed
-                    ? `Temporary password emailed to <strong>${escapeHTML(user.email)}</strong>.`
-                    : out.emailError
-                    ? `Email note: ${escapeHTML(out.emailError)}. Share the password below directly:`
-                    : 'Share this temporary password with the learner:'
-                }</div>
+                <div>Password updated! Share this temporary password with the learner (and click <strong>Export users.xlsx</strong> to publish to your repo):</div>
                 <div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                   <code style="font-size:0.95rem; font-weight:800; padding:4px 8px; background:rgba(15,23,42,0.08); border-radius:6px;">${escapeHTML(
                     out.temporaryPassword
@@ -3257,109 +3101,6 @@
     gate.hidden = false;
     workspace.hidden = true;
 
-    const backendApiBase =
-      window.LinguaBackend && typeof window.LinguaBackend.getApiBase === 'function'
-        ? window.LinguaBackend.getApiBase()
-        : '';
-    const isStaticSite =
-      Boolean(s.isLocalMode) ||
-      Boolean(window.LinguaBackend?.isStaticGithubHost?.()) ||
-      Boolean(backendApiBase);
-
-    const gateBackendHtml = isStaticSite
-      ? `
-        <div style="margin-top:22px; padding-top:18px; border-top:1px solid #e2e8f0; text-align:left;">
-          <div style="font-size:0.82rem; font-weight:800; margin-bottom:4px;">Hosted Node Backend Connection</div>
-          <p style="font-size:0.78rem; color:#64748b; margin:0 0 10px; line-height:1.45;">
-            ${
-              backendApiBase
-                ? 'Connected to your hosted Node server. Switch or reset anytime:'
-                : 'Running in Static Browser Mode. You can create your browser Admin above, or paste your deployed HTTPS Node server URL below to connect to your shared server database:'
-            }
-          </p>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <input
-              type="url"
-              class="admin-input"
-              id="adminGateBackendUrl"
-              value="${escapeHTML(backendApiBase)}"
-              placeholder="https://your-linguapath-server.onrender.com"
-              style="flex:1; min-width:210px;"
-            />
-            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="adminGateConnectBtn">Test &amp; Connect</button>
-            ${
-              backendApiBase
-                ? `<button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="adminGateResetBackendBtn">Use Browser Mode</button>`
-                : ''
-            }
-          </div>
-          <div id="adminGateBackendStatus" class="admin-backend-status ${backendApiBase ? 'is-success' : ''}">
-            ${escapeHTML(
-              backendApiBase
-                ? `Connected server: ${backendApiBase}`
-                : 'Static Browser Mode active (no external Node URL set).'
-            )}
-          </div>
-        </div>
-      `
-      : '';
-
-    const bindGateBackendEvents = () => {
-      const connectBtn = document.getElementById('adminGateConnectBtn');
-      const resetBtn = document.getElementById('adminGateResetBackendBtn');
-      const urlInput = document.getElementById('adminGateBackendUrl');
-      const statusEl = document.getElementById('adminGateBackendStatus');
-
-      if (connectBtn && window.LinguaBackend) {
-        connectBtn.onclick = async () => {
-          const candidate = (urlInput?.value || '').trim();
-          if (!candidate) {
-            if (statusEl) {
-              statusEl.className = 'admin-backend-status is-error';
-              statusEl.textContent = 'Enter your hosted HTTPS Node server URL first.';
-            }
-            return;
-          }
-          connectBtn.disabled = true;
-          connectBtn.textContent = 'Connecting…';
-          if (statusEl) {
-            statusEl.className = 'admin-backend-status';
-            statusEl.textContent = 'Testing /api/site-config over HTTPS/CORS…';
-          }
-          const probe = await window.LinguaBackend.testConnection(candidate);
-          if (!probe.ok) {
-            connectBtn.disabled = false;
-            connectBtn.textContent = 'Test & Connect';
-            if (statusEl) {
-              statusEl.className = 'admin-backend-status is-error';
-              statusEl.textContent = probe.error || 'Could not reach server.';
-            }
-            return;
-          }
-          try {
-            const saved = window.LinguaBackend.setApiBase(candidate);
-            updateBackendBadge();
-            toast(`Connected to ${saved} (${probe.latencyMs}ms).`);
-          } catch (err) {
-            connectBtn.disabled = false;
-            connectBtn.textContent = 'Test & Connect';
-            if (statusEl) {
-              statusEl.className = 'admin-backend-status is-error';
-              statusEl.textContent = err instanceof Error ? err.message : 'Invalid backend URL.';
-            }
-          }
-        };
-      }
-
-      if (resetBtn && window.LinguaBackend) {
-        resetBtn.onclick = () => {
-          window.LinguaBackend.clearApiBase();
-          updateBackendBadge();
-          toast('Switched back to Static Browser Mode.');
-        };
-      }
-    };
-
     if (!s.user) {
       const unclaimed = !s.adminClaimed;
       if (gateTitle) {
@@ -3368,7 +3109,7 @@
       if (gateMsg) {
         gateMsg.textContent = unclaimed
           ? 'No administrator account exists yet. Create your Admin account with syndkyaw@gmail.com to claim the CMS Portal.'
-          : 'Sign in with syndkyaw@gmail.com (email & password) to manage homepage content, stories, reels, lessons, exercises, Wordwall games, and learner memberships.';
+          : 'Sign in with your administrator email and password (verified against data/users.xlsx) to manage users, memberships, and site settings.';
       }
       if (gateActions) {
         gateActions.innerHTML = unclaimed
@@ -3378,14 +3119,12 @@
               <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignInBtn">Sign In</button>
               <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
             </div>
-            <div style="width:100%;">${gateBackendHtml}</div>
           `
           : `
             <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; width:100%;">
               <button type="button" class="admin-btn admin-btn-primary" id="adminGateSignInBtn">Sign In as Admin</button>
               <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
             </div>
-            <div style="width:100%;">${gateBackendHtml}</div>
           `;
         const regBtn = document.getElementById('adminGateRegisterBtn');
         if (regBtn) {
@@ -3403,7 +3142,6 @@
             }
           };
         }
-        bindGateBackendEvents();
       }
     } else {
       if (gateTitle) {
@@ -3418,14 +3156,12 @@
             <a href="index.html" class="admin-btn admin-btn-primary">Back to Home</a>
             <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
           </div>
-          <div style="width:100%;">${gateBackendHtml}</div>
         `;
         document.getElementById('adminGateSignOutBtn').onclick = () => {
           if (window.LinguaAuth && typeof window.LinguaAuth.logout === 'function') {
             window.LinguaAuth.logout();
           }
         };
-        bindGateBackendEvents();
       }
     }
   }
@@ -3452,19 +3188,13 @@
     const backendBadgeBtn = document.getElementById('adminBackendBadge');
     if (backendBadgeBtn) {
       backendBadgeBtn.onclick = () => {
-        state.activeTab = 'home';
-        window.history.replaceState(null, '', '#home');
+        state.activeTab = 'users';
+        window.history.replaceState(null, '', '#users');
         renderActiveTab();
-        const urlInput = document.getElementById('cfgBackendApiUrl');
-        if (urlInput) {
-          urlInput.focus();
-          urlInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
       };
     }
 
     updateBackendBadge();
-    window.addEventListener('linguapath-backend-change', () => updateBackendBadge());
 
     const modalBackdrop = document.getElementById('adminModalBackdrop');
     if (modalBackdrop) {

@@ -78,25 +78,11 @@
   }
 
   function getApiBase() {
-    var runtimeGlobal = normalizeBaseUrl(global.LINGUAPATH_BACKEND_URL || '');
-    if (runtimeGlobal && isValidHttpUrl(runtimeGlobal)) return runtimeGlobal;
-
-    var stored = getStoredOverride();
-    if (stored && isValidHttpUrl(stored)) return stored;
-
-    var metaUrl = getMetaOverride();
-    if (metaUrl && isValidHttpUrl(metaUrl)) return metaUrl;
-
-    if (isStaticGithubHost()) {
-      var prod = normalizeBaseUrl(DEFAULT_PRODUCTION_BACKEND_URL);
-      if (prod && isValidHttpUrl(prod)) return prod;
-    }
-
     return '';
   }
 
   function hasBackend() {
-    return Boolean(getApiBase()) || !isStaticGithubHost();
+    return false;
   }
 
   function dispatchConfigChange() {
