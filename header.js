@@ -478,7 +478,7 @@
     // Sync visibility of login-gated member menu items (Daily Streak, Learning Rank, Daily Reminder)
     syncMemberMenuVisibility();
 
-    // Ensure Firebase Auth + Account UI scripts are loaded on every page
+    // Ensure Account Auth & Account UI scripts are loaded on every page
     ensureAuthScriptsLoaded();
 
     // Notify listeners (such as auth-ui.js) that header buttons exist in DOM

@@ -473,6 +473,37 @@
         </p>
       </div>
 
+      <div class="admin-panel-card">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Forgot Password Email Delivery (SMTP)</h2>
+            <p>
+              When learners click <strong>Forgot password?</strong>, the server generates a new temporary password and emails it via SMTP
+              (configured via <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, and <code>SMTP_PASS</code> environment variables on your Node host).
+            </p>
+          </div>
+        </div>
+
+        <div class="admin-backend-row" style="grid-template-columns: 1fr auto;">
+          <input
+            type="email"
+            class="admin-input"
+            id="cfgSmtpTestEmail"
+            value="${escapeHTML(state.authState?.user?.email || cfg.contactEmail || 'syndkyaw@gmail.com')}"
+            placeholder="Recipient email for SMTP test"
+          />
+          <button type="button" class="admin-btn admin-btn-secondary" id="btnTestSmtp">Send Test Email</button>
+        </div>
+
+        <div id="smtpStatusBox" class="admin-backend-status ${state.authState?.smtpConfigured ? 'is-success' : ''}">
+          ${
+            state.authState?.smtpConfigured
+              ? 'SMTP environment variables detected on server. Click Send Test Email to verify inbox delivery.'
+              : 'SMTP is not configured yet on the Node server. Set SMTP_HOST, SMTP_USER, and SMTP_PASS to enable automatic Forgot Password emails.'
+          }
+        </div>
+      </div>
+
       <form id="adminHomeForm">
         <div class="admin-panel-card">
           <div class="admin-panel-head">
@@ -837,6 +868,53 @@
         setProbeUI('Reset to default local origin behavior.', '');
         await loadAllContentData(true);
         toast('Backend URL override cleared.');
+      };
+    }
+
+    const smtpTestBtn = document.getElementById('btnTestSmtp');
+    const smtpStatusBox = document.getElementById('smtpStatusBox');
+    if (smtpTestBtn && window.LinguaAuth && typeof window.LinguaAuth.getSmtpStatus === 'function') {
+      window.LinguaAuth
+        .getSmtpStatus()
+        .then((info) => {
+          if (!smtpStatusBox) return;
+          if (info.configured) {
+            smtpStatusBox.className = 'admin-backend-status is-success';
+            smtpStatusBox.textContent = `SMTP configured (${info.host}:${info.port} · ${info.userMasked || 'user'}). Click Send Test Email to verify delivery.`;
+          } else {
+            smtpStatusBox.className = 'admin-backend-status';
+            smtpStatusBox.textContent =
+              'SMTP not configured on server yet (missing SMTP_HOST, SMTP_USER, or SMTP_PASS). Forgot Password emails require SMTP credentials.';
+          }
+        })
+        .catch(() => {});
+
+      smtpTestBtn.onclick = async () => {
+        const to = (document.getElementById('cfgSmtpTestEmail')?.value || '').trim();
+        smtpTestBtn.disabled = true;
+        smtpTestBtn.textContent = 'Sending…';
+        if (smtpStatusBox) {
+          smtpStatusBox.className = 'admin-backend-status';
+          smtpStatusBox.textContent = 'Sending SMTP verification email…';
+        }
+        try {
+          const res = await window.LinguaAuth.sendTestSmtpEmail(to);
+          if (smtpStatusBox) {
+            smtpStatusBox.className = 'admin-backend-status is-success';
+            smtpStatusBox.textContent = res.message || `Test email sent to ${to}.`;
+          }
+          toast(res.message || 'SMTP test email sent!');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'SMTP test failed.';
+          if (smtpStatusBox) {
+            smtpStatusBox.className = 'admin-backend-status is-error';
+            smtpStatusBox.textContent = msg;
+          }
+          toast(msg, 'error');
+        } finally {
+          smtpTestBtn.disabled = false;
+          smtpTestBtn.textContent = 'Send Test Email';
+        }
       };
     }
 
@@ -2846,7 +2924,7 @@
                 <th>Plan</th>
                 <th>Expiry Date</th>
                 <th>Unlocked Lessons</th>
-                <th>Save</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -2855,13 +2933,15 @@
                   ? filteredUsers
                       .map((u) => {
                         const unlockedCount = Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds.length : 0;
+                        const roleTag = u.role === 'admin' ? ' · Admin' : '';
+                        const tempTag = u.mustChangePassword ? ' · Temp PW active' : '';
                         return `
                         <tr>
                           <td>
-                            <strong>${escapeHTML(u.username || 'Learner')}</strong>
+                            <strong>${escapeHTML(u.username || 'Learner')}</strong>${escapeHTML(roleTag)}
                             <div style="font-size:0.78rem; color:#64748b;">${escapeHTML(u.email || '')}${
                           u.phoneNumber ? ` · ${escapeHTML(u.phoneNumber)}` : ''
-                        }</div>
+                        }${escapeHTML(tempTag)}</div>
                           </td>
                           <td>
                             <select class="admin-select" data-u-status="${escapeHTML(u.uid)}">
@@ -2890,9 +2970,14 @@
                             )}">Lessons (${unlockedCount})</button>
                           </td>
                           <td>
-                            <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" data-u-save="${escapeHTML(
-                              u.uid
-                            )}">Update</button>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                              <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" data-u-save="${escapeHTML(
+                                u.uid
+                              )}">Update</button>
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-u-resetpw="${escapeHTML(
+                                u.uid
+                              )}">Reset PW</button>
+                            </div>
                           </td>
                         </tr>
                       `;
@@ -3008,6 +3093,106 @@
         };
       };
     });
+
+    viewport.querySelectorAll('[data-u-resetpw]').forEach((btn) => {
+      btn.onclick = () => {
+        const uid = btn.getAttribute('data-u-resetpw');
+        const user = users.find((x) => x.uid === uid);
+        if (!user) return;
+        const smtpOn = Boolean(state.authState?.smtpConfigured);
+
+        openModal(`
+          <div class="admin-panel-head" style="margin-bottom:12px;">
+            <div>
+              <h2>Reset Password · ${escapeHTML(user.username || user.email)}</h2>
+              <p>Set a temporary password for ${escapeHTML(user.email)} (leave blank to auto-generate a strong 12-character temporary password).</p>
+            </div>
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="rpCloseBtn">✕</button>
+          </div>
+
+          <form id="adminResetPwForm">
+            <div class="admin-field">
+              <label for="rpCustomPw">Custom Temporary Password (Optional, min. 6 chars)</label>
+              <input type="text" class="admin-input" id="rpCustomPw" minlength="6" placeholder="Leave blank to auto-generate random password" />
+            </div>
+            <label class="admin-check-row" style="margin:12px 0;">
+              <input type="checkbox" id="rpSendEmail" ${smtpOn ? 'checked' : ''} ${smtpOn ? '' : 'disabled'} />
+              <span>Email temporary password to ${escapeHTML(user.email)} ${smtpOn ? '(SMTP Ready)' : '(SMTP Not Configured)'}</span>
+            </label>
+            <div id="rpResultBox" class="admin-backend-status" hidden></div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+              <button type="button" class="admin-btn admin-btn-secondary" id="rpCancelBtn">Close</button>
+              <button type="submit" class="admin-btn admin-btn-primary" id="rpSubmitBtn">Reset User Password</button>
+            </div>
+          </form>
+        `);
+
+        document.getElementById('rpCloseBtn').onclick = closeModal;
+        document.getElementById('rpCancelBtn').onclick = closeModal;
+        document.getElementById('adminResetPwForm').onsubmit = async (e) => {
+          e.preventDefault();
+          const customPw = (document.getElementById('rpCustomPw')?.value || '').trim();
+          const sendEmail = Boolean(document.getElementById('rpSendEmail')?.checked);
+          const submitBtn = document.getElementById('rpSubmitBtn');
+          const resBox = document.getElementById('rpResultBox');
+          if (customPw && customPw.length < 6) {
+            toast('Custom password must be at least 6 characters.', 'error');
+            return;
+          }
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Resetting…';
+          }
+          try {
+            const out = await window.LinguaAuth.adminResetUserPassword(uid, {
+              newPassword: customPw || undefined,
+              sendEmail
+            });
+            if (resBox) {
+              resBox.hidden = false;
+              resBox.className = 'admin-backend-status is-success';
+              resBox.innerHTML = `
+                <div>Password updated! ${
+                  out.emailed
+                    ? `Temporary password emailed to <strong>${escapeHTML(user.email)}</strong>.`
+                    : out.emailError
+                    ? `Email note: ${escapeHTML(out.emailError)}. Share the password below directly:`
+                    : 'Share this temporary password with the learner:'
+                }</div>
+                <div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <code style="font-size:0.95rem; font-weight:800; padding:4px 8px; background:rgba(15,23,42,0.08); border-radius:6px;">${escapeHTML(
+                    out.temporaryPassword
+                  )}</code>
+                  <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="rpCopyTempBtn">Copy Password</button>
+                </div>
+              `;
+              const copyBtn = document.getElementById('rpCopyTempBtn');
+              if (copyBtn) {
+                copyBtn.onclick = () => {
+                  navigator.clipboard?.writeText(out.temporaryPassword).then(
+                    () => toast('Temporary password copied.'),
+                    () => toast('Copy failed — select manually.', 'info')
+                  );
+                };
+              }
+            }
+            toast(`Temporary password updated for ${user.email}.`);
+          } catch (err) {
+            if (resBox) {
+              resBox.hidden = false;
+              resBox.className = 'admin-backend-status is-error';
+              resBox.textContent = err instanceof Error ? err.message : 'Failed to reset password.';
+            }
+            toast(err instanceof Error ? err.message : 'Failed to reset password.', 'error');
+          } finally {
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Reset User Password';
+            }
+          }
+        };
+      };
+    });
   }
 
   // --- Tab Routing & Auth Gate ---
@@ -3069,176 +3254,59 @@
     workspace.hidden = true;
 
     if (!s.user) {
-      if (gateTitle) gateTitle.textContent = 'Administrator Sign-In Required';
-      if (gateMsg) {
-        gateMsg.textContent =
-          'Sign in with syndkyaw@gmail.com to manage homepage content, stories, reels, lessons, exercises, Wordwall games, and learner memberships.';
-      }
-      if (gateActions) {
-        gateActions.innerHTML = `
-          <div style="width:100%; display:flex; flex-direction:column; gap:10px; align-items:stretch;">
-            <button type="button" class="lp-btn-google lp-btn-google-top" id="adminGateGoogleDirectBtn">
-              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/>
-                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"/>
-                <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"/>
-                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"/>
-              </svg>
-              <span>Continue with Google (Admin)</span>
-            </button>
-            <div id="adminGateErrorBox" hidden style="padding:10px 12px; border-radius:10px; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; font-size:0.84rem; text-align:left; line-height:1.45;"></div>
-            <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
-              <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignInBtn">Sign In with Email</button>
-              <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
-            </div>
-          </div>
-        `;
-        const directGoogleBtn = document.getElementById('adminGateGoogleDirectBtn');
-        const gateErrorBox = document.getElementById('adminGateErrorBox');
-        if (directGoogleBtn) {
-          directGoogleBtn.onclick = async () => {
-            if (!window.LinguaAuth || typeof window.LinguaAuth.signInWithGoogle !== 'function') return;
-            if (gateErrorBox) gateErrorBox.hidden = true;
-            directGoogleBtn.disabled = true;
-            const span = directGoogleBtn.querySelector('span');
-            if (span) span.textContent = 'Signing in with Google…';
-            try {
-              await window.LinguaAuth.signInWithGoogle();
-            } catch (err) {
-              directGoogleBtn.disabled = false;
-              if (span) span.textContent = 'Continue with Google (Admin)';
-              const msg = err instanceof Error ? err.message : 'Google sign-in failed.';
-              const errCode = (err && typeof err === 'object' && 'code' in err ? String(err.code) : '') || '';
-              const isUnauthorizedDomain =
-                errCode === 'auth/unauthorized-domain' || /unauthorized-domain|not authorized/i.test(msg);
-              const projectId =
-                (window.LinguaAuth && typeof window.LinguaAuth.getFirebaseProjectId === 'function'
-                  ? window.LinguaAuth.getFirebaseProjectId()
-                  : 'melodic-ace-2lvvl') || 'melodic-ace-2lvvl';
-              const hostName = window.location.hostname || 'suyi-kyaw.github.io';
-              const domainsUrl = `https://console.firebase.google.com/project/${encodeURIComponent(
-                projectId
-              )}/authentication/settings`;
-              const cloudUpgradeUrl = `https://console.cloud.google.com/customer-identity?project=${encodeURIComponent(
-                projectId
-              )}`;
-
-              if (gateErrorBox) {
-                gateErrorBox.hidden = false;
-                if (isUnauthorizedDomain) {
-                  gateErrorBox.innerHTML = `
-                    <div><strong>Domain Not Authorized (${escapeHTML(hostName)}):</strong> ${escapeHTML(msg)}</div>
-                    <div class="lp-domain-copy-row" style="margin-top:8px;">
-                      <code class="lp-domain-pill">${escapeHTML(hostName)}</code>
-                      <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="adminGateCopyDomainBtn">Copy Domain</button>
-                    </div>
-                    <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-                      <a class="admin-btn admin-btn-primary admin-btn-sm" href="${escapeHTML(domainsUrl)}" target="_blank" rel="noopener noreferrer">Open Authorized Domains ↗</a>
-                      <a class="admin-btn admin-btn-secondary admin-btn-sm" href="${escapeHTML(cloudUpgradeUrl)}" target="_blank" rel="noopener noreferrer">Google Cloud Upgrade ↗</a>
-                    </div>
-                  `;
-                  const copyBtn = document.getElementById('adminGateCopyDomainBtn');
-                  if (copyBtn) {
-                    copyBtn.onclick = () => {
-                      if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(hostName).then(
-                          () => toast(`Copied ${hostName} to clipboard.`),
-                          () => toast(`Copy failed — add ${hostName} manually.`, 'info')
-                        );
-                      }
-                    };
-                  }
-                } else {
-                  gateErrorBox.innerHTML = `
-                    <div>${escapeHTML(msg)}</div>
-                    <div style="margin-top:8px;">
-                      <a class="admin-btn admin-btn-primary admin-btn-sm" href="${escapeHTML(window.location.href)}" target="_blank" rel="noopener noreferrer">Open Admin Portal in New Tab ↗</a>
-                    </div>
-                  `;
-                }
-              }
-              toast(msg, 'error');
-            }
-          };
-        }
-        document.getElementById('adminGateSignInBtn').onclick = () => {
-          if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openAuthModal === 'function') {
-            window.LinguaAuthUI.openAuthModal('signin');
-          }
-        };
-      }
-    } else {
-      const isUnverifiedAdminEmail =
-        String(s.user.email || '').toLowerCase() === 'syndkyaw@gmail.com' && !s.user.emailVerified;
+      const unclaimed = !s.adminClaimed;
       if (gateTitle) {
-        gateTitle.textContent = isUnverifiedAdminEmail ? 'Admin Email Verification Required' : 'Access Restricted';
+        gateTitle.textContent = unclaimed ? 'First-Time Admin Setup' : 'Administrator Sign-In Required';
       }
       if (gateMsg) {
-        gateMsg.textContent = isUnverifiedAdminEmail
-          ? `Signed in as ${s.user.email}, but your email is not yet verified. Click Continue with Google below for instant verified admin access, or click your inbox verification link and then Check Verification Status.`
-          : `Signed in as ${s.user.email}. This workspace is restricted to the site administrator account.`;
+        gateMsg.textContent = unclaimed
+          ? 'No administrator account exists yet. Create your Admin account with syndkyaw@gmail.com to claim the CMS Portal.'
+          : 'Sign in with syndkyaw@gmail.com (email & password) to manage homepage content, stories, reels, lessons, exercises, Wordwall games, and learner memberships.';
       }
       if (gateActions) {
-        gateActions.innerHTML = isUnverifiedAdminEmail
+        gateActions.innerHTML = unclaimed
           ? `
-            <div style="width:100%; display:flex; flex-direction:column; gap:10px; align-items:stretch;">
-              <button type="button" class="admin-btn admin-btn-primary" id="adminGateGoogleBtn">Continue with Google (Instant Verify)</button>
-              <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
-                <button type="button" class="admin-btn admin-btn-secondary" id="adminGateRefreshVerifyBtn">Check Verification Status</button>
-                <button type="button" class="admin-btn admin-btn-secondary" id="adminGateResendBtn">Resend Verification Email</button>
-                <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
-              </div>
+            <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+              <button type="button" class="admin-btn admin-btn-primary" id="adminGateRegisterBtn">Create Admin Account (syndkyaw@gmail.com)</button>
+              <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignInBtn">Sign In</button>
+              <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
             </div>
           `
           : `
-            <a href="index.html" class="admin-btn admin-btn-primary">Back to Home</a>
-            <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
+            <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+              <button type="button" class="admin-btn admin-btn-primary" id="adminGateSignInBtn">Sign In as Admin</button>
+              <a href="index.html" class="admin-btn admin-btn-secondary">Back to Home</a>
+            </div>
           `;
-        const resendBtn = document.getElementById('adminGateResendBtn');
-        if (resendBtn) {
-          resendBtn.onclick = async () => {
-            try {
-              await window.LinguaAuth.resendVerificationEmail();
-              toast('Verification email sent to syndkyaw@gmail.com. After clicking the link, click Check Verification Status.');
-            } catch (err) {
-              toast(err instanceof Error ? err.message : 'Could not send verification email.', 'error');
+        const regBtn = document.getElementById('adminGateRegisterBtn');
+        if (regBtn) {
+          regBtn.onclick = () => {
+            if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openAuthModal === 'function') {
+              window.LinguaAuthUI.openAuthModal('register');
             }
           };
         }
-        const refreshVerifyBtn = document.getElementById('adminGateRefreshVerifyBtn');
-        if (refreshVerifyBtn) {
-          refreshVerifyBtn.onclick = async () => {
-            if (!window.LinguaAuth || typeof window.LinguaAuth.reloadAuthSession !== 'function') return;
-            refreshVerifyBtn.disabled = true;
-            refreshVerifyBtn.textContent = 'Checking…';
-            try {
-              const nextState = await window.LinguaAuth.reloadAuthSession();
-              if (!nextState?.user?.emailVerified) {
-                toast('Email is not marked verified yet. Click the link in your inbox or use Continue with Google.', 'info');
-                refreshVerifyBtn.disabled = false;
-                refreshVerifyBtn.textContent = 'Check Verification Status';
-              }
-            } catch (err) {
-              refreshVerifyBtn.disabled = false;
-              refreshVerifyBtn.textContent = 'Check Verification Status';
-              toast(err instanceof Error ? err.message : 'Could not refresh session.', 'error');
+        const signInBtn = document.getElementById('adminGateSignInBtn');
+        if (signInBtn) {
+          signInBtn.onclick = () => {
+            if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openAuthModal === 'function') {
+              window.LinguaAuthUI.openAuthModal('signin');
             }
           };
         }
-        const googleBtn = document.getElementById('adminGateGoogleBtn');
-        if (googleBtn) {
-          googleBtn.onclick = async () => {
-            googleBtn.disabled = true;
-            googleBtn.textContent = 'Signing in with Google…';
-            try {
-              await window.LinguaAuth.signInWithGoogle();
-            } catch (err) {
-              googleBtn.disabled = false;
-              googleBtn.textContent = 'Continue with Google (Instant Verify)';
-              toast(err instanceof Error ? err.message : 'Google sign-in failed.', 'error');
-            }
-          };
-        }
+      }
+    } else {
+      if (gateTitle) {
+        gateTitle.textContent = 'Access Restricted';
+      }
+      if (gateMsg) {
+        gateMsg.textContent = `Signed in as ${s.user.email}. This workspace is restricted to the site administrator account.`;
+      }
+      if (gateActions) {
+        gateActions.innerHTML = `
+          <a href="index.html" class="admin-btn admin-btn-primary">Back to Home</a>
+          <button type="button" class="admin-btn admin-btn-secondary" id="adminGateSignOutBtn">Sign Out</button>
+        `;
         document.getElementById('adminGateSignOutBtn').onclick = () => {
           if (window.LinguaAuth && typeof window.LinguaAuth.logout === 'function') {
             window.LinguaAuth.logout();

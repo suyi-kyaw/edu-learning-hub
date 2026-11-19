@@ -1,33 +1,251 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const XLSX = require('xlsx');
 const multer = require('multer');
-const { initializeApp, getApps } = require('firebase-admin/app');
-const { getAuth } = require('firebase-admin/auth');
+const nodemailer = require('nodemailer');
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_EMAIL = 'syndkyaw@gmail.com';
+const TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
-// Load Firebase projectId cleanly for stateless verifyIdToken()
-let firebaseProjectId = 'melodic-ace-2lvvl';
-try {
-  const cfgPath = path.join(__dirname, 'firebase-applet-config.json');
-  if (fs.existsSync(cfgPath)) {
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    if (cfg && cfg.projectId) {
-      firebaseProjectId = cfg.projectId;
+// Lightweight .env loader (only fills keys missing from process.env)
+(function loadDotEnvIfPresent() {
+  try {
+    const envPath = path.join(__dirname, '.env');
+    if (!fs.existsSync(envPath)) return;
+    const raw = fs.readFileSync(envPath, 'utf8');
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx <= 0) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (key && !(key in process.env)) {
+        process.env[key] = val;
+      }
     }
+  } catch (err) {
+    console.warn('Could not read .env file:', err.message);
   }
-} catch (err) {
-  console.warn('Could not read firebase-applet-config.json:', err.message);
+})();
+
+const DATA_DIR = path.join(__dirname, 'data');
+const AUTH_STORE_PATH = path.join(DATA_DIR, 'auth-store.json');
+const AUTH_SECRET_PATH = path.join(DATA_DIR, 'auth-secret.json');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+function getTokenSecret() {
+  const fromEnv = String(process.env.AUTH_TOKEN_SECRET || '').trim();
+  if (fromEnv.length >= 16) return fromEnv;
+
+  try {
+    if (fs.existsSync(AUTH_SECRET_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(AUTH_SECRET_PATH, 'utf8'));
+      if (parsed && typeof parsed.secret === 'string' && parsed.secret.length >= 32) {
+        return parsed.secret;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not read data/auth-secret.json:', err.message);
+  }
+
+  const generated = crypto.randomBytes(48).toString('hex');
+  try {
+    const tmp = `${AUTH_SECRET_PATH}.tmp.${Date.now()}`;
+    fs.writeFileSync(tmp, JSON.stringify({ secret: generated, createdAt: new Date().toISOString() }, null, 2), {
+      encoding: 'utf8',
+      mode: 0o600
+    });
+    fs.renameSync(tmp, AUTH_SECRET_PATH);
+  } catch (err) {
+    console.warn('Could not persist data/auth-secret.json:', err.message);
+  }
+  return generated;
 }
 
-if (!getApps().length) {
-  initializeApp({ projectId: firebaseProjectId });
+const TOKEN_SECRET = getTokenSecret();
+
+function readAuthStore() {
+  const empty = { users: {}, userProgress: {}, subscriptionRequests: [], lessonCatalog: {} };
+  try {
+    if (!fs.existsSync(AUTH_STORE_PATH)) return empty;
+    const parsed = JSON.parse(fs.readFileSync(AUTH_STORE_PATH, 'utf8'));
+    return {
+      users: parsed && parsed.users && typeof parsed.users === 'object' ? parsed.users : {},
+      userProgress: parsed && parsed.userProgress && typeof parsed.userProgress === 'object' ? parsed.userProgress : {},
+      subscriptionRequests: Array.isArray(parsed?.subscriptionRequests) ? parsed.subscriptionRequests : [],
+      lessonCatalog: parsed && parsed.lessonCatalog && typeof parsed.lessonCatalog === 'object' ? parsed.lessonCatalog : {}
+    };
+  } catch (err) {
+    console.warn('Could not read data/auth-store.json:', err.message);
+    return empty;
+  }
 }
-const adminAuth = getAuth();
+
+function writeAuthStore(store) {
+  const tmpPath = `${AUTH_STORE_PATH}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
+  fs.writeFileSync(tmpPath, JSON.stringify(store, null, 2), { encoding: 'utf8', mode: 0o600 });
+  fs.renameSync(tmpPath, AUTH_STORE_PATH);
+}
+
+function isAdminClaimed(store = readAuthStore()) {
+  return Object.values(store.users).some((u) => u && u.role === 'admin');
+}
+
+function findUserByEmail(store, email) {
+  const target = String(email || '').trim().toLowerCase();
+  if (!target) return null;
+  return Object.values(store.users).find((u) => u && String(u.email || '').trim().toLowerCase() === target) || null;
+}
+
+function sanitizeUserPublic(u) {
+  if (!u) return null;
+  return {
+    uid: String(u.uid || ''),
+    username: String(u.username || 'Learner'),
+    email: String(u.email || ''),
+    phoneNumber: String(u.phoneNumber || ''),
+    dob: String(u.dob || ''),
+    role: u.role === 'admin' ? 'admin' : 'student',
+    membershipStatus: ['free', 'pending', 'active', 'expired'].includes(u.membershipStatus) ? u.membershipStatus : 'free',
+    membershipPlan: ['none', 'monthly', 'annual', 'per_lesson'].includes(u.membershipPlan) ? u.membershipPlan : 'none',
+    membershipExpiresAt: String(u.membershipExpiresAt || ''),
+    subscribedLessonIds: Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds.slice(0, 100) : [],
+    linkedProviders: ['password'],
+    mustChangePassword: Boolean(u.mustChangePassword),
+    createdAt: u.createdAt || null,
+    updatedAt: u.updatedAt || null
+  };
+}
+
+function hashPassword(password, existingSalt = null) {
+  const salt = existingSalt || crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return { salt, hash: derived };
+}
+
+function verifyPassword(password, salt, expectedHash) {
+  if (!salt || !expectedHash) return false;
+  try {
+    const derivedBuf = crypto.scryptSync(String(password), String(salt), 64);
+    const expectedBuf = Buffer.from(String(expectedHash), 'hex');
+    if (derivedBuf.length !== expectedBuf.length) return false;
+    return crypto.timingSafeEqual(derivedBuf, expectedBuf);
+  } catch (_) {
+    return false;
+  }
+}
+
+function generateTempPassword(length = 12) {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnopqrstuvwxyz';
+  const digits = '23456789';
+  const all = upper + lower + digits;
+  const pick = (pool) => pool[crypto.randomInt(0, pool.length)];
+  const chars = [pick(upper), pick(lower), pick(digits)];
+  while (chars.length < length) {
+    chars.push(pick(all));
+  }
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    const tmp = chars[i];
+    chars[i] = chars[j];
+    chars[j] = tmp;
+  }
+  return chars.join('');
+}
+
+function toBase64Url(input) {
+  const buf = Buffer.isBuffer(input) ? input : Buffer.from(String(input), 'utf8');
+  return buf.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+function fromBase64Url(str) {
+  const normalized = String(str).replace(/-/g, '+').replace(/_/g, '/');
+  const padLen = (4 - (normalized.length % 4)) % 4;
+  return Buffer.from(normalized + '='.repeat(padLen), 'base64').toString('utf8');
+}
+
+function signAuthToken(user) {
+  const header = toBase64Url(JSON.stringify({ alg: 'HS256', typ: 'LP' }));
+  const now = Date.now();
+  const payload = toBase64Url(
+    JSON.stringify({
+      uid: user.uid,
+      email: user.email,
+      role: user.role === 'admin' ? 'admin' : 'student',
+      iat: now,
+      exp: now + TOKEN_TTL_MS
+    })
+  );
+  const sig = toBase64Url(crypto.createHmac('sha256', TOKEN_SECRET).update(`${header}.${payload}`).digest());
+  return `${header}.${payload}.${sig}`;
+}
+
+function verifyAuthToken(token) {
+  const parts = String(token || '').trim().split('.');
+  if (parts.length !== 3) throw new Error('Malformed session token.');
+  const [header, payloadB64, sigB64] = parts;
+  const expectedSig = toBase64Url(
+    crypto.createHmac('sha256', TOKEN_SECRET).update(`${header}.${payloadB64}`).digest()
+  );
+  const sigBuf = Buffer.from(sigB64, 'utf8');
+  const expBuf = Buffer.from(expectedSig, 'utf8');
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    throw new Error('Invalid session signature.');
+  }
+  const decoded = JSON.parse(fromBase64Url(payloadB64));
+  if (!decoded || !decoded.uid || !decoded.exp || Number(decoded.exp) < Date.now()) {
+    throw new Error('Session expired. Please sign in again.');
+  }
+  return decoded;
+}
+
+function getSmtpConfig() {
+  const host = String(process.env.SMTP_HOST || '').trim();
+  const port = Number(process.env.SMTP_PORT) || 465;
+  const secureEnv = String(process.env.SMTP_SECURE || '').trim().toLowerCase();
+  const secure = secureEnv ? secureEnv === 'true' || secureEnv === '1' : port === 465;
+  const user = String(process.env.SMTP_USER || '').trim();
+  const pass = String(process.env.SMTP_PASS || '').trim();
+  const from = String(process.env.SMTP_FROM || user || `LinguaPath <${ADMIN_EMAIL}>`).trim();
+  const configured = Boolean(host && user && pass);
+  return { configured, host, port, secure, user, pass, from };
+}
+
+function isSmtpConfigured() {
+  return getSmtpConfig().configured;
+}
+
+async function sendSmtpMail({ to, subject, text, html }) {
+  const cfg = getSmtpConfig();
+  if (!cfg.configured) {
+    throw new Error('SMTP is not configured on the server.');
+  }
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: {
+      user: cfg.user,
+      pass: cfg.pass
+    }
+  });
+  await transporter.sendMail({
+    from: cfg.from,
+    to,
+    subject,
+    text,
+    html
+  });
+}
 
 // Ensure local upload directories exist
 const UPLOADS_ROOT = path.join(__dirname, 'assets', 'uploads');
@@ -108,28 +326,106 @@ app.use((req, res, next) => {
 
 const jsonParser = express.json({ limit: '15mb' });
 
-// Admin Authentication Middleware (Firebase ID token signature + verified admin email)
-async function requireAdminToken(req, res, next) {
+function sanitizeProgressInput(raw, uid) {
+  const input = raw && typeof raw === 'object' ? raw : {};
+  const cleanDate = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? String(v).trim() : '');
+  const cleanTime = (v) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v || '').trim()) ? String(v).trim() : '18:00');
+  const streakDates = Array.isArray(input.streakDates)
+    ? Array.from(new Set(input.streakDates.map((d) => cleanDate(d)).filter(Boolean))).slice(-366)
+    : [];
+  const completedLessonIds = Array.isArray(input.completedLessonIds)
+    ? Array.from(new Set(input.completedLessonIds.map((id) => String(id || '').trim().slice(0, 128)).filter(Boolean))).slice(-200)
+    : [];
+  return {
+    uid: String(uid),
+    currentStreak: Math.min(10000, Math.max(0, Math.round(Number(input.currentStreak) || 0))),
+    bestStreak: Math.min(10000, Math.max(0, Math.round(Number(input.bestStreak) || 0))),
+    lastCompletedDate: cleanDate(input.lastCompletedDate),
+    streakDates,
+    completedLessonIds,
+    reminderEnabled: input.reminderEnabled !== false,
+    reminderTime: cleanTime(input.reminderTime),
+    lastNotifiedDate: cleanDate(input.lastNotifiedDate),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function buildSessionResponse(store, user, token) {
+  const pubUser = sanitizeUserPublic(user);
+  const isAdmin = pubUser.role === 'admin';
+  const myRequests = (store.subscriptionRequests || [])
+    .filter((r) => r.userId === pubUser.uid)
+    .sort((a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || ''));
+
+  const userProgress =
+    store.userProgress && store.userProgress[pubUser.uid]
+      ? store.userProgress[pubUser.uid]
+      : sanitizeProgressInput(null, pubUser.uid);
+
+  const payload = {
+    success: true,
+    user: {
+      uid: pubUser.uid,
+      email: pubUser.email,
+      displayName: pubUser.username,
+      role: pubUser.role,
+      mustChangePassword: pubUser.mustChangePassword
+    },
+    profile: pubUser,
+    userProgress,
+    myRequests,
+    lessonCatalog: store.lessonCatalog || {},
+    adminClaimed: isAdminClaimed(store),
+    smtpConfigured: isSmtpConfigured()
+  };
+  if (token) {
+    payload.token = token;
+  }
+  if (isAdmin) {
+    payload.allRequests = [...(store.subscriptionRequests || [])].sort(
+      (a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || '')
+    );
+    payload.allUsers = Object.values(store.users || {})
+      .map(sanitizeUserPublic)
+      .sort((a, b) => (a.username || '').localeCompare(b.username || ''));
+  }
+  return payload;
+}
+
+// Authenticated User Middleware (HMAC-SHA256 Bearer token + active user lookup)
+function requireAuthToken(req, res, next) {
   try {
     const authHeader = String(req.headers.authorization || '');
     if (!authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, error: 'Missing Authorization Bearer token.' });
+      return res.status(401).json({ success: false, error: 'Please sign in first.' });
     }
-    const idToken = authHeader.slice(7).trim();
-    if (!idToken) {
-      return res.status(401).json({ success: false, error: 'Empty ID token.' });
+    const token = authHeader.slice(7).trim();
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Empty authentication token.' });
     }
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    const email = String(decoded.email || '').toLowerCase();
-    if (email !== ADMIN_EMAIL.toLowerCase() || decoded.email_verified !== true) {
-      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    const decoded = verifyAuthToken(token);
+    const store = readAuthStore();
+    const user = store.users[decoded.uid];
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Account no longer exists. Please sign in again.' });
     }
-    req.adminUser = decoded;
+    req.authDecoded = decoded;
+    req.authUser = user;
     next();
   } catch (err) {
-    console.warn('Admin token verification failed:', err.message);
-    return res.status(401).json({ success: false, error: 'Invalid or expired authentication token.' });
+    return res.status(401).json({ success: false, error: err.message || 'Invalid or expired session.' });
   }
+}
+
+// Admin Authentication Middleware (Bearer token + verified admin role in store)
+function requireAdminToken(req, res, next) {
+  requireAuthToken(req, res, () => {
+    if (!req.authUser || req.authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Administrator privileges required.' });
+    }
+    req.adminUser = req.authUser;
+    next();
+  });
 }
 
 // Helper to parse workbooks
@@ -353,11 +649,14 @@ app.get('/api/reels-stories-data', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
+  const store = readAuthStore();
   res.setHeader('Cache-Control', 'no-cache');
   res.json({
     success: true,
     service: 'linguapath-backend',
-    projectId: firebaseProjectId,
+    authMode: 'email-password',
+    adminClaimed: isAdminClaimed(store),
+    smtpConfigured: isSmtpConfigured(),
     timestamp: Date.now()
   });
 });
@@ -365,6 +664,364 @@ app.get('/api/health', (req, res) => {
 app.get('/api/site-config', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.json({ success: true, config: readSiteConfigFile() });
+});
+
+app.get('/api/catalog', (req, res) => {
+  const store = readAuthStore();
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json({ success: true, lessonCatalog: store.lessonCatalog || {} });
+});
+
+// --- Native Email & Password Auth, Profile, Progress & Subscription APIs ---
+
+app.get('/api/auth/status', (req, res) => {
+  const store = readAuthStore();
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json({
+    success: true,
+    adminClaimed: isAdminClaimed(store),
+    smtpConfigured: isSmtpConfigured()
+  });
+});
+
+app.post('/api/auth/register', jsonParser, (req, res) => {
+  try {
+    const body = req.body || {};
+    const email = String(body.email || '').trim().toLowerCase().slice(0, 160);
+    const password = String(body.password || '');
+    const username = String(body.username || '').trim().slice(0, 60) || (email.includes('@') ? email.split('@')[0] : 'Learner');
+    const phoneNumber = String(body.phoneNumber || '').trim().slice(0, 32);
+    const rawDob = String(body.dob || '').trim();
+    const dob = /^\d{4}-\d{2}-\d{2}$/.test(rawDob) ? rawDob : '';
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+    }
+    if (password.length < 6 || password.length > 128) {
+      return res.status(400).json({ success: false, error: 'Password must be between 6 and 128 characters.' });
+    }
+    if (rawDob && !dob) {
+      return res.status(400).json({ success: false, error: 'Date of Birth must be in YYYY-MM-DD format.' });
+    }
+
+    const store = readAuthStore();
+    if (findUserByEmail(store, email)) {
+      return res.status(409).json({
+        success: false,
+        code: 'email-already-in-use',
+        error: 'An account with this email already exists. Please sign in instead.'
+      });
+    }
+
+    const shouldClaimAdmin = email === ADMIN_EMAIL.toLowerCase() && !isAdminClaimed(store);
+    const uid = 'usr_' + crypto.randomBytes(10).toString('hex');
+    const { salt, hash } = hashPassword(password);
+    const nowIso = new Date().toISOString();
+
+    const newUser = {
+      uid,
+      username,
+      email,
+      phoneNumber,
+      dob,
+      role: shouldClaimAdmin ? 'admin' : 'student',
+      membershipStatus: 'free',
+      membershipPlan: 'none',
+      membershipExpiresAt: '',
+      subscribedLessonIds: [],
+      linkedProviders: ['password'],
+      mustChangePassword: false,
+      passwordSalt: salt,
+      passwordHash: hash,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    store.users[uid] = newUser;
+    if (!store.userProgress[uid]) {
+      store.userProgress[uid] = sanitizeProgressInput(null, uid);
+    }
+    writeAuthStore(store);
+
+    const token = signAuthToken(newUser);
+    res.status(201).json(buildSessionResponse(store, newUser, token));
+  } catch (err) {
+    console.error('POST /api/auth/register error:', err);
+    res.status(500).json({ success: false, error: 'Unable to create account.' });
+  }
+});
+
+app.post('/api/auth/login', jsonParser, (req, res) => {
+  try {
+    const body = req.body || {};
+    const email = String(body.email || '').trim().toLowerCase();
+    const password = String(body.password || '');
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: 'Please enter both your email and password.' });
+    }
+
+    const store = readAuthStore();
+    const user = findUserByEmail(store, email);
+    if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+      return res.status(401).json({
+        success: false,
+        code: 'invalid-credentials',
+        error: 'Invalid email or password. Please check your credentials and try again.'
+      });
+    }
+
+    const token = signAuthToken(user);
+    res.json(buildSessionResponse(store, user, token));
+  } catch (err) {
+    console.error('POST /api/auth/login error:', err);
+    res.status(500).json({ success: false, error: 'Unable to sign in.' });
+  }
+});
+
+app.post('/api/auth/forgot-password', jsonParser, async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+    }
+
+    if (!isSmtpConfigured()) {
+      return res.status(503).json({
+        success: false,
+        code: 'smtp-not-configured',
+        error:
+          'Password reset email is not configured on the server yet (missing SMTP_HOST, SMTP_USER, or SMTP_PASS). Please contact the site administrator to reset your password.'
+      });
+    }
+
+    const store = readAuthStore();
+    const user = findUserByEmail(store, email);
+    const neutralMessage = 'If an account exists for that email, a temporary password has been sent.';
+
+    if (!user) {
+      return res.json({ success: true, message: neutralMessage });
+    }
+
+    const tempPassword = generateTempPassword(12);
+    const { salt, hash } = hashPassword(tempPassword);
+
+    // Send email BEFORE committing new hash so SMTP failure does not invalidate user's current password
+    await sendSmtpMail({
+      to: user.email,
+      subject: 'LinguaPath Temporary Password',
+      text: [
+        `Hello ${user.username || 'Learner'},`,
+        '',
+        'You requested a password reset for your LinguaPath account.',
+        `Your new temporary password is: ${tempPassword}`,
+        '',
+        'Please sign in with this temporary password and change it right away under Profile & Membership.',
+        '',
+        '— LinguaPath Team'
+      ].join('\n'),
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0f172a; line-height:1.5; max-width:520px;">
+          <h2 style="margin:0 0 12px; color:#ea580c;">LinguaPath Password Reset</h2>
+          <p>Hello <strong>${user.username || 'Learner'}</strong>,</p>
+          <p>Here is your generated temporary password for signing in to LinguaPath:</p>
+          <p style="padding:12px 16px; background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; font-family:monospace; font-size:18px; font-weight:700; letter-spacing:0.06em; color:#9a3412;">
+            ${tempPassword}
+          </p>
+          <p>After signing in, please update your password under <strong>Account &rarr; Profile &amp; Membership &rarr; Change Password</strong>.</p>
+        </div>
+      `
+    });
+
+    user.passwordSalt = salt;
+    user.passwordHash = hash;
+    user.mustChangePassword = true;
+    user.updatedAt = new Date().toISOString();
+    writeAuthStore(store);
+
+    res.json({ success: true, message: neutralMessage });
+  } catch (err) {
+    console.error('POST /api/auth/forgot-password error:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Could not deliver the temporary password email right now. Please verify SMTP settings or contact the site administrator.'
+    });
+  }
+});
+
+app.post('/api/auth/change-password', requireAuthToken, jsonParser, (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Enter your current password and a new password.' });
+    }
+    if (newPassword.length < 6 || newPassword.length > 128) {
+      return res.status(400).json({ success: false, error: 'New password must be between 6 and 128 characters.' });
+    }
+
+    const store = readAuthStore();
+    const user = store.users[req.authUser.uid];
+    if (!user || !verifyPassword(currentPassword, user.passwordSalt, user.passwordHash)) {
+      return res.status(400).json({ success: false, error: 'Current password is incorrect.' });
+    }
+
+    const { salt, hash } = hashPassword(newPassword);
+    user.passwordSalt = salt;
+    user.passwordHash = hash;
+    user.mustChangePassword = false;
+    user.updatedAt = new Date().toISOString();
+    writeAuthStore(store);
+
+    res.json({ success: true, profile: sanitizeUserPublic(user) });
+  } catch (err) {
+    console.error('POST /api/auth/change-password error:', err);
+    res.status(500).json({ success: false, error: 'Unable to update password.' });
+  }
+});
+
+app.get('/api/auth/me', requireAuthToken, (req, res) => {
+  const store = readAuthStore();
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json(buildSessionResponse(store, req.authUser, null));
+});
+
+app.put('/api/auth/profile', requireAuthToken, jsonParser, (req, res) => {
+  try {
+    const body = req.body || {};
+    const username = String(body.username || '').trim().slice(0, 60);
+    const phoneNumber = String(body.phoneNumber || '').trim().slice(0, 32);
+    const rawDob = String(body.dob || '').trim();
+    const dob = /^\d{4}-\d{2}-\d{2}$/.test(rawDob) ? rawDob : '';
+
+    if (!username) {
+      return res.status(400).json({ success: false, error: 'User Name cannot be empty.' });
+    }
+    if (rawDob && !dob) {
+      return res.status(400).json({ success: false, error: 'Please enter Date of Birth in YYYY-MM-DD format.' });
+    }
+
+    const store = readAuthStore();
+    const user = store.users[req.authUser.uid];
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User profile not found.' });
+    }
+
+    user.username = username;
+    user.phoneNumber = phoneNumber;
+    user.dob = dob;
+    user.updatedAt = new Date().toISOString();
+    writeAuthStore(store);
+
+    res.json({ success: true, profile: sanitizeUserPublic(user) });
+  } catch (err) {
+    console.error('PUT /api/auth/profile error:', err);
+    res.status(500).json({ success: false, error: 'Unable to update profile.' });
+  }
+});
+
+app.put('/api/progress', requireAuthToken, jsonParser, (req, res) => {
+  try {
+    const store = readAuthStore();
+    const clean = sanitizeProgressInput(req.body, req.authUser.uid);
+    store.userProgress[req.authUser.uid] = clean;
+    writeAuthStore(store);
+    res.json({ success: true, userProgress: clean });
+  } catch (err) {
+    console.error('PUT /api/progress error:', err);
+    res.status(500).json({ success: false, error: 'Unable to save progress.' });
+  }
+});
+
+app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
+  try {
+    const body = req.body || {};
+    const store = readAuthStore();
+    const user = store.users[req.authUser.uid];
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User profile not found.' });
+    }
+
+    const planType = ['monthly', 'annual', 'per_lesson'].includes(body.planType) ? body.planType : 'monthly';
+    const planMeta = {
+      monthly: { name: 'Monthly All-Access', amountLabel: '$19 / month' },
+      annual: { name: 'Annual All-Access', amountLabel: '$149 / year' },
+      per_lesson: { name: 'Paid Lesson Unlock', amountLabel: '$9 / lesson' }
+    }[planType];
+
+    const lessonId =
+      planType === 'per_lesson'
+        ? String(body.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').slice(0, 128)
+        : '';
+    const lessonTitle =
+      planType === 'per_lesson'
+        ? String(body.lessonTitle || 'Paid Lesson Unlock').trim().slice(0, 160)
+        : planMeta.name;
+    const amountLabel = String(body.amountLabel || planMeta.amountLabel).trim().slice(0, 40);
+    const contactChannel = body.contactChannel === 'email' ? 'email' : 'viber';
+    const contactHandle = String(body.contactHandle || user.phoneNumber || user.email || '').trim().slice(0, 80);
+    const note = String(body.note || '').trim().slice(0, 400);
+
+    if (!contactHandle) {
+      return res.status(400).json({ success: false, error: 'Please provide your email or Viber contact handle.' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const requestItem = {
+      requestId: `req_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+      userId: user.uid,
+      username: user.username,
+      userEmail: user.email,
+      userPhone: user.phoneNumber || '',
+      planType,
+      lessonId,
+      lessonTitle,
+      amountLabel,
+      contactChannel,
+      contactHandle,
+      note,
+      status: 'pending',
+      adminNote: '',
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    store.subscriptionRequests.unshift(requestItem);
+    writeAuthStore(store);
+
+    const myRequests = store.subscriptionRequests.filter((r) => r.userId === user.uid);
+    res.status(201).json({ success: true, request: requestItem, myRequests });
+  } catch (err) {
+    console.error('POST /api/requests error:', err);
+    res.status(500).json({ success: false, error: 'Unable to submit subscription request.' });
+  }
+});
+
+app.delete('/api/requests/:requestId', requireAuthToken, (req, res) => {
+  try {
+    const requestId = String(req.params.requestId || '').trim();
+    const store = readAuthStore();
+    const idx = store.subscriptionRequests.findIndex((r) => r.requestId === requestId);
+    if (idx < 0) {
+      return res.status(404).json({ success: false, error: 'Subscription request not found.' });
+    }
+    const target = store.subscriptionRequests[idx];
+    const isAdmin = req.authUser.role === 'admin';
+    if (target.userId !== req.authUser.uid && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Not authorized to cancel this request.' });
+    }
+    if (target.status !== 'pending' && !isAdmin) {
+      return res.status(400).json({ success: false, error: 'Only pending requests can be cancelled.' });
+    }
+
+    store.subscriptionRequests.splice(idx, 1);
+    writeAuthStore(store);
+    const myRequests = store.subscriptionRequests.filter((r) => r.userId === req.authUser.uid);
+    res.json({ success: true, myRequests });
+  } catch (err) {
+    console.error('DELETE /api/requests/:requestId error:', err);
+    res.status(500).json({ success: false, error: 'Unable to cancel request.' });
+  }
 });
 
 // --- Protected Admin Endpoints ---
@@ -691,6 +1348,286 @@ app.post(
     }
   }
 );
+
+// --- Admin Membership, Catalog, Password Reset & SMTP Management Endpoints ---
+
+app.post('/api/admin/requests/:requestId/approve', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const requestId = String(req.params.requestId || '').trim();
+    const adminNote = String(req.body?.adminNote || 'Verified via QR payment').trim().slice(0, 300);
+    const store = readAuthStore();
+    const reqDoc = store.subscriptionRequests.find((r) => r.requestId === requestId);
+    if (!reqDoc) {
+      return res.status(404).json({ success: false, error: 'Subscription request not found.' });
+    }
+    const targetUser = store.users[reqDoc.userId];
+    if (!targetUser) {
+      return res.status(404).json({ success: false, error: 'Target user profile could not be found.' });
+    }
+
+    const now = Date.now();
+    let nextPlan = targetUser.membershipPlan || 'none';
+    let nextExpires = targetUser.membershipExpiresAt || '';
+    const nextLessons = Array.isArray(targetUser.subscribedLessonIds) ? [...targetUser.subscribedLessonIds] : [];
+
+    if (reqDoc.planType === 'monthly') {
+      nextPlan = 'monthly';
+      nextExpires = new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    } else if (reqDoc.planType === 'annual') {
+      nextPlan = 'annual';
+      nextExpires = new Date(now + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    } else if (reqDoc.planType === 'per_lesson') {
+      if (reqDoc.lessonId && !nextLessons.includes(reqDoc.lessonId) && nextLessons.length < 100) {
+        nextLessons.push(reqDoc.lessonId);
+      }
+      if (nextPlan !== 'monthly' && nextPlan !== 'annual') {
+        nextPlan = 'per_lesson';
+        nextExpires = '';
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    reqDoc.status = 'approved';
+    reqDoc.adminNote = adminNote;
+    reqDoc.updatedAt = nowIso;
+
+    targetUser.membershipStatus = 'active';
+    targetUser.membershipPlan = nextPlan;
+    targetUser.membershipExpiresAt = nextExpires;
+    targetUser.subscribedLessonIds = nextLessons;
+    targetUser.updatedAt = nowIso;
+
+    writeAuthStore(store);
+
+    const allRequests = [...store.subscriptionRequests];
+    const allUsers = Object.values(store.users).map(sanitizeUserPublic);
+    res.json({ success: true, request: reqDoc, user: sanitizeUserPublic(targetUser), allRequests, allUsers });
+  } catch (err) {
+    console.error('POST /api/admin/requests/:requestId/approve error:', err);
+    res.status(500).json({ success: false, error: 'Failed to approve subscription request.' });
+  }
+});
+
+app.post('/api/admin/requests/:requestId/reject', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const requestId = String(req.params.requestId || '').trim();
+    const adminNote = String(req.body?.adminNote || 'Payment could not be verified').trim().slice(0, 300);
+    const store = readAuthStore();
+    const reqDoc = store.subscriptionRequests.find((r) => r.requestId === requestId);
+    if (!reqDoc) {
+      return res.status(404).json({ success: false, error: 'Subscription request not found.' });
+    }
+    reqDoc.status = 'rejected';
+    reqDoc.adminNote = adminNote;
+    reqDoc.updatedAt = new Date().toISOString();
+    writeAuthStore(store);
+
+    res.json({ success: true, request: reqDoc, allRequests: [...store.subscriptionRequests] });
+  } catch (err) {
+    console.error('POST /api/admin/requests/:requestId/reject error:', err);
+    res.status(500).json({ success: false, error: 'Failed to reject subscription request.' });
+  }
+});
+
+app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const uid = String(req.params.uid || '').trim();
+    const body = req.body || {};
+    const store = readAuthStore();
+    const targetUser = store.users[uid];
+    if (!targetUser) {
+      return res.status(404).json({ success: false, error: 'User profile not found.' });
+    }
+
+    if (['free', 'pending', 'active', 'expired'].includes(body.membershipStatus)) {
+      targetUser.membershipStatus = body.membershipStatus;
+    }
+    if (['none', 'monthly', 'annual', 'per_lesson'].includes(body.membershipPlan)) {
+      targetUser.membershipPlan = body.membershipPlan;
+    }
+    if (typeof body.membershipExpiresAt === 'string') {
+      targetUser.membershipExpiresAt = body.membershipExpiresAt.trim().slice(0, 40);
+    }
+    if (Array.isArray(body.subscribedLessonIds)) {
+      targetUser.subscribedLessonIds = body.subscribedLessonIds
+        .map((id) => String(id || '').trim().slice(0, 128))
+        .filter(Boolean)
+        .slice(0, 100);
+    }
+    targetUser.updatedAt = new Date().toISOString();
+    writeAuthStore(store);
+
+    const allUsers = Object.values(store.users).map(sanitizeUserPublic);
+    res.json({ success: true, user: sanitizeUserPublic(targetUser), allUsers });
+  } catch (err) {
+    console.error('PUT /api/admin/users/:uid/membership error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update user membership.' });
+  }
+});
+
+app.post('/api/admin/users/:uid/reset-password', requireAdminToken, jsonParser, async (req, res) => {
+  try {
+    const uid = String(req.params.uid || '').trim();
+    const body = req.body || {};
+    const store = readAuthStore();
+    const targetUser = store.users[uid];
+    if (!targetUser) {
+      return res.status(404).json({ success: false, error: 'User account not found.' });
+    }
+
+    const customPw = typeof body.newPassword === 'string' ? body.newPassword : '';
+    const tempPassword = customPw ? customPw : generateTempPassword(12);
+    if (tempPassword.length < 6 || tempPassword.length > 128) {
+      return res.status(400).json({ success: false, error: 'Password must be between 6 and 128 characters.' });
+    }
+
+    const { salt, hash } = hashPassword(tempPassword);
+    let emailed = false;
+    let emailError = null;
+
+    if (body.sendEmail && isSmtpConfigured()) {
+      try {
+        await sendSmtpMail({
+          to: targetUser.email,
+          subject: 'LinguaPath Password Reset by Administrator',
+          text: [
+            `Hello ${targetUser.username || 'Learner'},`,
+            '',
+            'An administrator has reset your LinguaPath account password.',
+            `Your temporary password is: ${tempPassword}`,
+            '',
+            'Please sign in and update your password inside Account -> Profile & Membership.',
+            '',
+            '— LinguaPath Team'
+          ].join('\n')
+        });
+        emailed = true;
+      } catch (mailErr) {
+        emailError = mailErr instanceof Error ? mailErr.message : 'SMTP delivery failed.';
+      }
+    }
+
+    targetUser.passwordSalt = salt;
+    targetUser.passwordHash = hash;
+    targetUser.mustChangePassword = true;
+    targetUser.updatedAt = new Date().toISOString();
+    writeAuthStore(store);
+
+    const allUsers = Object.values(store.users).map(sanitizeUserPublic);
+    res.json({
+      success: true,
+      emailed,
+      emailError,
+      temporaryPassword: tempPassword,
+      user: sanitizeUserPublic(targetUser),
+      allUsers
+    });
+  } catch (err) {
+    console.error('POST /api/admin/users/:uid/reset-password error:', err);
+    res.status(500).json({ success: false, error: 'Failed to reset user password.' });
+  }
+});
+
+app.put('/api/admin/catalog', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const store = readAuthStore();
+    const nowIso = new Date().toISOString();
+
+    for (const item of items) {
+      const lessonId = String(item?.lessonId || '')
+        .trim()
+        .replace(/[^a-zA-Z0-9_\-]+/g, '-')
+        .slice(0, 128);
+      if (!lessonId) continue;
+      const audience = String(item.audience || '').toLowerCase() === 'kids' ? 'Kids' : 'Adult';
+      const accessType = String(item.accessType || '').toLowerCase() === 'paid' ? 'paid' : 'free';
+      const rawPrice = Number(item.price);
+      const price = accessType === 'free' ? 0 : Math.min(9999, Math.max(0, Number.isFinite(rawPrice) ? rawPrice : 9));
+
+      store.lessonCatalog[lessonId] = {
+        lessonId,
+        title: String(item.title || lessonId).trim().slice(0, 160) || lessonId,
+        audience,
+        accessType,
+        price,
+        updatedBy: req.authUser.uid,
+        updatedAt: nowIso
+      };
+    }
+
+    writeAuthStore(store);
+    res.json({ success: true, lessonCatalog: store.lessonCatalog });
+  } catch (err) {
+    console.error('PUT /api/admin/catalog error:', err);
+    res.status(500).json({ success: false, error: 'Failed to save lesson pricing catalog.' });
+  }
+});
+
+app.get('/api/admin/smtp-status', requireAdminToken, (req, res) => {
+  const cfg = getSmtpConfig();
+  const maskedUser = cfg.user
+    ? cfg.user.replace(/^([^@]{1,2})[^@]*(@.*)$/, '$1***$2')
+    : '';
+  res.json({
+    success: true,
+    configured: cfg.configured,
+    host: cfg.host || '',
+    port: cfg.port,
+    secure: cfg.secure,
+    userMasked: maskedUser,
+    from: cfg.from || ''
+  });
+});
+
+app.post('/api/admin/test-smtp', requireAdminToken, jsonParser, async (req, res) => {
+  const to = String(req.body?.to || req.authUser.email || ADMIN_EMAIL).trim();
+  if (!isSmtpConfigured()) {
+    return res.status(503).json({
+      success: false,
+      error: 'SMTP environment variables (SMTP_HOST, SMTP_USER, SMTP_PASS) are not set on the server.'
+    });
+  }
+  try {
+    await sendSmtpMail({
+      to,
+      subject: 'LinguaPath SMTP Test Email',
+      text: `SMTP delivery test succeeded at ${new Date().toISOString()} from your LinguaPath Node server.`,
+      html: `<p>SMTP delivery test <strong>succeeded</strong> at ${new Date().toISOString()} from your LinguaPath Node server.</p>`
+    });
+    res.json({ success: true, message: `Test email sent successfully to ${to}.` });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err instanceof Error ? err.message : 'SMTP test failed.'
+    });
+  }
+});
+
+// Block HTTP static access to sensitive server files, auth data stores, secrets, and backend source
+app.use((req, res, next) => {
+  const norm = String(req.path || '').toLowerCase();
+  if (
+    norm === '/server.js' ||
+    norm === '/package.json' ||
+    norm === '/package-lock.json' ||
+    norm === '/bun.lock' ||
+    norm === '/firebase-applet-config.json' ||
+    norm === '/firebase-blueprint.json' ||
+    norm === '/firestore.rules' ||
+    norm === '/security_spec.md' ||
+    norm === '/eslint.config.mjs' ||
+    norm.startsWith('/.env') ||
+    norm.startsWith('/.git') ||
+    norm.startsWith('/.aistudio') ||
+    norm.startsWith('/src/') ||
+    norm.startsWith('/node_modules/') ||
+    norm.startsWith('/data/auth-')
+  ) {
+    return res.status(404).end();
+  }
+  next();
+});
 
 // Serve static files from root directory (no-cache on code/markup + CORP cross-origin for uploads)
 app.use(

@@ -1,8 +1,8 @@
 /**
  * =========================================================
  * LINGUAPATH - AUTHENTICATION, PROFILE & SUBSCRIPTION UI
- * Handles Account Modal (Manual Email/Password + Google),
- * Profile + DOB/Age + Linked Providers, Membership Plans,
+ * Handles Account Modal (Email & Password Auth),
+ * Profile + DOB/Age + Change Password, Membership Plans,
  * Email/Viber QR Payment Request Flow, and Admin Approvals.
  * =========================================================
  */
@@ -279,110 +279,27 @@
     }
   }
 
-  function getFirebaseProjectId() {
-    const api = getAuthApi();
-    return (api && api.projectId) || 'melodic-ace-2lvvl';
-  }
-
-  function getConsoleProvidersUrl() {
-    return `https://console.firebase.google.com/project/${encodeURIComponent(getFirebaseProjectId())}/authentication/providers`;
-  }
-
-  function getConsoleDomainsUrl() {
-    return `https://console.firebase.google.com/project/${encodeURIComponent(getFirebaseProjectId())}/authentication/settings`;
-  }
-
-  function getCloudUpgradeUrl() {
-    return `https://console.cloud.google.com/welcome?project=${encodeURIComponent(getFirebaseProjectId())}`;
-  }
-
-  function getCurrentHostname() {
-    if (typeof window === 'undefined' || !window.location) return 'suyi-kyaw.github.io';
-    return window.location.hostname || 'localhost';
-  }
-
   // --- Modal Rendering ---
   function renderFeedbackHTML() {
     if (!feedbackBanner || !feedbackBanner.text) return '';
-    const isUnauthorizedDomain = Boolean(feedbackBanner.isUnauthorizedDomain);
-    const isProviderDisabled = Boolean(feedbackBanner.isProviderDisabled || feedbackBanner.showGoogleHint);
-    const isInvalidCredential = Boolean(feedbackBanner.isInvalidCredential);
-    const isPopupIssue = Boolean(feedbackBanner.isPopupIssue);
-    const consoleProvidersUrl = getConsoleProvidersUrl();
-    const consoleDomainsUrl = getConsoleDomainsUrl();
-    const cloudUpgradeUrl = getCloudUpgradeUrl();
-    const currentHost = getCurrentHostname();
-    const fullTabUrl = typeof window !== 'undefined' ? window.location.href : '/';
-
-    let guideHtml = '';
-    if (isUnauthorizedDomain) {
-      guideHtml = `
-        <div class="lp-console-guide">
-          <div class="lp-console-guide-title">How to authorize this domain in Firebase:</div>
-          <div class="lp-domain-copy-row">
-            <code class="lp-domain-pill">${escapeHTML(currentHost)}</code>
-            <button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" data-copy-text="${escapeHTML(currentHost)}">Copy Domain</button>
-          </div>
-          <ol class="lp-console-guide-list">
-            <li>If Firebase Console locks settings, open Google Cloud Console and <strong>Upgrade</strong> project <code>${escapeHTML(getFirebaseProjectId())}</code>.</li>
-            <li>Open <strong>Firebase Console &rarr; Authentication &rarr; Settings &rarr; Authorized domains</strong>.</li>
-            <li>Click <strong>Add domain</strong>, paste <code>${escapeHTML(currentHost)}</code>, save, and click <strong>Continue with Google</strong> again.</li>
-          </ol>
-          <div class="lp-feedback-actions">
-            <a class="lp-btn lp-btn-primary lp-btn-sm" href="${escapeHTML(consoleDomainsUrl)}" target="_blank" rel="noopener noreferrer">Open Authorized Domains ↗</a>
-            <a class="lp-btn lp-btn-secondary lp-btn-sm" href="${escapeHTML(cloudUpgradeUrl)}" target="_blank" rel="noopener noreferrer">Google Cloud Upgrade ↗</a>
-          </div>
-        </div>
-      `;
-    } else if (isProviderDisabled) {
-      guideHtml = `
-        <div class="lp-console-guide">
-          <div class="lp-console-guide-title">How to enable Email &amp; Password login on Firebase:</div>
-          <ol class="lp-console-guide-list">
-            <li>If settings are locked, open Google Cloud Console and <strong>Upgrade</strong> project <code>${escapeHTML(getFirebaseProjectId())}</code>.</li>
-            <li>Open <strong>Firebase Console &rarr; Authentication &rarr; Sign-in method</strong>, toggle <strong>Email/Password</strong> to <strong>Enable</strong>, and save.</li>
-            <li>Open <strong>Authentication &rarr; Users</strong> to confirm <strong>syndkyaw@gmail.com</strong> exists with a password, or use <strong>Continue with Google</strong>.</li>
-          </ol>
-          <div class="lp-feedback-actions">
-            <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpFallbackGoogleBtn">Continue with Google Now</button>
-            <a class="lp-btn lp-btn-secondary lp-btn-sm" href="${escapeHTML(consoleProvidersUrl)}" target="_blank" rel="noopener noreferrer">Open Sign-in Method ↗</a>
-            <a class="lp-btn lp-btn-secondary lp-btn-sm" href="${escapeHTML(cloudUpgradeUrl)}" target="_blank" rel="noopener noreferrer">Cloud Upgrade ↗</a>
-          </div>
-        </div>
-      `;
-    } else if (isInvalidCredential) {
-      guideHtml = `
-        <div class="lp-console-guide">
-          <div class="lp-console-guide-title">Admin / Account Password Checklist:</div>
-          <ol class="lp-console-guide-list">
-            <li>If you created the account via Google Sign-In only, click <strong>Continue with Google</strong> above or click <strong>Forgot password?</strong> to set a password for that email.</li>
-            <li>Verify under <strong>Firebase Console &rarr; Authentication &rarr; Users</strong> that the user exists and Email/Password is enabled.</li>
-          </ol>
-        </div>
-      `;
-    } else if (isPopupIssue) {
-      guideHtml = `
-        <div class="lp-feedback-actions">
-          <a class="lp-btn lp-btn-primary lp-btn-sm" href="${escapeHTML(fullTabUrl)}" target="_blank" rel="noopener noreferrer">Open App in New Tab to Sign In ↗</a>
-        </div>
-      `;
-    }
-
     return `
       <div class="lp-feedback lp-feedback-${escapeHTML(feedbackBanner.type || 'info')}" role="alert">
         <div>${escapeHTML(feedbackBanner.text)}</div>
-        ${guideHtml}
       </div>
     `;
   }
 
-  function renderAuthView() {
+  function renderAuthView(state) {
     const todayIso = new Date().toISOString().slice(0, 10);
     const pendingHint = pendingPostAuthSubscribe
       ? `<div class="lp-context-callout">Sign in or create an account to subscribe to <strong>${escapeHTML(
           pendingPostAuthSubscribe.lessonTitle || PLAN_CATALOG[pendingPostAuthSubscribe.planType]?.title || 'Membership'
         )}</strong>.</div>`
       : '';
+    const adminSetupHint =
+      authTab === 'register' && state && state.ready && !state.adminClaimed
+        ? `<div class="lp-context-callout"><strong>First-Time Admin Setup:</strong> Register with <strong>syndkyaw@gmail.com</strong> to claim Administrator access for the CMS Portal.</div>`
+        : '';
 
     return `
       <div class="lp-modal-header">
@@ -394,6 +311,7 @@
       </div>
 
       ${pendingHint}
+      ${adminSetupHint}
 
       <div class="lp-tabs-bar" role="tablist">
         <button type="button" class="lp-tab-btn ${authTab === 'signin' ? 'active' : ''}" data-auth-tab="signin" role="tab" aria-selected="${authTab === 'signin'}">Sign In</button>
@@ -401,18 +319,6 @@
       </div>
 
       ${renderFeedbackHTML()}
-
-      <button type="button" class="lp-btn-google lp-btn-google-top" id="lpGoogleAuthBtn">
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/>
-          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"/>
-          <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"/>
-          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"/>
-        </svg>
-        <span>Continue with Google</span>
-      </button>
-
-      <div class="lp-divider"><span>or use email &amp; password</span></div>
 
       ${
         authTab === 'signin'
@@ -429,7 +335,7 @@
             </div>
             <input type="password" id="lpLoginPassword" autocomplete="current-password" placeholder="Enter your password" required />
           </div>
-          <button type="submit" class="lp-btn lp-btn-primary lp-btn-full" id="lpSignInSubmitBtn">Sign In with Email</button>
+          <button type="submit" class="lp-btn lp-btn-primary lp-btn-full" id="lpSignInSubmitBtn">Sign In</button>
         </form>
       `
           : `
@@ -638,10 +544,8 @@
     const user = state.user;
     const profile = state.profile;
     const todayIso = new Date().toISOString().slice(0, 10);
-    const providers = profile?.linkedProviders || (user.providerData || []).map((p) => p.providerId);
-    const hasGoogle = providers.includes('google.com');
-    const hasPassword = providers.includes('password');
     const age = profile?.dob && api ? api.calculateAge(profile.dob) : null;
+    const mustChangePw = Boolean(profile?.mustChangePassword || user?.mustChangePassword);
 
     const myRequests = state.myRequests || [];
     const pendingReq = myRequests.find((r) => r.status === 'pending');
@@ -677,21 +581,12 @@
       membershipSub = 'Renew Monthly, Annual, or By-Lesson access to unlock paid lessons.';
     }
 
-    const isUnverifiedAdminEmail =
-      String(user.email || '').toLowerCase() === 'syndkyaw@gmail.com' && !user.emailVerified;
-
     return `
       ${
-        isUnverifiedAdminEmail
-          ? `
-        <div class="lp-feedback lp-feedback-info" role="status" style="margin-bottom:14px;">
-          <div><strong>Admin Email Verification Required:</strong> Signed in as ${escapeHTML(user.email)}, but your email is not verified yet. Verify via inbox link or click Continue with Google to unlock the Admin CMS Portal immediately.</div>
-          <div class="lp-feedback-actions">
-            <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpProfileAdminGoogleBtn">Continue with Google</button>
-            <button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" id="lpRefreshVerifyBtn">Check Verification Status</button>
-          </div>
-        </div>
-      `
+        mustChangePw
+          ? `<div class="lp-context-callout" role="status">
+               <strong>Temporary Password Active:</strong> You signed in with a temporary password. Please set your own new password below.
+             </div>`
           : ''
       }
       <div class="lp-membership-card lp-membership-${membershipTone}">
@@ -729,12 +624,7 @@
             )}" required />
           </div>
           <div class="lp-field">
-            <div class="lp-field-label-row">
-              <label for="lpProfEmail">Email Address</label>
-              <span class="lp-verify-tag ${user.emailVerified ? 'is-verified' : ''}">${
-                user.emailVerified ? 'Verified' : 'Unverified'
-              }</span>
-            </div>
+            <label for="lpProfEmail">Email Address</label>
             <input type="email" id="lpProfEmail" value="${escapeHTML(profile?.email || user.email || '')}" disabled />
           </div>
         </div>
@@ -756,44 +646,36 @@
         </div>
 
         <div class="lp-btn-row-between">
-          ${
-            !user.emailVerified
-              ? `<div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-                   <button type="button" class="lp-link-btn" id="lpResendVerifyBtn">Resend Verification Email</button>
-                   ${!isUnverifiedAdminEmail ? '<button type="button" class="lp-link-btn" id="lpRefreshVerifyBtn">Refresh Status</button>' : ''}
-                 </div>`
-              : '<span></span>'
-          }
+          <span></span>
           <button type="submit" class="lp-btn lp-btn-primary" id="lpSaveProfileBtn">Save Profile</button>
         </div>
       </form>
 
       <div class="lp-providers-box">
         <div class="lp-providers-header">
-          <strong>Sign-In Connections</strong>
-          <span>Link Google to sign in with either email/password or Google.</span>
+          <strong>Change Password</strong>
+          <span>Update your sign-in password anytime (minimum 6 characters).</span>
         </div>
-        <div class="lp-providers-list">
-          <div class="lp-provider-row">
-            <span>Email &amp; Password</span>
-            <span class="lp-provider-state">${hasPassword ? 'Connected' : 'Not set'}</span>
+        <form id="lpChangePasswordForm" class="lp-form" style="margin-top:8px;">
+          <div class="lp-field">
+            <label for="lpCurrentPassword">Current Password *</label>
+            <input type="password" id="lpCurrentPassword" autocomplete="current-password" placeholder="Enter current or temporary password" required />
           </div>
-          <div class="lp-provider-row">
-            <span>Google Account</span>
-            ${
-              hasGoogle
-                ? `<div class="lp-provider-actions">
-                     <span class="lp-provider-state is-connected">Linked</span>
-                     ${
-                       providers.length > 1
-                         ? `<button type="button" class="lp-link-btn" id="lpUnlinkGoogleBtn">Unlink</button>`
-                         : ''
-                     }
-                   </div>`
-                : `<button type="button" class="lp-btn lp-btn-secondary lp-btn-sm" id="lpLinkGoogleBtn">Link Google Account</button>`
-            }
+          <div class="lp-form-grid-2">
+            <div class="lp-field">
+              <label for="lpNewPassword">New Password *</label>
+              <input type="password" id="lpNewPassword" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required />
+            </div>
+            <div class="lp-field">
+              <label for="lpConfirmNewPassword">Confirm New Password *</label>
+              <input type="password" id="lpConfirmNewPassword" minlength="6" autocomplete="new-password" placeholder="Repeat new password" required />
+            </div>
           </div>
-        </div>
+          <div class="lp-btn-row-between">
+            <span></span>
+            <button type="submit" class="lp-btn lp-btn-secondary lp-btn-sm" id="lpChangePasswordBtn">Update Password</button>
+          </div>
+        </form>
       </div>
 
       ${
@@ -1036,7 +918,7 @@
       inner = renderAccountView(state);
     } else {
       modalMode = 'auth';
-      inner = renderAuthView();
+      inner = renderAuthView(state);
     }
 
     backdrop.innerHTML = `<div class="lp-auth-card">${inner}</div>`;
@@ -1133,34 +1015,34 @@
           }
           renderModal();
         } catch (err) {
-          const msg = err instanceof Error ? err.message : 'Unable to sign in.';
-          const code = err && typeof err === 'object' ? String(err.code || '') : '';
-          const invalidCredCodes = new Set(['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found']);
           feedbackBanner = {
             type: 'error',
-            text: msg,
-            isProviderDisabled: code === 'auth/operation-not-allowed' || msg.includes('Firebase Authentication Console'),
-            isInvalidCredential: invalidCredCodes.has(code)
+            text: err instanceof Error ? err.message : 'Unable to sign in.'
           };
           renderModal();
         }
       };
     }
 
-    // Forgot password
+    // Forgot password (server generates temporary password & emails user)
     const forgotBtn = document.getElementById('lpForgotPasswordBtn');
     if (forgotBtn) {
       forgotBtn.onclick = async () => {
         if (!api) return;
-        const email = document.getElementById('lpLoginEmail')?.value?.trim() || '';
+        const emailInput = document.getElementById('lpLoginEmail');
+        const email = emailInput?.value?.trim() || '';
         if (!email) {
-          feedbackBanner = { type: 'info', text: 'Enter your email address above first, then click Forgot password.' };
+          feedbackBanner = { type: 'info', text: 'Enter your email address above first, then click Forgot password?.' };
           renderModal();
+          setTimeout(() => document.getElementById('lpLoginEmail')?.focus(), 20);
           return;
         }
+        forgotBtn.disabled = true;
+        forgotBtn.textContent = 'Sending…';
         try {
-          await api.sendPasswordReset(email);
-          feedbackBanner = { type: 'success', text: `Password reset email sent to ${email}.` };
+          const msg = await api.sendPasswordReset(email);
+          feedbackBanner = { type: 'success', text: msg };
+          showToast('Temporary password email sent.');
           renderModal();
         } catch (err) {
           feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Unable to send reset email.' };
@@ -1205,7 +1087,20 @@
         }
         try {
           await api.registerWithEmail({ username, email, phoneNumber, dob, password });
-          feedbackBanner = { type: 'success', text: 'Account created! A verification link has been sent to your email.' };
+          const nextState = api.getState();
+          if (nextState?.isAdmin && !pendingPostAuthSubscribe) {
+            closeModal();
+            if (window.location.pathname.includes('admin.html')) {
+              showToast('Admin account created — CMS Portal unlocked.');
+            } else {
+              showToast('Admin account created — opening Admin Portal…');
+              setTimeout(() => {
+                window.location.href = 'admin.html';
+              }, 300);
+            }
+            return;
+          }
+          feedbackBanner = { type: 'success', text: 'Account created and signed in!' };
           showToast('Welcome to LinguaPath!');
           if (pendingPostAuthSubscribe) {
             subscribeContext = { ...pendingPostAuthSubscribe };
@@ -1217,93 +1112,14 @@
           }
           renderModal();
         } catch (err) {
-          const msg = err instanceof Error ? err.message : 'Registration failed.';
-          const code = err && typeof err === 'object' ? err.code : '';
           feedbackBanner = {
             type: 'error',
-            text: msg,
-            isProviderDisabled: code === 'auth/operation-not-allowed' || msg.includes('Firebase Authentication Console')
+            text: err instanceof Error ? err.message : 'Registration failed.'
           };
           renderModal();
         }
       };
     }
-
-    // Google Auth button (and fallback button inside error banner / admin verify banner)
-    const handleGoogle = async (triggerBtn) => {
-      if (!api) return;
-      const gBtn = document.getElementById('lpGoogleAuthBtn');
-      const fBtn = document.getElementById('lpFallbackGoogleBtn');
-      const pBtn = document.getElementById('lpProfileAdminGoogleBtn');
-      [gBtn, fBtn, pBtn].forEach((b) => {
-        if (b) b.disabled = true;
-      });
-      if (triggerBtn) {
-        const span = triggerBtn.querySelector('span');
-        if (span) {
-          span.textContent = 'Signing in with Google…';
-        } else {
-          triggerBtn.textContent = 'Signing in with Google…';
-        }
-      }
-      try {
-        await api.signInWithGoogle();
-        feedbackBanner = null;
-        const nextState = api.getState();
-        if (nextState?.isAdmin && !pendingPostAuthSubscribe) {
-          closeModal();
-          if (window.location.pathname.includes('admin.html')) {
-            showToast('Signed in as Admin — CMS Portal unlocked.');
-          } else {
-            showToast('Signed in as Admin — opening Admin Portal…');
-            setTimeout(() => {
-              window.location.href = 'admin.html';
-            }, 300);
-          }
-          return;
-        }
-        showToast('Signed in with Google.');
-        if (pendingPostAuthSubscribe) {
-          subscribeContext = { ...pendingPostAuthSubscribe };
-          pendingPostAuthSubscribe = null;
-          modalMode = 'subscribe';
-        } else {
-          modalMode = 'account';
-          accountTab = 'profile';
-        }
-        renderModal();
-      } catch (err) {
-        const code = err && typeof err === 'object' ? String(err.code || '') : '';
-        const isUnauthorizedDomain = code === 'auth/unauthorized-domain';
-        const popupCodes = new Set([
-          'auth/popup-blocked',
-          'auth/popup-closed-by-user',
-          'auth/cancelled-popup-request',
-          'auth/internal-error',
-          'auth/web-storage-unsupported'
-        ]);
-        const inIframe = (() => {
-          try {
-            return window.self !== window.top;
-          } catch (_) {
-            return true;
-          }
-        })();
-        feedbackBanner = {
-          type: 'error',
-          text: err instanceof Error ? err.message : 'Google sign-in failed.',
-          isUnauthorizedDomain,
-          isPopupIssue: !isUnauthorizedDomain && (popupCodes.has(code) || inIframe)
-        };
-        renderModal();
-      }
-    };
-    const googleBtn = document.getElementById('lpGoogleAuthBtn');
-    if (googleBtn) googleBtn.onclick = () => handleGoogle(googleBtn);
-    const fallbackGoogleBtn = document.getElementById('lpFallbackGoogleBtn');
-    if (fallbackGoogleBtn) fallbackGoogleBtn.onclick = () => handleGoogle(fallbackGoogleBtn);
-    const profileAdminGoogleBtn = document.getElementById('lpProfileAdminGoogleBtn');
-    if (profileAdminGoogleBtn) profileAdminGoogleBtn.onclick = () => handleGoogle(profileAdminGoogleBtn);
 
     // Profile actions
     const openPlansBtn = document.getElementById('lpOpenPlansFromProfileBtn');
@@ -1340,78 +1156,43 @@
       };
     }
 
-    const resendBtn = document.getElementById('lpResendVerifyBtn');
-    if (resendBtn) {
-      resendBtn.onclick = async () => {
-        if (!api) return;
-        try {
-          await api.resendVerificationEmail();
-          feedbackBanner = { type: 'success', text: 'Verification email sent. Check your inbox, click the link, then click Check Verification Status.' };
-          renderModal();
-        } catch (err) {
-          feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Could not send email.' };
-          renderModal();
-        }
-      };
-    }
+    const changePwForm = document.getElementById('lpChangePasswordForm');
+    if (changePwForm) {
+      changePwForm.onsubmit = async (e) => {
+        e.preventDefault();
+        if (!api || typeof api.changePassword !== 'function') return;
+        const currentPw = document.getElementById('lpCurrentPassword')?.value || '';
+        const newPw = document.getElementById('lpNewPassword')?.value || '';
+        const confirmPw = document.getElementById('lpConfirmNewPassword')?.value || '';
 
-    const refreshVerifyBtn = document.getElementById('lpRefreshVerifyBtn');
-    if (refreshVerifyBtn) {
-      refreshVerifyBtn.onclick = async () => {
-        if (!api || typeof api.reloadAuthSession !== 'function') return;
-        refreshVerifyBtn.disabled = true;
-        refreshVerifyBtn.textContent = 'Checking…';
-        try {
-          const nextState = await api.reloadAuthSession();
-          if (nextState?.user?.emailVerified) {
-            if (nextState.isAdmin && !window.location.pathname.includes('admin.html')) {
-              showToast('Admin email verified — opening Admin Portal…');
-              closeModal();
-              setTimeout(() => {
-                window.location.href = 'admin.html';
-              }, 300);
-              return;
-            }
-            feedbackBanner = { type: 'success', text: 'Email verification confirmed!' };
-          } else {
-            feedbackBanner = {
-              type: 'info',
-              text: 'Email is not marked verified yet. Click the verification link in your inbox, or use Continue with Google above for instant verification.'
-            };
-          }
+        if (!currentPw || !newPw) {
+          feedbackBanner = { type: 'error', text: 'Enter your current password and a new password.' };
           renderModal();
-        } catch (err) {
-          feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Could not refresh status.' };
-          renderModal();
+          return;
         }
-      };
-    }
-
-    const linkGoogleBtn = document.getElementById('lpLinkGoogleBtn');
-    if (linkGoogleBtn) {
-      linkGoogleBtn.onclick = async () => {
-        if (!api) return;
-        try {
-          await api.linkGoogleAccount();
-          feedbackBanner = { type: 'success', text: 'Google account linked! You can now sign in with Google or Email/Password.' };
+        if (newPw.length < 6) {
+          feedbackBanner = { type: 'error', text: 'New password must be at least 6 characters long.' };
           renderModal();
-        } catch (err) {
-          feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Could not link Google.' };
-          renderModal();
+          return;
         }
-      };
-    }
+        if (newPw !== confirmPw) {
+          feedbackBanner = { type: 'error', text: 'New passwords do not match.' };
+          renderModal();
+          return;
+        }
 
-    const unlinkGoogleBtn = document.getElementById('lpUnlinkGoogleBtn');
-    if (unlinkGoogleBtn) {
-      unlinkGoogleBtn.onclick = async () => {
-        if (!api) return;
+        const btn = document.getElementById('lpChangePasswordBtn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Updating…';
+        }
         try {
-          await api.unlinkGoogleAccount();
-          feedbackBanner = { type: 'info', text: 'Google sign-in unlinked from your profile.' };
+          await api.changePassword(currentPw, newPw);
+          feedbackBanner = { type: 'success', text: 'Your password has been updated.' };
+          showToast('Password updated.');
           renderModal();
         } catch (err) {
-          feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Could not unlink Google.' };
+          feedbackBanner = { type: 'error', text: err instanceof Error ? err.message : 'Could not update password.' };
           renderModal();
         }
       };

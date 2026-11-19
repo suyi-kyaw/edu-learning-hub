@@ -1,65 +1,18 @@
-import { initializeApp, getApps } from 'firebase/app';
-import {
-  getAuth,
-  onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  getRedirectResult,
-  GoogleAuthProvider,
-  linkWithPopup,
-  unlink,
-  sendEmailVerification,
-  sendPasswordResetEmail,
-  updateProfile,
-  signOut,
-  type User
-} from 'firebase/auth';
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  getDocFromServer,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-  writeBatch,
-  type Unsubscribe
-} from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+/**
+ * =========================================================
+ * LINGUAPATH - AUTHENTICATION, MEMBERSHIP & PROGRESS CLIENT
+ * Pure Node/Express REST client (no Firebase SDK).
+ * Supports both local/same-origin preview and GitHub Pages
+ * connected to an external HTTPS Node server via LinguaBackend.
+ * =========================================================
+ */
 
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write'
-}
-
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: Array<{
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }>;
-  };
+export interface AuthUserSummary {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: 'student' | 'admin';
+  mustChangePassword?: boolean;
 }
 
 export interface UserProfile {
@@ -74,6 +27,7 @@ export interface UserProfile {
   membershipExpiresAt: string;
   subscribedLessonIds: string[];
   linkedProviders: string[];
+  mustChangePassword?: boolean;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -165,23 +119,27 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   heroEyebrow: 'Learn Chinese Step by Step',
   heroTitleLine1: 'Learn Chinese',
   heroTitleHighlight: 'with Confidence.',
-  heroSubtitle: 'Build your Chinese skills through pronunciation, everyday expressions, conversations, vocabulary, and practical exercises.',
+  heroSubtitle:
+    'Build your Chinese skills through pronunciation, everyday expressions, conversations, vocabulary, and practical exercises.',
   heroPrimaryCta: 'Explore Stories & Reels',
   heroSecondaryCta: 'Learning Hub',
   heroBannerUrl: 'assets/hero-banner.png',
   storiesLabel: 'Featured Stories & Reels',
   storiesTitle: 'Stories & Reels',
-  storiesSubtitle: 'Watch bite-sized vertical video reels and engaging cultural narratives crafted for modern Mandarin learners.',
+  storiesSubtitle:
+    'Watch bite-sized vertical video reels and engaging cultural narratives crafted for modern Mandarin learners.',
   gamesLabel: 'Interactive Practice',
   gamesTitle: 'Play & Practice Games',
   gamesSubtitle: 'Reinforce your Chinese tones, character recognition, and rapid recall through interactive gameplay.',
   lessonsLabel: 'Curriculum Pathways',
   lessonsTitle: 'Choose Your Learning Pathway',
-  lessonsSubtitle: 'Select your track to access structured lessons, native voice recordings, dialogues, and practice exercises.',
+  lessonsSubtitle:
+    'Select your track to access structured lessons, native voice recordings, dialogues, and practice exercises.',
   adultBadge: 'Adults • Comprehensive',
   adultTitle: 'Mandarin for Adults & Professionals',
   adultSubtitle: '实用成人汉语 • Practical Proficiency',
-  adultDesc: 'Master practical conversation for career, travel, dining, and HSK test preparation with real-world scenarios and cultural nuance.',
+  adultDesc:
+    'Master practical conversation for career, travel, dining, and HSK test preparation with real-world scenarios and cultural nuance.',
   adultBullets: [
     'Everyday Living & Socializing',
     'Business Meetings & Travel Mandarin',
@@ -191,7 +149,8 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   kidsBadge: 'Kids • Playful Immersion',
   kidsTitle: 'Chinese for Kids & Young Learners',
   kidsSubtitle: '少儿趣味中文 • Joyful Adventures',
-  kidsDesc: 'Discover the joy of Mandarin through colorful stories, playful pinyin songs, animal adventures, and interactive challenges that inspire confidence.',
+  kidsDesc:
+    'Discover the joy of Mandarin through colorful stories, playful pinyin songs, animal adventures, and interactive challenges that inspire confidence.',
   kidsBullets: [
     'Animals, Colors & Family Adventures',
     'Cheerful Pinyin Songs & Animations',
@@ -206,7 +165,6 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   featuredGameIds: ['game-01']
 };
 
-const ADMIN_EMAIL = 'syndkyaw@gmail.com';
 export const CONTACT_INFO = {
   email: 'syndkyaw@gmail.com',
   viber: '+95 9 798 123 456',
@@ -237,46 +195,7 @@ export const MEMBERSHIP_PLANS = {
   }
 };
 
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: (auth.currentUser?.providerData || []).map((provider) => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      }))
-    },
-    operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
-async function testConnection(): Promise<void> {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
-  }
-}
-
-testConnection();
+const AUTH_TOKEN_STORAGE_KEY = 'linguapath_auth_token';
 
 // --- Pure Utility Functions ---
 
@@ -300,139 +219,114 @@ function sanitizeDocId(raw: string): string {
   return cleaned.slice(0, 128) || 'item-' + Date.now();
 }
 
-function sanitizeDob(raw?: string | null): string {
-  const v = String(raw || '').trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+function resolveBackendApiUrl(path: string): string {
+  const resolver = (window as unknown as { LinguaBackend?: { apiUrl?: (p: string) => string } }).LinguaBackend;
+  return resolver && typeof resolver.apiUrl === 'function' ? resolver.apiUrl(path) : path;
 }
 
-function sanitizeUsername(raw?: string | null, fallbackEmail?: string | null): string {
-  const cleaned = String(raw || '').trim().slice(0, 60);
-  if (cleaned) return cleaned;
-  if (fallbackEmail && fallbackEmail.includes('@')) {
-    return fallbackEmail.split('@')[0].slice(0, 60) || 'Learner';
+function hasBackendAvailable(): boolean {
+  const resolver = (window as unknown as { LinguaBackend?: { hasBackend?: () => boolean } }).LinguaBackend;
+  return resolver && typeof resolver.hasBackend === 'function' ? resolver.hasBackend() : true;
+}
+
+function getStoredToken(): string | null {
+  try {
+    const val = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    return val ? val.trim() : null;
+  } catch {
+    return null;
   }
-  return 'Learner';
 }
 
-function extractProviders(user: User): string[] {
-  const set = new Set<string>();
-  for (const p of user.providerData || []) {
-    if (p.providerId) {
-      set.add(String(p.providerId).slice(0, 40));
+function setStoredToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     }
+  } catch {
+    // ignore storage errors
   }
-  return Array.from(set).slice(0, 5);
 }
 
-function isTokenAdminUser(user: User | null): boolean {
-  return Boolean(
-    user &&
-    user.email &&
-    user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
-    user.emailVerified
-  );
-}
+type CodedAuthError = Error & { code?: string; status?: number };
 
-type CodedAuthError = Error & { code?: string };
-
-function formatAuthError(err: unknown): CodedAuthError {
-  const code = (err as { code?: string })?.code || '';
-  const rawMsg = err instanceof Error ? err.message : String(err);
-  let out: CodedAuthError;
-  switch (code) {
-    case 'auth/operation-not-allowed':
-      out = new Error(
-        'Email/Password sign-in is not yet enabled in Firebase Authentication Console. Click "Continue with Google" at the top now, or enable Email/Password under Firebase Console > Authentication > Sign-in method.'
-      );
-      break;
-    case 'auth/email-already-in-use':
-      out = new Error('An account with this email already exists. Please sign in instead, or link Google after signing in.');
-      break;
-    case 'auth/invalid-credential':
-    case 'auth/wrong-password':
-    case 'auth/user-not-found':
-      out = new Error('Invalid email or password. Please check your credentials and try again.');
-      break;
-    case 'auth/weak-password':
-      out = new Error('Password is too weak. Please enter at least 6 characters.');
-      break;
-    case 'auth/invalid-email':
-      out = new Error('Please enter a valid email address.');
-      break;
-    case 'auth/popup-closed-by-user':
-      out = new Error(
-        'Google sign-in popup was closed before completing. Try again or open the app in a new browser tab if the preview window closed the popup.'
-      );
-      break;
-    case 'auth/popup-blocked':
-      out = new Error(
-        'Google sign-in popup was blocked by your browser or embedded preview frame. Allow popups for this site or click Open in New Tab to sign in.'
-      );
-      break;
-    case 'auth/cancelled-popup-request':
-      out = new Error('A previous Google sign-in popup was cancelled. Please click Continue with Google once and finish signing in.');
-      break;
-    case 'auth/unauthorized-domain':
-      out = new Error(
-        `This domain (${typeof window !== 'undefined' ? window.location.hostname : 'preview'}) is not yet authorized for Firebase OAuth popups (auth/unauthorized-domain).`
-      );
-      break;
-    case 'auth/web-storage-unsupported':
-      out = new Error(
-        'Browser storage or third-party cookies are blocked in this embedded frame. Please open the app in a new browser tab to sign in with Google.'
-      );
-      break;
-    case 'auth/account-exists-with-different-credential':
-      out = new Error(
-        'An account already exists with this email under another sign-in method. Sign in with that method first, then link Google in your profile.'
-      );
-      break;
-    case 'auth/network-request-failed':
-      out = new Error('Network error while contacting Google/Firebase Authentication. Please check your connection and try again.');
-      break;
-    case 'auth/internal-error':
-      out = new Error(
-        'Google sign-in encountered an internal popup/iframe error (auth/internal-error). Allow popups/third-party cookies or open the app in a new tab to sign in.'
-      );
-      break;
-    case 'auth/credential-already-in-use':
-      out = new Error('That Google account is already linked to another user.');
-      break;
-    case 'auth/provider-already-linked':
-      out = new Error('Google sign-in is already linked to your account.');
-      break;
-    case 'auth/requires-recent-login':
-      out = new Error('Please sign out and sign back in before modifying linked sign-in providers.');
-      break;
-    default: {
-      let friendly = rawMsg.replace(/^Firebase:\s*/i, '').trim();
-      if (friendly.startsWith('Firestore Error:')) {
-        try {
-          const parsed = JSON.parse(friendly.slice('Firestore Error:'.length).trim());
-          friendly = `Profile sync error (${parsed.operationType || 'write'} on ${parsed.path || 'users'}): ${parsed.error || 'Permission denied'}`;
-        } catch (_) {
-          // keep original
-        }
-      }
-      if (!code && !friendly) {
-        friendly = 'Authentication failed.';
-      }
-      out = new Error(friendly);
-      break;
-    }
+async function apiRequest<T = Record<string, unknown>>(
+  path: string,
+  options: { method?: string; body?: unknown; requireAuth?: boolean } = {}
+): Promise<T> {
+  if (!hasBackendAvailable()) {
+    const err: CodedAuthError = new Error(
+      'Node backend URL is not configured for this static site. Open Admin Portal -> Hosted Node Backend Connection or set DEFAULT_PRODUCTION_BACKEND_URL in backend-config.js.'
+    );
+    err.code = 'no-backend';
+    throw err;
   }
-  out.code = code;
-  return out;
+
+  const token = getStoredToken();
+  if (options.requireAuth && !token) {
+    const err: CodedAuthError = new Error('Please sign in first.');
+    err.code = 'unauthenticated';
+    throw err;
+  }
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  let bodyStr: string | undefined;
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    bodyStr = JSON.stringify(options.body);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(resolveBackendApiUrl(path), {
+      method: options.method || 'GET',
+      mode: 'cors',
+      cache: 'no-store',
+      headers,
+      body: bodyStr
+    });
+  } catch {
+    const netErr: CodedAuthError = new Error(
+      'Could not reach the LinguaPath server. Check your internet connection or hosted Node backend URL.'
+    );
+    netErr.code = 'network-error';
+    throw netErr;
+  }
+
+  let data: Record<string, unknown> = {};
+  try {
+    data = (await res.json()) as Record<string, unknown>;
+  } catch {
+    data = {};
+  }
+
+  if (!res.ok || data.success === false) {
+    const err: CodedAuthError = new Error(
+      typeof data.error === 'string' && data.error ? data.error : `Request failed (HTTP ${res.status}).`
+    );
+    if (typeof data.code === 'string') err.code = data.code;
+    err.status = res.status;
+    throw err;
+  }
+
+  return data as T;
 }
 
 // --- Client Reactive Store ---
 
-interface AuthState {
+export interface AuthState {
   ready: boolean;
-  user: User | null;
+  user: AuthUserSummary | null;
   profile: UserProfile | null;
   userProgress: UserProgress | null;
   isAdmin: boolean;
+  adminClaimed: boolean;
+  smtpConfigured: boolean;
   myRequests: SubscriptionRequest[];
   allRequests: SubscriptionRequest[];
   allUsers: UserProfile[];
@@ -447,6 +341,8 @@ const state: AuthState = {
   profile: null,
   userProgress: null,
   isAdmin: false,
+  adminClaimed: false,
+  smtpConfigured: false,
   myRequests: [],
   allRequests: [],
   allUsers: [],
@@ -455,20 +351,16 @@ const state: AuthState = {
   lastError: null
 };
 
-let unsubProfile: Unsubscribe | null = null;
-let unsubProgress: Unsubscribe | null = null;
-let unsubMyRequests: Unsubscribe | null = null;
-let unsubAllRequests: Unsubscribe | null = null;
-let unsubAllUsers: Unsubscribe | null = null;
-let unsubCatalog: Unsubscribe | null = null;
-let unsubSiteConfig: Unsubscribe | null = null;
-
 const subscribers = new Set<(s: AuthState) => void>();
+
+function getComputedAdmin(): boolean {
+  return Boolean(state.user?.role === 'admin' || state.profile?.role === 'admin');
+}
 
 function emitState(): void {
   const snapshot: AuthState = {
     ...state,
-    isAdmin: isTokenAdminUser(state.user) || state.profile?.role === 'admin'
+    isAdmin: getComputedAdmin()
   };
   for (const cb of subscribers) {
     try {
@@ -480,27 +372,8 @@ function emitState(): void {
   window.dispatchEvent(new CustomEvent('lingua-auth-change', { detail: snapshot }));
 }
 
-function clearUserListeners(): void {
-  if (unsubProfile) {
-    unsubProfile();
-    unsubProfile = null;
-  }
-  if (unsubProgress) {
-    unsubProgress();
-    unsubProgress = null;
-  }
-  if (unsubMyRequests) {
-    unsubMyRequests();
-    unsubMyRequests = null;
-  }
-  if (unsubAllRequests) {
-    unsubAllRequests();
-    unsubAllRequests = null;
-  }
-  if (unsubAllUsers) {
-    unsubAllUsers();
-    unsubAllUsers = null;
-  }
+function emitSiteConfigChange(): void {
+  window.dispatchEvent(new CustomEvent('lingua-site-config-change', { detail: state.siteConfig }));
 }
 
 function normalizeStrList(raw: unknown, maxItems: number, maxLen: number, fallback: string[]): string[] {
@@ -568,360 +441,138 @@ function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteC
   };
 }
 
-function emitSiteConfigChange(): void {
-  window.dispatchEvent(new CustomEvent('lingua-site-config-change', { detail: state.siteConfig }));
-}
-
-function startCatalogListener(): void {
-  if (unsubCatalog) return;
-  const catalogRef = collection(db, 'lessonCatalog');
-  unsubCatalog = onSnapshot(
-    catalogRef,
-    (snap) => {
-      const map: Record<string, LessonCatalogItem> = {};
-      snap.forEach((d) => {
-        const item = d.data() as LessonCatalogItem;
-        if (item && item.lessonId) {
-          map[item.lessonId] = item;
-        }
-      });
-      state.lessonCatalog = map;
-      emitState();
-    },
-    (err) => {
-      console.warn('lessonCatalog listener warning:', err.message);
-    }
-  );
-}
-
-function resolveBackendApiUrl(path: string): string {
-  const resolver = (window as unknown as { LinguaBackend?: { apiUrl?: (p: string) => string } }).LinguaBackend;
-  return resolver && typeof resolver.apiUrl === 'function' ? resolver.apiUrl(path) : path;
-}
-
-function hasBackendAvailable(): boolean {
-  const resolver = (window as unknown as { LinguaBackend?: { hasBackend?: () => boolean } }).LinguaBackend;
-  return resolver && typeof resolver.hasBackend === 'function' ? resolver.hasBackend() : true;
-}
-
-function startSiteConfigListener(): void {
-  if (unsubSiteConfig) return;
-
-  // Hydrate initially from hosted/local Node server when available so visitors get instant saved copy
-  if (hasBackendAvailable()) {
-    fetch(resolveBackendApiUrl('/api/site-config?t=' + Date.now()))
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null)
-      .then((json) => {
-        if (json && json.config) {
-          state.siteConfig = normalizeSiteConfig(json.config);
-          emitSiteConfigChange();
-          emitState();
-        }
-      });
+function applySessionPayload(data: Record<string, unknown>): void {
+  if (typeof data.token === 'string' && data.token) {
+    setStoredToken(data.token);
   }
-
-  const cfgRef = doc(db, 'siteConfig', 'homepage');
-  unsubSiteConfig = onSnapshot(
-    cfgRef,
-    (snap) => {
-      if (snap.exists()) {
-        state.siteConfig = normalizeSiteConfig(snap.data() as Partial<SiteConfig>);
-        emitSiteConfigChange();
-        emitState();
-      }
-    },
-    (err) => {
-      console.warn('siteConfig listener warning:', err.message);
-    }
-  );
-}
-
-const inFlightProfileEnsures = new Map<string, Promise<UserProfile>>();
-
-async function ensureUserProfileDoc(
-  user: User,
-  overrides?: Partial<{ username: string; phoneNumber: string; dob: string }>
-): Promise<UserProfile> {
-  const existingPromise = inFlightProfileEnsures.get(user.uid);
-  if (existingPromise && !overrides) {
-    return existingPromise;
+  if (data.user && typeof data.user === 'object') {
+    state.user = data.user as AuthUserSummary;
   }
-  const run = ensureUserProfileDocInner(user, overrides).finally(() => {
-    inFlightProfileEnsures.delete(user.uid);
-  });
-  inFlightProfileEnsures.set(user.uid, run);
-  return run;
-}
-
-async function ensureUserProfileDocInner(
-  user: User,
-  overrides?: Partial<{ username: string; phoneNumber: string; dob: string }>
-): Promise<UserProfile> {
-  const userPath = `users/${user.uid}`;
-  const ref = doc(db, 'users', user.uid);
-  const providers = extractProviders(user);
-
-  let existingSnap;
-  try {
-    existingSnap = await getDoc(ref);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.GET, userPath);
+  if (data.profile && typeof data.profile === 'object') {
+    state.profile = data.profile as UserProfile;
   }
-
-  if (existingSnap && existingSnap.exists()) {
-    const existing = existingSnap.data() as UserProfile;
-    const nextProviders = Array.from(new Set([...(existing.linkedProviders || []), ...providers])).slice(0, 5);
-    const needsProviderSync =
-      nextProviders.length !== (existing.linkedProviders || []).length ||
-      nextProviders.some((p, i) => p !== existing.linkedProviders?.[i]);
-
-    const nextEmail = String(user.email || existing.email || '').slice(0, 160);
-    const isRootAdmin = isTokenAdminUser(user);
-    const needsRoleUpgrade = isRootAdmin && existing.role !== 'admin';
-
-    if (needsProviderSync || (nextEmail && nextEmail !== existing.email) || needsRoleUpgrade) {
-      const updatePayload: Record<string, unknown> = {
-        email: nextEmail,
-        linkedProviders: nextProviders,
-        updatedAt: serverTimestamp()
-      };
-      if (needsRoleUpgrade) {
-        updatePayload.role = 'admin';
-      }
-      try {
-        await updateDoc(ref, updatePayload);
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, userPath);
-      }
-    }
-
-    if (isRootAdmin) {
-      try {
-        const adminRef = doc(db, 'admins', user.uid);
-        const adminSnap = await getDoc(adminRef);
-        if (!adminSnap.exists()) {
-          await setDoc(adminRef, {
-            uid: user.uid,
-            email: nextEmail,
-            grantedAt: serverTimestamp()
-          });
-        }
-      } catch (err) {
-        console.warn('Admin doc sync skipped:', err);
-      }
-    }
-    return isRootAdmin && existing.role !== 'admin' ? { ...existing, role: 'admin', linkedProviders: nextProviders } : existing;
-  }
-
-  const username = sanitizeUsername(overrides?.username || user.displayName, user.email);
-  const email = String(user.email || '').trim().slice(0, 160);
-  const phoneNumber = String(overrides?.phoneNumber || user.phoneNumber || '').trim().slice(0, 32);
-  const dob = sanitizeDob(overrides?.dob);
-  const isRootAdmin = isTokenAdminUser(user);
-
-  const newProfile: UserProfile = {
-    uid: user.uid,
-    username,
-    email,
-    phoneNumber,
-    dob,
-    role: isRootAdmin ? 'admin' : 'student',
-    membershipStatus: 'free',
-    membershipPlan: 'none',
-    membershipExpiresAt: '',
-    subscribedLessonIds: [],
-    linkedProviders: providers,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  };
-
-  try {
-    await setDoc(ref, newProfile);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, userPath);
-  }
-
-  if (isRootAdmin) {
-    const adminPath = `admins/${user.uid}`;
-    try {
-      await setDoc(doc(db, 'admins', user.uid), {
-        uid: user.uid,
-        email,
-        grantedAt: serverTimestamp()
-      });
-    } catch (err) {
-      console.warn('Admin doc bootstrap skipped:', err);
-    }
-  }
-
-  return newProfile;
-}
-
-function startUserListeners(user: User): void {
-  clearUserListeners();
-
-  const userPath = `users/${user.uid}`;
-  unsubProfile = onSnapshot(
-    doc(db, 'users', user.uid),
-    (snap) => {
-      if (snap.exists()) {
-        state.profile = snap.data() as UserProfile;
-      }
-      emitState();
-    },
-    (err) => {
-      if (auth.currentUser) {
-        try {
-          handleFirestoreError(err, OperationType.GET, userPath);
-        } catch (wrapped) {
-          state.lastError = wrapped instanceof Error ? wrapped.message : String(wrapped);
-          emitState();
-        }
-      }
-    }
-  );
-
-  const progressPath = `userProgress/${user.uid}`;
-  unsubProgress = onSnapshot(
-    doc(db, 'userProgress', user.uid),
-    (snap) => {
-      if (snap.exists()) {
-        state.userProgress = normalizeUserProgress(snap.data() as Partial<UserProgress>, user.uid);
-      } else {
-        state.userProgress = createDefaultUserProgress(user.uid);
-      }
-      emitState();
-    },
-    (err) => {
-      if (auth.currentUser) {
-        try {
-          handleFirestoreError(err, OperationType.GET, progressPath);
-        } catch (wrapped) {
-          console.warn('userProgress listener warning:', wrapped);
-        }
-      }
-    }
-  );
-
-  const myReqQuery = query(
-    collection(db, 'subscriptionRequests'),
-    where('userId', '==', user.uid),
-    orderBy('createdAt', 'desc')
-  );
-  unsubMyRequests = onSnapshot(
-    myReqQuery,
-    (snap) => {
-      const list: SubscriptionRequest[] = [];
-      snap.forEach((d) => list.push(d.data() as SubscriptionRequest));
-      state.myRequests = list;
-      emitState();
-    },
-    (err) => {
-      if (auth.currentUser) {
-        // Fallback query without composite index if index isn't ready yet
-        const fallbackQuery = query(collection(db, 'subscriptionRequests'), where('userId', '==', user.uid));
-        unsubMyRequests = onSnapshot(
-          fallbackQuery,
-          (snap2) => {
-            const list: SubscriptionRequest[] = [];
-            snap2.forEach((d) => list.push(d.data() as SubscriptionRequest));
-            list.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
-            state.myRequests = list;
-            emitState();
-          },
-          (err2) => {
-            console.warn('subscriptionRequests listener error:', err2.message, err.message);
-          }
-        );
-      }
-    }
-  );
-
-  if (isTokenAdminUser(user)) {
-    const allReqQuery = query(collection(db, 'subscriptionRequests'), orderBy('createdAt', 'desc'));
-    unsubAllRequests = onSnapshot(
-      allReqQuery,
-      (snap) => {
-        const list: SubscriptionRequest[] = [];
-        snap.forEach((d) => list.push(d.data() as SubscriptionRequest));
-        state.allRequests = list;
-        emitState();
-      },
-      (err) => {
-        if (auth.currentUser) {
-          console.warn('Admin allRequests listener error:', err.message);
-        }
-      }
+  if (data.userProgress && typeof data.userProgress === 'object') {
+    state.userProgress = normalizeUserProgress(
+      data.userProgress as Partial<UserProgress>,
+      state.user?.uid || ''
     );
-
-    const allUsersQuery = query(collection(db, 'users'));
-    unsubAllUsers = onSnapshot(
-      allUsersQuery,
-      (snap) => {
-        const list: UserProfile[] = [];
-        snap.forEach((d) => list.push(d.data() as UserProfile));
-        list.sort((a, b) => (a.username || '').localeCompare(b.username || ''));
-        state.allUsers = list;
-        emitState();
-      },
-      (err) => {
-        if (auth.currentUser) {
-          console.warn('Admin allUsers listener error:', err.message);
-        }
-      }
-    );
+  } else if (state.user) {
+    state.userProgress = createDefaultUserProgress(state.user.uid);
+  }
+  if (Array.isArray(data.myRequests)) {
+    state.myRequests = data.myRequests as SubscriptionRequest[];
+  }
+  if (data.lessonCatalog && typeof data.lessonCatalog === 'object') {
+    state.lessonCatalog = data.lessonCatalog as Record<string, LessonCatalogItem>;
+  }
+  if (typeof data.adminClaimed === 'boolean') {
+    state.adminClaimed = data.adminClaimed;
+  }
+  if (typeof data.smtpConfigured === 'boolean') {
+    state.smtpConfigured = data.smtpConfigured;
+  }
+  if (state.user?.role === 'admin' || state.profile?.role === 'admin') {
+    if (Array.isArray(data.allRequests)) {
+      state.allRequests = data.allRequests as SubscriptionRequest[];
+    }
+    if (Array.isArray(data.allUsers)) {
+      state.allUsers = data.allUsers as UserProfile[];
+    }
   } else {
     state.allRequests = [];
     state.allUsers = [];
   }
-}
-
-function toMillis(ts: unknown): number {
-  if (!ts) return 0;
-  if (typeof ts === 'number') return ts;
-  if (typeof ts === 'string') return Date.parse(ts) || 0;
-  if (typeof (ts as { toMillis?: () => number }).toMillis === 'function') {
-    return (ts as { toMillis: () => number }).toMillis();
-  }
-  if (typeof (ts as { seconds?: number }).seconds === 'number') {
-    return ((ts as { seconds: number }).seconds || 0) * 1000;
-  }
-  return 0;
-}
-
-// Bootstrap listeners & handle any pending redirect sign-in result
-startCatalogListener();
-startSiteConfigListener();
-getRedirectResult(auth).catch((err) => {
-  console.warn('getRedirectResult note:', err?.code || err?.message || err);
-});
-
-onAuthStateChanged(auth, async (user) => {
-  state.user = user;
+  state.isAdmin = getComputedAdmin();
   state.lastError = null;
+}
 
-  if (!user) {
-    clearUserListeners();
-    state.profile = null;
-    state.userProgress = null;
-    state.myRequests = [];
-    state.allRequests = [];
-    state.allUsers = [];
-    state.ready = true;
-    emitState();
-    return;
+function clearAuthSession(): void {
+  setStoredToken(null);
+  state.user = null;
+  state.profile = null;
+  state.userProgress = null;
+  state.isAdmin = false;
+  state.myRequests = [];
+  state.allRequests = [];
+  state.allUsers = [];
+}
+
+async function hydratePublicAndSession(): Promise<void> {
+  // 1. Hydrate siteConfig (from backend or static fallback data/site-config.json)
+  if (hasBackendAvailable()) {
+    try {
+      const cfgRes = await fetch(resolveBackendApiUrl('/api/site-config?t=' + Date.now()), {
+        mode: 'cors',
+        cache: 'no-store'
+      });
+      if (cfgRes.ok) {
+        const cfgJson = (await cfgRes.json()) as { config?: Partial<SiteConfig> };
+        if (cfgJson && cfgJson.config) {
+          state.siteConfig = normalizeSiteConfig(cfgJson.config);
+          emitSiteConfigChange();
+        }
+      }
+    } catch {
+      // Fallback below
+    }
+  } else {
+    try {
+      const staticCfg = await fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' });
+      if (staticCfg.ok) {
+        const parsed = (await staticCfg.json()) as Partial<SiteConfig>;
+        state.siteConfig = normalizeSiteConfig(parsed);
+        emitSiteConfigChange();
+      }
+    } catch {
+      // keep defaults
+    }
   }
 
-  try {
-    await ensureUserProfileDoc(user);
-    startUserListeners(user);
-  } catch (err) {
-    state.lastError = err instanceof Error ? err.message : String(err);
-  } finally {
-    state.ready = true;
-    emitState();
+  // 2. Hydrate public catalog, auth status, and current user session if a token exists
+  if (hasBackendAvailable()) {
+    const token = getStoredToken();
+    try {
+      const [statusJson, catalogJson] = await Promise.all([
+        fetch(resolveBackendApiUrl('/api/auth/status?t=' + Date.now()), { mode: 'cors', cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+        fetch(resolveBackendApiUrl('/api/catalog?t=' + Date.now()), { mode: 'cors', cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+      ]);
+      if (statusJson) {
+        if (typeof statusJson.adminClaimed === 'boolean') state.adminClaimed = statusJson.adminClaimed;
+        if (typeof statusJson.smtpConfigured === 'boolean') state.smtpConfigured = statusJson.smtpConfigured;
+      }
+      if (catalogJson && catalogJson.lessonCatalog && typeof catalogJson.lessonCatalog === 'object') {
+        state.lessonCatalog = catalogJson.lessonCatalog as Record<string, LessonCatalogItem>;
+      }
+    } catch {
+      // ignore
+    }
+
+    if (token) {
+      try {
+        const me = await apiRequest<Record<string, unknown>>('/api/auth/me?t=' + Date.now(), { requireAuth: true });
+        applySessionPayload(me);
+      } catch (err) {
+        const coded = err as CodedAuthError;
+        if (coded.status === 401 || coded.code === 'unauthenticated') {
+          clearAuthSession();
+        } else {
+          state.lastError = coded.message;
+        }
+      }
+    }
   }
+
+  state.ready = true;
+  emitState();
+}
+
+hydratePublicAndSession();
+window.addEventListener('linguapath-backend-change', () => {
+  hydratePublicAndSession();
 });
 
 // --- Public Auth, Profile, Subscription & Admin Methods ---
@@ -933,171 +584,75 @@ async function registerWithEmail(params: {
   dob: string;
   password: string;
 }): Promise<UserProfile> {
-  const email = String(params.email || '').trim();
-  const password = String(params.password || '');
-  const username = sanitizeUsername(params.username, email);
-  const phoneNumber = String(params.phoneNumber || '').trim().slice(0, 32);
-  const dob = sanitizeDob(params.dob);
-
-  let cred;
-  try {
-    cred = await createUserWithEmailAndPassword(auth, email, password);
-  } catch (err) {
-    throw formatAuthError(err);
-  }
-
-  try {
-    await updateProfile(cred.user, { displayName: username });
-  } catch (err) {
-    console.warn('updateProfile skipped:', err);
-  }
-
-  try {
-    await sendEmailVerification(cred.user);
-  } catch (err) {
-    console.warn('sendEmailVerification skipped:', err);
-  }
-
-  const profile = await ensureUserProfileDoc(cred.user, { username, phoneNumber, dob });
-  startUserListeners(cred.user);
+  const data = await apiRequest<Record<string, unknown>>('/api/auth/register', {
+    method: 'POST',
+    body: {
+      username: String(params.username || '').trim(),
+      email: String(params.email || '').trim(),
+      phoneNumber: String(params.phoneNumber || '').trim(),
+      dob: String(params.dob || '').trim(),
+      password: String(params.password || '')
+    }
+  });
+  applySessionPayload(data);
+  state.ready = true;
   emitState();
-  return profile;
+  return state.profile as UserProfile;
 }
 
-async function loginWithEmail(email: string, password: string): Promise<User> {
-  try {
-    const cred = await signInWithEmailAndPassword(auth, String(email || '').trim(), String(password || ''));
-    const profile = await ensureUserProfileDoc(cred.user);
-    state.user = cred.user;
-    state.profile = profile;
-    state.ready = true;
-    startUserListeners(cred.user);
+async function loginWithEmail(email: string, password: string): Promise<AuthUserSummary> {
+  const data = await apiRequest<Record<string, unknown>>('/api/auth/login', {
+    method: 'POST',
+    body: {
+      email: String(email || '').trim(),
+      password: String(password || '')
+    }
+  });
+  applySessionPayload(data);
+  state.ready = true;
+  emitState();
+  return state.user as AuthUserSummary;
+}
+
+async function sendPasswordReset(email: string): Promise<string> {
+  const data = await apiRequest<{ message?: string }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: { email: String(email || '').trim() }
+  });
+  return String(data.message || 'If an account exists for that email, a temporary password has been sent.');
+}
+
+async function changePassword(currentPassword: string, newPassword: string): Promise<UserProfile> {
+  const data = await apiRequest<{ profile?: UserProfile }>('/api/auth/change-password', {
+    method: 'POST',
+    requireAuth: true,
+    body: { currentPassword, newPassword }
+  });
+  if (data.profile) {
+    state.profile = data.profile;
+    if (state.user) {
+      state.user.mustChangePassword = Boolean(data.profile.mustChangePassword);
+    }
     emitState();
-    return cred.user;
-  } catch (err) {
-    throw formatAuthError(err);
   }
-}
-
-let inFlightGoogleSignIn: Promise<User> | null = null;
-
-async function signInWithGoogle(): Promise<User> {
-  if (inFlightGoogleSignIn) {
-    return inFlightGoogleSignIn;
-  }
-  const run = (async () => {
-    try {
-      const cred = await signInWithPopup(auth, googleProvider);
-      let profile: UserProfile | null = null;
-      try {
-        profile = await ensureUserProfileDoc(cred.user);
-      } catch (profileErr) {
-        console.warn('Profile bootstrap delayed after Google login:', profileErr);
-      }
-      state.user = cred.user;
-      if (profile) {
-        state.profile = profile;
-      }
-      state.ready = true;
-      startUserListeners(cred.user);
-      emitState();
-      return cred.user;
-    } catch (err) {
-      throw formatAuthError(err);
-    } finally {
-      inFlightGoogleSignIn = null;
-    }
-  })();
-  inFlightGoogleSignIn = run;
-  return run;
-}
-
-async function linkGoogleAccount(): Promise<string[]> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Please sign in first.');
-  try {
-    const res = await linkWithPopup(user, googleProvider);
-    const providers = extractProviders(res.user);
-    const userPath = `users/${user.uid}`;
-    try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        linkedProviders: providers,
-        updatedAt: serverTimestamp()
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, userPath);
-    }
-    return providers;
-  } catch (err) {
-    throw formatAuthError(err);
-  }
-}
-
-async function unlinkGoogleAccount(): Promise<string[]> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Please sign in first.');
-  const providers = extractProviders(user);
-  if (providers.length <= 1) {
-    throw new Error('Cannot unlink your only remaining sign-in method.');
-  }
-  try {
-    const updatedUser = await unlink(user, 'google.com');
-    const nextProviders = extractProviders(updatedUser);
-    const userPath = `users/${user.uid}`;
-    try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        linkedProviders: nextProviders,
-        updatedAt: serverTimestamp()
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, userPath);
-    }
-    return nextProviders;
-  } catch (err) {
-    throw formatAuthError(err);
-  }
-}
-
-async function resendVerificationEmail(): Promise<void> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Please sign in first.');
-  try {
-    await sendEmailVerification(user);
-  } catch (err) {
-    throw formatAuthError(err);
-  }
-}
-
-async function sendPasswordReset(email: string): Promise<void> {
-  try {
-    await sendPasswordResetEmail(auth, String(email || '').trim());
-  } catch (err) {
-    throw formatAuthError(err);
-  }
+  return state.profile as UserProfile;
 }
 
 async function reloadAuthSession(): Promise<AuthState> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Please sign in first.');
-  try {
-    await user.reload();
-    await user.getIdToken(true);
-    const refreshedUser = auth.currentUser;
-    if (refreshedUser) {
-      state.user = refreshedUser;
-      await ensureUserProfileDoc(refreshedUser);
-      startUserListeners(refreshedUser);
-    }
-    emitState();
-    return getState();
-  } catch (err) {
-    throw formatAuthError(err);
+  if (!getStoredToken()) {
+    throw new Error('Please sign in first.');
   }
+  const me = await apiRequest<Record<string, unknown>>('/api/auth/me?t=' + Date.now(), { requireAuth: true });
+  applySessionPayload(me);
+  state.ready = true;
+  emitState();
+  return getState();
 }
 
 async function logout(): Promise<void> {
-  clearUserListeners();
-  await signOut(auth);
+  clearAuthSession();
+  state.ready = true;
+  emitState();
 }
 
 async function updateProfileDetails(params: {
@@ -1105,32 +660,21 @@ async function updateProfileDetails(params: {
   phoneNumber: string;
   dob: string;
 }): Promise<void> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Please sign in first.');
-  const username = sanitizeUsername(params.username, user.email);
-  const phoneNumber = String(params.phoneNumber || '').trim().slice(0, 32);
-  const dob = sanitizeDob(params.dob);
-
-  if (params.dob && !dob) {
-    throw new Error('Please enter Date of Birth in YYYY-MM-DD format.');
-  }
-
-  try {
-    await updateProfile(user, { displayName: username });
-  } catch (err) {
-    console.warn('Auth displayName update skipped:', err);
-  }
-
-  const userPath = `users/${user.uid}`;
-  try {
-    await updateDoc(doc(db, 'users', user.uid), {
-      username,
-      phoneNumber,
-      dob,
-      updatedAt: serverTimestamp()
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, userPath);
+  const data = await apiRequest<{ profile?: UserProfile }>('/api/auth/profile', {
+    method: 'PUT',
+    requireAuth: true,
+    body: {
+      username: String(params.username || '').trim(),
+      phoneNumber: String(params.phoneNumber || '').trim(),
+      dob: String(params.dob || '').trim()
+    }
+  });
+  if (data.profile) {
+    state.profile = data.profile;
+    if (state.user) {
+      state.user.displayName = data.profile.username;
+    }
+    emitState();
   }
 }
 
@@ -1143,58 +687,34 @@ async function submitSubscriptionRequest(params: {
   contactHandle: string;
   note?: string;
 }): Promise<SubscriptionRequest> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Please sign in or register first to subscribe.');
-
-  const profile = state.profile || (await ensureUserProfileDoc(user));
-  const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const reqPath = `subscriptionRequests/${requestId}`;
-
-  const plan = MEMBERSHIP_PLANS[params.planType] || MEMBERSHIP_PLANS.monthly;
-  const lessonId = params.planType === 'per_lesson' ? sanitizeDocId(params.lessonId || '') : '';
-  const lessonTitle =
-    params.planType === 'per_lesson'
-      ? String(params.lessonTitle || 'Paid Lesson Unlock').trim().slice(0, 160)
-      : plan.name;
-  const amountLabel = String(params.amountLabel || plan.amountLabel).trim().slice(0, 40);
-
-  const payload: SubscriptionRequest = {
-    requestId,
-    userId: user.uid,
-    username: sanitizeUsername(profile.username || user.displayName, user.email),
-    userEmail: String(profile.email || user.email || '').trim().slice(0, 160),
-    userPhone: String(profile.phoneNumber || '').trim().slice(0, 32),
-    planType: params.planType,
-    lessonId,
-    lessonTitle,
-    amountLabel,
-    contactChannel: params.contactChannel === 'viber' ? 'viber' : 'email',
-    contactHandle: String(params.contactHandle || profile.email || profile.phoneNumber || '').trim().slice(0, 80),
-    note: String(params.note || '').trim().slice(0, 400),
-    status: 'pending',
-    adminNote: '',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  };
-
-  try {
-    await setDoc(doc(db, 'subscriptionRequests', requestId), payload);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, reqPath);
+  const data = await apiRequest<{ request: SubscriptionRequest; myRequests?: SubscriptionRequest[] }>('/api/requests', {
+    method: 'POST',
+    requireAuth: true,
+    body: params
+  });
+  if (Array.isArray(data.myRequests)) {
+    state.myRequests = data.myRequests;
+  } else if (data.request) {
+    state.myRequests = [data.request, ...state.myRequests];
   }
-
-  return payload;
+  emitState();
+  return data.request;
 }
 
 async function cancelPendingRequest(requestId: string): Promise<void> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Please sign in first.');
-  const reqPath = `subscriptionRequests/${requestId}`;
-  try {
-    await deleteDoc(doc(db, 'subscriptionRequests', requestId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, reqPath);
+  const data = await apiRequest<{ myRequests?: SubscriptionRequest[] }>(
+    `/api/requests/${encodeURIComponent(requestId)}`,
+    {
+      method: 'DELETE',
+      requireAuth: true
+    }
+  );
+  if (Array.isArray(data.myRequests)) {
+    state.myRequests = data.myRequests;
+  } else {
+    state.myRequests = state.myRequests.filter((r) => r.requestId !== requestId);
   }
+  emitState();
 }
 
 // --- Admin Management Methods ---
@@ -1203,81 +723,30 @@ async function approveSubscriptionRequest(
   reqDoc: SubscriptionRequest,
   adminNote = 'Verified via QR payment'
 ): Promise<void> {
-  if (!auth.currentUser) throw new Error('Admin sign-in required.');
-
-  const reqPath = `subscriptionRequests/${reqDoc.requestId}`;
-  const userPath = `users/${reqDoc.userId}`;
-
-  let targetUserSnap;
-  try {
-    targetUserSnap = await getDoc(doc(db, 'users', reqDoc.userId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.GET, userPath);
-  }
-
-  if (!targetUserSnap || !targetUserSnap.exists()) {
-    throw new Error('Target user profile could not be found.');
-  }
-
-  const targetUser = targetUserSnap.data() as UserProfile;
-  const now = new Date();
-  let nextStatus: UserProfile['membershipStatus'] = 'active';
-  let nextPlan: UserProfile['membershipPlan'] = targetUser.membershipPlan || 'none';
-  let nextExpires = targetUser.membershipExpiresAt || '';
-  const nextLessons = Array.isArray(targetUser.subscribedLessonIds)
-    ? [...targetUser.subscribedLessonIds]
-    : [];
-
-  if (reqDoc.planType === 'monthly') {
-    const exp = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    nextPlan = 'monthly';
-    nextExpires = exp.toISOString().slice(0, 10);
-  } else if (reqDoc.planType === 'annual') {
-    const exp = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-    nextPlan = 'annual';
-    nextExpires = exp.toISOString().slice(0, 10);
-  } else if (reqDoc.planType === 'per_lesson') {
-    if (reqDoc.lessonId && !nextLessons.includes(reqDoc.lessonId) && nextLessons.length < 100) {
-      nextLessons.push(reqDoc.lessonId);
-    }
-    if (nextPlan !== 'monthly' && nextPlan !== 'annual') {
-      nextPlan = 'per_lesson';
-      nextExpires = '';
-    }
-  }
-
-  try {
-    const batch = writeBatch(db);
-    batch.update(doc(db, 'subscriptionRequests', reqDoc.requestId), {
-      status: 'approved',
-      adminNote: String(adminNote || '').slice(0, 300),
-      updatedAt: serverTimestamp()
-    });
-    batch.update(doc(db, 'users', reqDoc.userId), {
-      membershipStatus: nextStatus,
-      membershipPlan: nextPlan,
-      membershipExpiresAt: nextExpires,
-      subscribedLessonIds: nextLessons,
-      updatedAt: serverTimestamp()
-    });
-    await batch.commit();
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `${reqPath} + ${userPath}`);
-  }
+  const data = await apiRequest<{
+    allRequests?: SubscriptionRequest[];
+    allUsers?: UserProfile[];
+  }>(`/api/admin/requests/${encodeURIComponent(reqDoc.requestId)}/approve`, {
+    method: 'POST',
+    requireAuth: true,
+    body: { adminNote }
+  });
+  if (Array.isArray(data.allRequests)) state.allRequests = data.allRequests;
+  if (Array.isArray(data.allUsers)) state.allUsers = data.allUsers;
+  emitState();
 }
 
 async function rejectSubscriptionRequest(requestId: string, adminNote = 'Payment could not be verified'): Promise<void> {
-  if (!auth.currentUser) throw new Error('Admin sign-in required.');
-  const reqPath = `subscriptionRequests/${requestId}`;
-  try {
-    await updateDoc(doc(db, 'subscriptionRequests', requestId), {
-      status: 'rejected',
-      adminNote: String(adminNote || '').slice(0, 300),
-      updatedAt: serverTimestamp()
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, reqPath);
-  }
+  const data = await apiRequest<{ allRequests?: SubscriptionRequest[] }>(
+    `/api/admin/requests/${encodeURIComponent(requestId)}/reject`,
+    {
+      method: 'POST',
+      requireAuth: true,
+      body: { adminNote }
+    }
+  );
+  if (Array.isArray(data.allRequests)) state.allRequests = data.allRequests;
+  emitState();
 }
 
 async function updateUserMembershipAdmin(
@@ -1289,22 +758,39 @@ async function updateUserMembershipAdmin(
     subscribedLessonIds?: string[];
   }
 ): Promise<void> {
-  if (!auth.currentUser) throw new Error('Admin sign-in required.');
-  const userPath = `users/${userId}`;
-  try {
-    const payload: Record<string, unknown> = {
-      membershipStatus: updates.membershipStatus,
-      membershipPlan: updates.membershipPlan,
-      membershipExpiresAt: String(updates.membershipExpiresAt || '').slice(0, 40),
-      updatedAt: serverTimestamp()
-    };
-    if (Array.isArray(updates.subscribedLessonIds)) {
-      payload.subscribedLessonIds = updates.subscribedLessonIds.slice(0, 100);
+  const data = await apiRequest<{ user?: UserProfile; allUsers?: UserProfile[] }>(
+    `/api/admin/users/${encodeURIComponent(userId)}/membership`,
+    {
+      method: 'PUT',
+      requireAuth: true,
+      body: updates
     }
-    await updateDoc(doc(db, 'users', userId), payload);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, userPath);
+  );
+  if (Array.isArray(data.allUsers)) state.allUsers = data.allUsers;
+  if (data.user && state.user && data.user.uid === state.user.uid) {
+    state.profile = data.user;
   }
+  emitState();
+}
+
+async function adminResetUserPassword(
+  userId: string,
+  options: { newPassword?: string; sendEmail?: boolean } = {}
+): Promise<{ emailed: boolean; emailError?: string | null; temporaryPassword: string; user?: UserProfile }> {
+  const data = await apiRequest<{
+    emailed: boolean;
+    emailError?: string | null;
+    temporaryPassword: string;
+    user?: UserProfile;
+    allUsers?: UserProfile[];
+  }>(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+    method: 'POST',
+    requireAuth: true,
+    body: options
+  });
+  if (Array.isArray(data.allUsers)) state.allUsers = data.allUsers;
+  emitState();
+  return data;
 }
 
 async function saveLessonCatalogItems(
@@ -1316,43 +802,19 @@ async function saveLessonCatalogItems(
     price: number;
   }>
 ): Promise<void> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Admin sign-in required to save lesson pricing.');
-
-  try {
-    // Firestore batch supports up to 500 writes
-    const chunkSize = 400;
-    for (let i = 0; i < items.length; i += chunkSize) {
-      const chunk = items.slice(i, i + chunkSize);
-      const batch = writeBatch(db);
-      for (const item of chunk) {
-        const lessonId = sanitizeDocId(item.lessonId);
-        const audience = String(item.audience || '').toLowerCase() === 'kids' ? 'Kids' : 'Adult';
-        const accessType = String(item.accessType || '').toLowerCase() === 'paid' ? 'paid' : 'free';
-        const rawPrice = Number(item.price);
-        const price = accessType === 'free' ? 0 : Math.min(9999, Math.max(0, Number.isFinite(rawPrice) ? rawPrice : 9));
-
-        batch.set(doc(db, 'lessonCatalog', lessonId), {
-          lessonId,
-          title: String(item.title || lessonId).trim().slice(0, 160) || lessonId,
-          audience,
-          accessType,
-          price,
-          updatedBy: user.uid,
-          updatedAt: serverTimestamp()
-        });
-      }
-      await batch.commit();
-    }
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, 'lessonCatalog');
+  const data = await apiRequest<{ lessonCatalog?: Record<string, LessonCatalogItem> }>('/api/admin/catalog', {
+    method: 'PUT',
+    requireAuth: true,
+    body: { items }
+  });
+  if (data.lessonCatalog) {
+    state.lessonCatalog = data.lessonCatalog;
+    emitState();
   }
 }
 
-async function getIdToken(forceRefresh = false): Promise<string | null> {
-  const user = auth.currentUser;
-  if (!user) return null;
-  return user.getIdToken(forceRefresh);
+async function getIdToken(): Promise<string | null> {
+  return getStoredToken();
 }
 
 function getSiteConfig(): SiteConfig {
@@ -1360,47 +822,35 @@ function getSiteConfig(): SiteConfig {
 }
 
 async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Admin sign-in required to update site configuration.');
-
   const merged = normalizeSiteConfig({ ...state.siteConfig, ...partial });
-  const payload = {
-    ...merged,
-    configId: 'homepage',
-    updatedBy: user.uid,
-    updatedAt: serverTimestamp()
-  };
-
-  const cfgPath = 'siteConfig/homepage';
-  try {
-    await setDoc(doc(db, 'siteConfig', 'homepage'), payload);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, cfgPath);
-  }
-
-  state.siteConfig = merged;
+  const data = await apiRequest<{ config?: Partial<SiteConfig> }>('/api/admin/site-config', {
+    method: 'PUT',
+    requireAuth: true,
+    body: merged
+  });
+  state.siteConfig = normalizeSiteConfig(data.config || merged);
   emitSiteConfigChange();
   emitState();
+  return state.siteConfig;
+}
 
-  // Also sync local JSON cache on the configured Express backend when available
-  if (hasBackendAvailable()) {
-    try {
-      const token = await user.getIdToken();
-      await fetch(resolveBackendApiUrl('/api/admin/site-config'), {
-        method: 'PUT',
-        mode: 'cors',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(merged)
-      });
-    } catch (err) {
-      console.warn('Backend site-config cache sync note:', err);
-    }
-  }
+async function getSmtpStatus(): Promise<{
+  configured: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  userMasked: string;
+  from: string;
+}> {
+  return apiRequest('/api/admin/smtp-status', { requireAuth: true });
+}
 
-  return merged;
+async function sendTestSmtpEmail(to?: string): Promise<{ message: string }> {
+  return apiRequest('/api/admin/test-smtp', {
+    method: 'POST',
+    requireAuth: true,
+    body: to ? { to } : {}
+  });
 }
 
 // --- Access Evaluation Helpers ---
@@ -1423,7 +873,6 @@ function getLessonPricing(lesson: {
     };
   }
 
-  // Fallback to spreadsheet metadata fields if present
   const rawAccess = String(lesson?.accessType || lesson?.access || '').trim().toLowerCase();
   if (rawAccess === 'free' || lesson?.isFree === true || String(lesson?.isFree).toLowerCase() === 'true') {
     return { accessType: 'free', price: 0 };
@@ -1433,7 +882,6 @@ function getLessonPricing(lesson: {
     return { accessType: 'paid', price: Number.isFinite(p) && p > 0 ? p : 9 };
   }
 
-  // Curriculum defaults: Foundations/Basics/Pinyin are free; higher tracks are paid
   const cat = String(lesson?.categoryKey || '').toLowerCase();
   if (cat === 'basics' || cat === 'pinyin' || id.includes('basics') || id.includes('pinyin')) {
     return { accessType: 'free', price: 0 };
@@ -1445,7 +893,7 @@ function getLessonPricing(lesson: {
 function hasActiveMembership(): boolean {
   const profile = state.profile;
   if (!profile) return false;
-  if (profile.role === 'admin' || isTokenAdminUser(state.user)) return true;
+  if (getComputedAdmin()) return true;
   if (profile.membershipStatus !== 'active') return false;
 
   if (profile.membershipPlan === 'monthly' || profile.membershipPlan === 'annual') {
@@ -1471,7 +919,7 @@ function canAccessLesson(lesson: {
 }): boolean {
   const pricing = getLessonPricing(lesson);
   if (pricing.accessType === 'free') return true;
-  if (isTokenAdminUser(state.user) || state.profile?.role === 'admin') return true;
+  if (getComputedAdmin()) return true;
   if (hasActiveMembership()) return true;
 
   const id = sanitizeDocId(lesson?.id || lesson?.lessonId || '');
@@ -1566,13 +1014,10 @@ function getUserProgress(): UserProgress | null {
 }
 
 async function persistUserProgress(next: UserProgress): Promise<UserProgress> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Sign in required to save progress.');
-  const path = `userProgress/${user.uid}`;
-  const ref = doc(db, 'userProgress', user.uid);
+  if (!state.user) throw new Error('Sign in required to save progress.');
 
   const payload: UserProgress = {
-    uid: user.uid,
+    uid: state.user.uid,
     currentStreak: Math.min(10000, Math.max(0, Math.round(next.currentStreak || 0))),
     bestStreak: Math.min(10000, Math.max(0, Math.round(next.bestStreak || 0))),
     lastCompletedDate: sanitizeDateStr(next.lastCompletedDate),
@@ -1582,42 +1027,29 @@ async function persistUserProgress(next: UserProgress): Promise<UserProgress> {
     ).slice(-200),
     reminderEnabled: Boolean(next.reminderEnabled),
     reminderTime: sanitizeTimeStr(next.reminderTime),
-    lastNotifiedDate: sanitizeDateStr(next.lastNotifiedDate),
-    updatedAt: serverTimestamp()
+    lastNotifiedDate: sanitizeDateStr(next.lastNotifiedDate)
   };
 
   state.userProgress = { ...payload };
   emitState();
 
-  try {
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      await updateDoc(ref, {
-        currentStreak: payload.currentStreak,
-        bestStreak: payload.bestStreak,
-        lastCompletedDate: payload.lastCompletedDate,
-        streakDates: payload.streakDates,
-        completedLessonIds: payload.completedLessonIds,
-        reminderEnabled: payload.reminderEnabled,
-        reminderTime: payload.reminderTime,
-        lastNotifiedDate: payload.lastNotifiedDate,
-        updatedAt: serverTimestamp()
-      });
-    } else {
-      await setDoc(ref, payload);
-    }
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, path);
+  const data = await apiRequest<{ userProgress?: UserProgress }>('/api/progress', {
+    method: 'PUT',
+    requireAuth: true,
+    body: payload
+  });
+  if (data.userProgress) {
+    state.userProgress = normalizeUserProgress(data.userProgress, state.user.uid);
+    emitState();
   }
-  return payload;
+  return state.userProgress as UserProgress;
 }
 
 async function recordLessonCompletedProgress(lessonId: string, completed = true): Promise<UserProgress | null> {
-  const user = auth.currentUser;
-  if (!user) return null;
+  if (!state.user) return null;
 
   const cleanId = String(lessonId || '').trim().slice(0, 128);
-  const current = getUserProgress() || createDefaultUserProgress(user.uid);
+  const current = getUserProgress() || createDefaultUserProgress(state.user.uid);
   const completedSet = new Set(current.completedLessonIds || []);
 
   if (cleanId) {
@@ -1669,10 +1101,9 @@ async function saveReminderPreferences(prefs: {
   time?: string;
   lastNotifiedDate?: string;
 }): Promise<UserProgress | null> {
-  const user = auth.currentUser;
-  if (!user) return null;
+  if (!state.user) return null;
 
-  const current = getUserProgress() || createDefaultUserProgress(user.uid);
+  const current = getUserProgress() || createDefaultUserProgress(state.user.uid);
   return persistUserProgress({
     ...current,
     reminderEnabled: typeof prefs.enabled === 'boolean' ? prefs.enabled : current.reminderEnabled,
@@ -1684,10 +1115,7 @@ async function saveReminderPreferences(prefs: {
 
 function subscribe(cb: (s: AuthState) => void): () => void {
   subscribers.add(cb);
-  cb({
-    ...state,
-    isAdmin: isTokenAdminUser(state.user) || state.profile?.role === 'admin'
-  });
+  cb(getState());
   return () => {
     subscribers.delete(cb);
   };
@@ -1696,12 +1124,11 @@ function subscribe(cb: (s: AuthState) => void): () => void {
 function getState(): AuthState {
   return {
     ...state,
-    isAdmin: isTokenAdminUser(state.user) || state.profile?.role === 'admin'
+    isAdmin: getComputedAdmin()
   };
 }
 
 const LinguaAuth = {
-  projectId: firebaseConfig.projectId || 'melodic-ace-2lvvl',
   CONTACT_INFO,
   MEMBERSHIP_PLANS,
   DEFAULT_SITE_CONFIG,
@@ -1713,11 +1140,8 @@ const LinguaAuth = {
   saveSiteConfig,
   registerWithEmail,
   loginWithEmail,
-  signInWithGoogle,
-  linkGoogleAccount,
-  unlinkGoogleAccount,
-  resendVerificationEmail,
   sendPasswordReset,
+  changePassword,
   reloadAuthSession,
   logout,
   updateProfileDetails,
@@ -1726,7 +1150,10 @@ const LinguaAuth = {
   approveSubscriptionRequest,
   rejectSubscriptionRequest,
   updateUserMembershipAdmin,
+  adminResetUserPassword,
   saveLessonCatalogItems,
+  getSmtpStatus,
+  sendTestSmtpEmail,
   getLessonPricing,
   hasActiveMembership,
   hasPendingRequest,
