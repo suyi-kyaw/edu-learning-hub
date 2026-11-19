@@ -102,35 +102,23 @@ document.addEventListener("DOMContentLoaded", () => {
 async function loadWorkbook() {
   let loaded = false;
 
-  // Strategy 1: Live API endpoint when a Node backend is available (same-origin or configured external HTTPS URL)
-  if (backendAvailable()) {
+  // Strategy 0: Static Excel Content Store (Local Admin Draft -> Repository data/lessons.xlsx -> .json fallback)
+  if (window.LinguaContentStore && typeof window.LinguaContentStore.loadLessonsWorkbook === "function") {
     try {
-      const apiResponse = await fetch(backendApiUrl("/api/lessons-data?t=" + Date.now()), {
-        mode: "cors",
-        cache: "no-store"
-      });
-
-      if (apiResponse.ok) {
-        const apiData = await apiResponse.json();
-
-        if (apiData.success && apiData.sheets) {
-          lessonData = apiData.sheets["Lessons"] || [];
-          vocabularyData = apiData.sheets["Vocabulary"] || [];
-          storyData = apiData.sheets["Story"] || [];
-          exercisesData = apiData.sheets["Exercises"] || [];
-          writingData = apiData.sheets["Writing"] || [];
-
-          if (lessonData.length > 0) {
-            loaded = true;
-          }
-        }
+      const storeRes = await window.LinguaContentStore.loadLessonsWorkbook();
+      if (storeRes && storeRes.sheets && Array.isArray(storeRes.sheets.Lessons) && storeRes.sheets.Lessons.length > 0) {
+        lessonData = storeRes.sheets.Lessons || [];
+        vocabularyData = storeRes.sheets.Vocabulary || [];
+        exercisesData = storeRes.sheets.Exercises || [];
+        writingData = storeRes.sheets.Writing || [];
+        loaded = true;
       }
-    } catch (apiError) {
-      console.warn("Server API fallback note:", apiError);
+    } catch (storeErr) {
+      console.warn("Content store lesson load note:", storeErr);
     }
   }
 
-  // Strategy 2: Direct Excel parsing if SheetJS (XLSX) is present
+  // Strategy 1: Direct Excel parsing if SheetJS (XLSX) is present
   if (!loaded && typeof XLSX !== "undefined") {
     try {
       const response = await fetch("data/lessons.xlsx");
@@ -3008,21 +2996,16 @@ async function initHomepageHydration() {
     applyHomepageSiteConfig(window.LinguaAuth.getSiteConfig());
   }
 
-  // Load config + dynamic datasets in parallel (live backend when configured, otherwise static JSON snapshots)
+  // Load config + dynamic datasets in parallel (Local Admin Draft -> Direct .xlsx -> .json fallback)
   try {
-    const stamp = Date.now();
     let cfgData = null;
 
-    if (backendAvailable()) {
-      const [cfgRes, reelsRes, storiesRes, lessonsRes] = await Promise.allSettled([
-        fetch(backendApiUrl("/api/site-config?t=" + stamp), { mode: "cors" }).then((r) => (r.ok ? r.json() : null)),
-        fetch(backendApiUrl("/api/reels-stories-data?t=" + stamp), { mode: "cors" }).then((r) => (r.ok ? r.json() : null)),
-        fetch(backendApiUrl("/api/stories-data?t=" + stamp), { mode: "cors" }).then((r) => (r.ok ? r.json() : null)),
-        fetch(backendApiUrl("/api/lessons-data?t=" + stamp), { mode: "cors" }).then((r) => (r.ok ? r.json() : null))
+    if (window.LinguaContentStore) {
+      const [reelsRes, storiesRes, lessonsRes] = await Promise.allSettled([
+        window.LinguaContentStore.loadReelsWorkbook(),
+        window.LinguaContentStore.loadStoriesWorkbook(),
+        window.LinguaContentStore.loadLessonsWorkbook()
       ]);
-      if (cfgRes.status === "fulfilled" && cfgRes.value?.config) {
-        cfgData = cfgRes.value.config;
-      }
       if (reelsRes.status === "fulfilled" && reelsRes.value?.sheets?.Videos) {
         cachedHomeReels = reelsRes.value.sheets.Videos;
       }
@@ -3032,9 +3015,8 @@ async function initHomepageHydration() {
       if (lessonsRes.status === "fulfilled" && lessonsRes.value?.sheets?.Games) {
         cachedHomeGames = lessonsRes.value.sheets.Games;
       }
-    }
-
-    if (!cachedHomeReels.length || !cachedHomeStories.length || !cachedHomeGames.length) {
+    } else {
+      const stamp = Date.now();
       const [fbReels, fbStories, fbLessons] = await Promise.allSettled([
         cachedHomeReels.length ? Promise.resolve(null) : fetch("data/reels_stories.json?t=" + stamp).then((r) => (r.ok ? r.json() : null)),
         cachedHomeStories.length ? Promise.resolve(null) : fetch("data/stories.json?t=" + stamp).then((r) => (r.ok ? r.json() : null)),

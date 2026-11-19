@@ -369,8 +369,8 @@
     }
   </script>
 
-  <!-- Runtime Static Asset Resolver -->
-  <script src="backend-config.js?v=excel2"></script>
+  <!-- Runtime Static Asset Resolver & Excel Content Store -->
+  <script src="backend-config.js?v=excel3"></script>
 
   <!-- Excel-Backed Auth & Membership Client -->
   <script src="vendor/firebase-app.js?v=excel2"></script>
@@ -544,27 +544,16 @@
 
     // Load Games data
     async function fetchGamesData() {
-      // Strategy 1: Call API when a Node backend is available (same-origin or external HTTPS URL)
-      const backendReady =
-        !window.LinguaBackend ||
-        typeof window.LinguaBackend.hasBackend !== 'function' ||
-        window.LinguaBackend.hasBackend();
-      if (backendReady) {
+      // Strategy 1: Shared Excel Content Store (Local Admin Draft -> Repository data/lessons.xlsx -> .json fallback)
+      if (window.LinguaContentStore && typeof window.LinguaContentStore.loadLessonsWorkbook === 'function') {
         try {
-          const apiEndpoint =
-            window.LinguaBackend && typeof window.LinguaBackend.apiUrl === 'function'
-              ? window.LinguaBackend.apiUrl('/api/lessons-data?t=' + Date.now())
-              : '/api/lessons-data?t=' + Date.now();
-          const res = await fetch(apiEndpoint, { mode: 'cors', cache: 'no-store' });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.sheets && data.sheets.Games && data.sheets.Games.length) {
-              renderGames(data.sheets.Games);
-              return;
-            }
+          const storeRes = await window.LinguaContentStore.loadLessonsWorkbook();
+          if (storeRes && storeRes.sheets && Array.isArray(storeRes.sheets.Games) && storeRes.sheets.Games.length) {
+            renderGames(storeRes.sheets.Games);
+            return;
           }
         } catch (e) {
-          console.warn('API /api/lessons-data fetch note:', e);
+          console.warn('LinguaContentStore Games fetch note:', e);
         }
       }
 

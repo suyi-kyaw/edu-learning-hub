@@ -1578,27 +1578,21 @@ async function loadStoryLesson() {
     let allExerciseRows = [];
     let loaded = false;
 
-    // Strategy 1: Server API endpoint /api/stories-data when backend is available
-    if (backendAvailable()) {
+    // Strategy 1: Shared Excel Content Store (Local Admin Draft -> Repository data/stories.xlsx -> .json fallback)
+    if (window.LinguaContentStore && typeof window.LinguaContentStore.loadStoriesWorkbook === "function") {
       try {
-        const apiResponse = await fetch(backendApiUrl("/api/stories-data?t=" + Date.now()), {
-          mode: "cors",
-          cache: "no-store"
-        });
-        if (apiResponse.ok) {
-          const apiData = await apiResponse.json();
-          if (apiData.success && apiData.sheets) {
-            lessons = apiData.sheets["Lessons"] || [];
-            allStoryRows = apiData.sheets["Story"] || [];
-            allVocabularyRows = apiData.sheets["Vocabulary"] || [];
-            allExerciseRows = apiData.sheets["Exercises"] || [];
-            if (lessons.length > 0 || allStoryRows.length > 0) {
-              loaded = true;
-            }
+        const storeRes = await window.LinguaContentStore.loadStoriesWorkbook();
+        if (storeRes && storeRes.sheets) {
+          lessons = storeRes.sheets["Lessons"] || [];
+          allStoryRows = storeRes.sheets["Story"] || [];
+          allVocabularyRows = storeRes.sheets["Vocabulary"] || [];
+          allExerciseRows = storeRes.sheets["Exercises"] || [];
+          if (lessons.length > 0 || allStoryRows.length > 0) {
+            loaded = true;
           }
         }
-      } catch (apiErr) {
-        console.warn("Server API fallback note for story:", apiErr);
+      } catch (storeErr) {
+        console.warn("Content store fallback note for story:", storeErr);
       }
     }
 
@@ -3546,22 +3540,16 @@ function applySubtitleToggles() {
 async function loadReelsAndStoriesWorkbook() {
   let loaded = false;
 
-  // Strategy 1: Server API endpoint /api/reels-stories-data when backend is available
-  if (backendAvailable()) {
+  // Strategy 1: Shared Excel Content Store (Local Admin Draft -> Repository data/reels_stories.xlsx -> .json fallback)
+  if (window.LinguaContentStore && typeof window.LinguaContentStore.loadReelsWorkbook === "function") {
     try {
-      const apiRes = await fetch(backendApiUrl(`/api/reels-stories-data?t=${Date.now()}`), {
-        mode: "cors",
-        cache: "no-store"
-      });
-      if (apiRes.ok) {
-        const data = await apiRes.json();
-        if (data && data.sheets && data.sheets.Videos && data.sheets.Videos.length > 0) {
-          allLoadedVideos = data.sheets.Videos;
-          loaded = true;
-        }
+      const storeRes = await window.LinguaContentStore.loadReelsWorkbook();
+      if (storeRes && storeRes.sheets && storeRes.sheets.Videos && storeRes.sheets.Videos.length > 0) {
+        allLoadedVideos = storeRes.sheets.Videos;
+        loaded = true;
       }
     } catch (e) {
-      console.warn("Server API fallback for reels_stories note:", e);
+      console.warn("Content store note for reels_stories:", e);
     }
   }
 

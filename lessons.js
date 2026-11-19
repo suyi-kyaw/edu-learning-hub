@@ -454,25 +454,19 @@
       console.warn("localStorage custom lessons load note:", e);
     }
 
-    // Strategy 1: Fetch API /api/lessons-data when a Node backend is available
-    if (!loaded && backendAvailable()) {
+    // Strategy 1: Shared Excel Content Store (Local Admin Draft -> Repository data/lessons.xlsx -> .json fallback)
+    if (!loaded && window.LinguaContentStore && typeof window.LinguaContentStore.loadLessonsWorkbook === 'function') {
       try {
-        const res = await fetch(backendApiUrl('/api/lessons-data?t=' + Date.now()), {
-          mode: 'cors',
-          cache: 'no-store'
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.sheets) {
-            if (data.sheets.Lessons && data.sheets.Lessons.length) allLessons = data.sheets.Lessons;
-            if (data.sheets.Exercises && data.sheets.Exercises.length) allExercises = data.sheets.Exercises;
-            if (data.sheets.Writing && data.sheets.Writing.length) allWriting = data.sheets.Writing;
-            if (data.sheets.Vocabulary && data.sheets.Vocabulary.length) allVocabulary = data.sheets.Vocabulary;
-            if (allLessons.length) loaded = true;
-          }
+        const storeRes = await window.LinguaContentStore.loadLessonsWorkbook();
+        if (storeRes && storeRes.sheets) {
+          if (storeRes.sheets.Lessons && storeRes.sheets.Lessons.length) allLessons = storeRes.sheets.Lessons;
+          if (storeRes.sheets.Exercises && storeRes.sheets.Exercises.length) allExercises = storeRes.sheets.Exercises;
+          if (storeRes.sheets.Writing && storeRes.sheets.Writing.length) allWriting = storeRes.sheets.Writing;
+          if (storeRes.sheets.Vocabulary && storeRes.sheets.Vocabulary.length) allVocabulary = storeRes.sheets.Vocabulary;
+          if (allLessons.length) loaded = true;
         }
       } catch (err) {
-        console.warn("API /api/lessons-data load note:", err);
+        console.warn("LinguaContentStore lessons load note:", err);
       }
     }
 

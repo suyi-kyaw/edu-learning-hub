@@ -127,77 +127,132 @@
     }" frameborder="0" allowfullscreen></iframe>`;
   }
 
-  async function adminFetch(url, options = {}) {
-    if (!hasBackend()) {
-      throw new Error(
-        'This static site cannot overwrite repository Excel or media files automatically. Use Export / Import or update files in your repository.'
-      );
+  function getContentStore() {
+    if (!window.LinguaContentStore) {
+      throw new Error('Static Excel content store is not loaded.');
     }
-    const authApi = window.LinguaAuth;
-    if (!authApi || typeof authApi.getIdToken !== 'function') {
-      throw new Error('Authentication SDK is not initialized.');
-    }
-    const token = await authApi.getIdToken(false);
-    if (!token) {
-      throw new Error('Administrator session expired. Please sign in again.');
-    }
-    const headers = new Headers(options.headers || {});
-    headers.set('Authorization', `Bearer ${token}`);
-    const resolvedUrl = apiUrl(url);
-    const res = await fetch(resolvedUrl, { ...options, mode: 'cors', headers });
-    let data = null;
-    try {
-      data = await res.json();
-    } catch (_) {
-      data = null;
-    }
-    if (!res.ok || (data && data.success === false)) {
-      throw new Error((data && data.error) || `Request failed (${res.status})`);
-    }
-    return data;
+    return window.LinguaContentStore;
+  }
+
+  function renderWorkbookSyncToolbar(domain, fileName) {
+    const store = window.LinguaContentStore;
+    const hasDraft = store && typeof store.hasDraft === 'function' ? store.hasDraft(domain) : false;
+    return `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; background:${
+        hasDraft ? '#fef9c3' : '#f8fafc'
+      }; border:1px solid ${hasDraft ? '#fde047' : '#e2e8f0'}; border-radius:12px; padding:10px 14px; margin-bottom:14px;">
+        <div style="font-size:0.84rem; color:${hasDraft ? '#854d0e' : '#475569'};">
+          ${
+            hasDraft
+              ? `<strong>Local browser changes active:</strong> Click <strong>Export ${escapeHTML(
+                  fileName
+                )}</strong> and commit it to <code>data/${escapeHTML(fileName)}</code> to publish for all visitors.`
+              : `<strong>Synced with repository workbook:</strong> Reading directly from <code>data/${escapeHTML(
+                  fileName
+                )}</code>.`
+          }
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-cms-export="${escapeHTML(
+            domain
+          )}">Export ${escapeHTML(fileName)}</button>
+          <label class="admin-btn admin-btn-secondary admin-btn-sm" style="margin:0; cursor:pointer;">
+            <span>Import ${escapeHTML(fileName)}</span>
+            <input type="file" accept=".xlsx,.xls" data-cms-import="${escapeHTML(domain)}" hidden />
+          </label>
+          ${
+            hasDraft
+              ? `<button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-cms-reset="${escapeHTML(
+                  domain
+                )}">Reset Draft</button>`
+              : ''
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  function wireWorkbookSyncToolbar(viewport) {
+    if (!viewport) return;
+    viewport.querySelectorAll('[data-cms-export]').forEach((btn) => {
+      btn.onclick = async () => {
+        const domain = btn.getAttribute('data-cms-export');
+        try {
+          const res = await getContentStore().exportWorkbook(domain);
+          toast(`Downloaded ${res.fileName} — commit it to data/${res.fileName} in your repo to publish.`);
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Could not export Excel workbook.', 'error');
+        }
+      };
+    });
+    viewport.querySelectorAll('[data-cms-import]').forEach((input) => {
+      input.onchange = async () => {
+        const file = input.files && input.files[0];
+        const domain = input.getAttribute('data-cms-import');
+        if (!file) return;
+        try {
+          setSyncStatus(`Importing ${file.name}…`);
+          const buf = await file.arrayBuffer();
+          const res = await getContentStore().importWorkbookFile(domain, buf);
+          if (domain === 'stories') state.storiesData = res.sheets;
+          else if (domain === 'reels') state.reelsData = res.sheets;
+          else if (domain === 'lessons') state.lessonsData = res.sheets;
+          updateNavCounts();
+          renderActiveTab();
+          setSyncStatus('Imported locally');
+          toast(`Imported ${file.name} into local preview.`);
+        } catch (err) {
+          setSyncStatus('Import failed');
+          toast(err instanceof Error ? err.message : 'Failed to import Excel workbook.', 'error');
+        } finally {
+          input.value = '';
+        }
+      };
+    });
+    viewport.querySelectorAll('[data-cms-reset]').forEach((btn) => {
+      btn.onclick = () => {
+        const domain = btn.getAttribute('data-cms-reset');
+        openConfirmDialog({
+          title: 'Reset local browser edits?',
+          message: 'This clears unexported browser changes for this section and reloads directly from the repository Excel file.',
+          confirmLabel: 'Reset to Repo File',
+          onConfirm: async () => {
+            try {
+              const res = await getContentStore().clearDraft(domain);
+              if (domain === 'stories') state.storiesData = res.sheets;
+              else if (domain === 'reels') state.reelsData = res.sheets;
+              else if (domain === 'lessons') state.lessonsData = res.sheets;
+              updateNavCounts();
+              renderActiveTab();
+              toast('Reverted to repository Excel workbook.');
+            } catch (err) {
+              toast(err instanceof Error ? err.message : 'Failed to reset draft.', 'error');
+            }
+          }
+        });
+      };
+    });
   }
 
   // --- Data Loading ---
   async function loadAllContentData(force = false) {
     if (state.loading && !force) return;
     state.loading = true;
-    setSyncStatus('Loading data…');
+    setSyncStatus('Loading workbooks…');
     updateBackendBadge();
     try {
-      const stamp = Date.now();
-      const backendActive = hasBackend();
-      let cfgRes = null;
-      let storiesRes = null;
-      let reelsRes = null;
-      let lessonsRes = null;
-      let usedStaticFallback = false;
-
-      if (backendActive) {
-        [cfgRes, storiesRes, reelsRes, lessonsRes] = await Promise.all([
-          fetch(apiUrl(`/api/site-config?t=${stamp}`), { mode: 'cors' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          fetch(apiUrl(`/api/stories-data?t=${stamp}`), { mode: 'cors' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          fetch(apiUrl(`/api/reels-stories-data?t=${stamp}`), { mode: 'cors' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          fetch(apiUrl(`/api/lessons-data?t=${stamp}`), { mode: 'cors' }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
-        ]);
-      }
-
-      if (!storiesRes || !storiesRes.sheets || !reelsRes || !reelsRes.sheets || !lessonsRes || !lessonsRes.sheets) {
-        usedStaticFallback = !backendActive || (!storiesRes && !reelsRes && !lessonsRes);
-        const [fbStories, fbReels, fbLessons] = await Promise.all([
-          storiesRes && storiesRes.sheets ? Promise.resolve(storiesRes) : fetch(`data/stories.json?t=${stamp}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          reelsRes && reelsRes.sheets ? Promise.resolve(reelsRes) : fetch(`data/reels_stories.json?t=${stamp}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          lessonsRes && lessonsRes.sheets ? Promise.resolve(lessonsRes) : fetch(`data/lessons.json?t=${stamp}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
-        ]);
-        storiesRes = fbStories || storiesRes;
-        reelsRes = fbReels || reelsRes;
-        lessonsRes = fbLessons || lessonsRes;
-      }
+      const store = getContentStore();
+      const [storiesRes, reelsRes, lessonsRes] = await Promise.all([
+        store.loadStoriesWorkbook(),
+        store.loadReelsWorkbook(),
+        store.loadLessonsWorkbook()
+      ]);
 
       const authSiteCfg =
         window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === 'function'
           ? window.LinguaAuth.getSiteConfig()
           : null;
-      state.siteConfig = authSiteCfg || (cfgRes && cfgRes.config) || {};
+      state.siteConfig = authSiteCfg || state.siteConfig || {};
 
       if (storiesRes && storiesRes.sheets) {
         state.storiesData = {
@@ -223,11 +278,13 @@
       }
 
       state.loadedOnce = true;
-      setSyncStatus(usedStaticFallback ? 'Static Excel & JSON Loaded' : 'Synced');
+      const draftSummary = store.getDraftStatusSummary();
+      const hasAnyDraft = draftSummary.lessons || draftSummary.stories || draftSummary.reels;
+      setSyncStatus(hasAnyDraft ? 'Local Drafts + Excel' : 'Static Excel Loaded');
       updateNavCounts();
       renderActiveTab();
     } catch (err) {
-      setSyncStatus('Sync warning');
+      setSyncStatus('Load warning');
       toast(err instanceof Error ? err.message : 'Could not load content workbooks.', 'error');
     } finally {
       state.loading = false;
@@ -321,14 +378,9 @@
         fileInput.addEventListener('change', async () => {
           const file = fileInput.files && fileInput.files[0];
           if (!file) return;
-          setSyncStatus(`Uploading ${file.name}…`);
+          setSyncStatus(`Attaching ${file.name}…`);
           try {
-            const fd = new FormData();
-            fd.append('file', file);
-            const result = await adminFetch('/api/admin/upload-media', {
-              method: 'POST',
-              body: fd
-            });
+            const result = await getContentStore().readFileAsInlineMedia(file);
             if (textInput) {
               textInput.value = result.url;
               textInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -336,11 +388,11 @@
             if (previewEl) {
               previewEl.innerHTML = renderMediaPreviewInner(result.url, kind);
             }
-            setSyncStatus('Uploaded');
-            toast(`Uploaded ${file.name} → ${result.url}`);
+            setSyncStatus('Media attached locally');
+            toast(`Attached ${file.name} locally. For large files, commit to assets/ and paste path.`);
           } catch (err) {
-            setSyncStatus('Upload error');
-            toast(err instanceof Error ? err.message : 'Upload failed.', 'error');
+            setSyncStatus('Media note');
+            toast(err instanceof Error ? err.message : 'Could not attach media file.', 'error');
           } finally {
             fileInput.value = '';
           }
@@ -1021,15 +1073,11 @@
       commitBtn.disabled = true;
       commitBtn.textContent = 'Importing…';
       try {
-        const res = await adminFetch('/api/admin/upload-exercises', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            target: targetSelect.value,
-            mode: modeSelect.value,
-            lessonId: lessonSelect.value.trim(),
-            rows: state.pendingExercisesRows
-          })
+        const res = await getContentStore().importExercisesLocal({
+          target: targetSelect.value,
+          mode: modeSelect.value,
+          lessonId: lessonSelect.value.trim(),
+          rows: state.pendingExercisesRows
         });
         if (targetSelect.value === 'stories') {
           state.storiesData.Exercises = res.exercises || [];
@@ -1038,7 +1086,9 @@
         }
         closeModal();
         renderActiveTab();
-        toast(`Imported ${res.importedCount} exercise(s) into ${targetSelect.value}.`);
+        setSyncStatus('Saved locally');
+        const exportName = targetSelect.value === 'stories' ? 'stories.xlsx' : 'lessons.xlsx';
+        toast(`Imported ${res.importedCount} exercise(s) locally. Export ${exportName} to publish.`);
       } catch (err) {
         commitBtn.disabled = false;
         commitBtn.textContent = 'Import Exercises';
@@ -1067,13 +1117,14 @@
         <div class="admin-panel-head">
           <div>
             <h2>Stories &amp; Reading Lessons (${stories.length})</h2>
-            <p>Create or edit Mandarin stories, story scenes, key vocabulary, homepage featured status, and exercises.</p>
+            <p>Create, edit, or delete Mandarin stories, reading scenes, vocabulary, featured status, and exercises.</p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button type="button" class="admin-btn admin-btn-secondary" id="btnUploadStoryExercises">Upload Exercises (.xlsx)</button>
             <button type="button" class="admin-btn admin-btn-primary" id="btnAddStory">+ New Story</button>
           </div>
         </div>
+        ${renderWorkbookSyncToolbar('stories', 'stories.xlsx')}
 
         <div style="margin-bottom:14px; max-width:340px;">
           <input type="search" class="admin-input" id="storySearchInput" value="${escapeHTML(
@@ -1144,6 +1195,7 @@
       </div>
     `;
 
+    wireWorkbookSyncToolbar(viewport);
     document.getElementById('storySearchInput').oninput = (e) => {
       state.filters.storySearch = e.target.value;
       renderStoriesTab(viewport);
@@ -1168,22 +1220,23 @@
         const id = btn.getAttribute('data-del-story');
         openConfirmDialog({
           title: `Delete story "${id}"?`,
-          message: 'This removes the story, its reading scenes, and vocabulary from data/stories.xlsx.',
+          message: 'This removes the story, its reading scenes, and vocabulary from your local draft (export stories.xlsx to publish).',
           confirmLabel: 'Delete Story',
           onConfirm: async () => {
             const nextLessons = stories.filter((x) => !isSameId(x.id, id));
             const nextScenes = state.storiesData.Story.filter((x) => !isSameId(x.lessonId, id));
             const nextVocab = state.storiesData.Vocabulary.filter((x) => !isSameId(x.lessonId, id));
             try {
-              const res = await adminFetch('/api/admin/content/stories', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lessons: nextLessons, story: nextScenes, vocabulary: nextVocab })
+              const res = await getContentStore().saveStoriesSheets({
+                Lessons: nextLessons,
+                Story: nextScenes,
+                Vocabulary: nextVocab
               });
               state.storiesData = { ...state.storiesData, ...res.sheets };
               updateNavCounts();
               renderActiveTab();
-              toast(`Deleted story ${id}.`);
+              setSyncStatus('Saved locally');
+              toast(`Deleted story ${id}. Export stories.xlsx to publish.`);
             } catch (err) {
               toast(err instanceof Error ? err.message : 'Failed to delete story.', 'error');
             }
@@ -1491,21 +1544,18 @@
 
       try {
         setSyncStatus('Saving story…');
-        const res = await adminFetch('/api/admin/content/stories', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lessons: existingLessons,
-            story: [...keptScenes, ...cleanScenes],
-            vocabulary: [...keptVocab, ...cleanVocab]
-          })
+        const res = await getContentStore().saveStoriesSheets({
+          Lessons: existingLessons,
+          Story: [...keptScenes, ...cleanScenes],
+          Vocabulary: [...keptVocab, ...cleanVocab]
         });
         state.storiesData = { ...state.storiesData, ...res.sheets };
         await toggleFeaturedId('featuredStoryIds', id, document.getElementById('stFeatured').checked);
         closeModal();
         updateNavCounts();
         renderActiveTab();
-        toast(`Saved story "${record.title}".`);
+        setSyncStatus('Saved locally');
+        toast(`Saved story "${record.title}". Export stories.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save story.', 'error');
@@ -1535,10 +1585,11 @@
         <div class="admin-panel-head">
           <div>
             <h2>Short Video Reels (${videos.length})</h2>
-            <p>Upload or link vertical Mandarin reels, subtitles (CN / Pinyin / EN / Myanmar), and pick featured homepage reels.</p>
+            <p>Add, edit, or delete vertical Mandarin reels, subtitles (CN / Pinyin / EN / Myanmar), and homepage featured reels.</p>
           </div>
           <button type="button" class="admin-btn admin-btn-primary" id="btnAddReel">+ New Short Reel</button>
         </div>
+        ${renderWorkbookSyncToolbar('reels', 'reels_stories.xlsx')}
 
         <div class="admin-grid-2" style="margin-bottom:14px; max-width:540px;">
           <input type="search" class="admin-input" id="reelSearchInput" value="${escapeHTML(
@@ -1608,6 +1659,7 @@
       </div>
     `;
 
+    wireWorkbookSyncToolbar(viewport);
     document.getElementById('reelSearchInput').oninput = (e) => {
       state.filters.reelSearch = e.target.value;
       renderReelsTab(viewport);
@@ -1632,20 +1684,17 @@
         const id = btn.getAttribute('data-del-reel');
         openConfirmDialog({
           title: `Delete reel "${id}"?`,
-          message: 'This will remove the video reel from data/reels_stories.xlsx.',
+          message: 'This removes the video reel from your local draft (export reels_stories.xlsx to publish).',
           confirmLabel: 'Delete Reel',
           onConfirm: async () => {
             const nextVideos = videos.filter((x) => !isSameId(x.id, id));
             try {
-              const res = await adminFetch('/api/admin/content/reels', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videos: nextVideos })
-              });
+              const res = await getContentStore().saveReelsSheets({ Videos: nextVideos });
               state.reelsData = { ...state.reelsData, ...res.sheets };
               updateNavCounts();
               renderActiveTab();
-              toast(`Deleted reel ${id}.`);
+              setSyncStatus('Saved locally');
+              toast(`Deleted reel ${id}. Export reels_stories.xlsx to publish.`);
             } catch (err) {
               toast(err instanceof Error ? err.message : 'Failed to delete reel.', 'error');
             }
@@ -1800,17 +1849,14 @@
 
       try {
         setSyncStatus('Saving reel…');
-        const res = await adminFetch('/api/admin/content/reels', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videos: nextVideos })
-        });
+        const res = await getContentStore().saveReelsSheets({ Videos: nextVideos });
         state.reelsData = { ...state.reelsData, ...res.sheets };
         await toggleFeaturedId('featuredReelIds', id, document.getElementById('rlFeatured').checked);
         closeModal();
         updateNavCounts();
         renderActiveTab();
-        toast(`Saved reel "${rec.title}".`);
+        setSyncStatus('Saved locally');
+        toast(`Saved reel "${rec.title}". Export reels_stories.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save reel.', 'error');
@@ -1841,13 +1887,14 @@
         <div class="admin-panel-head">
           <div>
             <h2>Adult &amp; Kids Curriculum Lessons (${lessons.length})</h2>
-            <p>Manage lessons, Free/Paid access pricing (synced to Firestore), media uploads, Vocabulary/Writing, and Excel Exercises.</p>
+            <p>Add, edit, or delete lessons, Free/Paid access pricing, media files, Vocabulary/Writing, and Excel Exercises.</p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button type="button" class="admin-btn admin-btn-secondary" id="btnUploadLessonExercises">Upload Exercises (.xlsx)</button>
             <button type="button" class="admin-btn admin-btn-primary" id="btnAddLesson">+ New Lesson</button>
           </div>
         </div>
+        ${renderWorkbookSyncToolbar('lessons', 'lessons.xlsx')}
 
         <div class="admin-grid-2" style="margin-bottom:14px; max-width:560px;">
           <input type="search" class="admin-input" id="lessonSearchInput" value="${escapeHTML(
@@ -1922,6 +1969,7 @@
       </div>
     `;
 
+    wireWorkbookSyncToolbar(viewport);
     document.getElementById('lessonSearchInput').oninput = (e) => {
       state.filters.lessonSearch = e.target.value;
       renderLessonsTab(viewport);
@@ -1947,22 +1995,23 @@
         const id = btn.getAttribute('data-del-lesson');
         openConfirmDialog({
           title: `Delete lesson "${id}"?`,
-          message: 'This deletes the lesson, its vocabulary, and its writing entries from data/lessons.xlsx.',
+          message: 'This deletes the lesson, its vocabulary, and its writing entries from your local draft (export lessons.xlsx to publish).',
           confirmLabel: 'Delete Lesson',
           onConfirm: async () => {
             const nextLessons = lessons.filter((x) => !isSameId(x.id, id));
             const nextVocab = state.lessonsData.Vocabulary.filter((x) => !isSameId(x.lessonId, id));
             const nextWriting = state.lessonsData.Writing.filter((x) => !isSameId(x.lessonId, id));
             try {
-              const res = await adminFetch('/api/admin/content/lessons', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lessons: nextLessons, vocabulary: nextVocab, writing: nextWriting })
+              const res = await getContentStore().saveLessonsSheets({
+                Lessons: nextLessons,
+                Vocabulary: nextVocab,
+                Writing: nextWriting
               });
               state.lessonsData = { ...state.lessonsData, ...res.sheets };
               updateNavCounts();
               renderActiveTab();
-              toast(`Deleted lesson ${id}.`);
+              setSyncStatus('Saved locally');
+              toast(`Deleted lesson ${id}. Export lessons.xlsx to publish.`);
             } catch (err) {
               toast(err instanceof Error ? err.message : 'Failed to delete lesson.', 'error');
             }
@@ -2295,7 +2344,9 @@
         videoUrl: document.getElementById('lsVideo').value.trim(),
         posterUrl: document.getElementById('lsPoster').value.trim(),
         fullAudio: document.getElementById('lsAudio').value.trim(),
-        keywords: document.getElementById('lsKeywords').value.trim()
+        keywords: document.getElementById('lsKeywords').value.trim(),
+        accessType,
+        price
       };
 
       const nextLessons = [...state.lessonsData.Lessons];
@@ -2315,14 +2366,10 @@
 
       try {
         setSyncStatus('Saving lesson…');
-        const res = await adminFetch('/api/admin/content/lessons', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lessons: nextLessons,
-            vocabulary: [...keptVocab, ...cleanVocab],
-            writing: [...keptWriting, ...cleanWriting]
-          })
+        const res = await getContentStore().saveLessonsSheets({
+          Lessons: nextLessons,
+          Vocabulary: [...keptVocab, ...cleanVocab],
+          Writing: [...keptWriting, ...cleanWriting]
         });
         state.lessonsData = { ...state.lessonsData, ...res.sheets };
         if (window.LinguaAuth && typeof window.LinguaAuth.saveLessonCatalogItems === 'function') {
@@ -2330,10 +2377,17 @@
             { lessonId: id, title: rec.title, audience, accessType, price }
           ]);
         }
+        try {
+          const pricingRaw = localStorage.getItem('linguapath_local_lesson_pricing');
+          const pricingMap = pricingRaw ? JSON.parse(pricingRaw) : {};
+          pricingMap[id] = { accessType, price };
+          localStorage.setItem('linguapath_local_lesson_pricing', JSON.stringify(pricingMap));
+        } catch (_) {}
         closeModal();
         updateNavCounts();
         renderActiveTab();
-        toast(`Saved lesson "${rec.title}" (${accessType === 'paid' ? `$${price}` : 'Free'}).`);
+        setSyncStatus('Saved locally');
+        toast(`Saved lesson "${rec.title}" (${accessType === 'paid' ? `$${price}` : 'Free'}). Export lessons.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save lesson.', 'error');
@@ -2357,6 +2411,7 @@
           </div>
           <button type="button" class="admin-btn admin-btn-primary" id="btnAddGame">+ Add Wordwall Game</button>
         </div>
+        ${renderWorkbookSyncToolbar('lessons', 'lessons.xlsx')}
 
         <div class="admin-table-wrap">
           <table class="admin-table">
@@ -2428,20 +2483,18 @@
       </div>
     `;
 
+    wireWorkbookSyncToolbar(viewport);
+
     const persistGames = async (nextList, message) => {
       const normalized = nextList.map((g, i) => ({ ...g, order: i + 1 }));
       try {
         setSyncStatus('Saving games…');
-        const res = await adminFetch('/api/admin/content/games', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ games: normalized })
-        });
+        const res = await getContentStore().saveLessonsSheets({ Games: normalized });
         state.lessonsData = { ...state.lessonsData, ...res.sheets };
-        setSyncStatus('Saved');
+        setSyncStatus('Saved locally');
         updateNavCounts();
         renderActiveTab();
-        if (message) toast(message);
+        if (message) toast(`${message} Export lessons.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save error');
         toast(err instanceof Error ? err.message : 'Failed to save games.', 'error');
