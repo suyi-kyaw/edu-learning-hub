@@ -49,6 +49,13 @@
   };
 
   // --- Utilities ---
+  function cloneArray(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.map(function (item) {
+      return item && typeof item === 'object' ? Object.assign({}, item) : item;
+    });
+  }
+
   function escapeHTML(str) {
     return String(str ?? '')
       .replace(/&/g, '&amp;')
@@ -846,8 +853,9 @@
     try {
       const isStories = target === 'stories';
       const dataObj = isStories ? (state.storiesData || {}) : (state.lessonsData || {});
-      const allExercises = cloneArray(dataObj.Exercises || []);
-      const lessonsList = cloneArray(dataObj.Lessons || []);
+      const safeClone = typeof cloneArray === 'function' ? cloneArray : (arr) => (Array.isArray(arr) ? arr.slice() : []);
+      const allExercises = safeClone(dataObj.Exercises || []);
+      const lessonsList = safeClone(dataObj.Lessons || []);
 
       state.editingExercisesTarget = target;
       state.editingExercisesLessonId = presetLessonId || (lessonsList[0] ? lessonsList[0].id : '');

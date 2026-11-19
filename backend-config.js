@@ -538,6 +538,8 @@
     exportWorkbook: exportWorkbook,
     importWorkbookFile: importWorkbookFile,
     clearDraft: clearDraft,
-    readFileAsInlineMedia: readFileAsInlineMedia
+    readFileAsInlineMedia: readFileAsInlineMedia,
+    cloneArray: cloneArray
   };
+  global.cloneArray = cloneArray;
 })(typeof window !== 'undefined' ? window : globalThis);
