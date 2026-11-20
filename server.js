@@ -1543,7 +1543,7 @@ app.put('/api/admin/catalog', requireAdminToken, jsonParser, (req, res) => {
       const audience = String(item.audience || '').toLowerCase() === 'kids' ? 'Kids' : 'Adult';
       const accessType = String(item.accessType || '').toLowerCase() === 'paid' ? 'paid' : 'free';
       const rawPrice = Number(item.price);
-      const price = accessType === 'free' ? 0 : Math.min(9999, Math.max(0, Number.isFinite(rawPrice) ? rawPrice : 9));
+      const price = accessType === 'free' ? 0 : Math.min(9999999, Math.max(0, Number.isFinite(rawPrice) ? rawPrice : 9));
 
       store.lessonCatalog[lessonId] = {
         lessonId,

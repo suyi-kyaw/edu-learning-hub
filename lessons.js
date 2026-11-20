@@ -739,8 +739,8 @@
       const accessMetaText = !isPaid
         ? 'Free Lesson'
         : isUnlocked
-        ? `Paid ($${pricing.price}) · Unlocked`
-        : `Paid · $${pricing.price}`;
+        ? `Paid (${pricing.price} Kyat) · Unlocked`
+        : `Paid · ${pricing.price} Kyat`;
 
       const isKids = currentAudience === 'Kids';
 
@@ -765,7 +765,7 @@
 
             <div class="lesson-card-actions" style="margin-top: auto;">
               <button type="button" class="btn ${isLocked ? 'lesson-button-locked' : (isKids ? 'btn-kids-play' : 'btn-primary')} lesson-button" style="width: 100%; text-align: center;" data-lesson-id="${escapeHTML(lessonId)}">
-                ${isLocked ? `🔒 Unlock Lesson ($${escapeHTML(pricing.price)}) →` : '🚀 Start Lesson →'}
+                ${isLocked ? `🔒 Unlock Lesson (${escapeHTML(pricing.price)} Kyat) →` : '🚀 Start Lesson →'}
               </button>
             </div>
           </div>
@@ -4213,17 +4213,17 @@
                 <option value="paid" ${pricing.accessType === 'paid' ? 'selected' : ''}>Paid</option>
               </select>
               <div class="excel-price-input-wrap">
-                <span>$</span>
+                <span>Kyat</span>
                 <input
                   type="number"
                   min="0"
-                  max="9999"
+                  max="999999"
                   step="1"
                   class="lp-inline-price"
                   data-pricing-price="${escapeHTML(id)}"
                   value="${pricing.accessType === 'free' ? 0 : pricing.price}"
                   ${pricing.accessType === 'free' ? 'disabled' : ''}
-                  aria-label="Price for ${escapeHTML(l.title || id)}"
+                  aria-label="Price in Kyat for ${escapeHTML(l.title || id)}"
                 />
               </div>
             </div>

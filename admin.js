@@ -2017,7 +2017,7 @@
                           </td>
                           <td>
                             <span class="${pricing.accessType === 'paid' ? 'admin-status-pending' : 'admin-status-active'}">
-                              ${pricing.accessType === 'paid' ? `Paid ($${pricing.price})` : 'Free'}
+                              ${pricing.accessType === 'paid' ? `Paid (${pricing.price} Kyat)` : 'Free'}
                             </span>
                           </td>
                           <td class="num">${exCount}</td>
@@ -2317,8 +2317,8 @@
             </select>
           </div>
           <div class="admin-field">
-            <label for="lsPrice">Single-Lesson Price ($ USD)</label>
-            <input type="number" class="admin-input" id="lsPrice" min="0" max="9999" value="${escapeHTML(
+            <label for="lsPrice">Single-Lesson Price (Kyat)</label>
+            <input type="number" class="admin-input" id="lsPrice" min="0" max="999999" value="${escapeHTML(
               pricing.price || 9
             )}" />
           </div>
@@ -2478,7 +2478,7 @@
         updateNavCounts();
         renderActiveTab();
         setSyncStatus('Saved locally');
-        toast(`Saved lesson "${rec.title}" (${accessType === 'paid' ? `$${price}` : 'Free'}). Export lessons.xlsx to publish.`);
+        toast(`Saved lesson "${rec.title}" (${accessType === 'paid' ? `${price} Kyat` : 'Free'}). Export lessons.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save lesson.', 'error');

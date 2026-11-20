@@ -12092,7 +12092,8 @@ body.lp-modal-open {
 }
 
 .lp-inline-price {
-  width: 74px;
+  width: 90px;
+  min-width: 84px;
 }
 
 /* Toast Notifications */

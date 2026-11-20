@@ -200,7 +200,7 @@ export const MEMBERSHIP_PLANS = {
     id: 'per_lesson' as const,
     name: 'Single Lesson Pass',
     price: 9,
-    amountLabel: '$9 / lesson',
+    amountLabel: '9 Kyat / lesson',
     description: 'Lifetime unlock for one selected paid lesson.'
   }
 };
@@ -1451,7 +1451,7 @@ async function submitSubscriptionRequest(params: {
         : 'Monthly All-Access'),
     amountLabel:
       String(params.amountLabel || '').trim() ||
-      (planType === 'annual' ? '$149 / yr' : planType === 'per_lesson' ? '$9' : '$19 / mo'),
+      (planType === 'annual' ? '$149 / yr' : planType === 'per_lesson' ? '9 Kyat' : '$19 / mo'),
     contactChannel: params.contactChannel === 'email' ? 'email' : 'viber',
     contactHandle: String(params.contactHandle || '').trim(),
     note: String(params.note || '').trim().slice(0, 400),

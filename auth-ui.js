@@ -14,7 +14,7 @@
     per_lesson: {
       id: 'per_lesson',
       title: 'By-Lesson Pass',
-      defaultAmount: '$9',
+      defaultAmount: '9 Kyat',
       subtitle: 'Unlock one paid lesson permanently'
     },
     monthly: {
@@ -221,7 +221,7 @@
         planType: 'per_lesson',
         lessonId,
         lessonTitle,
-        amountLabel: `$${pricing.price || 9}`,
+        amountLabel: `${pricing.price || 9} Kyat`,
         contactChannel: subscribeContext.contactChannel || 'viber'
       };
     } else {
@@ -443,7 +443,7 @@
     const isLessonContext = Boolean(subscribeContext.lessonId);
 
     const perLessonTitle = subscribeContext.lessonTitle || 'Selected Paid Lesson';
-    const perLessonPrice = subscribeContext.lessonId ? subscribeContext.amountLabel || '$9' : '$9 / lesson';
+    const perLessonPrice = subscribeContext.lessonId ? subscribeContext.amountLabel || '9 Kyat' : '9 Kyat / lesson';
 
     const selectedPlan = subscribeContext.planType || 'monthly';
     const selectedLabel =
