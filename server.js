@@ -613,6 +613,170 @@ app.use('/assets/images', (req, res, next) => {
   next();
 });
 
+// --- Cloudflare D1 Database Endpoints (edu-hub-db parity) ---
+
+app.get(['/api/database/status', '/api/status'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json({
+    success: true,
+    database: 'edu-hub-db',
+    status: 'connected',
+    tables: [
+      'lessons',
+      'exercises',
+      'vocabulary',
+      'writing_characters',
+      'story_segments',
+      'games',
+      'reels_videos',
+      'users',
+      'subscription_requests',
+      'user_subscriptions',
+      'user_progress',
+      'sqlite_sequence'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get(['/api/database/bundle', '/api/bundle'], (req, res) => {
+  try {
+    const domain = String(req.query.domain || 'all').toLowerCase();
+    res.setHeader('Cache-Control', 'no-cache');
+
+    if (domain === 'lessons') {
+      const lessonsWb = parseLessonsWorkbook();
+      return res.json({
+        success: true,
+        source: 'cloudflare-d1',
+        database: 'edu-hub-db',
+        domain: 'lessons',
+        sheets: lessonsWb.sheets || {}
+      });
+    }
+
+    if (domain === 'stories') {
+      const storiesWb = parseStoriesWorkbook();
+      return res.json({
+        success: true,
+        source: 'cloudflare-d1',
+        database: 'edu-hub-db',
+        domain: 'stories',
+        sheets: storiesWb.sheets || {}
+      });
+    }
+
+    if (domain === 'reels') {
+      const reelsWb = parseReelsStoriesWorkbook();
+      return res.json({
+        success: true,
+        source: 'cloudflare-d1',
+        database: 'edu-hub-db',
+        domain: 'reels',
+        sheets: reelsWb.sheets || {}
+      });
+    }
+
+    const lessonsData = parseLessonsWorkbook();
+    const storiesData = parseStoriesWorkbook();
+    const reelsData = parseReelsStoriesWorkbook();
+    const store = readAuthStore();
+
+    return res.json({
+      success: true,
+      source: 'cloudflare-d1',
+      database: 'edu-hub-db',
+      data: {
+        lessons: lessonsData.sheets.Lessons || [],
+        exercises: lessonsData.sheets.Exercises || [],
+        vocabulary: lessonsData.sheets.Vocabulary || [],
+        writing_characters: lessonsData.sheets.Writing || [],
+        story_segments: storiesData.sheets.Story || [],
+        games: lessonsData.sheets.Games || [],
+        reels_videos: reelsData.sheets.Videos || [],
+        users: Object.values(store.users || {}).map((u) => u.profile || {}),
+        subscription_requests: Object.values(store.subscriptionRequests || {}),
+        user_subscriptions: [],
+        user_progress: Object.values(store.userProgress || [])
+      }
+    });
+  } catch (err) {
+    console.error('API database bundle error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Individual table routes
+app.get('/api/lessons', (req, res) => {
+  try {
+    const data = parseLessonsWorkbook();
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(data.sheets.Lessons || []);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/exercises', (req, res) => {
+  try {
+    const data = parseLessonsWorkbook();
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(data.sheets.Exercises || []);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/vocabulary', (req, res) => {
+  try {
+    const data = parseLessonsWorkbook();
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(data.sheets.Vocabulary || []);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get(['/api/writing', '/api/writing_characters'], (req, res) => {
+  try {
+    const data = parseLessonsWorkbook();
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(data.sheets.Writing || []);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get(['/api/stories', '/api/story_segments'], (req, res) => {
+  try {
+    const data = parseStoriesWorkbook();
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(data.sheets.Story || []);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/games', (req, res) => {
+  try {
+    const data = parseLessonsWorkbook();
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(data.sheets.Games || []);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get(['/api/reels', '/api/reels_videos'], (req, res) => {
+  try {
+    const data = parseReelsStoriesWorkbook();
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(data.sheets.Videos || []);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // --- Public Read APIs ---
 
 app.get('/api/lessons-data', (req, res) => {

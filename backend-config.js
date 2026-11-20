@@ -277,11 +277,49 @@
     }, 0);
   }
 
+  var activeDataSources = {
+    lessons: { source: 'pending', database: 'edu-hub-db' },
+    stories: { source: 'pending', database: 'edu-hub-db' },
+    reels: { source: 'pending', database: 'edu-hub-db' }
+  };
+
+  function setDataSourceStatus(domain, source, dbName) {
+    activeDataSources[domain] = {
+      source: source,
+      database: dbName || 'edu-hub-db',
+      timestamp: Date.now()
+    };
+  }
+
+  function getDataSourceStatus(domain) {
+    return activeDataSources[domain] || { source: 'xlsx-fallback', database: 'edu-hub-db' };
+  }
+
   async function loadRepositoryWorkbook(domain) {
     var meta = WORKBOOK_META[domain];
     if (!meta) throw new Error('Unknown content domain: ' + domain);
 
-    // 1. Direct binary Excel parsing via SheetJS (primary repo source)
+    // 0. Primary: Cloudflare D1 Database (edu-hub-db via Cloudflare Worker / API)
+    try {
+      var d1Url = '/api/database/bundle?domain=' + encodeURIComponent(domain) + '&t=' + Date.now();
+      var d1Res = await fetch(d1Url, { cache: 'no-store' });
+      if (d1Res.ok) {
+        var d1Data = await d1Res.json();
+        if (d1Data && d1Data.sheets) {
+          var normD1 = normalizeSheetsForDomain(domain, d1Data.sheets);
+          if (countRowsInSheets(normD1) > 0) {
+            setDataSourceStatus(domain, 'cloudflare-d1', d1Data.database || 'edu-hub-db');
+            return {
+              sheets: normD1,
+              source: 'cloudflare-d1',
+              database: d1Data.database || 'edu-hub-db'
+            };
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 1. Fallback: Direct binary Excel parsing via SheetJS (data/*.xlsx)
     if (getXlsx()) {
       try {
         var xlsxRes = await fetch(meta.xlsxPath + '?t=' + Date.now(), { cache: 'no-store' });
@@ -289,6 +327,7 @@
           var buf = await xlsxRes.arrayBuffer();
           var parsedSheets = parseXlsxBuffer(domain, buf);
           if (countRowsInSheets(parsedSheets) > 0) {
+            setDataSourceStatus(domain, 'xlsx-fallback', 'edu-hub-db');
             return { sheets: parsedSheets, source: 'xlsx' };
           }
         }
@@ -303,12 +342,14 @@
         if (jsonData && jsonData.sheets) {
           var normJson = normalizeSheetsForDomain(domain, jsonData.sheets);
           if (countRowsInSheets(normJson) > 0) {
+            setDataSourceStatus(domain, 'json-fallback', 'edu-hub-db');
             return { sheets: normJson, source: 'json' };
           }
         }
       }
     } catch (_) {}
 
+    setDataSourceStatus(domain, 'empty', 'edu-hub-db');
     return { sheets: createEmptySheets(domain), source: 'empty' };
   }
 
@@ -516,6 +557,7 @@
     MAX_INLINE_MEDIA_BYTES: MAX_INLINE_MEDIA_BYTES,
     hasDraft: hasDraft,
     getDraftStatusSummary: getDraftStatusSummary,
+    getDataSourceStatus: getDataSourceStatus,
     loadWorkbook: loadWorkbook,
     loadLessonsWorkbook: function (opts) {
       return loadWorkbook('lessons', opts);

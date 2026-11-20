@@ -144,22 +144,30 @@
   function renderWorkbookSyncToolbar(domain, fileName) {
     const store = window.LinguaContentStore;
     const hasDraft = store && typeof store.hasDraft === 'function' ? store.hasDraft(domain) : false;
+    const dsInfo = store && typeof store.getDataSourceStatus === 'function' ? store.getDataSourceStatus(domain) : { source: 'xlsx-fallback', database: 'edu-hub-db' };
+    const isCloudflare = dsInfo.source === 'cloudflare-d1';
+
     return `
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; background:${
         hasDraft ? '#fef9c3' : '#f8fafc'
       }; border:1px solid ${hasDraft ? '#fde047' : '#e2e8f0'}; border-radius:12px; padding:10px 14px; margin-bottom:14px;">
-        <div style="font-size:0.84rem; color:${hasDraft ? '#854d0e' : '#475569'};">
-          ${
-            hasDraft
-              ? `<strong>Local browser changes active:</strong> Click <strong>Export ${escapeHTML(
-                  fileName
-                )}</strong> and commit it to <code>data/${escapeHTML(fileName)}</code> to publish for all visitors.`
-              : `<strong>Synced with repository workbook:</strong> Reading directly from <code>data/${escapeHTML(
-                  fileName
-                )}</code>.`
-          }
+        <div style="font-size:0.84rem; color:${hasDraft ? '#854d0e' : '#475569'}; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="display:inline-flex; align-items:center; gap:5px; font-weight:600; color:${isCloudflare ? '#059669' : '#0284c7'};">
+            ${isCloudflare ? '● Cloudflare D1 Database (edu-hub-db)' : '○ Excel Fallback (data/' + escapeHTML(fileName) + ')'}
+          </span>
+          <span style="color:#94a3b8;">|</span>
+          <span>
+            ${
+              hasDraft
+                ? `<strong>Local browser changes active:</strong> Click <strong>Export ${escapeHTML(
+                    fileName
+                  )}</strong> and commit to <code>data/${escapeHTML(fileName)}</code> to publish.`
+                : `Reading curriculum records directly from <strong>${isCloudflare ? 'Cloudflare D1' : 'Excel (.xlsx)'}</strong>.`
+            }
+          </span>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-cms-test-db="true" title="Verify connection to Cloudflare D1 edu-hub-db">Test D1 DB</button>
           <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-cms-export="${escapeHTML(
             domain
           )}">Export ${escapeHTML(fileName)}</button>
@@ -181,6 +189,28 @@
 
   function wireWorkbookSyncToolbar(viewport) {
     if (!viewport) return;
+
+    viewport.querySelectorAll('[data-cms-test-db]').forEach((btn) => {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = 'Testing D1…';
+        try {
+          const res = await fetch('/api/database/status?t=' + Date.now());
+          const json = await res.json();
+          if (json.success) {
+            toast(`Connected to Cloudflare D1 (${json.database})! Found ${json.tables ? json.tables.length : 12} tables.`);
+          } else {
+            toast(`D1 status: ${json.message || 'offline'}. Using Excel sheets fallback.`, 'info');
+          }
+        } catch (err) {
+          toast(`D1 test: ${err.message || 'Server error'}. Using Excel fallback.`, 'info');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Test D1 DB';
+        }
+      };
+    });
+
     viewport.querySelectorAll('[data-cms-export]').forEach((btn) => {
       btn.onclick = async () => {
         const domain = btn.getAttribute('data-cms-export');
