@@ -36,7 +36,7 @@
       storySearch: '',
       reelSearch: '',
       reelStatus: 'all',
-      lessonAudience: 'all',
+      lessonCourse: 'all',
       lessonSearch: '',
       userSearch: ''
     },
@@ -107,6 +107,54 @@
 
   function isSameId(a, b) {
     return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  }
+
+  function normalizeCourseName(val) {
+    if (window.LinguaAuth && typeof window.LinguaAuth.normalizeCourseName === 'function') {
+      return window.LinguaAuth.normalizeCourseName(val);
+    }
+    const raw = String(val || '').trim();
+    if (!raw) return 'HSK 1';
+    const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
+    if (compact === 'hsk1') return 'HSK 1';
+    if (compact === 'hsk2') return 'HSK 2';
+    if (compact === 'hsk3') return 'HSK 3';
+    if (compact === 'hsk4') return 'HSK 4';
+    return raw.slice(0, 80);
+  }
+
+  function courseSlug(val) {
+    return String(val || '').trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '');
+  }
+
+  function getLessonCourse(lesson) {
+    if (window.LinguaAuth && typeof window.LinguaAuth.getLessonCourseName === 'function') {
+      return window.LinguaAuth.getLessonCourseName(lesson);
+    }
+    if (!lesson || typeof lesson !== 'object') return 'HSK 1';
+    const raw = String(lesson.course || lesson.courseName || lesson.category || '').trim();
+    if (raw) return normalizeCourseName(raw);
+    const id = String(lesson.id || '').toLowerCase();
+    return id.includes('hsk2') || id.includes('lesson-02') ? 'HSK 2' : 'HSK 1';
+  }
+
+  function getAdminCoursesList() {
+    const out = [];
+    const seen = new Set();
+    const pushCourse = (name) => {
+      const norm = normalizeCourseName(name);
+      const slug = courseSlug(norm);
+      if (slug && !seen.has(slug)) {
+        seen.add(slug);
+        out.push(norm);
+      }
+    };
+    pushCourse('HSK 1');
+    pushCourse('HSK 2');
+    (state.lessonsData.Lessons || []).forEach((l) => pushCourse(getLessonCourse(l)));
+    const cp = (state.siteConfig && state.siteConfig.coursePrices) || {};
+    Object.keys(cp).forEach(pushCourse);
+    return out;
   }
 
   function parseCsvList(str) {
@@ -488,6 +536,8 @@
     const stories = state.storiesData.Lessons || [];
     const reels = state.reelsData.Videos || [];
     const games = state.lessonsData.Games || [];
+    const coursesList = getAdminCoursesList();
+    const coursePricesMap = cfg.coursePrices && typeof cfg.coursePrices === 'object' ? cfg.coursePrices : {};
 
     const featStories = new Set((cfg.featuredStoryIds || []).map((x) => x.toLowerCase()));
     const featReels = new Set((cfg.featuredReelIds || []).map((x) => x.toLowerCase()));
@@ -552,13 +602,13 @@
           <div class="admin-panel-head">
             <div>
               <h2>Homepage Section Headings</h2>
-              <p>Customize every section label, title, and description shown on the home page.</p>
+              <p>Customize every standalone section label, title, and description shown on the home page.</p>
             </div>
           </div>
 
-          <div class="admin-grid-3">
+          <div class="admin-grid-2">
             <div class="admin-subrow">
-              <strong style="font-size:0.86rem;">Stories &amp; Reels Section</strong>
+              <strong style="font-size:0.86rem;">Chinese Stories Section</strong>
               <div class="admin-field">
                 <label for="cfgStoriesLabel">Eyebrow Label</label>
                 <input type="text" class="admin-input" id="cfgStoriesLabel" value="${escapeHTML(cfg.storiesLabel || '')}" />
@@ -570,6 +620,22 @@
               <div class="admin-field">
                 <label for="cfgStoriesSub">Section Description</label>
                 <textarea class="admin-textarea" id="cfgStoriesSub">${escapeHTML(cfg.storiesSubtitle || '')}</textarea>
+              </div>
+            </div>
+
+            <div class="admin-subrow">
+              <strong style="font-size:0.86rem;">Short Mandarin Reels Section</strong>
+              <div class="admin-field">
+                <label for="cfgReelsLabel">Eyebrow Label</label>
+                <input type="text" class="admin-input" id="cfgReelsLabel" value="${escapeHTML(cfg.reelsLabel || '')}" />
+              </div>
+              <div class="admin-field">
+                <label for="cfgReelsTitle">Section Title</label>
+                <input type="text" class="admin-input" id="cfgReelsTitle" value="${escapeHTML(cfg.reelsTitle || '')}" />
+              </div>
+              <div class="admin-field">
+                <label for="cfgReelsSub">Section Description</label>
+                <textarea class="admin-textarea" id="cfgReelsSub">${escapeHTML(cfg.reelsSubtitle || '')}</textarea>
               </div>
             </div>
 
@@ -590,7 +656,7 @@
             </div>
 
             <div class="admin-subrow">
-              <strong style="font-size:0.86rem;">Curriculum Lessons Section</strong>
+              <strong style="font-size:0.86rem;">Mandarin Lessons Section</strong>
               <div class="admin-field">
                 <label for="cfgLessonsLabel">Eyebrow Label</label>
                 <input type="text" class="admin-input" id="cfgLessonsLabel" value="${escapeHTML(cfg.lessonsLabel || '')}" />
@@ -610,73 +676,67 @@
         <div class="admin-panel-card">
           <div class="admin-panel-head">
             <div>
-              <h2>Adult &amp; Kids Learning Track Cards</h2>
-              <p>Edit pathway titles, subtitles, descriptions, bullet lists (one per line), and CTA labels.</p>
+              <h2>Homepage Lessons Card &amp; Course Pass Pricing (Kyat)</h2>
+              <p>Edit the unified Lessons gateway card on index.html and set Course Pass prices in Kyat (unlocking all lessons in each course).</p>
             </div>
           </div>
 
           <div class="admin-grid-2">
             <div class="admin-subrow">
-              <strong>Adults Pathway Card</strong>
+              <strong>Unified Lessons Card</strong>
               <div class="admin-grid-2">
                 <div class="admin-field">
-                  <label for="cfgAdultBadge">Badge</label>
-                  <input type="text" class="admin-input" id="cfgAdultBadge" value="${escapeHTML(cfg.adultBadge || '')}" />
+                  <label for="cfgLessonsBadge">Badge</label>
+                  <input type="text" class="admin-input" id="cfgLessonsBadge" value="${escapeHTML(cfg.lessonsBadge || '')}" />
                 </div>
                 <div class="admin-field">
-                  <label for="cfgAdultCta">Button Label</label>
-                  <input type="text" class="admin-input" id="cfgAdultCta" value="${escapeHTML(cfg.adultCta || '')}" />
+                  <label for="cfgLessonsCta">Button Label</label>
+                  <input type="text" class="admin-input" id="cfgLessonsCta" value="${escapeHTML(cfg.lessonsCta || '')}" />
                 </div>
               </div>
               <div class="admin-field">
-                <label for="cfgAdultTitle">Title</label>
-                <input type="text" class="admin-input" id="cfgAdultTitle" value="${escapeHTML(cfg.adultTitle || '')}" />
+                <label for="cfgLessonsCardTitle">Card Title</label>
+                <input type="text" class="admin-input" id="cfgLessonsCardTitle" value="${escapeHTML(cfg.lessonsCardTitle || '')}" />
               </div>
               <div class="admin-field">
-                <label for="cfgAdultSub">Chinese Subtitle</label>
-                <input type="text" class="admin-input" id="cfgAdultSub" value="${escapeHTML(cfg.adultSubtitle || '')}" />
+                <label for="cfgLessonsCardSub">Chinese Subtitle</label>
+                <input type="text" class="admin-input" id="cfgLessonsCardSub" value="${escapeHTML(cfg.lessonsCardSubtitle || '')}" />
               </div>
               <div class="admin-field">
-                <label for="cfgAdultDesc">Description</label>
-                <textarea class="admin-textarea" id="cfgAdultDesc">${escapeHTML(cfg.adultDesc || '')}</textarea>
+                <label for="cfgLessonsCardDesc">Description</label>
+                <textarea class="admin-textarea" id="cfgLessonsCardDesc">${escapeHTML(cfg.lessonsCardDesc || '')}</textarea>
               </div>
               <div class="admin-field">
-                <label for="cfgAdultBullets">Bullet Highlights (one per line)</label>
-                <textarea class="admin-textarea" id="cfgAdultBullets">${escapeHTML(
-                  (cfg.adultBullets || []).join('\n')
+                <label for="cfgLessonsBullets">Bullet Highlights (one per line)</label>
+                <textarea class="admin-textarea" id="cfgLessonsBullets">${escapeHTML(
+                  (cfg.lessonsBullets || []).join('\n')
                 )}</textarea>
               </div>
             </div>
 
             <div class="admin-subrow">
-              <strong>Kids Pathway Card</strong>
-              <div class="admin-grid-2">
-                <div class="admin-field">
-                  <label for="cfgKidsBadge">Badge</label>
-                  <input type="text" class="admin-input" id="cfgKidsBadge" value="${escapeHTML(cfg.kidsBadge || '')}" />
-                </div>
-                <div class="admin-field">
-                  <label for="cfgKidsCta">Button Label</label>
-                  <input type="text" class="admin-input" id="cfgKidsCta" value="${escapeHTML(cfg.kidsCta || '')}" />
-                </div>
-              </div>
-              <div class="admin-field">
-                <label for="cfgKidsTitle">Title</label>
-                <input type="text" class="admin-input" id="cfgKidsTitle" value="${escapeHTML(cfg.kidsTitle || '')}" />
-              </div>
-              <div class="admin-field">
-                <label for="cfgKidsSub">Chinese Subtitle</label>
-                <input type="text" class="admin-input" id="cfgKidsSub" value="${escapeHTML(cfg.kidsSubtitle || '')}" />
-              </div>
-              <div class="admin-field">
-                <label for="cfgKidsDesc">Description</label>
-                <textarea class="admin-textarea" id="cfgKidsDesc">${escapeHTML(cfg.kidsDesc || '')}</textarea>
-              </div>
-              <div class="admin-field">
-                <label for="cfgKidsBullets">Bullet Highlights (one per line)</label>
-                <textarea class="admin-textarea" id="cfgKidsBullets">${escapeHTML(
-                  (cfg.kidsBullets || []).join('\n')
-                )}</textarea>
+              <strong>Course Pass Pricing (Kyat)</strong>
+              <p style="font-size:0.82rem; color:#64748b; margin:4px 0 12px;">
+                Set the full-course unlock price in Kyat for each course. Learners paying this fee unlock all lessons inside that course.
+              </p>
+              <div style="display:flex; flex-direction:column; gap:10px;">
+                ${coursesList
+                  .map((cName) => {
+                    const fallbackVal = courseSlug(cName) === 'hsk2' ? 120 : 100;
+                    const curPrice = Number(coursePricesMap[cName]) || fallbackVal;
+                    return `
+                      <div class="admin-field" style="display:grid; grid-template-columns: 1fr 140px; gap:10px; align-items:center;">
+                        <label style="margin:0; font-weight:700;">${escapeHTML(cName)}</label>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                          <input type="number" min="0" max="9999999" class="admin-input" data-cfg-course-price="${escapeHTML(
+                            cName
+                          )}" value="${escapeHTML(curPrice)}" />
+                          <span style="font-size:0.82rem; color:#64748b; font-weight:600;">Kyat</span>
+                        </div>
+                      </div>
+                    `;
+                  })
+                  .join('')}
               </div>
             </div>
           </div>
@@ -806,6 +866,14 @@
           .map((s) => s.trim())
           .filter(Boolean);
 
+      const coursePrices = Object.assign({}, coursePricesMap);
+      form.querySelectorAll('[data-cfg-course-price]').forEach((inp) => {
+        const cname = inp.getAttribute('data-cfg-course-price');
+        if (cname) {
+          coursePrices[cname] = Math.max(0, Number(inp.value) || 0);
+        }
+      });
+
       const featuredStoryIds = Array.from(form.querySelectorAll('input[name="featStory"]:checked')).map((c) => c.value);
       const featuredReelIds = Array.from(form.querySelectorAll('input[name="featReel"]:checked')).map((c) => c.value);
       const featuredGameIds = Array.from(form.querySelectorAll('input[name="featGame"]:checked')).map((c) => c.value);
@@ -821,24 +889,22 @@
         storiesLabel: val('cfgStoriesLabel'),
         storiesTitle: val('cfgStoriesTitle'),
         storiesSubtitle: val('cfgStoriesSub'),
+        reelsLabel: val('cfgReelsLabel'),
+        reelsTitle: val('cfgReelsTitle'),
+        reelsSubtitle: val('cfgReelsSub'),
         gamesLabel: val('cfgGamesLabel'),
         gamesTitle: val('cfgGamesTitle'),
         gamesSubtitle: val('cfgGamesSub'),
         lessonsLabel: val('cfgLessonsLabel'),
         lessonsTitle: val('cfgLessonsTitle'),
         lessonsSubtitle: val('cfgLessonsSub'),
-        adultBadge: val('cfgAdultBadge'),
-        adultTitle: val('cfgAdultTitle'),
-        adultSubtitle: val('cfgAdultSub'),
-        adultDesc: val('cfgAdultDesc'),
-        adultBullets: lines('cfgAdultBullets'),
-        adultCta: val('cfgAdultCta'),
-        kidsBadge: val('cfgKidsBadge'),
-        kidsTitle: val('cfgKidsTitle'),
-        kidsSubtitle: val('cfgKidsSub'),
-        kidsDesc: val('cfgKidsDesc'),
-        kidsBullets: lines('cfgKidsBullets'),
-        kidsCta: val('cfgKidsCta'),
+        lessonsBadge: val('cfgLessonsBadge'),
+        lessonsCardTitle: val('cfgLessonsCardTitle'),
+        lessonsCardSubtitle: val('cfgLessonsCardSub'),
+        lessonsCardDesc: val('cfgLessonsCardDesc'),
+        lessonsBullets: lines('cfgLessonsBullets'),
+        lessonsCta: val('cfgLessonsCta'),
+        coursePrices,
         contactEmail: val('cfgContactEmail'),
         contactPhone: val('cfgContactPhone'),
         contactViber: val('cfgContactViber'),
@@ -852,7 +918,7 @@
         const saved = await window.LinguaAuth.saveSiteConfig(nextPayload);
         state.siteConfig = saved;
         setSyncStatus('Saved');
-        toast('Homepage settings, Contact Us & Featured items saved.');
+        toast('Homepage settings, Course prices, Contact Us & Featured items saved.');
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save homepage settings.', 'error');
@@ -2318,26 +2384,28 @@
     const exercises = state.lessonsData.Exercises || [];
     const writings = state.lessonsData.Writing || [];
     const pronunciations = state.lessonsData.Pronunciation || [];
-    const aud = state.filters.lessonAudience;
+    const coursesList = getAdminCoursesList();
+    const courseFilter = state.filters.lessonCourse || 'all';
     const q = state.filters.lessonSearch.toLowerCase();
+    const cfgCoursePrices = (state.siteConfig && state.siteConfig.coursePrices) || {};
 
     const filtered = lessons.filter((l) => {
-      const a = String(l.audience || 'Adult').toLowerCase();
-      const matchAud = aud === 'all' || a === aud;
+      const cName = getLessonCourse(l);
+      const matchCourse = courseFilter === 'all' || courseSlug(cName) === courseSlug(courseFilter);
       const matchQ =
         !q ||
         String(l.title || '').toLowerCase().includes(q) ||
         String(l.id || '').toLowerCase().includes(q) ||
-        String(l.category || '').toLowerCase().includes(q);
-      return matchAud && matchQ;
+        cName.toLowerCase().includes(q);
+      return matchCourse && matchQ;
     });
 
     viewport.innerHTML = `
       <div class="admin-panel-card">
         <div class="admin-panel-head">
           <div>
-            <h2>Adult &amp; Kids Curriculum Lessons (${lessons.length})</h2>
-            <p>Add, edit, or delete lessons, Free/Paid access pricing, media files, Vocabulary/Writing, Pronunciation Check lines, and Excel Exercises.</p>
+            <h2>Curriculum Lessons &amp; Courses (${lessons.length})</h2>
+            <p>Assign lessons to <strong>HSK 1</strong>, <strong>HSK 2</strong>, or create custom course names. Configure Free/Paid pricing (Kyat), media, Vocabulary/Writing, Pronunciation, and all 5 Exercise types.</p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button type="button" class="admin-btn admin-btn-secondary" id="btnUploadLessonExercises">Upload Exercises (.xlsx)</button>
@@ -2346,14 +2414,45 @@
         </div>
         ${renderWorkbookSyncToolbar('lessons', 'lessons.xlsx')}
 
+        <div class="admin-subrow" style="margin-bottom:14px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+            <strong style="font-size:0.86rem;">Course Pass Pricing (Kyat — unlocks all lessons inside each course)</strong>
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnSaveCoursePricesInline">Save Course Prices</button>
+          </div>
+          <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+            ${coursesList
+              .map((cName) => {
+                const countInCourse = lessons.filter((l) => courseSlug(getLessonCourse(l)) === courseSlug(cName)).length;
+                const fallbackPrice = courseSlug(cName) === 'hsk2' ? 120 : 100;
+                const priceVal = Number(cfgCoursePrices[cName]) || fallbackPrice;
+                return `
+                  <label style="display:inline-flex; align-items:center; gap:8px; font-size:0.84rem; font-weight:600; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:6px 10px;">
+                    <span>${escapeHTML(cName)} (${countInCourse}):</span>
+                    <input type="number" min="0" max="9999999" class="admin-input" style="width:92px; padding:4px 8px;" data-ls-course-price="${escapeHTML(
+                      cName
+                    )}" value="${escapeHTML(priceVal)}" />
+                    <span style="color:#64748b;">Kyat</span>
+                  </label>
+                `;
+              })
+              .join('')}
+          </div>
+        </div>
+
         <div class="admin-grid-2" style="margin-bottom:14px; max-width:560px;">
           <input type="search" class="admin-input" id="lessonSearchInput" value="${escapeHTML(
             state.filters.lessonSearch
-          )}" placeholder="Search title, category, or ID…" />
-          <select class="admin-select" id="lessonAudienceFilter">
-            <option value="all" ${aud === 'all' ? 'selected' : ''}>All Audiences</option>
-            <option value="adult" ${aud === 'adult' ? 'selected' : ''}>Adult Track</option>
-            <option value="kids" ${aud === 'kids' ? 'selected' : ''}>Kids Track</option>
+          )}" placeholder="Search title, course, or ID…" />
+          <select class="admin-select" id="lessonCourseFilter">
+            <option value="all" ${courseFilter === 'all' ? 'selected' : ''}>All Courses</option>
+            ${coursesList
+              .map(
+                (cName) =>
+                  `<option value="${escapeHTML(cName)}" ${courseSlug(courseFilter) === courseSlug(cName) ? 'selected' : ''}>${escapeHTML(
+                    cName
+                  )}</option>`
+              )
+              .join('')}
           </select>
         </div>
 
@@ -2362,7 +2461,7 @@
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Track</th>
+                <th>Course</th>
                 <th>Lesson Title</th>
                 <th>Access / Price</th>
                 <th class="num">Exercises</th>
@@ -2376,6 +2475,7 @@
                 filtered.length
                   ? filtered
                       .map((l) => {
+                        const cName = getLessonCourse(l);
                         const pricing = window.LinguaAuth
                           ? window.LinguaAuth.getLessonPricing(l)
                           : { accessType: 'free', price: 0 };
@@ -2385,11 +2485,11 @@
                         return `
                         <tr>
                           <td><code>${escapeHTML(l.id)}</code></td>
-                          <td>${escapeHTML(l.audience || 'Adult')} · ${escapeHTML(l.category || '')}</td>
+                          <td><strong>${escapeHTML(cName)}</strong></td>
                           <td>
                             <strong>${escapeHTML(l.title || '')}</strong>
                             <div style="font-size:0.78rem; color:#64748b;">${escapeHTML(l.chineseTitle || '')} · ${escapeHTML(
-                          l.level || ''
+                          l.level || cName
                         )}</div>
                           </td>
                           <td>
@@ -2432,12 +2532,31 @@
     `;
 
     wireWorkbookSyncToolbar(viewport);
+
+    const saveCoursePricesBtn = document.getElementById('btnSaveCoursePricesInline');
+    if (saveCoursePricesBtn) {
+      saveCoursePricesBtn.onclick = async () => {
+        const nextPrices = Object.assign({}, cfgCoursePrices);
+        viewport.querySelectorAll('[data-ls-course-price]').forEach((inp) => {
+          const cname = inp.getAttribute('data-ls-course-price');
+          if (cname) nextPrices[cname] = Math.max(0, Number(inp.value) || 0);
+        });
+        try {
+          const saved = await window.LinguaAuth.saveSiteConfig({ coursePrices: nextPrices });
+          state.siteConfig = saved;
+          toast('Saved course pass prices in Kyat.');
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Failed to save course prices.', 'error');
+        }
+      };
+    }
+
     document.getElementById('lessonSearchInput').oninput = (e) => {
       state.filters.lessonSearch = e.target.value;
       renderLessonsTab(viewport);
     };
-    document.getElementById('lessonAudienceFilter').onchange = (e) => {
-      state.filters.lessonAudience = e.target.value;
+    document.getElementById('lessonCourseFilter').onchange = (e) => {
+      state.filters.lessonCourse = e.target.value;
       renderLessonsTab(viewport);
     };
     document.getElementById('btnAddLesson').onclick = () => openLessonEditorModal(null);
@@ -2491,23 +2610,26 @@
 
   function openLessonEditorModal(lesson) {
     const isNew = !lesson;
+    const coursesList = getAdminCoursesList();
+    const defaultCourse = state.filters.lessonCourse !== 'all' ? state.filters.lessonCourse : 'HSK 1';
     const base = lesson || {
-      id: `lesson-new-${Date.now().toString().slice(-4)}`,
-      audience: 'Adult',
-      category: 'Beginner & Everyday Basics',
-      categoryKey: 'basics',
-      categoryNum: 'Category 1',
+      id: `hsk-${Date.now().toString().slice(-4)}`,
+      course: defaultCourse,
+      category: defaultCourse,
+      categoryKey: courseSlug(defaultCourse),
+      categoryNum: 'Course 1',
       title: '',
       chineseTitle: '',
       pinyin: '',
       meaning: '',
-      level: 'Beginner',
+      level: defaultCourse,
       description: '',
       videoUrl: 'assets/video/lesson-01.mp4',
       posterUrl: 'assets/images/story-01.jpg',
       fullAudio: '',
       keywords: ''
     };
+    const baseCourse = getLessonCourse(base);
     const pricing = window.LinguaAuth ? window.LinguaAuth.getLessonPricing(base) : { accessType: 'free', price: 0 };
 
     state.editingLessonVocab = lesson
@@ -2649,27 +2771,15 @@
             <input type="text" class="admin-input" id="lsId" value="${escapeHTML(base.id)}" ${isNew ? '' : 'readonly'} required />
           </div>
           <div class="admin-field">
-            <label for="lsAudience">Audience *</label>
-            <select class="admin-select" id="lsAudience">
-              <option value="Adult" ${String(base.audience).toLowerCase() !== 'kids' ? 'selected' : ''}>Adult</option>
-              <option value="Kids" ${String(base.audience).toLowerCase() === 'kids' ? 'selected' : ''}>Kids</option>
-            </select>
+            <label for="lsCourse">Course Name * (e.g. HSK 1, HSK 2)</label>
+            <input type="text" class="admin-input" id="lsCourse" list="lsCourseOptions" value="${escapeHTML(baseCourse)}" placeholder="HSK 1" required />
+            <datalist id="lsCourseOptions">
+              ${coursesList.map((c) => `<option value="${escapeHTML(c)}"></option>`).join('')}
+            </datalist>
           </div>
           <div class="admin-field">
-            <label for="lsLevel">Level</label>
-            <input type="text" class="admin-input" id="lsLevel" value="${escapeHTML(base.level || 'Beginner')}" />
-          </div>
-          <div class="admin-field">
-            <label for="lsCat">Category Name</label>
-            <input type="text" class="admin-input" id="lsCat" value="${escapeHTML(base.category || '')}" />
-          </div>
-          <div class="admin-field">
-            <label for="lsCatKey">Category Key</label>
-            <input type="text" class="admin-input" id="lsCatKey" value="${escapeHTML(base.categoryKey || 'basics')}" />
-          </div>
-          <div class="admin-field">
-            <label for="lsCatNum">Category Order Label</label>
-            <input type="text" class="admin-input" id="lsCatNum" value="${escapeHTML(base.categoryNum || 'Category 1')}" />
+            <label for="lsLevel">Level Label</label>
+            <input type="text" class="admin-input" id="lsLevel" value="${escapeHTML(base.level || baseCourse)}" />
           </div>
           <div class="admin-field">
             <label for="lsTitle">Title *</label>
@@ -2793,21 +2903,21 @@
     document.getElementById('lessonEditForm').onsubmit = async (e) => {
       e.preventDefault();
       const id = document.getElementById('lsId').value.trim();
-      const audience = document.getElementById('lsAudience').value;
+      const courseName = normalizeCourseName(document.getElementById('lsCourse').value);
       const accessType = document.getElementById('lsAccess').value === 'paid' ? 'paid' : 'free';
       const price = accessType === 'free' ? 0 : Math.max(0, Number(document.getElementById('lsPrice').value) || 9);
 
       const rec = {
         id,
-        audience,
-        category: document.getElementById('lsCat').value.trim() || 'General',
-        categoryKey: document.getElementById('lsCatKey').value.trim() || 'basics',
-        categoryNum: document.getElementById('lsCatNum').value.trim() || 'Category 1',
+        course: courseName,
+        category: courseName,
+        categoryKey: courseSlug(courseName) || 'hsk1',
+        categoryNum: courseName,
         title: document.getElementById('lsTitle').value.trim(),
         chineseTitle: document.getElementById('lsCn').value.trim(),
         pinyin: document.getElementById('lsPinyin').value.trim(),
         meaning: document.getElementById('lsMeaning').value.trim(),
-        level: document.getElementById('lsLevel').value.trim() || 'Beginner',
+        level: document.getElementById('lsLevel').value.trim() || courseName,
         description: document.getElementById('lsDesc').value.trim(),
         videoUrl: document.getElementById('lsVideo').value.trim(),
         posterUrl: document.getElementById('lsPoster').value.trim(),
@@ -2842,7 +2952,7 @@
         state.lessonsData = { ...state.lessonsData, ...res.sheets };
         if (window.LinguaAuth && typeof window.LinguaAuth.saveLessonCatalogItems === 'function') {
           await window.LinguaAuth.saveLessonCatalogItems([
-            { lessonId: id, title: rec.title, audience, accessType, price }
+            { lessonId: id, title: rec.title, course: courseName, accessType, price }
           ]);
         }
         try {
@@ -2855,7 +2965,7 @@
         updateNavCounts();
         renderActiveTab();
         setSyncStatus('Saved locally');
-        toast(`Saved lesson "${rec.title}" (${accessType === 'paid' ? `${price} Kyat` : 'Free'}). Export lessons.xlsx to publish.`);
+        toast(`Saved "${rec.title}" under ${courseName} (${accessType === 'paid' ? `${price} Kyat` : 'Free'}). Export lessons.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save lesson.', 'error');
@@ -2866,7 +2976,7 @@
   // --- Writing & Stroke Order Editor Modal ---
   function openWritingEditorModal(lessonId) {
     const lessons = state.lessonsData.Lessons || [];
-    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'adult-basics-01');
+    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'hsk1-01');
 
     const renderWritingModalContent = () => {
       const lesson = lessons.find((x) => isSameId(x.id, currentLessonId)) || { id: currentLessonId, title: currentLessonId };
@@ -3107,7 +3217,7 @@
 
   function openPronunciationEditorModal(lessonId) {
     const lessons = state.lessonsData.Lessons || [];
-    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'adult-basics-01');
+    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'hsk1-01');
 
     const renderPronModalContent = () => {
       const lesson = lessons.find((x) => isSameId(x.id, currentLessonId)) || { id: currentLessonId, title: currentLessonId };
@@ -3649,9 +3759,8 @@
             <label for="udPlan">Membership Plan</label>
             <select class="admin-select" id="udPlan">
               <option value="none" ${user.membershipPlan === 'none' ? 'selected' : ''}>none</option>
-              <option value="monthly" ${user.membershipPlan === 'monthly' ? 'selected' : ''}>monthly</option>
-              <option value="annual" ${user.membershipPlan === 'annual' ? 'selected' : ''}>annual</option>
-              <option value="per_lesson" ${user.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson</option>
+              <option value="per_lesson" ${user.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson (Lesson Pass)</option>
+              <option value="course" ${user.membershipPlan === 'course' ? 'selected' : ''}>course (Course Pass)</option>
             </select>
           </div>
           <div class="admin-field">
@@ -3753,7 +3862,7 @@
         <div class="admin-panel-head">
           <div>
             <h2>Pending QR Payment Subscription Requests (${pendingReqs.length})</h2>
-            <p>Approve verified Viber/Email QR payments to immediately unlock Monthly, Annual, or By-Lesson access.</p>
+            <p>Approve verified Viber/Email QR payments (Kyat) to immediately unlock single-lesson or full-course access.</p>
           </div>
         </div>
 
@@ -3841,6 +3950,7 @@
                   ? filteredUsers
                       .map((u) => {
                         const unlockedCount = Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds.length : 0;
+                        const unlockedCoursesCount = Array.isArray(u.subscribedCourses) ? u.subscribedCourses.length : 0;
                         const roleTag = u.role === 'admin' ? ' · Admin' : '';
                         const tempTag = u.mustChangePassword ? ' · Temp PW active' : '';
                         return `
@@ -3862,9 +3972,8 @@
                           <td>
                             <select class="admin-select" data-u-plan="${escapeHTML(u.uid)}">
                               <option value="none" ${u.membershipPlan === 'none' ? 'selected' : ''}>none</option>
-                              <option value="monthly" ${u.membershipPlan === 'monthly' ? 'selected' : ''}>monthly</option>
-                              <option value="annual" ${u.membershipPlan === 'annual' ? 'selected' : ''}>annual</option>
                               <option value="per_lesson" ${u.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson</option>
+                              <option value="course" ${u.membershipPlan === 'course' ? 'selected' : ''}>course</option>
                             </select>
                           </td>
                           <td>
@@ -3875,7 +3984,7 @@
                           <td>
                             <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-u-lessons="${escapeHTML(
                               u.uid
-                            )}">Lessons (${unlockedCount})</button>
+                            )}">Courses (${unlockedCoursesCount}) · Lessons (${unlockedCount})</button>
                           </td>
                           <td>
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
@@ -4006,23 +4115,43 @@
         const user = users.find((x) => x.uid === uid);
         if (!user) return;
         const unlocked = new Set(user.subscribedLessonIds || []);
+        const unlockedCourses = new Set((user.subscribedCourses || []).map((c) => courseSlug(c)));
         const allLessons = state.lessonsData.Lessons || [];
+        const coursesList = getAdminCoursesList();
 
         openModal(`
           <div class="admin-panel-head" style="margin-bottom:12px;">
             <div>
-              <h2>Unlocked Lessons · ${escapeHTML(user.username || user.email)}</h2>
-              <p>Select individual lessons unlocked on this learner profile.</p>
+              <h2>Unlocked Courses &amp; Lessons · ${escapeHTML(user.username || user.email)}</h2>
+              <p>Grant full Course Pass access (all lessons inside a course) or individual Lesson Pass unlocks.</p>
             </div>
             <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="ulCloseBtn">✕</button>
           </div>
-          <div class="admin-featured-checklist" style="max-height:360px; overflow-y:auto;">
+
+          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Unlocked Courses (Full Course Pass)</strong>
+          <div class="admin-featured-checklist" style="margin-bottom:14px;">
+            ${coursesList
+              .map(
+                (cName) => `
+              <label class="admin-featured-item">
+                <input type="checkbox" name="ulCourse" value="${escapeHTML(cName)}" ${
+                  unlockedCourses.has(courseSlug(cName)) ? 'checked' : ''
+                } />
+                <span>${escapeHTML(cName)}</span>
+              </label>
+            `
+              )
+              .join('')}
+          </div>
+
+          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Individual Unlocked Lessons</strong>
+          <div class="admin-featured-checklist" style="max-height:280px; overflow-y:auto;">
             ${allLessons
               .map(
                 (l) => `
               <label class="admin-featured-item">
                 <input type="checkbox" name="ulLesson" value="${escapeHTML(l.id)}" ${unlocked.has(l.id) ? 'checked' : ''} />
-                <span>${escapeHTML(l.title || l.id)} (${escapeHTML(l.audience || 'Adult')})</span>
+                <span>${escapeHTML(l.title || l.id)} (${escapeHTML(getLessonCourse(l))})</span>
               </label>
             `
               )
@@ -4030,7 +4159,7 @@
           </div>
           <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
             <button type="button" class="admin-btn admin-btn-secondary" id="ulCancelBtn">Cancel</button>
-            <button type="button" class="admin-btn admin-btn-primary" id="ulSaveBtn">Save Unlocked Lessons</button>
+            <button type="button" class="admin-btn admin-btn-primary" id="ulSaveBtn">Save Access</button>
           </div>
         `);
 
@@ -4038,17 +4167,21 @@
         document.getElementById('ulCancelBtn').onclick = closeModal;
         document.getElementById('ulSaveBtn').onclick = async () => {
           const checkedIds = Array.from(document.querySelectorAll('input[name="ulLesson"]:checked')).map((c) => c.value);
+          const checkedCourses = Array.from(document.querySelectorAll('input[name="ulCourse"]:checked')).map((c) => c.value);
+          const hasAny = checkedIds.length > 0 || checkedCourses.length > 0;
+          const nextPlan = checkedCourses.length ? 'course' : checkedIds.length ? 'per_lesson' : 'none';
           try {
             await window.LinguaAuth.updateUserMembershipAdmin(uid, {
-              membershipStatus: user.membershipStatus || (checkedIds.length ? 'active' : 'free'),
-              membershipPlan: user.membershipPlan || (checkedIds.length ? 'per_lesson' : 'none'),
+              membershipStatus: user.membershipStatus && user.membershipStatus !== 'free' ? user.membershipStatus : hasAny ? 'active' : 'free',
+              membershipPlan: user.membershipPlan && user.membershipPlan !== 'none' ? user.membershipPlan : nextPlan,
               membershipExpiresAt: user.membershipExpiresAt || '',
-              subscribedLessonIds: checkedIds
+              subscribedLessonIds: checkedIds,
+              subscribedCourses: checkedCourses
             });
             closeModal();
-            toast(`Saved ${checkedIds.length} unlocked lesson(s).`);
+            toast(`Saved ${checkedCourses.length} course(s) and ${checkedIds.length} lesson(s).`);
           } catch (err) {
-            toast(err instanceof Error ? err.message : 'Failed to save unlocked lessons.', 'error');
+            toast(err instanceof Error ? err.message : 'Failed to save access.', 'error');
           }
         };
       };

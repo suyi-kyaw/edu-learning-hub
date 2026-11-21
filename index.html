@@ -81,11 +81,11 @@
           </p>
 
           <div class="hero-buttons">
-            <a href="#stories-reels" class="btn btn-primary" id="homeHeroPrimaryCta">
-              Explore Stories &amp; Reels
+            <a href="lessons.html" class="btn btn-primary" id="homeHeroPrimaryCta">
+              Explore Lessons
             </a>
-            <a href="#lessons" class="btn btn-secondary" id="homeHeroSecondaryCta">
-              Learning Hub
+            <a href="#stories" class="btn btn-secondary" id="homeHeroSecondaryCta">
+              Explore Stories &amp; Reels
             </a>
           </div>
 
@@ -108,19 +108,70 @@
 
 
     <!-- =========================
-         SECTION 2: STORIES & REELS
+         SECTION 2: CHINESE STORIES
     ========================== -->
-    <section class="section stories-reels-section" id="stories-reels">
+    <section class="section stories-home-section" id="stories">
       <div class="container">
         <div class="section-heading">
           <span class="section-label" id="homeStoriesLabel">
-            Featured Stories &amp; Reels
+            Interactive Reading
           </span>
           <h2 id="homeStoriesTitle">
-            Stories &amp; Reels
+            Chinese Stories
           </h2>
           <p id="homeStoriesSubtitle">
-            Watch bite-sized vertical video reels and engaging cultural narratives crafted for modern Mandarin learners.
+            Read illustrated Mandarin stories with pinyin, native audio, vocabulary, and comprehension exercises.
+          </p>
+        </div>
+
+        <div class="featured-stories-strip" id="homeFeaturedStoriesGrid">
+          <a href="story.html?id=lesson-01" class="home-featured-story-card">
+            <div class="home-featured-story-thumb">
+              <img src="assets/images/story-poster.jpg" alt="Xiaoming's Day" loading="lazy" onerror="this.onerror=null;this.src='assets/images/story-01.jpg';">
+            </div>
+            <div class="home-featured-story-body">
+              <span class="home-featured-story-kicker">Featured Story · Beginner</span>
+              <h3>Xiaoming's Day <span class="zh-sub">小明的一天</span></h3>
+              <div class="home-featured-story-pinyin">Xiǎomíng de yì tiān</div>
+              <p>Follow Xiaoming's morning routine with illustrated scenes, vocabulary, and audio.</p>
+            </div>
+          </a>
+          <a href="story.html?id=lesson-02" class="home-featured-story-card">
+            <div class="home-featured-story-thumb">
+              <img src="assets/images/story2-poster.jpg" alt="Xiaoming Buys Fruit" loading="lazy" onerror="this.onerror=null;this.src='assets/images/story-02.jpg';">
+            </div>
+            <div class="home-featured-story-body">
+              <span class="home-featured-story-kicker">Featured Story · Beginner</span>
+              <h3>Xiaoming Buys Fruit <span class="zh-sub">小明买水果</span></h3>
+              <div class="home-featured-story-pinyin">Xiǎomíng mǎi shuǐguǒ</div>
+              <p>Visit the lively fruit market and learn practical shopping phrases in Mandarin.</p>
+            </div>
+          </a>
+        </div>
+
+        <div class="section-action-center">
+          <a href="story.html" class="btn btn-primary btn-lg">
+            View More Stories →
+          </a>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- =========================
+         SECTION 3: SHORT REELS
+    ========================== -->
+    <section class="section stories-reels-section" id="reels">
+      <div class="container">
+        <div class="section-heading">
+          <span class="section-label" id="homeReelsLabel">
+            Short Video Immersion
+          </span>
+          <h2 id="homeReelsTitle">
+            Short Mandarin Reels
+          </h2>
+          <p id="homeReelsSubtitle">
+            Watch bite-sized vertical video reels with quad-language subtitles in Hanzi, Pinyin, English, and Myanmar.
           </p>
         </div>
 
@@ -195,11 +246,9 @@
           </article>
         </div>
 
-        <div class="featured-stories-strip" id="homeFeaturedStoriesGrid" hidden></div>
-
         <div class="section-action-center">
-          <a href="story.html" class="btn btn-primary btn-lg">
-            View More Reels &amp; Stories
+          <a href="reels.html" class="btn btn-primary btn-lg">
+            View More Reels →
           </a>
         </div>
       </div>
@@ -207,7 +256,7 @@
 
 
     <!-- =========================
-         SECTION 3: GAMES
+         SECTION 4: GAMES
     ========================== -->
     <section class="section games-section" id="games">
       <div class="container">
@@ -249,80 +298,50 @@
 
 
     <!-- =========================
-         SECTION 4: LESSONS
+         SECTION 5: LESSONS (UNIFIED HSK PATHWAY)
     ========================== -->
     <section class="section lessons-portal-section" id="lessons">
       <div class="container">
         <div class="section-heading">
           <span class="section-label" id="homeLessonsLabel">
-            Curriculum Pathways
+            Structured Curriculum
           </span>
           <h2 id="homeLessonsTitle">
-            Choose Your Learning Pathway
+            Mandarin Lessons
           </h2>
           <p id="homeLessonsSubtitle">
-            Select your track to access structured lessons, native voice recordings, dialogues, and practice exercises.
+            Master Chinese step by step across HSK 1, HSK 2, and structured courses with video lessons, exercises, and character writing.
           </p>
         </div>
 
-        <div class="lesson-categories-grid">
-          <!-- 1. Adult Lessons Card -->
-          <article class="category-card category-card-adult">
-            <div class="category-card-badge">
-              <span class="badge-icon">💼</span>
-              <span id="homeAdultBadge">Adults • Comprehensive</span>
-            </div>
-            <div class="category-card-visual" aria-hidden="true">
-              <span class="category-icon-bg">大</span>
-              <span class="category-art-emoji">🏙️</span>
-            </div>
-            <div class="category-card-content">
-              <h3 id="homeAdultTitle">Mandarin for Adults &amp; Professionals</h3>
-              <span class="category-subtitle" id="homeAdultSubtitle">实用成人汉语 • Practical Proficiency</span>
-              <p id="homeAdultDesc">
-                Master practical conversation for career, travel, dining, and HSK test preparation with real-world scenarios and cultural nuance.
-              </p>
-              <ul class="category-features" id="homeAdultBullets">
-                <li><span>✓</span> Everyday Living &amp; Socializing</li>
-                <li><span>✓</span> Business Meetings &amp; Travel Mandarin</li>
-                <li><span>✓</span> Sentence Patterns &amp; HSK Vocabulary</li>
-              </ul>
-              <div class="category-card-footer">
-                <a href="lessons-adult.html" class="btn btn-primary category-btn" id="homeAdultCta">
-                  Start Learning (Adults) →
-                </a>
+        <div class="lesson-single-portal-wrap">
+          <a href="lessons.html" class="category-card category-card-unified" id="homeLessonsCard">
+            <div class="category-card-unified-left">
+              <div class="category-card-badge">
+                <span class="badge-icon">📚</span>
+                <span id="homeLessonsBadge">HSK 1 &amp; HSK 2 • Structured Courses</span>
               </div>
-            </div>
-          </article>
-
-          <!-- 2. Kids Lessons Card -->
-          <article class="category-card category-card-kids">
-            <div class="category-card-badge badge-kids">
-              <span class="badge-icon">🎨</span>
-              <span id="homeKidsBadge">Kids • Playful Immersion</span>
-            </div>
-            <div class="category-card-visual visual-kids" aria-hidden="true">
-              <span class="category-icon-bg">小</span>
-              <span class="category-art-emoji">🐼</span>
-            </div>
-            <div class="category-card-content">
-              <h3 id="homeKidsTitle">Chinese for Kids &amp; Young Learners</h3>
-              <span class="category-subtitle" id="homeKidsSubtitle">少儿趣味中文 • Joyful Adventures</span>
-              <p id="homeKidsDesc">
-                Discover the joy of Mandarin through colorful stories, playful pinyin songs, animal adventures, and interactive challenges that inspire confidence.
+              <h3 id="homeLessonsCardTitle">Interactive HSK Mandarin Courses</h3>
+              <span class="category-subtitle" id="homeLessonsCardSubtitle">HSK 标准课程 • Step-by-Step Fluency</span>
+              <p id="homeLessonsCardDesc">
+                Explore guided video lessons, HSK listening and matching exercises, pinyin fill-in-the-blank writing, and stroke-order practice.
               </p>
-              <ul class="category-features features-kids" id="homeKidsBullets">
-                <li><span>★</span> Animals, Colors &amp; Family Adventures</li>
-                <li><span>★</span> Cheerful Pinyin Songs &amp; Animations</li>
-                <li><span>★</span> Reward Badges &amp; Interactive Quizzes</li>
+              <ul class="category-features" id="homeLessonsBullets">
+                <li><span>✓</span> HSK 1 &amp; HSK 2 Structured Curriculum</li>
+                <li><span>✓</span> Listening, Image Choice &amp; Pinyin Exercises</li>
+                <li><span>✓</span> Stroke-Order Writing &amp; Pronunciation Check</li>
               </ul>
-              <div class="category-card-footer">
-                <a href="lessons-kids.html" class="btn btn-primary btn-kids category-btn" id="homeKidsCta">
-                  Start Learning (Kids) →
-                </a>
-              </div>
             </div>
-          </article>
+            <div class="category-card-unified-right">
+              <div class="unified-portal-emblem" aria-hidden="true">
+                <span class="unified-hanzi">汉语</span>
+                <span class="unified-levels">HSK 1 · HSK 2</span>
+              </div>
+              <span class="btn btn-primary btn-lg category-btn" id="homeLessonsCta">
+                Go to Lessons →
+              </span>
+            </div>
+          </a>
         </div>
       </div>
     </section>

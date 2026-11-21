@@ -1984,7 +1984,7 @@ function renderLearningHub() {
 
         <div class="lesson-card-actions">
           <a
-            href="${lessonId.toLowerCase().includes('kids') || (row.audience && row.audience.toLowerCase() === 'kids') ? 'lessons-kids.html' : 'lessons-adult.html'}?lesson=${encodeURIComponent(lessonId)}"
+            href="lessons.html?lesson=${encodeURIComponent(lessonId)}"
             class="btn btn-primary lesson-button"
           >
             Start Lesson →
@@ -2013,11 +2013,10 @@ function renderLearningHub() {
       });
     }
 
-    // Card click redirects to respective 3-section lesson page
+    // Card click redirects to unified lesson workspace
     card.addEventListener("click", (e) => {
       if (!e.target.closest("button")) {
-        const isK = lessonId.toLowerCase().includes('kids') || (row.audience && row.audience.toLowerCase() === 'kids');
-        window.location.href = `${isK ? 'lessons-kids.html' : 'lessons-adult.html'}?lesson=${encodeURIComponent(lessonId)}`;
+        window.location.href = `lessons.html?lesson=${encodeURIComponent(lessonId)}`;
       }
     });
 
@@ -2788,6 +2787,10 @@ function applyHomepageSiteConfig(cfg) {
   setText("homeStoriesTitle", cfg.storiesTitle);
   setText("homeStoriesSubtitle", cfg.storiesSubtitle);
 
+  setText("homeReelsLabel", cfg.reelsLabel);
+  setText("homeReelsTitle", cfg.reelsTitle);
+  setText("homeReelsSubtitle", cfg.reelsSubtitle);
+
   setText("homeGamesLabel", cfg.gamesLabel);
   setText("homeGamesTitle", cfg.gamesTitle);
   setText("homeGamesSubtitle", cfg.gamesSubtitle);
@@ -2796,29 +2799,16 @@ function applyHomepageSiteConfig(cfg) {
   setText("homeLessonsTitle", cfg.lessonsTitle);
   setText("homeLessonsSubtitle", cfg.lessonsSubtitle);
 
-  setText("homeAdultBadge", cfg.adultBadge);
-  setText("homeAdultTitle", cfg.adultTitle);
-  setText("homeAdultSubtitle", cfg.adultSubtitle);
-  setText("homeAdultDesc", cfg.adultDesc);
-  setText("homeAdultCta", cfg.adultCta);
+  setText("homeLessonsBadge", cfg.lessonsBadge);
+  setText("homeLessonsCardTitle", cfg.lessonsCardTitle);
+  setText("homeLessonsCardSubtitle", cfg.lessonsCardSubtitle);
+  setText("homeLessonsCardDesc", cfg.lessonsCardDesc);
+  setText("homeLessonsCta", cfg.lessonsCta);
 
-  const adultBulletsEl = document.getElementById("homeAdultBullets");
-  if (adultBulletsEl && Array.isArray(cfg.adultBullets) && cfg.adultBullets.length) {
-    adultBulletsEl.innerHTML = cfg.adultBullets
+  const lessonsBulletsEl = document.getElementById("homeLessonsBullets");
+  if (lessonsBulletsEl && Array.isArray(cfg.lessonsBullets) && cfg.lessonsBullets.length) {
+    lessonsBulletsEl.innerHTML = cfg.lessonsBullets
       .map((item) => `<li><span>✓</span> ${escapeHTML(item)}</li>`)
-      .join("");
-  }
-
-  setText("homeKidsBadge", cfg.kidsBadge);
-  setText("homeKidsTitle", cfg.kidsTitle);
-  setText("homeKidsSubtitle", cfg.kidsSubtitle);
-  setText("homeKidsDesc", cfg.kidsDesc);
-  setText("homeKidsCta", cfg.kidsCta);
-
-  const kidsBulletsEl = document.getElementById("homeKidsBullets");
-  if (kidsBulletsEl && Array.isArray(cfg.kidsBullets) && cfg.kidsBullets.length) {
-    kidsBulletsEl.innerHTML = cfg.kidsBullets
-      .map((item) => `<li><span>★</span> ${escapeHTML(item)}</li>`)
       .join("");
   }
 
@@ -2887,29 +2877,24 @@ function renderHomepageFeaturedReels(cfg) {
 
 function renderHomepageFeaturedStories(cfg) {
   const strip = document.getElementById("homeFeaturedStoriesGrid");
-  if (!strip) return;
+  if (!strip || !cachedHomeStories.length) return;
 
   const featuredIds = Array.isArray(cfg?.featuredStoryIds) ? cfg.featuredStoryIds : [];
-  if (!featuredIds.length || !cachedHomeStories.length) {
-    strip.hidden = true;
-    strip.innerHTML = "";
-    return;
+  let picked = [];
+  if (featuredIds.length > 0) {
+    featuredIds.forEach((id) => {
+      const match = cachedHomeStories.find((s) => String(s.id || "").trim() === String(id).trim());
+      if (match) picked.push(match);
+    });
   }
-
-  const picked = [];
-  featuredIds.forEach((id) => {
-    const match = cachedHomeStories.find((s) => String(s.id || "").trim() === String(id).trim());
-    if (match) picked.push(match);
-  });
-
   if (!picked.length) {
-    strip.hidden = true;
-    strip.innerHTML = "";
-    return;
+    picked = cachedHomeStories.slice(0, 3);
   }
+  if (!picked.length) return;
 
   strip.hidden = false;
   strip.innerHTML = picked
+    .slice(0, 6)
     .map((story) => {
       const sid = String(story.id || "lesson-01");
       const title = String(story.title || sid);
@@ -2919,7 +2904,7 @@ function renderHomepageFeaturedStories(cfg) {
       const poster = backendAssetUrl(String(story.poster || "assets/images/story-poster.jpg"));
       const level = String(story.level || "Beginner");
       return `
-        <a href="story.html?lesson=${encodeURIComponent(sid)}" class="home-featured-story-card">
+        <a href="story.html?id=${encodeURIComponent(sid)}" class="home-featured-story-card">
           <div class="home-featured-story-thumb">
             <img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}" loading="lazy" onerror="this.onerror=null;this.src='assets/images/story-poster.jpg';" />
           </div>

@@ -20,11 +20,10 @@
       <div class="footer-links">
         <h4 class="footer-title">Navigation</h4>
         <a href="index.html#home">Home</a>
-        <a href="story.html">Stories &amp; Reels</a>
+        <a href="story.html">Stories</a>
+        <a href="reels.html">Reels</a>
         <a href="games.html">Games</a>
         <a href="lessons.html">Lessons</a>
-        <a href="lessons-adult.html">Adult Lessons</a>
-        <a href="lessons-kids.html">Kids Lessons</a>
       </div>
 
       <div class="footer-contact">

@@ -18,10 +18,9 @@
   let allVocabulary = [];
   let allPronunciation = [];
 
-  let currentAudience = 'Adult'; // 'Adult' or 'Kids'
-  let activeCategoryKey = 'basics'; // 'basics' or 'travel' or 'business' / 'pinyin' etc.
+  let activeCourseName = 'HSK 1'; // 'HSK 1', 'HSK 2', or custom course
   let activeLesson = null;
-  let activeWorkspaceTab = 'video'; // 'video', 'exercises', 'writing'
+  let activeWorkspaceTab = 'video'; // 'video', 'exercises', 'writing', 'pronunciation'
   let activeWritingCharIndex = 0;
   let exerciseAnswersState = {}; // { questionIndex: { selectedOption, isCorrect } }
   const autoReviewedLessons = new Set();
@@ -64,247 +63,124 @@
   let lastY = 0;
   let showGhostChar = true;
 
-  // --- Embedded Offline Fallbacks ---
+  // --- Embedded Offline Fallbacks (1 HSK 1 starter + 1 HSK 2 starter) ---
   const FALLBACK_LESSONS = [
-    // ADULT
     {
-      id: "adult-basics-01",
-      audience: "Adult",
-      category: "Beginner & Everyday Basics",
-      categoryKey: "basics",
-      categoryNum: "Category 1",
-      title: "Morning Greetings & Politeness",
+      id: "hsk1-01",
+      course: "HSK 1",
+      category: "HSK 1",
+      categoryKey: "hsk1",
+      categoryNum: "Course 1",
+      title: "Morning Greetings & Daily Politeness",
       chineseTitle: "早上好！日常礼貌问候",
       pinyin: "Zǎoshang hǎo! Rìcháng lǐmào wènhòu",
-      meaning: "Good morning! Daily pleasantries and formal etiquette",
-      level: "Beginner",
-      description: "Master daily greetings, formal polite expressions (您好, 请问), and the essential third-tone sandhi rhythm of Chinese speech.",
+      meaning: "Good morning! Everyday greetings and polite expressions",
+      level: "HSK 1",
+      description: "Master essential HSK 1 greetings, polite introductions (您好, 谢谢), and natural Mandarin tone flow.",
       videoUrl: "assets/video/lesson-01.mp4",
       posterUrl: "assets/images/story-01.jpg",
-      keywords: "Greetings, Hello, Morning, Politeness"
+      keywords: "HSK 1, Greetings, Hello, Morning, Politeness",
+      accessType: "free",
+      price: 0
     },
     {
-      id: "adult-basics-02",
-      audience: "Adult",
-      category: "Beginner & Everyday Basics",
-      categoryKey: "basics",
-      categoryNum: "Category 1",
-      title: "Self-Introduction & Essential Numbers",
-      chineseTitle: "自我介绍与基础数字应用",
-      pinyin: "Zìwǒ jièshào yǔ jīchǔ shùzì yìngyòng",
-      meaning: "Introducing yourself, nationalities, professions, and counting 1-100",
-      level: "Beginner",
-      description: "Learn to state your name, origin, job, exchange phone numbers, and master counting numbers 1-100 for everyday transactions.",
+      id: "hsk2-01",
+      course: "HSK 2",
+      category: "HSK 2",
+      categoryKey: "hsk2",
+      categoryNum: "Course 2",
+      title: "Ordering Food, Transit & Everyday Plans",
+      chineseTitle: "餐厅点餐与日常出行交流",
+      pinyin: "Cāntīng diǎncài yǔ rìcháng chūxíng jiāoliú",
+      meaning: "Ordering meals, taking city transport, and coordinating daily plans",
+      level: "HSK 2",
+      description: "Build HSK 2 fluency across restaurants, taxis and subways, workplace scheduling, and everyday dialogues.",
       videoUrl: "assets/video/lesson-02.mp4",
       posterUrl: "assets/images/story-02.jpg",
-      keywords: "Introduction, Name, Numbers, Country"
-    },
-    {
-      id: "adult-travel-01",
-      audience: "Adult",
-      category: "Travel & Daily Life",
-      categoryKey: "travel",
-      categoryNum: "Category 2",
-      title: "Ordering Food & Dining Culture",
-      chineseTitle: "餐厅点餐与地道饮食文化",
-      pinyin: "Cāntīng diǎncài yǔ dìdào yǐnshí wénhuà",
-      meaning: "Ordering meals, dietary preferences, and table etiquette",
-      level: "Elementary",
-      description: "Navigate authentic Chinese menus, specify spice levels (不吃辣, 微辣), request drinks, and settle bills with WeChat/Alipay.",
-      videoUrl: "assets/video/lesson-01.mp4",
-      posterUrl: "assets/images/story-03.jpg",
-      keywords: "Restaurant, Menu, Spicy, Bill"
-    },
-    {
-      id: "adult-travel-02",
-      audience: "Adult",
-      category: "Travel & Daily Life",
-      categoryKey: "travel",
-      categoryNum: "Category 2",
-      title: "Asking Directions & Urban Transit",
-      chineseTitle: "问路导航与城市公共交通",
-      pinyin: "Wènlù dǎoháng yǔ chéngshì gōnggòng jiāotōng",
-      meaning: "Asking for directions, taking high-speed trains, taxis, and metro",
-      level: "Elementary",
-      description: "Master metro transfer signs, taxi instructions (往右拐, 直走), asking 'Where is...', and landmark navigation in major Chinese cities.",
-      videoUrl: "assets/video/lesson-02.mp4",
-      posterUrl: "assets/images/story-04.jpg",
-      keywords: "Directions, Metro, Taxi, Station"
-    },
-    {
-      id: "adult-business-01",
-      audience: "Adult",
-      category: "Business & Workplace",
-      categoryKey: "business",
-      categoryNum: "Category 3",
-      title: "Professional Etiquette & Introductions",
-      chineseTitle: "商务职场礼仪与初次洽谈",
-      pinyin: "Shāngwù zhíchǎng lǐyí yǔ chūcì qiàtán",
-      meaning: "Business card etiquette, formal greetings, and company roles",
-      level: "Intermediate",
-      description: "Exchange business cards with both hands, introduce corporate ranks (总经理, 项目经理), and express enthusiasm for mutual collaboration.",
-      videoUrl: "assets/video/lesson-01.mp4",
-      posterUrl: "assets/images/story-05.jpg",
-      keywords: "Business, Etiquette, Business Card, Cooperation"
-    },
-    {
-      id: "adult-business-02",
-      audience: "Adult",
-      category: "Business & Workplace",
-      categoryKey: "business",
-      categoryNum: "Category 3",
-      title: "Work Emails & Scheduling Meetings",
-      chineseTitle: "职场商务邮件与会议安排",
-      pinyin: "Zhíchǎng shāngwù yóujiàn yǔ huìyì ānpái",
-      meaning: "Formal email correspondence and conference scheduling",
-      level: "Intermediate",
-      description: "Draft professional emails, propose meeting agendas, confirm schedules (确定时间), and follow up on business project deliverables.",
-      videoUrl: "assets/video/lesson-02.mp4",
-      posterUrl: "assets/images/story2-01.jpg",
-      keywords: "Email, Meeting, Schedule, Confirm"
-    },
-
-    // KIDS
-    {
-      id: "kids-pinyin-01",
-      audience: "Kids",
-      category: "Fun with Pinyin & Tones",
-      categoryKey: "pinyin",
-      categoryNum: "Category 1",
-      title: "Pinyin Melody & Four Tones Island",
-      chineseTitle: "拼音小乐园与四声调大冒险",
-      pinyin: "Pīnyīn xiǎo lèyuán yǔ sì shēngdiào dà màoxiǎn",
-      meaning: "Singing vowel songs and mastering the four tones with animal sounds",
-      level: "Kids Starter",
-      description: "Ride the tone rollercoaster: Flat 1st tone (mā), Climbing 2nd tone (má), Bouncing 3rd tone (mǎ), and Falling 4th tone (mà)!",
-      videoUrl: "assets/video/lesson-01.mp4",
-      posterUrl: "assets/images/story-01.jpg",
-      keywords: "Pinyin, Tones, Vowels, Music"
-    },
-    {
-      id: "kids-pinyin-02",
-      audience: "Kids",
-      category: "Fun with Pinyin & Tones",
-      categoryKey: "pinyin",
-      categoryNum: "Category 1",
-      title: "Consonant Safari: B, P, M, F Fun",
-      chineseTitle: "声母探险队：波坡摸佛动物探秘",
-      pinyin: "Shēngmǔ tànxiǎnduì: Bō Pō Mō Fó dòngwù tànmì",
-      meaning: "Catching initial sound butterflies with joyful animal friends",
-      level: "Kids Starter",
-      description: "Discover initial consonant sounds with Daddy Panda (bàba), Little Kitten (māomāo), and playful frog jumps!",
-      videoUrl: "assets/video/lesson-02.mp4",
-      posterUrl: "assets/images/story-02.jpg",
-      keywords: "Consonants, Animals, Panda, Sounds"
-    },
-    {
-      id: "kids-colors-01",
-      audience: "Kids",
-      category: "Colors, Animals & Family",
-      categoryKey: "colors",
-      categoryNum: "Category 2",
-      title: "Rainbow Colors & Animal Friends",
-      chineseTitle: "七彩彩虹与动物乐园",
-      pinyin: "Qīcǎi cǎihóng yǔ dòngwù lèyuán",
-      meaning: "Vibrant rainbow colors and cute animal vocabulary",
-      level: "Kids Elementary",
-      description: "Learn red (红色), yellow (黄色), blue (蓝色), and green (绿色) while petting friendly puppies, kittens, and singing birds!",
-      videoUrl: "assets/video/lesson-01.mp4",
-      posterUrl: "assets/images/story-03.jpg",
-      keywords: "Colors, Rainbow, Animals, Puppy"
-    },
-    {
-      id: "kids-family-01",
-      audience: "Kids",
-      category: "Colors, Animals & Family",
-      categoryKey: "colors",
-      categoryNum: "Category 2",
-      title: "My Loving Family Tree",
-      chineseTitle: "我亲爱的温馨一家人",
-      pinyin: "Wǒ qīn'ài de wēnxīn yìjiārén",
-      meaning: "Meet grandpa, grandma, mom, dad, and siblings",
-      level: "Kids Elementary",
-      description: "Introduce your family with hugs and love: 爷爷 (Grandpa), 奶奶 (Grandma), 爸爸, 妈妈, 哥哥, and 妹妹!",
-      videoUrl: "assets/video/lesson-02.mp4",
-      posterUrl: "assets/images/story-04.jpg",
-      keywords: "Family, Love, Grandpa, Grandma"
-    },
-    {
-      id: "kids-rhymes-01",
-      audience: "Kids",
-      category: "Nursery Rhymes & Short Stories",
-      categoryKey: "rhymes",
-      categoryNum: "Category 3",
-      title: "Two Tigers Rhyme & Sing-Along",
-      chineseTitle: "两只老虎经典儿歌唱跳",
-      pinyin: "Liǎng zhī lǎohǔ jīngdiǎn érgē chàngtiào",
-      meaning: "The beloved Chinese nursery rhyme and animal movement game",
-      level: "Kids Fun",
-      description: "Sing and dance to '两只老虎，两只老虎，跑得快！' while learning body parts (ears, eyes, tail) and rhythmic beats.",
-      videoUrl: "assets/video/lesson-01.mp4",
-      posterUrl: "assets/images/story-05.jpg",
-      keywords: "Nursery Rhyme, Song, Tiger, Fast"
-    },
-    {
-      id: "kids-rhymes-02",
-      audience: "Kids",
-      category: "Nursery Rhymes & Short Stories",
-      categoryKey: "rhymes",
-      categoryNum: "Category 3",
-      title: "Little White Rabbit & Big Radish",
-      chineseTitle: "小白兔拔萝卜经典童话故事",
-      pinyin: "Xiǎo bái tù bá luóbo jīngdiǎn tónghuà gùshì",
-      meaning: "Teamwork fairytale: Pulling up the giant sweet radish",
-      level: "Kids Fun",
-      description: "Help Little White Rabbit and all forest friends work together to pull up the enormous sweet carrot!",
-      videoUrl: "assets/video/lesson-02.mp4",
-      posterUrl: "assets/images/story2-02.jpg",
-      keywords: "Story, Rabbit, Teamwork, Radish"
+      keywords: "HSK 2, Dining, Transit, Schedule, Conversation",
+      accessType: "paid",
+      price: 9
     }
   ];
 
   const FALLBACK_EXERCISES = [
     {
-      lessonId: "adult-basics-01",
+      lessonId: "hsk1-01",
       order: 1,
       type: "multiple-choice",
-      question: "How do you politely greet a client, elder, or respected colleague in Chinese?",
+      question: "How do you politely greet a teacher, elder, or colleague in Chinese?",
       optionA: "你好 (Nǐ hǎo)",
       optionB: "您好 (Nín hǎo)",
       optionC: "早上 (Zǎoshang)",
       optionD: "再见 (Zàijiàn)",
       answer: "您好 (Nín hǎo)",
-      explanation: "您 (nín) is the formal, polite second-person pronoun in Mandarin, ideal for business and elders."
+      explanation: "您 (nín) is the polite, respectful form of 'you' in Mandarin."
     },
     {
-      lessonId: "adult-basics-01",
+      lessonId: "hsk1-01",
       order: 2,
-      type: "multiple-choice",
-      question: "What is the standard response when someone says '谢谢' (Xièxie - Thank you)?",
-      optionA: "不客气 (Bú kèqì)",
-      optionB: "对不起 (Duìbuqǐ)",
-      optionC: "早上好 (Zǎoshang hǎo)",
-      optionD: "请问 (Qǐngwèn)",
-      answer: "不客气 (Bú kèqì)",
-      explanation: "不客气 (bú kèqì) translates directly to 'Don't be polite / You're welcome'."
+      type: "image-choice",
+      audioUrl: "assets/audio/zaoshang.mp3",
+      question: "Listen & choose the picture that matches '早上好！' (Zǎoshang hǎo!).",
+      optionA: "早上好 (Morning sunrise)",
+      optionB: "谢谢 (Thank you gift)",
+      optionC: "再见 (Waving goodbye)",
+      optionAImage: "assets/images/exercises/sunrise-greeting.svg",
+      optionBImage: "assets/images/exercises/thank-you-gift.svg",
+      optionCImage: "assets/images/exercises/wave-goodbye.svg",
+      answer: "A",
+      explanation: "早上好 (Zǎoshang hǎo) is used to say Good Morning at sunrise (A)."
     },
     {
-      lessonId: "adult-basics-01",
+      lessonId: "hsk1-01",
       order: 3,
+      type: "shared-image-match",
+      groupId: "hsk1-greetings-pic",
+      groupTitle: "Part II: Listen or read the dialogue and match Picture A, B, C, or D.",
+      audioUrl: "assets/audio/xiexie.mp3",
+      pinyin: "Nán: Xièxie nǐ de lǐwù!  Nǚ: Bú kèqi!",
+      question: "男：谢谢你的礼物！ 女：不客气！",
+      optionA: "早上好 (Morning)",
+      optionB: "谢谢 (Thank you)",
+      optionC: "再见 (Goodbye)",
+      optionD: "打电话 (Phone call)",
+      optionAImage: "assets/images/exercises/sunrise-greeting.svg",
+      optionBImage: "assets/images/exercises/thank-you-gift.svg",
+      optionCImage: "assets/images/exercises/wave-goodbye.svg",
+      optionDImage: "assets/images/exercises/phone-call.svg",
+      answer: "B",
+      explanation: "Giving a gift and saying 谢谢 (Thank you) matches picture B."
+    },
+    {
+      lessonId: "hsk1-01",
+      order: 4,
+      type: "shared-text-match",
+      groupId: "hsk1-bank",
+      groupTitle: "Word Bank: Choose A–E to complete each HSK 1 sentence.",
+      pinyin: "Lǎoshī, (   ) zǎoshang hǎo!",
+      question: "老师，(   ) 早上好！",
+      optionA: "您 (nín)",
+      optionB: "早上好 (zǎoshang hǎo)",
+      optionC: "谢谢 (xièxie)",
+      optionD: "不客气 (bú kèqi)",
+      optionE: "再见 (zàijiàn)",
+      answer: "A",
+      explanation: "Use the polite pronoun 您 (nín) when addressing your teacher."
+    },
+    {
+      lessonId: "hsk1-01",
+      order: 5,
       type: "fill-blank",
-      question: "Fill in the blank for 'Good morning': 早上___！(hǎo)",
-      optionA: "好",
-      optionB: "见",
-      optionC: "吗",
-      optionD: "呢",
+      pinyin: "hǎo",
+      question: "早上 (   )！今天天气真不错。",
       answer: "好",
-      explanation: "早上好 (Zǎoshang hǎo) is the standard morning greeting in Chinese."
+      explanation: "早上好 (Zǎoshang hǎo) means 'Good morning'."
     }
   ];
 
   const FALLBACK_WRITING = [
     {
-      lessonId: "adult-basics-01",
+      lessonId: "hsk1-01",
       order: 1,
       character: "早",
       pinyin: "zǎo",
@@ -314,7 +190,7 @@
       strokeOrderSteps: "1. Vertical (丨), 2. Horizontal-turning (𠃍), 3. Horizontal (一), 4. Horizontal close (一), 5. Horizontal baseline (一), 6. Center vertical (丨)"
     },
     {
-      lessonId: "adult-basics-01",
+      lessonId: "hsk1-01",
       order: 2,
       character: "好",
       pinyin: "hǎo",
@@ -324,7 +200,7 @@
       strokeOrderSteps: "1. Turning stroke (ㄑ), 2. Slanted curve (ノ), 3. Horizontal crossing (一), 4. Horizontal hook (乛), 5. Vertical curve hook (亅), 6. Horizontal (一)"
     },
     {
-      lessonId: "adult-basics-01",
+      lessonId: "hsk1-01",
       order: 3,
       character: "您",
       pinyin: "nín",
@@ -332,21 +208,41 @@
       strokeCount: 11,
       radical: "心 (Heart)",
       strokeOrderSteps: "1. Slant (ノ), 2. Vertical (丨), 3. Slant (ノ), 4. Horizontal-hook (𠃍), 5. Vertical (丨), 6. Left dot (丶), 7. Right dot (丶), 8. Heart dot (丶), 9. Heart curve (㇃), 10. Inner dot (丶), 11. Outer dot (丶)"
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 1,
+      character: "吃",
+      pinyin: "chī",
+      meaning: "to eat",
+      strokeCount: 6,
+      radical: "口 (Mouth)",
+      strokeOrderSteps: "1. Vertical (丨), 2. Horizontal-turn (𠃍), 3. Horizontal (一), 4. Top slant (丿), 5. Horizontal (一), 6. Curved hook (乙)"
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 2,
+      character: "茶",
+      pinyin: "chá",
+      meaning: "tea",
+      strokeCount: 9,
+      radical: "艹 (Grass)",
+      strokeOrderSteps: "1. Horizontal (一), 2. Left vertical (丨), 3. Right vertical (丨), 4. Slant (丿), 5. Right press (乀), 6. Horizontal (一), 7. Vertical hook (亅), 8. Left slant (丿), 9. Right dot (丶)"
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 3,
+      character: "左",
+      pinyin: "zuǒ",
+      meaning: "left",
+      strokeCount: 5,
+      radical: "工 (Work)",
+      strokeOrderSteps: "1. Horizontal (一), 2. Left slant (丿), 3. Horizontal (一), 4. Vertical (丨), 5. Horizontal (一)"
     }
   ];
 
-  // --- Category Definitions (Without 'all' filter option) ---
-  const ADULT_CATEGORIES = [
-    { key: "basics", name: "Beginner & Everyday Basics", icon: "⭐", num: "Category 1", desc: "Greetings, Self-Introduction, Numbers, Pinyin" },
-    { key: "travel", name: "Travel & Daily Life", icon: "✈️", num: "Category 2", desc: "Dining, Directions, Shopping, HSK 1–2 Vocab" },
-    { key: "business", name: "Business & Workplace", icon: "💼", num: "Category 3", desc: "Workplace Etiquette, Emails, Meetings, Networking" }
-  ];
-
-  const KIDS_CATEGORIES = [
-    { key: "pinyin", name: "Fun with Pinyin & Tones", icon: "🎵", num: "Category 1", desc: "Pinyin Songs, Four Tones Audio Cards, Easy Sounds" },
-    { key: "colors", name: "Colors, Animals & Family", icon: "🌈", num: "Category 2", desc: "Flashcards, Word Matching, Picture Vocab" },
-    { key: "rhymes", name: "Nursery Rhymes & Short Stories", icon: "📖", num: "Category 3", desc: "Animated Songs, Simple Dialogues, Story Time" }
-  ];
+  // --- Guaranteed Core Courses (plus any dynamic Admin courses) ---
+  const BASE_COURSES = ['HSK 1', 'HSK 2'];
 
   // --- Utilities ---
   function escapeHTML(str) {
@@ -374,16 +270,71 @@
     return String(str).replace(/([\u4e00-\u9fa5\u3400-\u4dbf\u2e80-\u2eff\u31c0-\u31ef\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]+)/g, '<span class="chinese-kaiti" style="font-family: \'KaiTi\', \'STKaiti\', \'楷体\', \'Kaiti SC\', \'Ma Shan Zheng\', serif;">$1</span>');
   }
 
+  function normalizeCourseName(val) {
+    if (window.LinguaAuth && typeof window.LinguaAuth.normalizeCourseName === 'function') {
+      return window.LinguaAuth.normalizeCourseName(val);
+    }
+    const raw = String(val || '').trim();
+    if (!raw) return 'HSK 1';
+    const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
+    if (compact === 'hsk1') return 'HSK 1';
+    if (compact === 'hsk2') return 'HSK 2';
+    if (compact === 'hsk3') return 'HSK 3';
+    if (compact === 'hsk4') return 'HSK 4';
+    return raw.slice(0, 80);
+  }
+
+  function courseKeySlug(courseName) {
+    return String(courseName || '').trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '');
+  }
+
+  function getLessonCourse(lesson) {
+    if (!lesson || typeof lesson !== 'object') return 'HSK 1';
+    if (window.LinguaAuth && typeof window.LinguaAuth.getLessonCourseName === 'function') {
+      return window.LinguaAuth.getLessonCourseName(lesson);
+    }
+    const raw = String(lesson.course || lesson.courseName || lesson.category || '').trim();
+    if (raw) return normalizeCourseName(raw);
+    const lid = String(lesson.id || lesson.lessonId || '').toLowerCase();
+    if (lid.includes('hsk2') || lid.includes('lesson-02')) return 'HSK 2';
+    return 'HSK 1';
+  }
+
   function getCategoryKey(lesson) {
-    if (lesson.categoryKey) return lesson.categoryKey;
-    const cat = String(lesson.category || "").toLowerCase();
-    if (cat.includes("basic") || cat.includes("beginner") || cat.includes("category 1")) return "basics";
-    if (cat.includes("travel") || cat.includes("daily") || cat.includes("category 2")) return "travel";
-    if (cat.includes("business") || cat.includes("work") || cat.includes("category 3")) return "business";
-    if (cat.includes("pinyin") || cat.includes("tone")) return "pinyin";
-    if (cat.includes("color") || cat.includes("animal") || cat.includes("family")) return "colors";
-    if (cat.includes("rhyme") || cat.includes("song") || cat.includes("story")) return "rhymes";
-    return currentAudience === 'Kids' ? 'pinyin' : 'basics';
+    return courseKeySlug(getLessonCourse(lesson));
+  }
+
+  function computeCoursesList() {
+    const result = [];
+    const seen = new Set();
+    const pushCourse = (name) => {
+      const norm = normalizeCourseName(name);
+      const slug = courseKeySlug(norm);
+      if (slug && !seen.has(slug)) {
+        seen.add(slug);
+        result.push(norm);
+      }
+    };
+    BASE_COURSES.forEach(pushCourse);
+    (allLessons || []).forEach((l) => pushCourse(getLessonCourse(l)));
+    if (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === 'function') {
+      const cfg = window.LinguaAuth.getSiteConfig();
+      if (cfg && cfg.coursePrices && typeof cfg.coursePrices === 'object') {
+        Object.keys(cfg.coursePrices).forEach(pushCourse);
+      }
+    }
+    return result;
+  }
+
+  function getCoursePricingInfo(courseName) {
+    const norm = normalizeCourseName(courseName);
+    const price = window.LinguaAuth && typeof window.LinguaAuth.getCoursePrice === 'function'
+      ? window.LinguaAuth.getCoursePrice(norm)
+      : (courseKeySlug(norm) === 'hsk2' ? 120 : 100);
+    const unlocked = window.LinguaAuth && typeof window.LinguaAuth.hasCourseAccess === 'function'
+      ? window.LinguaAuth.hasCourseAccess(norm)
+      : false;
+    return { courseName: norm, price, unlocked };
   }
 
   // Speak Chinese speech synthesis
@@ -576,9 +527,8 @@
     const rawAccess = String(lesson?.accessType || lesson?.access || '').trim().toLowerCase();
     if (rawAccess === 'free') return { accessType: 'free', price: 0 };
     if (rawAccess === 'paid') return { accessType: 'paid', price: Number(lesson?.price) || 9 };
-    const cat = String(lesson?.categoryKey || '').toLowerCase();
     const id = String(lesson?.id || '').toLowerCase();
-    if (cat === 'basics' || cat === 'pinyin' || id.includes('basics') || id.includes('pinyin')) {
+    if (id === 'hsk1-01' || id.includes('hsk1-01')) {
       return { accessType: 'free', price: 0 };
     }
     return { accessType: 'paid', price: Number(lesson?.price) || 9 };
@@ -588,9 +538,9 @@
     const pricing = resolveLessonPricing(lesson);
     if (pricing.accessType === 'free') return true;
     if (window.LinguaAuth && typeof window.LinguaAuth.canAccessLesson === 'function') {
-      // Pass merged pricing fields so canAccessLesson respects local override if Firestore catalog doesn't have it yet
       return window.LinguaAuth.canAccessLesson({
         ...lesson,
+        course: getLessonCourse(lesson),
         accessType: pricing.accessType,
         price: pricing.price
       });
@@ -598,51 +548,102 @@
     return false;
   }
 
-  // --- Render Categories Navigation Bar ---
-  function renderCategoryBar() {
-    const container = document.getElementById('curriculumCategoryBar');
-    if (!container) return;
+  // --- Render Left Sidebar Course Menu ---
+  function renderCourseSidebar() {
+    const sidebar = document.getElementById('lessonsCourseSidebar');
+    if (!sidebar) return;
 
-    const categories = currentAudience === 'Kids' ? KIDS_CATEGORIES : ADULT_CATEGORIES;
-    const audienceLessons = allLessons.filter(l => String(l.audience || 'Adult').toLowerCase() === currentAudience.toLowerCase());
-
-    // Ensure activeCategoryKey is valid
-    if (!categories.some(c => c.key === activeCategoryKey)) {
-      activeCategoryKey = categories[0].key;
+    const courses = computeCoursesList();
+    if (!courses.some((c) => courseKeySlug(c) === courseKeySlug(activeCourseName))) {
+      activeCourseName = courses[0] || 'HSK 1';
     }
 
-    container.innerHTML = categories.map(cat => {
-      const count = audienceLessons.filter(l => getCategoryKey(l) === cat.key).length;
-      const isActive = activeCategoryKey === cat.key;
-      return `
-        <button type="button" class="cat-pill-btn ${isActive ? 'active' : ''}" data-category="${cat.key}">
-          <span>${cat.icon}</span>
-          <span>${escapeHTML(cat.name)}</span>
-          <span class="cat-count-badge">${count}</span>
-        </button>
-      `;
-    }).join('');
+    sidebar.innerHTML = `
+      <div class="lessons-sidebar-header">
+        <span class="lessons-sidebar-kicker">Courses</span>
+        <h2 class="lessons-sidebar-title">Curriculum Menu</h2>
+      </div>
+      <nav class="lessons-course-nav" role="tablist" aria-label="Chinese Courses">
+        ${courses
+          .map((courseName) => {
+            const slug = courseKeySlug(courseName);
+            const count = allLessons.filter((l) => courseKeySlug(getLessonCourse(l)) === slug).length;
+            const isActive = courseKeySlug(activeCourseName) === slug;
+            const cInfo = getCoursePricingInfo(courseName);
+            return `
+              <button
+                type="button"
+                class="course-nav-btn ${isActive ? 'active' : ''}"
+                data-course="${escapeHTML(courseName)}"
+                role="tab"
+                aria-selected="${isActive ? 'true' : 'false'}"
+              >
+                <span class="course-nav-main">
+                  <span class="course-nav-name">${escapeHTML(courseName)}</span>
+                  <span class="course-nav-meta">${cInfo.unlocked ? 'Unlocked' : `${cInfo.price} Kyat`}</span>
+                </span>
+                <span class="course-nav-count">${count}</span>
+              </button>
+            `;
+          })
+          .join('')}
+      </nav>
+    `;
 
-    // Attach click listeners to category pills
-    container.querySelectorAll('.cat-pill-btn').forEach(btn => {
+    sidebar.querySelectorAll('.course-nav-btn').forEach((btn) => {
       btn.onclick = () => {
-        const catKey = btn.dataset.category;
-        switchCategory(catKey);
+        switchCourse(btn.dataset.course);
       };
     });
   }
 
-  function switchCategory(catKey, updateUrl = true) {
-    activeCategoryKey = catKey;
-    renderCategoryBar();
-    renderLessonGrid();
+  function renderActiveCourseHeader(courseLessonCount) {
+    const header = document.getElementById('activeCourseHeader');
+    if (!header) return;
 
-    // If a lesson workspace is open, close it to show the filtered grid
-    closeLessonWorkspace();
+    const info = getCoursePricingInfo(activeCourseName);
+    const authState = window.LinguaAuth ? window.LinguaAuth.getState() : { isAdmin: false };
+    const isUnlocked = info.unlocked || Boolean(authState.isAdmin);
+
+    header.innerHTML = `
+      <div class="course-banner-info">
+        <div class="course-banner-kicker">Active Course</div>
+        <h2 class="course-banner-title">${escapeHTML(info.courseName)}</h2>
+        <p class="course-banner-desc">
+          <span class="tabular-nums">${courseLessonCount}</span> lesson${courseLessonCount === 1 ? '' : 's'} available · Unlock individual paid lessons (Kyat) or get all lessons in <strong>${escapeHTML(info.courseName)}</strong> with a Course Pass.
+        </p>
+      </div>
+      <div class="course-banner-actions">
+        ${
+          isUnlocked
+            ? `<span class="course-unlocked-badge">✓ Full Course Unlocked</span>`
+            : `<button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Unlock Full Course (${escapeHTML(info.price)} Kyat)</button>`
+        }
+      </div>
+    `;
+
+    const unlockBtn = document.getElementById('btnUnlockFullCourse');
+    if (unlockBtn) {
+      unlockBtn.onclick = () => {
+        if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openSubscribeCourseModal === 'function') {
+          window.LinguaAuthUI.openSubscribeCourseModal(info.courseName);
+        } else if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openSubscribeModal === 'function') {
+          window.LinguaAuthUI.openSubscribeModal({ course: info.courseName, accessType: 'paid', price: info.price });
+        }
+      };
+    }
+  }
+
+  function switchCourse(courseName, updateUrl = true) {
+    activeCourseName = normalizeCourseName(courseName);
+    renderCourseSidebar();
+    renderLessonGrid();
+    closeLessonWorkspace(false);
 
     if (updateUrl) {
       const url = new URL(window.location);
-      url.searchParams.set('category', catKey);
+      url.searchParams.set('course', activeCourseName);
+      url.searchParams.delete('category');
       url.searchParams.delete('lesson');
       window.history.pushState({}, '', url);
     }
@@ -663,33 +664,41 @@
     }
 
     const authState = window.LinguaAuth ? window.LinguaAuth.getState() : { user: null, isAdmin: false, profile: null };
-    const hasActiveSub = window.LinguaAuth && window.LinguaAuth.hasActiveMembership();
+    const courseInfo = getCoursePricingInfo(activeCourseName);
 
-    let accessSummary = 'Free foundational lessons open · Paid lessons require membership';
+    let accessSummary = 'Free starter lessons open · Paid lessons or full courses in Kyat';
     if (authState.isAdmin) {
-      accessSummary = 'Admin signed in · Set Free/Paid access & publish live';
-    } else if (hasActiveSub) {
-      accessSummary = 'Active Membership · All Paid Lessons Unlocked';
+      accessSummary = 'Admin signed in · Manage courses, pricing & Excel curriculum';
+    } else if (courseInfo.unlocked) {
+      accessSummary = `${courseInfo.courseName} Course Pass Active · All Lessons Unlocked`;
     } else if (authState.user) {
-      accessSummary = 'Free Tier · Subscribe anytime to unlock paid lessons';
+      accessSummary = 'Choose per-lesson unlock or unlock an entire course';
     }
 
     bar.innerHTML = `
       <span class="curriculum-access-summary">${escapeHTML(accessSummary)}</span>
       <div class="curriculum-manage-actions">
         ${
-          !hasActiveSub && !authState.isAdmin
-            ? `<button type="button" class="btn-manage-inline btn-manage-upgrade" id="btnGridViewPlans">View Membership Plans</button>`
+          !courseInfo.unlocked && !authState.isAdmin
+            ? `<button type="button" class="btn-manage-inline btn-manage-upgrade" id="btnGridViewPlans">Unlock Lesson / Course</button>`
             : ''
         }
-        <button type="button" class="btn-manage-inline" id="btnGridManagePricing">Upload &amp; Set Free/Paid</button>
+        ${
+          authState.isAdmin
+            ? `<button type="button" class="btn-manage-inline" id="btnGridManagePricing">Upload &amp; Set Free/Paid</button>`
+            : ''
+        }
       </div>
     `;
 
     const viewPlansBtn = document.getElementById('btnGridViewPlans');
     if (viewPlansBtn) {
       viewPlansBtn.onclick = () => {
-        if (window.LinguaAuthUI) window.LinguaAuthUI.openSubscribeModal();
+        if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openSubscribeCourseModal === 'function') {
+          window.LinguaAuthUI.openSubscribeCourseModal(activeCourseName);
+        } else if (window.LinguaAuthUI) {
+          window.LinguaAuthUI.openSubscribeModal();
+        }
       };
     }
 
@@ -704,18 +713,17 @@
     const grid = document.getElementById('lessonsGrid');
     if (!grid) return;
 
-    renderCurriculumManageBar();
+    const targetSlug = courseKeySlug(activeCourseName);
+    const filtered = allLessons.filter((l) => courseKeySlug(getLessonCourse(l)) === targetSlug);
 
-    const audienceLessons = allLessons.filter(l => String(l.audience || 'Adult').toLowerCase() === currentAudience.toLowerCase());
-    const filtered = audienceLessons.filter(l => {
-      return getCategoryKey(l) === activeCategoryKey;
-    });
+    renderActiveCourseHeader(filtered.length);
+    renderCurriculumManageBar();
 
     if (!filtered.length) {
       grid.innerHTML = `
-        <div style="grid-column: 1/-1; text-align: center; padding: 50px 20px; background: var(--bg-warm, #fff7ed); border: 1.5px dashed var(--primary-border, #fed7aa); border-radius: 20px;">
-          <h3>No lessons found in this category</h3>
-          <p>Please select another category above to view lessons.</p>
+        <div class="course-empty-box">
+          <h3>No lessons added under ${escapeHTML(activeCourseName)} yet</h3>
+          <p>Admin can create new lessons under ${escapeHTML(activeCourseName)} from the Admin Portal.</p>
         </div>
       `;
       return;
@@ -728,9 +736,9 @@
       const pinyin = lesson.pinyin || '';
       const meaning = lesson.meaning || '';
       const desc = lesson.description || '';
-      const level = lesson.level || 'Beginner';
+      const courseName = getLessonCourse(lesson);
+      const level = lesson.level || courseName;
       const poster = backendAssetUrl(lesson.posterUrl || lesson.poster || `assets/images/story-0${(idx % 5) + 1}.jpg`);
-      const categoryName = lesson.category || (currentAudience === 'Kids' ? 'Fun Adventure' : 'Everyday Basics');
       const pricing = resolveLessonPricing(lesson);
       const isPaid = pricing.accessType === 'paid';
       const isUnlocked = canUserAccessLesson(lesson);
@@ -739,10 +747,8 @@
       const accessMetaText = !isPaid
         ? 'Free Lesson'
         : isUnlocked
-        ? `Paid (${pricing.price} Kyat) · Unlocked`
-        : `Paid · ${pricing.price} Kyat`;
-
-      const isKids = currentAudience === 'Kids';
+        ? `Unlocked · ${pricing.price} Kyat`
+        : `${pricing.price} Kyat`;
 
       return `
         <article class="lesson-card ${isLocked ? 'lesson-card-locked' : ''}" id="card-${escapeHTML(lessonId)}">
@@ -751,10 +757,10 @@
           </div>
           <div class="lesson-card-content">
             <div class="lesson-meta-line">
-              <span class="lesson-category-tag">${escapeHTML(categoryName)}</span>
+              <span class="lesson-category-tag">${escapeHTML(courseName)}</span>
               <span class="lesson-access-tag ${!isPaid ? 'is-free' : isUnlocked ? 'is-unlocked' : 'is-paid'}">${escapeHTML(accessMetaText)}</span>
             </div>
-            <span class="lesson-level">⭐ ${escapeHTML(level)}</span>
+            <span class="lesson-level">${escapeHTML(level)}</span>
             <h3>${escapeHTML(title)}</h3>
             ${cnTitle ? `<div class="lesson-chinese-title chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(cnTitle)}</div>` : ''}
             ${pinyin ? `<div class="lesson-pinyin">${escapeHTML(pinyin)}</div>` : ''}
@@ -764,8 +770,8 @@
             <div class="lesson-features-line">📺 Video · ✏️ Exercises · 🖌️ Stroke Writing</div>
 
             <div class="lesson-card-actions" style="margin-top: auto;">
-              <button type="button" class="btn ${isLocked ? 'lesson-button-locked' : (isKids ? 'btn-kids-play' : 'btn-primary')} lesson-button" style="width: 100%; text-align: center;" data-lesson-id="${escapeHTML(lessonId)}">
-                ${isLocked ? `🔒 Unlock Lesson (${escapeHTML(pricing.price)} Kyat) →` : '🚀 Start Lesson →'}
+              <button type="button" class="btn ${isLocked ? 'lesson-button-locked' : 'btn-primary'} lesson-button" style="width: 100%; text-align: center;" data-lesson-id="${escapeHTML(lessonId)}">
+                ${isLocked ? `🔒 Unlock (${escapeHTML(pricing.price)} Kyat) →` : '🚀 Start Lesson →'}
               </button>
             </div>
           </div>
@@ -773,7 +779,6 @@
       `;
     }).join('');
 
-    // Attach click listeners to "Start Lesson" buttons
     grid.querySelectorAll('.lesson-button').forEach(btn => {
       btn.onclick = () => {
         const lessonId = btn.dataset.lessonId;
@@ -784,15 +789,14 @@
 
   let pendingDeepLinkLessonId = null;
 
-  // --- Open Lesson Workspace (3 Core Sections) ---
+  // --- Open Lesson Workspace (4 Core Sections) ---
   function openLessonWorkspace(lessonId, updateUrl = true) {
     const lesson = allLessons.find(l => String(l.id || '').trim().toLowerCase() === String(lessonId || '').trim().toLowerCase()) || allLessons[0];
     if (!lesson) return;
 
-    // Gate Paid Lessons unless user has active subscription / per-lesson unlock / admin
+    // Gate Paid Lessons unless user has course access / per-lesson unlock / admin
     if (!canUserAccessLesson(lesson)) {
       const authState = window.LinguaAuth ? window.LinguaAuth.getState() : null;
-      // If deep-linking right on initial page load before Firebase Auth finishes hydrating, defer gate briefly
       if (authState && !authState.ready && !updateUrl) {
         pendingDeepLinkLessonId = lesson.id;
         return;
@@ -801,6 +805,7 @@
         const pricing = resolveLessonPricing(lesson);
         window.LinguaAuthUI.openSubscribeModal({
           ...lesson,
+          course: getLessonCourse(lesson),
           accessType: pricing.accessType,
           price: pricing.price
         });
@@ -810,20 +815,20 @@
 
     pendingDeepLinkLessonId = null;
     activeLesson = lesson;
+    activeCourseName = getLessonCourse(lesson);
     activeWorkspaceTab = 'video';
     activeWritingCharIndex = 0;
     exerciseAnswersState = {};
 
-    // Track active lesson in localStorage for "Continue Lesson" banner
     try {
       localStorage.setItem('linguapath_active_lesson', JSON.stringify({
         id: lesson.id,
-        audience: lesson.audience || currentAudience,
+        course: activeCourseName,
         title: lesson.title,
         chineseTitle: lesson.chineseTitle || '',
         pinyin: lesson.pinyin || '',
-        level: lesson.level || '',
-        category: lesson.category || '',
+        level: lesson.level || activeCourseName,
+        category: activeCourseName,
         timestamp: Date.now()
       }));
     } catch (e) {}
@@ -833,10 +838,6 @@
 
     if (workspace) {
       if (curriculumSection) curriculumSection.style.display = 'none';
-      const adultView = document.getElementById('adultView');
-      if (adultView) adultView.style.display = 'none';
-      const kidsView = document.getElementById('kidsView');
-      if (kidsView) kidsView.style.display = 'none';
 
       workspace.classList.add('active');
       workspace.style.display = 'block';
@@ -848,21 +849,16 @@
       renderPronunciationSection(lesson);
       switchWorkspaceTab('video');
 
-      // Scroll to top of workspace smoothly
       workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
-      // If workspace container is not on this page, redirect to the correct track page with query param
-      const targetAudience = (lesson.audience || currentAudience).toLowerCase() === 'kids' ? 'Kids' : 'Adult';
-      const targetPage = targetAudience === 'Kids' ? 'lessons-kids.html' : 'lessons-adult.html';
-      window.location.href = `${targetPage}?lesson=${encodeURIComponent(lesson.id)}`;
+      window.location.href = `lessons.html?lesson=${encodeURIComponent(lesson.id)}`;
       return;
     }
 
     if (updateUrl) {
       const url = new URL(window.location);
       url.searchParams.set('lesson', lesson.id);
-      const catKey = getCategoryKey(lesson);
-      if (catKey) url.searchParams.set('category', catKey);
+      url.searchParams.set('course', activeCourseName);
       window.history.pushState({}, '', url);
     }
   }
@@ -871,7 +867,6 @@
     const workspace = document.getElementById('lessonWorkspace');
     const curriculumSection = document.getElementById('curriculumListSection');
 
-    // Stop active speech recognition recording if in progress
     stopPronunciationRecording();
 
     if (workspace) {
@@ -880,12 +875,7 @@
     }
 
     if (curriculumSection) curriculumSection.style.display = 'block';
-    const adultView = document.getElementById('adultView');
-    if (adultView) adultView.style.display = 'block';
-    const kidsView = document.getElementById('kidsView');
-    if (kidsView) kidsView.style.display = 'none';
 
-    // Pause any playing video
     const video = document.getElementById('workspaceVideoPlayer');
     if (video) video.pause();
 
@@ -903,19 +893,18 @@
     const hero = document.getElementById('workspaceHeroHeader');
     if (!hero) return;
 
-    const catName = lesson.category || 'General Curriculum';
-    const isKids = currentAudience === 'Kids';
+    const courseName = getLessonCourse(lesson);
 
     hero.innerHTML = `
       <div class="workspace-top-bar">
         <button type="button" class="btn-back-to-curriculum" id="btnBackToCurriculum">
-          ← Back to Curriculum Lessons
+          ← Back to ${escapeHTML(courseName)} Lessons
         </button>
         <div class="workspace-top-right">
           <div class="workspace-breadcrumbs">
-            <span>${isKids ? '🐼 Kids Track' : '💼 Adult Track'}</span>
+            <span>Courses</span>
             <span class="sep">›</span>
-            <span>${escapeHTML(catName)}</span>
+            <span>${escapeHTML(courseName)}</span>
             <span class="sep">›</span>
             <span style="color: #ea580c;">${escapeHTML(lesson.title)}</span>
           </div>
@@ -3131,6 +3120,58 @@
   // =========================================================
 
   const PRONUNCIATION_PRACTICE_BANK = {
+    "hsk1-01": [
+      {
+        chinese: "早上好！今天天气真不错。",
+        pinyin: "Zǎoshang hǎo! Jīntiān tiānqì zhēn búcuò.",
+        meaning: "Good morning! The weather is really nice today.",
+        focus: "HSK 1 Morning greetings"
+      },
+      {
+        chinese: "您好，请问老师在吗？",
+        pinyin: "Nín hǎo, qǐngwèn lǎoshī zài ma?",
+        meaning: "Hello, excuse me, is the teacher here?",
+        focus: "Polite address (您好 / 请问)"
+      },
+      {
+        chinese: "非常感谢您的帮助，不客气！",
+        pinyin: "Fēicháng gǎnxiè nín de bāngzhù, bú kèqi!",
+        meaning: "Thank you very much for your help — you're welcome!",
+        focus: "Gratitude & polite response"
+      },
+      {
+        chinese: "明天见，再见！",
+        pinyin: "Míngtiān jiàn, zàijiàn!",
+        meaning: "See you tomorrow, goodbye!",
+        focus: "Farewell expressions"
+      }
+    ],
+    "hsk2-01": [
+      {
+        chinese: "服务员，请给我一份菜单。",
+        pinyin: "Fúwùyuán, qǐng gěi wǒ yí fèn càidān.",
+        meaning: "Waiter, please give me a menu.",
+        focus: "HSK 2 Restaurant ordering"
+      },
+      {
+        chinese: "我每天早上坐地铁去公司。",
+        pinyin: "Wǒ měitiān zǎoshang zuò dìtiě qù gōngsī.",
+        meaning: "Every morning I take the subway to the company.",
+        focus: "Daily commuting"
+      },
+      {
+        chinese: "前面的路口往左拐就是地铁站。",
+        pinyin: "Qiánmiàn de lùkǒu wǎng zuǒ guǎi jiùshì dìtiězhàn.",
+        meaning: "Turn left at the intersection ahead to reach the subway station.",
+        focus: "Giving directions"
+      },
+      {
+        chinese: "我们吃饱了，服务员请买单！",
+        pinyin: "Wǒmen chībǎo le, fúwùyuán qǐng mǎidān!",
+        meaning: "We're full — waiter, check please!",
+        focus: "Settling the bill"
+      }
+    ],
     "adult-basics-01": [
       {
         chinese: "早上好！今天天气真好。",
@@ -4575,7 +4616,7 @@
           ${lessonObj.chineseTitle ? `<span class="continue-chinese-title chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(lessonObj.chineseTitle)}</span>` : ''}
         </div>
         <div class="continue-meta">
-          ${escapeHTML(lessonObj.audience || 'Adult')} Track • ${escapeHTML(lessonObj.level || 'Beginner')} • ${escapeHTML(lessonObj.category || 'Basics')}
+          ${escapeHTML(getLessonCourse(lessonObj))} • ${escapeHTML(lessonObj.level || getLessonCourse(lessonObj))}
         </div>
       </div>
       <div class="continue-action-btns">
@@ -4598,15 +4639,7 @@
     const continueBtn = document.getElementById('btnContinueActiveLesson');
     if (continueBtn) {
       continueBtn.onclick = () => {
-        const targetAudience = (lessonObj.audience || '').toLowerCase() === 'kids' ? 'Kids' : 'Adult';
-        const isCurrentKidsPage = window.location.pathname.includes('kids');
-        if (targetAudience === 'Kids' && !isCurrentKidsPage) {
-          window.location.href = `lessons-kids.html?lesson=${encodeURIComponent(lessonObj.id)}`;
-        } else if (targetAudience === 'Adult' && isCurrentKidsPage) {
-          window.location.href = `lessons-adult.html?lesson=${encodeURIComponent(lessonObj.id)}`;
-        } else {
-          openLessonWorkspace(lessonObj.id);
-        }
+        openLessonWorkspace(lessonObj.id);
       };
     }
 
@@ -4646,7 +4679,7 @@
           <div class="excel-pricing-row" data-pricing-row="${escapeHTML(id)}">
             <div class="excel-pricing-info">
               <strong>${escapeHTML(l.title || id)}</strong>
-              <span>${escapeHTML(l.audience || 'Adult')} · ${escapeHTML(l.category || 'General')} (${escapeHTML(id)})</span>
+              <span>${escapeHTML(getLessonCourse(l))} (${escapeHTML(id)})</span>
             </div>
             <div class="excel-pricing-controls">
               <select class="lp-inline-select" data-pricing-access="${escapeHTML(id)}" aria-label="Access type for ${escapeHTML(l.title || id)}">
@@ -4707,7 +4740,7 @@
         </div>
 
         <p style="font-size: 0.92rem; color: var(--text-muted, #64748b); margin-bottom: 14px; line-height: 1.5;">
-          Export or upload Adult &amp; Kids Mandarin lessons (.xlsx / .csv) and choose which lessons are Free vs. Paid.
+          Export or upload HSK Mandarin lessons (.xlsx / .csv) and choose which lessons are Free vs. Paid (Kyat).
           <a href="admin.html#lessons" style="font-weight: 700; color: #ea580c; margin-left: 6px; text-decoration: none;">Open Full Admin CMS →</a>
         </p>
 
@@ -4821,7 +4854,7 @@
           catalogItems.push({
             lessonId: lid,
             title: lessonObj?.title || lid,
-            audience: lessonObj?.audience || 'Adult',
+            course: getLessonCourse(lessonObj),
             accessType,
             price
           });
@@ -5004,7 +5037,7 @@
           }
         }
 
-        renderCategoryBar();
+        renderCourseSidebar();
         renderLessonGrid();
         renderContinueLessonBanner();
         renderExcelPricingTableRows();
@@ -5026,19 +5059,29 @@
   // --- Deep Linking Handler ---
   function handleUrlParams() {
     const params = new URLSearchParams(window.location.search);
-    const categoryParam = params.get('category');
+    const courseParam = params.get('course') || params.get('category');
     const lessonParam = params.get('lesson');
     const managePricingParam = params.get('managePricing');
 
-    const categories = currentAudience === 'Kids' ? KIDS_CATEGORIES : ADULT_CATEGORIES;
+    const courses = computeCoursesList();
+    let targetLessonObj = null;
 
-    if (categoryParam && categories.some(c => c.key === categoryParam)) {
-      activeCategoryKey = categoryParam;
-    } else {
-      activeCategoryKey = categories[0].key;
+    if (lessonParam) {
+      targetLessonObj = allLessons.find(
+        (l) => String(l.id || '').trim().toLowerCase() === String(lessonParam).trim().toLowerCase()
+      );
     }
 
-    renderCategoryBar();
+    if (targetLessonObj) {
+      activeCourseName = getLessonCourse(targetLessonObj);
+    } else if (courseParam) {
+      const matchedCourse = courses.find((c) => courseKeySlug(c) === courseKeySlug(courseParam));
+      activeCourseName = matchedCourse || courses[0] || 'HSK 1';
+    } else {
+      activeCourseName = courses[0] || 'HSK 1';
+    }
+
+    renderCourseSidebar();
     renderLessonGrid();
     renderContinueLessonBanner();
 
@@ -5053,26 +5096,24 @@
 
   // --- Initialization ---
   async function init() {
-    if (window.location.pathname.includes('kids') || document.body.classList.contains('kids-theme') || document.body.dataset.audience === 'Kids') {
-      currentAudience = 'Kids';
-      activeCategoryKey = 'pinyin';
-    } else {
-      currentAudience = 'Adult';
-      activeCategoryKey = 'basics';
-    }
-
     setupWorkspaceTabs();
     await loadLessonsWorkbook();
     handleUrlParams();
 
     window.addEventListener('lingua-auth-change', (e) => {
       const authState = e?.detail;
+      renderCourseSidebar();
       renderLessonGrid();
       if (pendingDeepLinkLessonId && authState && authState.ready) {
         const lid = pendingDeepLinkLessonId;
         pendingDeepLinkLessonId = null;
         openLessonWorkspace(lid, false);
       }
+    });
+
+    window.addEventListener('lingua-site-config-change', () => {
+      renderCourseSidebar();
+      renderLessonGrid();
     });
 
     window.addEventListener('popstate', () => {
@@ -5085,6 +5126,8 @@
         if (e.detail.sheets.Writing) allWriting = e.detail.sheets.Writing;
         if (e.detail.sheets.Pronunciation) allPronunciation = e.detail.sheets.Pronunciation;
         if (e.detail.sheets.Exercises) allExercises = e.detail.sheets.Exercises;
+        renderCourseSidebar();
+        renderLessonGrid();
         if (activeLesson) {
           if (activeWorkspaceTab === 'writing') renderWritingSection(activeLesson);
           else if (activeWorkspaceTab === 'pronunciation') renderPronunciationSection(activeLesson);
@@ -5097,7 +5140,9 @@
   // Expose global controller
   window.LinguaLessons = {
     init,
-    switchCategory,
+    switchCourse,
+    switchCategory: switchCourse,
+    getAllCourses: computeCoursesList,
     openLessonWorkspace,
     closeLessonWorkspace,
     switchWorkspaceTab,

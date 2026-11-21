@@ -1568,6 +1568,7 @@ function getLessonId() {
    ========================================================= */
 
 async function loadStoryLesson() {
+  if (!document.getElementById("storyContent")) return;
   try {
     const lessonId = getLessonId();
 
@@ -3607,26 +3608,30 @@ function handleUrlDeepLinking() {
   const filterParam = urlParams.get("filter");
   const reelParam = urlParams.get("reel");
 
-  if (tabParam === "reels" || filterParam || reelParam || window.location.hash === "#reels") {
-    switchStoriesReelsTab("reels", false);
-
-    if (filterParam) {
-      setReelCategoryFilter(filterParam, false);
+  const hasSwitcher = Boolean(document.getElementById("tabBtnStories") && document.getElementById("tabBtnReels"));
+  if (hasSwitcher) {
+    if (tabParam === "reels" || filterParam || reelParam || window.location.hash === "#reels") {
+      switchStoriesReelsTab("reels", false);
+    } else {
+      switchStoriesReelsTab("stories", false);
     }
+  }
 
-    if (reelParam) {
-      const foundReel = allLoadedVideos.find(x => String(x.id).toLowerCase() === String(reelParam).toLowerCase());
-      if (foundReel) {
-        setTimeout(() => openReelModalPlayer(foundReel), 200);
-      }
+  if (filterParam) {
+    setReelCategoryFilter(filterParam, false);
+  }
+
+  if (reelParam) {
+    const foundReel = allLoadedVideos.find(x => String(x.id).toLowerCase() === String(reelParam).toLowerCase());
+    if (foundReel) {
+      setTimeout(() => openReelModalPlayer(foundReel), 200);
     }
-  } else {
-    switchStoriesReelsTab("stories", false);
   }
 }
 
 function initStoriesAndReelsSystem() {
-  // Tab switch buttons
+  if (!document.getElementById("reelsVideoGrid")) return;
+  // Tab switch buttons (if switcher exists)
   const tabBtnStories = document.getElementById("tabBtnStories");
   const tabBtnReels = document.getElementById("tabBtnReels");
 

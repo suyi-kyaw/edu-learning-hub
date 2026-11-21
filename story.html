@@ -37,10 +37,19 @@
   >
 
   <link rel="stylesheet" href="style.css">
-  <!-- Early theme application to avoid flash of incorrect theme on reload -->
+  <!-- Early theme application & backward-compatible redirect for ?tab=reels/?reel= -->
   <script>
     (function () {
       try {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("tab") === "reels" || params.get("reel") || window.location.hash === "#reels") {
+          var nextParams = new URLSearchParams();
+          if (params.get("filter")) nextParams.set("filter", params.get("filter"));
+          if (params.get("reel")) nextParams.set("reel", params.get("reel"));
+          var qs = nextParams.toString();
+          window.location.replace("reels.html" + (qs ? "?" + qs : ""));
+          return;
+        }
         var savedTheme = localStorage.getItem("linguapath_theme") || localStorage.getItem("theme");
         var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
         var activeTheme = (savedTheme === "dark" || savedTheme === "light") ? savedTheme : (prefersDark ? "dark" : "light");
@@ -58,46 +67,22 @@
 
   <main id="mainContent">
     <!-- =========================
-         PAGE HERO & SUB-PAGE SWITCHER (Matching lessons.html & games.html)
+         PAGE HERO (STORIES)
     ========================== -->
     <section class="story-page-hero">
       <div class="container">
-        <span class="eyebrow">Interactive Media &amp; Immersion</span>
-        <h1>Chinese Stories &amp; Short Reels</h1>
+        <span class="eyebrow">Interactive Reading &amp; Immersion</span>
+        <h1>Chinese Stories &amp; Reading</h1>
         <p>
-          Master Chinese reading, vocabulary, and natural dialogue through full interactive story lessons and bite-sized short video reels.
+          Master Chinese reading, vocabulary, and natural sentences through full interactive story lessons with native audio and exercises.
         </p>
-
-        <!-- Prominent Pill Sub-Page Switcher (Matching lessons.html) -->
-        <div class="audience-tab-bar" role="tablist" aria-label="Stories and Reels switcher">
-          <button
-            type="button"
-            class="audience-tab active"
-            id="tabBtnStories"
-            role="tab"
-            aria-selected="true"
-            aria-controls="stories-view"
-          >
-            📖 Stories &amp; Reading
-          </button>
-          <button
-            type="button"
-            class="audience-tab"
-            id="tabBtnReels"
-            role="tab"
-            aria-selected="false"
-            aria-controls="reels-view"
-          >
-            🎬 Short Reels
-          </button>
-        </div>
       </div>
     </section>
 
     <!-- =========================
-         TAB 1: STORIES VIEW
+         STORIES VIEW
     ========================== -->
-    <div id="stories-view" class="tab-view-panel active" role="tabpanel" aria-labelledby="tabBtnStories">
+    <div id="stories-view">
 
       <!-- =========================
            LESSON NAVIGATION
@@ -446,137 +431,7 @@
 
     </div>
     <!-- End of #stories-view -->
-
-
-    <!-- =========================
-         TAB 2: REELS VIEW (Matching Layout of Other Pages)
-    ========================== -->
-    <div id="reels-view" class="tab-view-panel" role="tabpanel" aria-labelledby="tabBtnReels" style="display: none;">
-      <section class="section" style="padding: 40px 0 80px;">
-        <div class="container">
-          <div class="section-heading">
-            <span class="section-label">Bite-Sized Video Immersion</span>
-            <h2>Short Mandarin Reels &amp; Holiday Specials</h2>
-            <p>
-              Watch high-definition vertical video shorts with synchronized quad-language subtitles in Chinese Hanzi, Pinyin, English, and Myanmar (Burmese).
-            </p>
-          </div>
-
-          <!-- Horizontal Filter Chip Bar (Matching track-pills) -->
-          <div class="track-pills" id="reelsFilterChips" role="toolbar" aria-label="Filter Reels by category">
-            <button type="button" class="track-pill active filter-chip" data-filter="all">
-              <span>✨ All Reels</span>
-            </button>
-            <button type="button" class="track-pill filter-chip" data-filter="holidays">
-              <span>🏮 Holidays &amp; Festivals</span>
-            </button>
-            <button type="button" class="track-pill filter-chip" data-filter="daily">
-              <span>💬 Daily Conversation</span>
-            </button>
-            <button type="button" class="track-pill filter-chip" data-filter="kids">
-              <span>🐼 Kids &amp; Fun</span>
-            </button>
-            <button type="button" class="track-pill filter-chip" data-filter="grammar">
-              <span>🎼 Grammar &amp; Tones</span>
-            </button>
-            <button type="button" class="track-pill filter-chip" data-filter="culture">
-              <span>🍵 Culture &amp; Customs</span>
-            </button>
-          </div>
-
-          <!-- Reels Video Grid Section -->
-          <div class="reels-grid-section" style="padding-top: 30px;">
-            <div class="reels-grid-header">
-              <div class="reels-count-info" id="reelsCountInfo">Showing active reels</div>
-            </div>
-
-            <!-- 9:16 Vertical Video Grid -->
-            <div class="reels-video-grid" id="reelsVideoGrid">
-              <!-- Dynamic Reel Cards rendered by story.js -->
-            </div>
-
-            <div id="reelsEmptyState" class="reels-empty-state" style="display: none;">
-              <div class="empty-icon">🎬</div>
-              <h3>No reels found for this category</h3>
-              <p>Try selecting "All Reels" to explore more videos.</p>
-              <button type="button" class="btn btn-secondary btn-sm" id="resetFilterBtn">View All Reels</button>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-    <!-- End of #reels-view -->
   </main>
-
-
-  <!-- =========================
-       REEL MODAL OVERLAY PLAYER (Quad-Language Subtitles)
-  ========================== -->
-  <div id="reelPlayerModal" class="reel-modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="reelModalTitle">
-    <div class="reel-modal-container">
-      <button type="button" class="reel-modal-close" id="closeReelModalBtn" aria-label="Close Reel Player">✕</button>
-
-      <!-- 9:16 Vertical Video Player Stage -->
-      <div class="reel-modal-stage">
-        <video
-          id="reelModalVideo"
-          class="reel-vertical-video"
-          playsinline
-          preload="auto"
-          controls
-        >
-          Your browser does not support HTML5 video.
-        </video>
-
-        <!-- Floating Category & Duration Badges -->
-        <div class="reel-modal-floating-badges">
-          <span class="reel-badge-pill" id="reelModalBadge">Holiday</span>
-          <span class="reel-duration-pill" id="reelModalDuration">15s</span>
-        </div>
-      </div>
-
-      <!-- Reel Content & Quad-Language Subtitles Box -->
-      <div class="reel-modal-content">
-        <div class="reel-modal-header">
-          <h2 id="reelModalTitle" class="reel-modal-heading">Reel Title</h2>
-          
-          <div class="reel-modal-actions-bar">
-            <button type="button" class="btn-reel-action" id="reelModalLikeBtn" aria-label="Like this reel" title="Like / Save to Favorites">
-              <span class="action-icon" id="reelModalLikeIcon">🤍</span>
-              <span class="action-label" id="reelModalLikeLabel">Favorite</span>
-            </button>
-
-            <button type="button" class="btn-reel-action" id="reelModalShareBtn" aria-label="Share this reel" title="Share Reel Link">
-              <span class="action-icon">🔗</span>
-              <span class="action-label">Share</span>
-            </button>
-
-            <button type="button" class="btn-reel-action" id="reelModalReplayBtn" aria-label="Replay Video" title="Replay">
-              <span class="action-icon">↺</span>
-              <span class="action-label">Replay</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Subtitle Language Toggles -->
-        <div class="reel-sub-toggle-bar">
-          <span class="sub-toggle-label">Subtitles:</span>
-          <button type="button" class="sub-chip active" id="toggleSubCn" data-lang="cn">🇨🇳 Hanzi</button>
-          <button type="button" class="sub-chip active" id="toggleSubPinyin" data-lang="pinyin">🔤 Pinyin</button>
-          <button type="button" class="sub-chip active" id="toggleSubEn" data-lang="en">🇬🇧 English</button>
-          <button type="button" class="sub-chip active" id="toggleSubMy" data-lang="my">🇲🇲 Myanmar</button>
-        </div>
-
-        <!-- Quad-Language Subtitle Display Box -->
-        <div class="reel-quad-subtitles" id="reelSubtitlesBox">
-          <div class="sub-line sub-line-cn" id="reelSubCn"></div>
-          <div class="sub-line sub-line-pinyin" id="reelSubPinyin"></div>
-          <div class="sub-line sub-line-en" id="reelSubEn"></div>
-          <div class="sub-line sub-line-my" id="reelSubMy"></div>
-        </div>
-      </div>
-    </div>
-  </div>
 
 
   <!-- =========================

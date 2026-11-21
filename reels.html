@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta
+    name="description"
+    content="Watch bite-sized vertical Mandarin Chinese video reels with quad-language subtitles in Hanzi, Pinyin, English, and Myanmar."
+  >
+  <meta property="og:title" content="LinguaPath | Short Mandarin Reels">
+  <meta property="og:description" content="Watch bite-sized vertical Mandarin Chinese video reels with quad-language subtitles.">
+  <meta property="og:image" content="assets/images/story-poster.jpg">
+  <meta property="og:type" content="website">
+
+  <title>LinguaPath | Short Mandarin Reels</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;600;700&family=Ma+Shan+Zheng&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="style.css">
+  <script>
+    (function () {
+      try {
+        var savedTheme = localStorage.getItem("linguapath_theme") || localStorage.getItem("theme");
+        var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var activeTheme = (savedTheme === "dark" || savedTheme === "light") ? savedTheme : (prefersDark ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", activeTheme);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+
+<body>
+
+  <!-- Shared Header Container -->
+  <div id="sharedHeader"></div>
+
+  <main id="mainContent">
+    <!-- =========================
+         PAGE HERO (REELS)
+    ========================== -->
+    <section class="story-page-hero">
+      <div class="container">
+        <span class="eyebrow">Bite-Sized Video Immersion</span>
+        <h1>Short Mandarin Reels</h1>
+        <p>
+          Watch high-definition vertical video shorts with synchronized quad-language subtitles in Chinese Hanzi, Pinyin, English, and Myanmar (Burmese).
+        </p>
+      </div>
+    </section>
+
+    <!-- =========================
+         REELS VIEW
+    ========================== -->
+    <div id="reels-view">
+      <section class="section" style="padding: 40px 0 80px;">
+        <div class="container">
+          <!-- Horizontal Filter Chip Bar -->
+          <div class="track-pills" id="reelsFilterChips" role="toolbar" aria-label="Filter Reels by category">
+            <button type="button" class="track-pill active filter-chip" data-filter="all">
+              <span>✨ All Reels</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="holidays">
+              <span>🏮 Holidays &amp; Festivals</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="daily">
+              <span>💬 Daily Conversation</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="kids">
+              <span>🐼 Culture &amp; Fun</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="grammar">
+              <span>🎼 Grammar &amp; Tones</span>
+            </button>
+            <button type="button" class="track-pill filter-chip" data-filter="culture">
+              <span>🍵 Culture &amp; Customs</span>
+            </button>
+          </div>
+
+          <!-- Reels Video Grid Section -->
+          <div class="reels-grid-section" style="padding-top: 30px;">
+            <div class="reels-grid-header">
+              <div class="reels-count-info" id="reelsCountInfo">Showing active reels</div>
+            </div>
+
+            <!-- 9:16 Vertical Video Grid -->
+            <div class="reels-video-grid" id="reelsVideoGrid">
+              <!-- Dynamic Reel Cards rendered by story.js -->
+            </div>
+
+            <div id="reelsEmptyState" class="reels-empty-state" style="display: none;">
+              <div class="empty-icon">🎬</div>
+              <h3>No reels found for this category</h3>
+              <p>Try selecting "All Reels" to explore more videos.</p>
+              <button type="button" class="btn btn-secondary btn-sm" id="resetFilterBtn">View All Reels</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- =========================
+       REEL MODAL OVERLAY PLAYER (Quad-Language Subtitles)
+  ========================== -->
+  <div id="reelPlayerModal" class="reel-modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="reelModalTitle">
+    <div class="reel-modal-container">
+      <button type="button" class="reel-modal-close" id="closeReelModalBtn" aria-label="Close Reel Player">✕</button>
+
+      <!-- 9:16 Vertical Video Player Stage -->
+      <div class="reel-modal-stage">
+        <video
+          id="reelModalVideo"
+          class="reel-vertical-video"
+          playsinline
+          preload="auto"
+          controls
+        >
+          Your browser does not support HTML5 video.
+        </video>
+
+        <div class="reel-modal-floating-badges">
+          <span class="reel-badge-pill" id="reelModalBadge">Holiday</span>
+          <span class="reel-duration-pill" id="reelModalDuration">15s</span>
+        </div>
+      </div>
+
+      <!-- Reel Content & Quad-Language Subtitles Box -->
+      <div class="reel-modal-content">
+        <div class="reel-modal-header">
+          <h2 id="reelModalTitle" class="reel-modal-heading">Reel Title</h2>
+
+          <div class="reel-modal-actions-bar">
+            <button type="button" class="btn-reel-action" id="reelModalLikeBtn" aria-label="Like this reel" title="Like / Save to Favorites">
+              <span class="action-icon" id="reelModalLikeIcon">🤍</span>
+              <span class="action-label" id="reelModalLikeLabel">Favorite</span>
+            </button>
+
+            <button type="button" class="btn-reel-action" id="reelModalShareBtn" aria-label="Share this reel" title="Share Reel Link">
+              <span class="action-icon">🔗</span>
+              <span class="action-label">Share</span>
+            </button>
+
+            <button type="button" class="btn-reel-action" id="reelModalReplayBtn" aria-label="Replay Video" title="Replay">
+              <span class="action-icon">↺</span>
+              <span class="action-label">Replay</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="reel-sub-toggle-bar">
+          <span class="sub-toggle-label">Subtitles:</span>
+          <button type="button" class="sub-chip active" id="toggleSubCn" data-lang="cn">🇨🇳 Hanzi</button>
+          <button type="button" class="sub-chip active" id="toggleSubPinyin" data-lang="pinyin">🔤 Pinyin</button>
+          <button type="button" class="sub-chip active" id="toggleSubEn" data-lang="en">🇬🇧 English</button>
+          <button type="button" class="sub-chip active" id="toggleSubMy" data-lang="my">🇲🇲 Myanmar</button>
+        </div>
+
+        <div class="reel-quad-subtitles" id="reelSubtitlesBox">
+          <div class="sub-line sub-line-cn" id="reelSubCn"></div>
+          <div class="sub-line sub-line-pinyin" id="reelSubPinyin"></div>
+          <div class="sub-line sub-line-en" id="reelSubEn"></div>
+          <div class="sub-line sub-line-my" id="reelSubMy"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shared Footer Container -->
+  <div id="sharedFooter"></div>
+
+  <!-- Daily Reminder Modal -->
+  <div id="reminderModal" class="reminder-modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="reminderModalTitle">
+    <div class="reminder-modal-card">
+      <button type="button" class="reminder-modal-close" id="closeReminderModalBtn" aria-label="Close reminder settings">✕</button>
+      <div class="reminder-modal-header">
+        <div class="reminder-bell-avatar" aria-hidden="true">🔔</div>
+        <h2 id="reminderModalTitle">Daily Lesson Reminder</h2>
+        <p class="reminder-modal-subtitle">Stay consistent on your Chinese learning journey with a daily notification.</p>
+      </div>
+      <div class="reminder-section">
+        <div class="reminder-toggle-row">
+          <div class="reminder-toggle-text">
+            <strong>Daily Goal Reminder</strong>
+            <span>Prompt me to complete a lesson if I haven't reached my daily goal</span>
+          </div>
+          <label class="switch-toggle" for="reminderToggle">
+            <input type="checkbox" id="reminderToggle" checked>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="reminder-section" id="reminderTimeSection">
+        <label class="reminder-section-label" for="reminderCustomTime">Reminder Time</label>
+        <p class="reminder-section-desc">If today's lesson isn't completed by this time, a reminder notification will pop up.</p>
+        <div class="reminder-preset-chips" id="reminderTimePresets">
+          <button type="button" class="time-chip" data-time="09:00">09:00 AM 🌅</button>
+          <button type="button" class="time-chip" data-time="12:30">12:30 PM ☀️</button>
+          <button type="button" class="time-chip active" data-time="18:00">06:00 PM 🌇</button>
+          <button type="button" class="time-chip" data-time="20:30">08:30 PM 🌙</button>
+        </div>
+        <div class="reminder-custom-time-row">
+          <label for="reminderCustomTime">Custom time:</label>
+          <input type="time" id="reminderCustomTime" value="18:00" class="reminder-time-input">
+        </div>
+      </div>
+      <div class="reminder-permission-card" id="reminderPermissionCard">
+        <div class="permission-icon" id="permissionIcon">ℹ️</div>
+        <div class="permission-content">
+          <strong id="permissionTitle">Browser Notifications</strong>
+          <span id="permissionStatusText">Allow notifications so LinguaPath can remind you even when this tab is closed.</span>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="requestPermissionBtn">Enable</button>
+      </div>
+      <div class="reminder-goal-status" id="reminderGoalStatus">
+        <span class="goal-status-icon" id="goalStatusIcon">🎯</span>
+        <div class="goal-status-text">
+          <strong id="goalStatusTitle">Today's Lesson Status</strong>
+          <p id="goalStatusDesc">Pending — complete 1 lesson today to keep your streak burning!</p>
+        </div>
+      </div>
+      <div class="reminder-modal-actions">
+        <button type="button" class="btn btn-secondary" id="testNotificationBtn">🔔 Test Notification</button>
+        <button type="button" class="btn btn-primary" id="saveReminderBtn">Save &amp; Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="reminderToastContainer" class="reminder-toast-container" aria-live="polite"></div>
+
+  <!-- SheetJS (Local with CDN fallback) -->
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script>
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"><\/script>');
+    }
+  </script>
+
+  <script src="audio-engine.js"></script>
+  <script src="backend-config.js?v=excel3"></script>
+  <script src="story.js?v=excel4"></script>
+  <script src="vendor/firebase-app.js?v=excel3"></script>
+  <script src="auth-ui.js?v=excel3"></script>
+  <script src="header.js" defer></script>
+  <script src="footer.js" defer></script>
+</body>
+
+</html>

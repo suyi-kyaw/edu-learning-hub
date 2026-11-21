@@ -105,6 +105,24 @@ function findUserByEmail(store, email) {
   return Object.values(store.users).find((u) => u && String(u.email || '').trim().toLowerCase() === target) || null;
 }
 
+function normalizeCourseNameServer(val) {
+  const raw = String(val || '').trim();
+  if (!raw) return 'HSK 1';
+  const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
+  if (compact === 'hsk1') return 'HSK 1';
+  if (compact === 'hsk2') return 'HSK 2';
+  if (compact === 'hsk3') return 'HSK 3';
+  if (compact === 'hsk4') return 'HSK 4';
+  return raw.slice(0, 80);
+}
+
+function normalizeServerPlan(plan) {
+  const p = String(plan || 'none').trim().toLowerCase();
+  if (p === 'per_lesson' || p === 'lesson') return 'per_lesson';
+  if (p === 'course' || p === 'monthly' || p === 'annual' || p === 'hsk') return 'course';
+  return 'none';
+}
+
 function sanitizeUserPublic(u) {
   if (!u) return null;
   return {
@@ -115,9 +133,12 @@ function sanitizeUserPublic(u) {
     dob: String(u.dob || ''),
     role: u.role === 'admin' ? 'admin' : 'student',
     membershipStatus: ['free', 'pending', 'active', 'expired'].includes(u.membershipStatus) ? u.membershipStatus : 'free',
-    membershipPlan: ['none', 'monthly', 'annual', 'per_lesson'].includes(u.membershipPlan) ? u.membershipPlan : 'none',
+    membershipPlan: normalizeServerPlan(u.membershipPlan),
     membershipExpiresAt: String(u.membershipExpiresAt || ''),
     subscribedLessonIds: Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds.slice(0, 100) : [],
+    subscribedCourses: Array.isArray(u.subscribedCourses)
+      ? Array.from(new Set(u.subscribedCourses.map(normalizeCourseNameServer).filter(Boolean))).slice(0, 50)
+      : [],
     linkedProviders: ['password'],
     mustChangePassword: Boolean(u.mustChangePassword),
     createdAt: u.createdAt || null,
@@ -266,48 +287,45 @@ const DEFAULT_SITE_CONFIG = {
   heroTitleHighlight: 'with Confidence.',
   heroSubtitle:
     'Build your Chinese skills through pronunciation, everyday expressions, conversations, vocabulary, and practical exercises.',
-  heroPrimaryCta: 'Explore Stories & Reels',
-  heroSecondaryCta: 'Learning Hub',
+  heroPrimaryCta: 'Explore Stories',
+  heroSecondaryCta: 'Explore Lessons',
   heroBannerUrl: 'assets/hero-banner.png',
-  storiesLabel: 'Featured Stories & Reels',
-  storiesTitle: 'Stories & Reels',
+  storiesLabel: 'Interactive Reading',
+  storiesTitle: 'Featured Stories',
   storiesSubtitle:
-    'Watch bite-sized vertical video reels and engaging cultural narratives crafted for modern Mandarin learners.',
+    'Explore illustrated Mandarin stories with native narration, sentence-by-sentence pinyin, key vocabulary, and comprehension exercises.',
+  reelsLabel: 'Bite-Sized Video Immersion',
+  reelsTitle: 'Short Reels',
+  reelsSubtitle:
+    'Watch bite-sized vertical video reels and cultural shorts with quad-language subtitles in Hanzi, Pinyin, English, and Myanmar.',
   gamesLabel: 'Interactive Practice',
   gamesTitle: 'Play & Practice Games',
   gamesSubtitle:
     'Reinforce your Chinese tones, character recognition, and rapid recall through interactive gameplay.',
-  lessonsLabel: 'Curriculum Pathways',
-  lessonsTitle: 'Choose Your Learning Pathway',
+  lessonsLabel: 'Structured HSK Curriculum',
+  lessonsTitle: 'Mandarin Courses & Lessons',
   lessonsSubtitle:
-    'Select your track to access structured lessons, native voice recordings, dialogues, and practice exercises.',
-  adultBadge: 'Adults • Comprehensive',
-  adultTitle: 'Mandarin for Adults & Professionals',
-  adultSubtitle: '实用成人汉语 • Practical Proficiency',
-  adultDesc:
-    'Master practical conversation for career, travel, dining, and HSK test preparation with real-world scenarios and cultural nuance.',
-  adultBullets: [
-    'Everyday Living & Socializing',
-    'Business Meetings & Travel Mandarin',
-    'Sentence Patterns & HSK Vocabulary'
+    'Study step by step with HSK 1, HSK 2, and custom courses featuring video lessons, 5 interactive exercise types, and stroke writing.',
+  lessonsBadge: 'HSK 1 · HSK 2 · All Levels',
+  lessonsCardTitle: 'Explore HSK Courses & Lessons',
+  lessonsCardSubtitle: '系统汉语课程 • Video, Exercises & Stroke Order',
+  lessonsCardDesc:
+    'Browse structured lessons organized by course in our learning workspace. Practice listening, picture matching, pinyin character writing, and speaking.',
+  lessonsBullets: [
+    'HSK 1 & HSK 2 foundational to conversational courses',
+    '5 interactive exercise formats including Pinyin character writing',
+    'Unlock individual lessons or an entire course in Kyat'
   ],
-  adultCta: 'Start Learning (Adults) →',
-  kidsBadge: 'Kids • Playful Immersion',
-  kidsTitle: 'Chinese for Kids & Young Learners',
-  kidsSubtitle: '少儿趣味中文 • Joyful Adventures',
-  kidsDesc:
-    'Discover the joy of Mandarin through colorful stories, playful pinyin songs, animal adventures, and interactive challenges that inspire confidence.',
-  kidsBullets: [
-    'Animals, Colors & Family Adventures',
-    'Cheerful Pinyin Songs & Animations',
-    'Reward Badges & Interactive Quizzes'
-  ],
-  kidsCta: 'Start Learning (Kids) →',
+  lessonsCta: 'Go to Lessons →',
+  coursePrices: {
+    'HSK 1': 100,
+    'HSK 2': 120
+  },
   contactEmail: 'syndkyaw@gmail.com',
   contactPhone: '+95 9 798 123 456',
   contactViber: '+95 9 798 123 456',
   featuredReelIds: ['cny_01', 'daily_01', 'kids_01'],
-  featuredStoryIds: ['lesson-01'],
+  featuredStoryIds: ['lesson-01', 'lesson-02'],
   featuredGameIds: ['game-01']
 };
 
@@ -520,6 +538,20 @@ function readSiteConfigFile() {
   return { ...DEFAULT_SITE_CONFIG };
 }
 
+function normalizeCoursePricesServer(rawPrices) {
+  const out = { ...DEFAULT_SITE_CONFIG.coursePrices };
+  if (rawPrices && typeof rawPrices === 'object' && !Array.isArray(rawPrices)) {
+    for (const [k, v] of Object.entries(rawPrices)) {
+      const name = normalizeCourseNameServer(k);
+      const n = Number(v);
+      if (name && Number.isFinite(n) && n >= 0) {
+        out[name] = Math.round(n);
+      }
+    }
+  }
+  return out;
+}
+
 function sanitizeSiteConfigInput(raw) {
   const input = raw && typeof raw === 'object' ? raw : {};
   const str = (key, maxLen) => {
@@ -552,24 +584,22 @@ function sanitizeSiteConfigInput(raw) {
     storiesLabel: str('storiesLabel', 100),
     storiesTitle: str('storiesTitle', 120),
     storiesSubtitle: str('storiesSubtitle', 400),
+    reelsLabel: str('reelsLabel', 100),
+    reelsTitle: str('reelsTitle', 120),
+    reelsSubtitle: str('reelsSubtitle', 400),
     gamesLabel: str('gamesLabel', 100),
     gamesTitle: str('gamesTitle', 120),
     gamesSubtitle: str('gamesSubtitle', 400),
     lessonsLabel: str('lessonsLabel', 100),
     lessonsTitle: str('lessonsTitle', 120),
     lessonsSubtitle: str('lessonsSubtitle', 400),
-    adultBadge: str('adultBadge', 80),
-    adultTitle: str('adultTitle', 140),
-    adultSubtitle: str('adultSubtitle', 140),
-    adultDesc: str('adultDesc', 400),
-    adultBullets: strList('adultBullets', 6, 140, true),
-    adultCta: str('adultCta', 80),
-    kidsBadge: str('kidsBadge', 80),
-    kidsTitle: str('kidsTitle', 140),
-    kidsSubtitle: str('kidsSubtitle', 140),
-    kidsDesc: str('kidsDesc', 400),
-    kidsBullets: strList('kidsBullets', 6, 140, true),
-    kidsCta: str('kidsCta', 80),
+    lessonsBadge: str('lessonsBadge', 100),
+    lessonsCardTitle: str('lessonsCardTitle', 140),
+    lessonsCardSubtitle: str('lessonsCardSubtitle', 140),
+    lessonsCardDesc: str('lessonsCardDesc', 400),
+    lessonsBullets: strList('lessonsBullets', 6, 140, true),
+    lessonsCta: str('lessonsCta', 80),
+    coursePrices: normalizeCoursePricesServer(input.coursePrices),
     contactEmail: str('contactEmail', 160),
     contactPhone: str('contactPhone', 40),
     contactViber: str('contactViber', 40),
@@ -893,6 +923,7 @@ app.post('/api/auth/register', jsonParser, (req, res) => {
       membershipPlan: 'none',
       membershipExpiresAt: '',
       subscribedLessonIds: [],
+      subscribedCourses: [],
       linkedProviders: ['password'],
       mustChangePassword: false,
       passwordSalt: salt,
@@ -1106,11 +1137,19 @@ app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
       return res.status(404).json({ success: false, error: 'User profile not found.' });
     }
 
-    const planType = ['monthly', 'annual', 'per_lesson'].includes(body.planType) ? body.planType : 'monthly';
+    const planType = body.planType === 'per_lesson' ? 'per_lesson' : 'course';
+    const siteCfg = readSiteConfig();
+    const courseName =
+      planType === 'course'
+        ? normalizeCourseNameServer(body.courseName || body.lessonTitle || 'HSK 1')
+        : '';
+    const defaultCoursePrice =
+      (siteCfg.coursePrices && siteCfg.coursePrices[courseName]) != null
+        ? Number(siteCfg.coursePrices[courseName])
+        : 100;
     const planMeta = {
-      monthly: { name: 'Monthly All-Access', amountLabel: '$19 / month' },
-      annual: { name: 'Annual All-Access', amountLabel: '$149 / year' },
-      per_lesson: { name: 'Paid Lesson Unlock', amountLabel: '$9 / lesson' }
+      per_lesson: { name: 'Lesson Pass', amountLabel: '9 Kyat / lesson' },
+      course: { name: `${courseName || 'HSK 1'} Course Pass`, amountLabel: `${defaultCoursePrice} Kyat / course` }
     }[planType];
 
     const lessonId =
@@ -1120,7 +1159,7 @@ app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
     const lessonTitle =
       planType === 'per_lesson'
         ? String(body.lessonTitle || 'Paid Lesson Unlock').trim().slice(0, 160)
-        : planMeta.name;
+        : String(body.lessonTitle || planMeta.name).trim().slice(0, 160);
     const amountLabel = String(body.amountLabel || planMeta.amountLabel).trim().slice(0, 40);
     const contactChannel = body.contactChannel === 'email' ? 'email' : 'viber';
     const contactHandle = String(body.contactHandle || user.phoneNumber || user.email || '').trim().slice(0, 80);
@@ -1139,6 +1178,7 @@ app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
       userPhone: user.phoneNumber || '',
       planType,
       lessonId,
+      courseName,
       lessonTitle,
       amountLabel,
       contactChannel,
@@ -1529,25 +1569,26 @@ app.post('/api/admin/requests/:requestId/approve', requireAdminToken, jsonParser
       return res.status(404).json({ success: false, error: 'Target user profile could not be found.' });
     }
 
-    const now = Date.now();
-    let nextPlan = targetUser.membershipPlan || 'none';
-    let nextExpires = targetUser.membershipExpiresAt || '';
+    let nextPlan = normalizeServerPlan(targetUser.membershipPlan || 'none');
+    const nextExpires = targetUser.membershipExpiresAt || '';
     const nextLessons = Array.isArray(targetUser.subscribedLessonIds) ? [...targetUser.subscribedLessonIds] : [];
+    const nextCourses = Array.isArray(targetUser.subscribedCourses)
+      ? targetUser.subscribedCourses.map(normalizeCourseNameServer)
+      : [];
 
-    if (reqDoc.planType === 'monthly') {
-      nextPlan = 'monthly';
-      nextExpires = new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    } else if (reqDoc.planType === 'annual') {
-      nextPlan = 'annual';
-      nextExpires = new Date(now + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    } else if (reqDoc.planType === 'per_lesson') {
+    if (reqDoc.planType === 'per_lesson') {
       if (reqDoc.lessonId && !nextLessons.includes(reqDoc.lessonId) && nextLessons.length < 100) {
         nextLessons.push(reqDoc.lessonId);
       }
-      if (nextPlan !== 'monthly' && nextPlan !== 'annual') {
+      if (nextPlan !== 'course') {
         nextPlan = 'per_lesson';
-        nextExpires = '';
       }
+    } else {
+      const targetCourse = normalizeCourseNameServer(reqDoc.courseName || reqDoc.lessonTitle || 'HSK 1');
+      if (targetCourse && !nextCourses.includes(targetCourse) && nextCourses.length < 50) {
+        nextCourses.push(targetCourse);
+      }
+      nextPlan = 'course';
     }
 
     const nowIso = new Date().toISOString();
@@ -1559,6 +1600,7 @@ app.post('/api/admin/requests/:requestId/approve', requireAdminToken, jsonParser
     targetUser.membershipPlan = nextPlan;
     targetUser.membershipExpiresAt = nextExpires;
     targetUser.subscribedLessonIds = nextLessons;
+    targetUser.subscribedCourses = nextCourses;
     targetUser.updatedAt = nowIso;
 
     writeAuthStore(store);
@@ -1606,8 +1648,8 @@ app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, (req,
     if (['free', 'pending', 'active', 'expired'].includes(body.membershipStatus)) {
       targetUser.membershipStatus = body.membershipStatus;
     }
-    if (['none', 'monthly', 'annual', 'per_lesson'].includes(body.membershipPlan)) {
-      targetUser.membershipPlan = body.membershipPlan;
+    if (['none', 'per_lesson', 'course', 'monthly', 'annual'].includes(body.membershipPlan)) {
+      targetUser.membershipPlan = normalizeServerPlan(body.membershipPlan);
     }
     if (typeof body.membershipExpiresAt === 'string') {
       targetUser.membershipExpiresAt = body.membershipExpiresAt.trim().slice(0, 40);
@@ -1617,6 +1659,11 @@ app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, (req,
         .map((id) => String(id || '').trim().slice(0, 128))
         .filter(Boolean)
         .slice(0, 100);
+    }
+    if (Array.isArray(body.subscribedCourses)) {
+      targetUser.subscribedCourses = Array.from(
+        new Set(body.subscribedCourses.map(normalizeCourseNameServer).filter(Boolean))
+      ).slice(0, 50);
     }
     targetUser.updatedAt = new Date().toISOString();
     writeAuthStore(store);

@@ -17,17 +17,11 @@
       defaultAmount: '9 Kyat',
       subtitle: 'Unlock one paid lesson permanently'
     },
-    monthly: {
-      id: 'monthly',
-      title: 'Monthly All-Access',
-      defaultAmount: '$19 / mo',
-      subtitle: 'All Adult & Kids paid lessons for 30 days'
-    },
-    annual: {
-      id: 'annual',
-      title: 'Annual All-Access',
-      defaultAmount: '$149 / yr',
-      subtitle: 'All Adult & Kids paid lessons for 12 months (Save 35%)'
+    course: {
+      id: 'course',
+      title: 'Full Course Pass',
+      defaultAmount: '100 Kyat',
+      subtitle: 'Unlock every lesson inside a selected course (e.g., HSK 1 or HSK 2)'
     }
   };
 
@@ -36,10 +30,11 @@
   let resetPrefillEmail = '';
   let accountTab = 'profile'; // 'profile' | 'plans' | 'admin'
   let subscribeContext = {
-    planType: 'monthly',
+    planType: 'course',
     lessonId: '',
     lessonTitle: '',
-    amountLabel: '$19 / mo',
+    courseName: 'HSK 1',
+    amountLabel: '100 Kyat',
     contactChannel: 'viber'
   };
   let pendingPostAuthSubscribe = null;
@@ -82,10 +77,11 @@
     if (!state?.user) return '';
     if (state.isAdmin) return 'Admin';
     if (!profile) return 'Free';
-    if (profile.membershipStatus === 'active') {
-      if (profile.membershipPlan === 'annual') return 'Annual Active';
-      if (profile.membershipPlan === 'monthly') return 'Monthly Active';
-      if (profile.membershipPlan === 'per_lesson') return 'Lesson Pass';
+    const hasCourses = (profile.subscribedCourses || []).length > 0;
+    const hasLessons = (profile.subscribedLessonIds || []).length > 0;
+    if (profile.membershipStatus === 'active' || hasCourses || hasLessons) {
+      if (hasCourses || profile.membershipPlan === 'course') return 'Course Active';
+      if (hasLessons || profile.membershipPlan === 'per_lesson') return 'Lesson Pass';
       return 'Active';
     }
     if ((state.myRequests || []).some((r) => r.status === 'pending')) {
@@ -208,40 +204,86 @@
     renderModal();
   }
 
-  function openSubscribeModal(lesson) {
+  function getAvailableCoursesList() {
+    const api = getAuthApi();
+    const cfg = api && typeof api.getSiteConfig === 'function' ? api.getSiteConfig() : null;
+    const set = new Set(['HSK 1', 'HSK 2']);
+    if (cfg && cfg.coursePrices && typeof cfg.coursePrices === 'object') {
+      Object.keys(cfg.coursePrices).forEach((k) => {
+        if (k && String(k).trim()) set.add(String(k).trim());
+      });
+    }
+    if (window.LinguaLessons && typeof window.LinguaLessons.getAllCourses === 'function') {
+      (window.LinguaLessons.getAllCourses() || []).forEach((c) => {
+        if (c && String(c).trim()) set.add(String(c).trim());
+      });
+    }
+    return Array.from(set);
+  }
+
+  function resolveCoursePriceKyat(courseName) {
+    const api = getAuthApi();
+    if (api && typeof api.getCoursePrice === 'function') {
+      return api.getCoursePrice(courseName);
+    }
+    return String(courseName).toUpperCase().includes('2') ? 120 : 100;
+  }
+
+  function openSubscribeModal(lessonOrOpts) {
     const api = getAuthApi();
     const state = api ? api.getState() : null;
     feedbackBanner = null;
 
-    if (lesson && (lesson.id || lesson.lessonId)) {
-      const pricing = api ? api.getLessonPricing(lesson) : { accessType: 'paid', price: 9 };
-      const lessonId = String(lesson.id || lesson.lessonId);
-      const lessonTitle = String(lesson.title || lessonId);
+    if (lessonOrOpts && lessonOrOpts.mode === 'course') {
+      const cName = api && api.normalizeCourseName
+        ? api.normalizeCourseName(lessonOrOpts.courseName || 'HSK 1')
+        : (lessonOrOpts.courseName || 'HSK 1');
+      const cPrice = resolveCoursePriceKyat(cName);
+      subscribeContext = {
+        planType: 'course',
+        lessonId: '',
+        lessonTitle: `${cName} Full Course`,
+        courseName: cName,
+        amountLabel: `${cPrice} Kyat`,
+        contactChannel: subscribeContext.contactChannel || 'viber'
+      };
+    } else if (lessonOrOpts && (lessonOrOpts.id || lessonOrOpts.lessonId)) {
+      const pricing = api ? api.getLessonPricing(lessonOrOpts) : { accessType: 'paid', price: 9 };
+      const lessonId = String(lessonOrOpts.id || lessonOrOpts.lessonId);
+      const lessonTitle = String(lessonOrOpts.title || lessonId);
+      const cName = api && api.getLessonCourseName
+        ? api.getLessonCourseName(lessonOrOpts)
+        : (lessonOrOpts.course || lessonOrOpts.category || 'HSK 1');
       subscribeContext = {
         planType: 'per_lesson',
         lessonId,
         lessonTitle,
+        courseName: cName,
         amountLabel: `${pricing.price || 9} Kyat`,
         contactChannel: subscribeContext.contactChannel || 'viber'
       };
     } else {
+      const firstCourse = getAvailableCoursesList()[0] || 'HSK 1';
+      const cPrice = resolveCoursePriceKyat(firstCourse);
       subscribeContext = {
-        planType: 'monthly',
+        planType: 'course',
         lessonId: '',
-        lessonTitle: '',
-        amountLabel: '$19 / mo',
+        lessonTitle: `${firstCourse} Full Course`,
+        courseName: firstCourse,
+        amountLabel: `${cPrice} Kyat`,
         contactChannel: subscribeContext.contactChannel || 'viber'
       };
     }
 
-    if (state && state.user) {
-      modalMode = 'subscribe';
-    } else {
-      // Prompt sign in / registration first, then proceed right into the selected plan
+    if (!state || !state.user) {
       pendingPostAuthSubscribe = { ...subscribeContext };
-      modalMode = 'subscribe';
     }
+    modalMode = 'subscribe';
     renderModal();
+  }
+
+  function openSubscribeCourseModal(courseName) {
+    openSubscribeModal({ mode: 'course', courseName: courseName || 'HSK 1' });
   }
 
   function showToast(message, type = 'success') {
@@ -437,19 +479,36 @@
   }
 
   function renderPlanSelectionAndQrStep(state) {
-    const api = getAuthApi();
     const isSignedIn = Boolean(state && state.user);
     const profile = state?.profile;
     const isLessonContext = Boolean(subscribeContext.lessonId);
 
-    const perLessonTitle = subscribeContext.lessonTitle || 'Selected Paid Lesson';
-    const perLessonPrice = subscribeContext.lessonId ? subscribeContext.amountLabel || '9 Kyat' : '9 Kyat / lesson';
+    const coursesList = getAvailableCoursesList();
+    const activeCourse = coursesList.includes(subscribeContext.courseName)
+      ? subscribeContext.courseName
+      : coursesList[0] || 'HSK 1';
+    subscribeContext.courseName = activeCourse;
 
-    const selectedPlan = subscribeContext.planType || 'monthly';
+    const perLessonTitle = subscribeContext.lessonTitle || 'Selected Paid Lesson';
+    const perLessonPriceNum = Number(String(subscribeContext.amountLabel || '9').replace(/[^\d.]/g, '')) || 9;
+    const perLessonPrice = isLessonContext && subscribeContext.planType === 'per_lesson'
+      ? (subscribeContext.amountLabel || '9 Kyat')
+      : `${perLessonPriceNum} Kyat`;
+
+    const coursePriceKyat = resolveCoursePriceKyat(activeCourse);
+    const coursePriceLabel = `${coursePriceKyat} Kyat`;
+
+    const selectedPlan = subscribeContext.planType === 'per_lesson' && isLessonContext ? 'per_lesson' : 'course';
+    subscribeContext.planType = selectedPlan;
+    subscribeContext.amountLabel = selectedPlan === 'per_lesson' ? perLessonPrice : coursePriceLabel;
+    if (selectedPlan === 'course') {
+      subscribeContext.lessonTitle = `${activeCourse} Full Course`;
+    }
+
     const selectedLabel =
       selectedPlan === 'per_lesson'
         ? `${perLessonTitle} (${perLessonPrice})`
-        : PLAN_CATALOG[selectedPlan]?.title + ' · ' + PLAN_CATALOG[selectedPlan]?.defaultAmount;
+        : `${activeCourse} Full Course (${coursePriceLabel})`;
 
     const { contactEmail, contactViber, viberHref } = getSiteContact();
     const channel = subscribeContext.contactChannel === 'email' ? 'email' : 'viber';
@@ -464,7 +523,7 @@
         profile?.username || ''
       }\nEmail: ${profile?.email || state?.user?.email || ''}\nPhone/Viber: ${
         profile?.phoneNumber || ''
-      }\n\nPlease share the QR code for payment so my membership can be activated.\n\nThank you!`
+      }\n\nPlease share the QR code for payment so my access can be activated.\n\nThank you!`
     );
     const mailtoHref = `mailto:${encodeURIComponent(contactEmail)}?subject=${subject}&body=${body}`;
 
@@ -474,10 +533,12 @@
       ${
         isLessonContext
           ? `<div class="lp-context-callout">
-               <strong>Locked Lesson:</strong> ${escapeHTML(subscribeContext.lessonTitle)}
-               <span>· Choose single-lesson unlock or unlimited All-Access below.</span>
+               <strong>Locked Lesson:</strong> ${escapeHTML(perLessonTitle)} (${escapeHTML(activeCourse)})
+               <span>· Unlock just this lesson or subscribe to the full ${escapeHTML(activeCourse)} course.</span>
              </div>`
-          : ''
+          : `<div class="lp-context-callout">
+               <strong>Course &amp; Lesson Access:</strong> Unlock all lessons inside a full course (e.g. ${escapeHTML(activeCourse)}) or individual lessons from the Lessons page.
+             </div>`
       }
 
       <div class="lp-plan-grid">
@@ -486,30 +547,33 @@
             ? `
           <button type="button" class="lp-plan-card ${selectedPlan === 'per_lesson' ? 'is-selected' : ''}" data-select-plan="per_lesson">
             <div class="lp-plan-top">
-              <strong>This Lesson Only</strong>
+              <strong>Lesson (This Lesson Only)</strong>
               <span class="lp-plan-price">${escapeHTML(perLessonPrice)}</span>
             </div>
-            <p>${escapeHTML(perLessonTitle)} · Permanent access to this lesson.</p>
+            <p>${escapeHTML(perLessonTitle)} · Unlock this single paid lesson permanently.</p>
           </button>
         `
             : ''
         }
 
-        <button type="button" class="lp-plan-card ${selectedPlan === 'monthly' ? 'is-selected' : ''}" data-select-plan="monthly">
+        <div class="lp-plan-card ${selectedPlan === 'course' ? 'is-selected' : ''}" data-select-plan="course" role="button" tabindex="0">
           <div class="lp-plan-top">
-            <strong>Monthly All-Access</strong>
-            <span class="lp-plan-price">$19 / mo</span>
+            <strong>Course (${escapeHTML(activeCourse)})</strong>
+            <span class="lp-plan-price">${escapeHTML(coursePriceLabel)}</span>
           </div>
-          <p>Unlock every paid Adult &amp; Kids lesson for 30 days.</p>
-        </button>
-
-        <button type="button" class="lp-plan-card ${selectedPlan === 'annual' ? 'is-selected' : ''}" data-select-plan="annual">
-          <div class="lp-plan-top">
-            <strong>Annual All-Access</strong>
-            <span class="lp-plan-price">$149 / yr</span>
+          <p>Unlock every lesson in <strong>${escapeHTML(activeCourse)}</strong> (including all current &amp; future lessons added to this course).</p>
+          <div style="margin-top: 10px;">
+            <label for="lpSubCourseSelect" style="display:block; font-size:0.78rem; font-weight:700; margin-bottom:4px;">Select Course</label>
+            <select id="lpSubCourseSelect" class="lp-inline-select" style="width:100%;">
+              ${coursesList
+                .map((c) => {
+                  const cp = resolveCoursePriceKyat(c);
+                  return `<option value="${escapeHTML(c)}" ${c === activeCourse ? 'selected' : ''}>${escapeHTML(c)} — ${cp} Kyat</option>`;
+                })
+                .join('')}
+            </select>
           </div>
-          <p>Full 12-month membership across all lessons (Save 35%).</p>
-        </button>
+        </div>
       </div>
 
       ${
@@ -517,7 +581,7 @@
           ? `
         <div class="lp-qr-box">
           <h3>Step 2: Sign In to Request QR Payment</h3>
-          <p class="lp-muted">Please sign in or register first so we can link the QR payment and activate membership on your profile.</p>
+          <p class="lp-muted">Please sign in or register first so we can link your QR payment and activate your lesson or course access.</p>
           <div class="lp-btn-row">
             <button type="button" class="lp-btn lp-btn-primary" id="lpSubGoSignInBtn">Sign In</button>
             <button type="button" class="lp-btn lp-btn-secondary" id="lpSubGoRegisterBtn">Create Account</button>
@@ -528,7 +592,7 @@
         <div class="lp-qr-box">
           <h3>Request QR Code via Email or Viber</h3>
           <p class="lp-muted">
-            Selected: <strong>${escapeHTML(selectedLabel)}</strong> · Contact us via Email or Viber to receive our payment QR code. After payment is confirmed, your membership status will be activated on your profile.
+            Selected: <strong>${escapeHTML(selectedLabel)}</strong> · Contact us via Email or Viber to receive our payment QR code. After payment is confirmed, access unlocks on your profile.
           </p>
 
           <div class="lp-contact-cards">
@@ -603,35 +667,33 @@
     const myRequests = state.myRequests || [];
     const pendingReq = myRequests.find((r) => r.status === 'pending');
 
+    const unlockedCourses = profile?.subscribedCourses || [];
+    const unlockedLessons = profile?.subscribedLessonIds || [];
+
     let membershipHeadline = 'Free Learner Plan';
-    let membershipSub = 'Access all free foundational lessons. Upgrade anytime for paid lessons.';
+    let membershipSub = 'Access free starter lessons. Subscribe to individual lessons or full courses anytime.';
     let membershipTone = 'free';
 
     if (state.isAdmin) {
       membershipHeadline = 'Administrator · Full Access';
-      membershipSub = 'You have full access to all lessons, upload pricing, and member approvals.';
+      membershipSub = 'You have full access to all courses, lessons, pricing settings, and member approvals.';
       membershipTone = 'active';
-    } else if (profile?.membershipStatus === 'active' && api && api.hasActiveMembership()) {
+    } else if (unlockedCourses.length > 0) {
       membershipTone = 'active';
-      const planNames = { monthly: 'Monthly All-Access', annual: 'Annual All-Access', per_lesson: 'By-Lesson Pass', none: 'Active' };
-      membershipHeadline = `Active Membership · ${planNames[profile.membershipPlan] || 'Subscribed'}`;
-      membershipSub = profile.membershipExpiresAt
-        ? `Valid through ${profile.membershipExpiresAt} · All paid lessons unlocked.`
-        : 'All paid lessons are unlocked on your account.';
-    } else if ((profile?.subscribedLessonIds || []).length > 0) {
+      membershipHeadline = `Active Course Access · ${unlockedCourses.join(', ')}`;
+      membershipSub = `All lessons inside ${unlockedCourses.join(', ')} are unlocked on your account.`;
+    } else if (unlockedLessons.length > 0) {
       membershipTone = 'active';
-      membershipHeadline = `Active · ${profile.subscribedLessonIds.length} Lesson${
-        profile.subscribedLessonIds.length > 1 ? 's' : ''
-      } Unlocked`;
-      membershipSub = `Unlocked IDs: ${profile.subscribedLessonIds.join(', ')}`;
+      membershipHeadline = `Active · ${unlockedLessons.length} Lesson${unlockedLessons.length > 1 ? 's' : ''} Unlocked`;
+      membershipSub = `Unlocked Lesson IDs: ${unlockedLessons.join(', ')}`;
     } else if (pendingReq) {
       membershipTone = 'pending';
       membershipHeadline = `Pending QR Verification · ${pendingReq.lessonTitle}`;
       membershipSub = `Requested ${pendingReq.amountLabel} via ${pendingReq.contactChannel.toUpperCase()}. Waiting for admin confirmation.`;
     } else if (profile?.membershipStatus === 'expired') {
       membershipTone = 'expired';
-      membershipHeadline = 'Membership Expired';
-      membershipSub = 'Renew Monthly, Annual, or By-Lesson access to unlock paid lessons.';
+      membershipHeadline = 'Access Expired';
+      membershipSub = 'Subscribe to a Lesson or Course in Kyat to unlock paid lessons.';
     }
 
     return `
@@ -859,9 +921,8 @@
                         </select>
                         <select class="lp-inline-select" data-user-plan="${escapeHTML(u.uid)}" aria-label="Membership plan">
                           <option value="none" ${u.membershipPlan === 'none' ? 'selected' : ''}>none</option>
-                          <option value="monthly" ${u.membershipPlan === 'monthly' ? 'selected' : ''}>monthly</option>
-                          <option value="annual" ${u.membershipPlan === 'annual' ? 'selected' : ''}>annual</option>
                           <option value="per_lesson" ${u.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson</option>
+                          <option value="course" ${u.membershipPlan === 'course' || u.membershipPlan === 'monthly' || u.membershipPlan === 'annual' ? 'selected' : ''}>course</option>
                         </select>
                         <input type="date" class="lp-inline-date" data-user-expiry="${escapeHTML(u.uid)}" value="${escapeHTML(
                       u.membershipExpiresAt || ''
@@ -1326,17 +1387,30 @@
 
     // Subscribe plan cards & QR workflow
     document.querySelectorAll('[data-select-plan]').forEach((card) => {
-      card.onclick = () => {
+      card.onclick = (e) => {
+        if (e.target && e.target.closest('#lpSubCourseSelect')) return;
         const planId = card.dataset.selectPlan;
-        subscribeContext.planType = planId;
-        if (planId === 'monthly') {
-          subscribeContext.amountLabel = '$19 / mo';
-        } else if (planId === 'annual') {
-          subscribeContext.amountLabel = '$149 / yr';
+        subscribeContext.planType = planId === 'per_lesson' ? 'per_lesson' : 'course';
+        if (subscribeContext.planType === 'course') {
+          const cName = subscribeContext.courseName || 'HSK 1';
+          subscribeContext.amountLabel = `${resolveCoursePriceKyat(cName)} Kyat`;
         }
         renderModal();
       };
     });
+
+    const subCourseSelect = document.getElementById('lpSubCourseSelect');
+    if (subCourseSelect) {
+      subCourseSelect.onchange = (e) => {
+        e.stopPropagation();
+        const chosen = subCourseSelect.value || 'HSK 1';
+        subscribeContext.planType = 'course';
+        subscribeContext.courseName = chosen;
+        subscribeContext.lessonTitle = `${chosen} Full Course`;
+        subscribeContext.amountLabel = `${resolveCoursePriceKyat(chosen)} Kyat`;
+        renderModal();
+      };
+    }
 
     const subGoSignIn = document.getElementById('lpSubGoSignInBtn');
     if (subGoSignIn) {
@@ -1392,6 +1466,7 @@
           await api.submitSubscriptionRequest({
             planType: subscribeContext.planType,
             lessonId: subscribeContext.lessonId,
+            courseName: subscribeContext.courseName,
             lessonTitle: subscribeContext.lessonTitle,
             amountLabel: subscribeContext.amountLabel,
             contactChannel,
@@ -1400,7 +1475,7 @@
           });
           feedbackBanner = {
             type: 'success',
-            text: 'Subscription request submitted! Send a message via Email or Viber above to receive your QR code. Your membership will unlock once payment is confirmed.'
+            text: 'Subscription request submitted! Send a message via Email or Viber above to receive your QR code. Your access will unlock once payment is confirmed.'
           };
           showToast('QR payment request submitted.');
           renderModal();
@@ -1419,7 +1494,7 @@
         if (window.LinguaLessons && typeof window.LinguaLessons.openExcelManagerModal === 'function') {
           window.LinguaLessons.openExcelManagerModal();
         } else {
-          window.location.href = 'lessons-adult.html?managePricing=1';
+          window.location.href = 'lessons.html?managePricing=1';
         }
       };
     }
@@ -2124,6 +2199,7 @@
     openAuthModal,
     openAccountModal,
     openSubscribeModal,
+    openSubscribeCourseModal,
     closeModal,
     updateHeaderAccountUI,
     syncMemberMenuTools,

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lessons & Curriculum - LinguaPath Mandarin</title>
-  <meta name="description" content="Explore Chinese Mandarin curriculum tracks for adults and kids.">
+  <title>Chinese Lessons &amp; HSK Courses - LinguaPath Mandarin</title>
+  <meta name="description" content="Explore structured Mandarin Chinese courses including HSK 1, HSK 2, and custom tracks with video lessons, exercises, stroke writing, and pronunciation practice.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Noto+Serif+SC:wght@600;700;900&family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
@@ -20,46 +20,6 @@
       } catch (e) {}
     })();
   </script>
-  <style>
-    .audience-tab-bar {
-      display: inline-flex;
-      background: #fed7aa;
-      padding: 6px;
-      border-radius: 9999px;
-      margin: 20px auto 0;
-      gap: 6px;
-    }
-    [data-theme="dark"] .audience-tab-bar {
-      background: #334155;
-    }
-    .audience-tab {
-      padding: 10px 24px;
-      border-radius: 9999px;
-      font-size: 0.95rem;
-      font-weight: 800;
-      color: #9a3412;
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-    [data-theme="dark"] .audience-tab {
-      color: #cbd5e1;
-    }
-    .audience-tab.active {
-      background: #ffffff;
-      color: #ea580c;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-    [data-theme="dark"] .audience-tab.active {
-      background: #0f172a;
-      color: #fb923c;
-    }
-  </style>
 </head>
 <body>
 
@@ -67,128 +27,55 @@
   <div id="sharedHeader"></div>
 
   <main>
-    <section class="hero" style="padding: 60px 0 40px; text-align: center;">
+    <!-- Hero Header -->
+    <section class="hero" style="padding: 52px 0 36px; text-align: center;">
       <div class="container">
-        <span class="eyebrow">Structured Curriculum</span>
-        <h1 style="font-size: clamp(2.4rem, 6vw, 3.5rem); font-weight: 900; margin: 12px 0 16px;">
-          Select Your Pathway
+        <span class="eyebrow">Structured HSK Curriculum</span>
+        <h1 style="font-size: clamp(2.2rem, 5vw, 3.2rem); font-weight: 900; margin: 10px 0 12px;">
+          Chinese Lessons &amp; Courses
         </h1>
-        <p style="max-width: 640px; margin: 0 auto; font-size: 1.1rem; color: #475569;">
-          Switch between our adult professional course and playful young-learner curriculum.
+        <p style="max-width: 660px; margin: 0 auto; font-size: 1.05rem;">
+          Select a course from the sidebar menu—start with <strong>HSK 1</strong> or <strong>HSK 2</strong> and practice with video lessons, interactive quizzes, stroke-order writing, and pronunciation checks.
         </p>
+      </div>
+    </section>
 
-        <div class="audience-tab-bar" role="tablist">
-          <button type="button" class="audience-tab active" id="tabAdult" role="tab" aria-selected="true">
-            💼 Adult Track
-          </button>
-          <button type="button" class="audience-tab" id="tabKids" role="tab" aria-selected="false">
-            🐼 Kids Track
-          </button>
+    <!-- 1. Course Sidebar + Lessons Grid View -->
+    <section class="section" id="curriculumListSection" style="padding: 36px 0 80px;">
+      <div class="container">
+        <div class="lessons-layout">
+          <!-- Left Course Menu Sidebar -->
+          <aside class="lessons-sidebar" id="lessonsCourseSidebar" aria-label="Course Curriculum Navigation">
+            <!-- Rendered dynamically by lessons.js (HSK 1, HSK 2, and custom courses) -->
+          </aside>
+
+          <!-- Main Course Stage -->
+          <div class="lessons-main-stage">
+            <!-- Active Course Banner Header + Unlock Full Course CTA -->
+            <div id="activeCourseHeader" class="course-banner-card">
+              <!-- Populated dynamically by lessons.js -->
+            </div>
+
+            <div class="lesson-grid" id="lessonsGrid">
+              <!-- Lesson cards rendered dynamically from lessons.xlsx / D1 by lessons.js -->
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 12px; flex-wrap: wrap; margin-top: 40px;">
+              <a href="index.html#lessons" class="btn btn-secondary btn-lg">← Back to Home</a>
+              <a href="games.html" class="btn btn-primary btn-lg">Practice with Games →</a>
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- Adult Track Section Container -->
-    <div id="adultView" class="container section" style="padding: 40px 0 80px;">
-      <div class="section-heading">
-        <span class="section-label">For Professionals &amp; Adults</span>
-        <h2>Practical Conversation &amp; Business</h2>
-        <p>Curated lessons covering workplace meetings, dining etiquette, travel Mandarin, and HSK test preparation.</p>
-      </div>
-
-      <div class="lesson-grid">
-        <article class="lesson-card">
-          <div class="lesson-card-image">
-            <img src="assets/images/story-01.jpg" alt="Morning Routine and Greetings" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';">
-          </div>
-          <div class="lesson-card-content">
-            <span class="lesson-level">⭐ Beginner • Daily Talk</span>
-            <h3>Morning Greetings &amp; Politeness</h3>
-            <div class="lesson-chinese-title">早上好！日常问候</div>
-            <div class="lesson-pinyin">Zǎoshang hǎo! Rìcháng wènhòu</div>
-            <p class="lesson-description">Learn natural greetings, introduce yourself with proper etiquette, and master third-tone sandhi rhythm.</p>
-            <div class="lesson-card-actions">
-              <a href="lessons-adult.html?lesson=adult-basics-01" class="btn btn-primary lesson-button">Start Lesson →</a>
-            </div>
-          </div>
-        </article>
-
-        <article class="lesson-card">
-          <div class="lesson-card-image">
-            <img src="assets/images/story-02.jpg" alt="Fruit Market and Dining" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';">
-          </div>
-          <div class="lesson-card-content">
-            <span class="lesson-level">⭐⭐ Elementary • Practical</span>
-            <h3>Fresh Market &amp; Bargaining</h3>
-            <div class="lesson-chinese-title">买水果与市场购物</div>
-            <div class="lesson-pinyin">Mǎi shuǐguǒ yǔ shìchǎng gòuwù</div>
-            <p class="lesson-description">Essential phrases for asking prices ("多少钱？"), buying by weight, and digital payment vocabulary.</p>
-            <div class="lesson-card-actions">
-              <a href="lessons-adult.html?lesson=adult-basics-02" class="btn btn-primary lesson-button">Start Lesson →</a>
-            </div>
-          </div>
-        </article>
-      </div>
-
-      <div style="text-align: center; margin-top: 30px;">
-        <a href="lessons-adult.html" class="btn btn-secondary btn-lg">View Full Adult Curriculum →</a>
-      </div>
-    </div>
-
-    <!-- Kids Track Section Container -->
-    <div id="kidsView" class="container section" style="padding: 40px 0 80px; display: none;">
-      <div class="section-heading">
-        <span class="section-label">For Kids (Ages 5-12)</span>
-        <h2>Joyful Chinese Adventure Park</h2>
-        <p>Colorful animal lessons, pinyin songs, and rewarding vocabulary games.</p>
-      </div>
-
-      <div class="lesson-grid">
-        <article class="lesson-card" style="border: 2px solid #a7f3d0;">
-          <div class="lesson-card-image">
-            <img src="assets/images/story-01.jpg" alt="Panda Greetings" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';">
-          </div>
-          <div class="lesson-card-content">
-            <span class="lesson-level" style="background: #dcfce7; color: #15803d; border-color: #86efac;">🐼 Lesson 1 • Friendly Animals</span>
-            <h3>Say Hello to Little Panda!</h3>
-            <div class="lesson-chinese-title" style="color: #059669;">你好，小熊猫！</div>
-            <div class="lesson-pinyin">Nǐ hǎo, xiǎo xióngmāo!</div>
-            <p class="lesson-description">Learn to say hello, thank you, and goodbye while waving to friendly panda mascot!</p>
-            <div class="lesson-card-actions">
-              <a href="lessons-kids.html?lesson=kids-pinyin-01" class="btn btn-primary lesson-button" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;">Start Lesson →</a>
-            </div>
-          </div>
-        </article>
-
-        <article class="lesson-card" style="border: 2px solid #fde68a;">
-          <div class="lesson-card-image">
-            <img src="assets/images/story-02.jpg" alt="Fruit Basket and Colors" onerror="this.onerror=null; this.src='assets/images/story-poster.jpg';">
-          </div>
-          <div class="lesson-card-content">
-            <span class="lesson-level" style="background: #fef9c3; color: #a16207; border-color: #fde047;">🍎 Lesson 2 • Yummy Fruit</span>
-            <h3>Sweet Apples &amp; Bananas!</h3>
-            <div class="lesson-chinese-title" style="color: #d97706;">甜甜的水果乐园</div>
-            <div class="lesson-pinyin">Tián tián de shuǐguǒ lèyuán</div>
-            <p class="lesson-description">Taste sweet red apples and yellow bananas while learning Chinese number counts!</p>
-            <div class="lesson-card-actions">
-              <a href="lessons-kids.html?lesson=kids-pinyin-02" class="btn btn-primary lesson-button" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;">Start Lesson →</a>
-            </div>
-          </div>
-        </article>
-      </div>
-
-      <div style="text-align: center; margin-top: 30px;">
-        <a href="lessons-kids.html" class="btn btn-secondary btn-lg">View Full Kids Adventure →</a>
-      </div>
-    </div>
-
-    <!-- Dynamic Lesson Workspace Container (3 Core Sections) -->
+    <!-- 2. Dedicated Lesson Workspace (4 Core Sections) -->
     <section class="lesson-workspace-container" id="lessonWorkspace">
       <div class="container">
         <!-- Hero Card populated by lessons.js -->
         <div id="workspaceHeroHeader" class="workspace-lesson-hero"></div>
 
-        <!-- 3 Core Section Tabs -->
+        <!-- Workspace Section Tabs -->
         <div class="workspace-tabs-bar" role="tablist" aria-label="Lesson Workspace Sections">
           <button type="button" class="workspace-tab-btn active" data-tab="video" role="tab" aria-selected="true">
             📺 Video Lesson
@@ -222,42 +109,13 @@
   <!-- Shared Footer Container -->
   <div id="sharedFooter"></div>
 
+  <!-- SheetJS with local fallback -->
+  <script src="vendor/xlsx.full.min.js"></script>
   <script>
-    // Handle tab switching or query param (?audience=kids or ?audience=adult)
-    const tabAdult = document.getElementById('tabAdult');
-    const tabKids = document.getElementById('tabKids');
-    const adultView = document.getElementById('adultView');
-    const kidsView = document.getElementById('kidsView');
-
-    function switchAudience(isKids) {
-      if (isKids) {
-        tabKids.classList.add('active');
-        tabKids.setAttribute('aria-selected', 'true');
-        tabAdult.classList.remove('active');
-        tabAdult.setAttribute('aria-selected', 'false');
-        kidsView.style.display = 'block';
-        adultView.style.display = 'none';
-      } else {
-        tabAdult.classList.add('active');
-        tabAdult.setAttribute('aria-selected', 'true');
-        tabKids.classList.remove('active');
-        tabKids.setAttribute('aria-selected', 'false');
-        adultView.style.display = 'block';
-        kidsView.style.display = 'none';
-      }
-    }
-
-    tabAdult.addEventListener('click', () => switchAudience(false));
-    tabKids.addEventListener('click', () => switchAudience(true));
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('audience') === 'kids') {
-      switchAudience(true);
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"><\/script>');
     }
   </script>
-
-  <!-- SheetJS Excel Parser -->
-  <script src="vendor/xlsx.full.min.js"></script>
 
   <!-- HanziWriter Stroke Order Engine -->
   <script src="vendor/hanzi-writer.min.js"></script>
@@ -272,11 +130,11 @@
   <script src="backend-config.js?v=excel3"></script>
 
   <!-- Excel Auth & Membership Client -->
-  <script src="vendor/firebase-app.js?v=excel2"></script>
-  <script src="auth-ui.js?v=excel2"></script>
+  <script src="vendor/firebase-app.js?v=excel3"></script>
+  <script src="auth-ui.js?v=excel3"></script>
 
   <!-- Dynamic Curriculum Controller -->
-  <script src="lessons.js?v=excel3"></script>
+  <script src="lessons.js?v=excel4"></script>
 
   <!-- Shared Header Script -->
   <script src="header.js" defer></script>

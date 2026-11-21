@@ -228,7 +228,8 @@
 
       <nav class="desktop-nav" aria-label="Main Navigation">
         <a href="index.html" class="nav-link">Home</a>
-        <a href="story.html" class="nav-link">Stories &amp; Reels</a>
+        <a href="story.html" class="nav-link">Stories</a>
+        <a href="reels.html" class="nav-link">Reels</a>
         <a href="games.html" class="nav-link">Games</a>
         <a href="lessons.html" class="nav-link">Lessons</a>
       </nav>
@@ -299,8 +300,13 @@
           <span class="hide-menu-link-text">Home</span>
         </a>
         <a href="story.html" class="hide-menu-link">
+          <span class="menu-link-icon" aria-hidden="true">📖</span>
+          <span class="hide-menu-link-text">Stories</span>
+          <span class="hide-menu-tag">Read</span>
+        </a>
+        <a href="reels.html" class="hide-menu-link">
           <span class="menu-link-icon" aria-hidden="true">🎬</span>
-          <span class="hide-menu-link-text">Stories &amp; Reels</span>
+          <span class="hide-menu-link-text">Reels</span>
           <span class="hide-menu-tag">Watch</span>
         </a>
         <a href="games.html" class="hide-menu-link">
@@ -310,7 +316,7 @@
         </a>
         <a href="lessons.html" class="hide-menu-link">
           <span class="menu-link-icon" aria-hidden="true">📚</span>
-          <span class="hide-menu-link-text">Lessons &amp; Pathways</span>
+          <span class="hide-menu-link-text">Lessons</span>
         </a>
         <a href="admin.html" class="hide-menu-link hide-menu-admin-link" id="mobileAdminLink" hidden>
           <span class="menu-link-icon" aria-hidden="true">⚙️</span>
@@ -583,6 +589,10 @@
         }
         // Stories matching (covers story.html)
         else if (currentFile.startsWith('story') && linkFile.startsWith('story')) {
+          isMatch = true;
+        }
+        // Reels matching (covers reels.html)
+        else if (currentFile.startsWith('reel') && linkFile.startsWith('reel')) {
           isMatch = true;
         }
 

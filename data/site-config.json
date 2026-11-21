@@ -4,38 +4,35 @@
   "heroTitleLine1": "Learn Chinese",
   "heroTitleHighlight": "with Confidence.",
   "heroSubtitle": "Build your Chinese skills through pronunciation, everyday expressions, conversations, vocabulary, and practical exercises.",
-  "heroPrimaryCta": "Explore Stories & Reels",
-  "heroSecondaryCta": "Learning Hub",
+  "heroPrimaryCta": "Explore Stories",
+  "heroSecondaryCta": "Explore Lessons",
   "heroBannerUrl": "assets/hero-banner.png",
-  "storiesLabel": "Featured Stories & Reels",
-  "storiesTitle": "Stories & Reels",
-  "storiesSubtitle": "Watch bite-sized vertical video reels and engaging cultural narratives crafted for modern Mandarin learners.",
+  "storiesLabel": "Interactive Reading",
+  "storiesTitle": "Featured Stories",
+  "storiesSubtitle": "Explore illustrated Mandarin stories with native narration, sentence-by-sentence pinyin, key vocabulary, and comprehension exercises.",
+  "reelsLabel": "Bite-Sized Video Immersion",
+  "reelsTitle": "Short Reels",
+  "reelsSubtitle": "Watch bite-sized vertical video reels and cultural shorts with quad-language subtitles in Hanzi, Pinyin, English, and Myanmar.",
   "gamesLabel": "Interactive Practice",
   "gamesTitle": "Play & Practice Games",
   "gamesSubtitle": "Reinforce your Chinese tones, character recognition, and rapid recall through interactive gameplay.",
-  "lessonsLabel": "Curriculum Pathways",
-  "lessonsTitle": "Choose Your Learning Pathway",
-  "lessonsSubtitle": "Select your track to access structured lessons, native voice recordings, dialogues, and practice exercises.",
-  "adultBadge": "Adults • Comprehensive",
-  "adultTitle": "Mandarin for Adults & Professionals",
-  "adultSubtitle": "实用成人汉语 • Practical Proficiency",
-  "adultDesc": "Master practical conversation for career, travel, dining, and HSK test preparation with real-world scenarios and cultural nuance.",
-  "adultBullets": [
-    "Everyday Living & Socializing",
-    "Business Meetings & Travel Mandarin",
-    "Sentence Patterns & HSK Vocabulary"
+  "lessonsLabel": "Structured HSK Curriculum",
+  "lessonsTitle": "Mandarin Courses & Lessons",
+  "lessonsSubtitle": "Study step by step with HSK 1, HSK 2, and custom courses featuring video lessons, 5 interactive exercise types, and stroke writing.",
+  "lessonsBadge": "HSK 1 · HSK 2 · All Levels",
+  "lessonsCardTitle": "Explore HSK Courses & Lessons",
+  "lessonsCardSubtitle": "系统汉语课程 • Video, Exercises & Stroke Order",
+  "lessonsCardDesc": "Browse structured lessons organized by course in our learning workspace. Practice listening, picture matching, pinyin character writing, and speaking.",
+  "lessonsBullets": [
+    "HSK 1 & HSK 2 foundational to conversational courses",
+    "5 interactive exercise formats including Pinyin character writing",
+    "Unlock individual lessons or an entire course in Kyat"
   ],
-  "adultCta": "Start Learning (Adults) →",
-  "kidsBadge": "Kids • Playful Immersion",
-  "kidsTitle": "Chinese for Kids & Young Learners",
-  "kidsSubtitle": "少儿趣味中文 • Joyful Adventures",
-  "kidsDesc": "Discover the joy of Mandarin through colorful stories, playful pinyin songs, animal adventures, and interactive challenges that inspire confidence.",
-  "kidsBullets": [
-    "Animals, Colors & Family Adventures",
-    "Cheerful Pinyin Songs & Animations",
-    "Reward Badges & Interactive Quizzes"
-  ],
-  "kidsCta": "Start Learning (Kids) →",
+  "lessonsCta": "Go to Lessons →",
+  "coursePrices": {
+    "HSK 1": 100,
+    "HSK 2": 120
+  },
   "contactEmail": "syndkyaw@gmail.com",
   "contactPhone": "+95 9 798 123 456",
   "contactViber": "+95 9 798 123 456",
@@ -45,7 +42,8 @@
     "kids_01"
   ],
   "featuredStoryIds": [
-    "lesson-01"
+    "lesson-01",
+    "lesson-02"
   ],
   "featuredGameIds": [
     "game-01"
