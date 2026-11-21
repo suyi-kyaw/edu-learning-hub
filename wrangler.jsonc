@@ -3,7 +3,9 @@
   "name": "edu-learning-hub",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-21",
-  "observability": { "enabled": true },
+  "observability": {
+    "enabled": true
+  },
   "assets": {
     "directory": ".",
     "binding": "ASSETS"
@@ -16,4 +18,3 @@
     }
   ]
 }
-
