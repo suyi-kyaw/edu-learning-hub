@@ -1163,41 +1163,270 @@
       ];
     }
 
+    // Normalize exercise records (supports camelCase or snake_case from Excel / D1)
+    const normalizedExercises = exercises
+      .map((raw, idx) => ({
+        lessonId: String(raw.lessonId || raw.lesson_id || lesson.id || '').trim(),
+        order: Number(raw.order || raw.order_num) || idx + 1,
+        type: String(raw.type || 'multiple-choice').trim().toLowerCase(),
+        groupId: String(raw.groupId || raw.group_id || '').trim(),
+        groupTitle: String(raw.groupTitle || raw.group_title || '').trim(),
+        question: String(raw.question || '').trim(),
+        audioUrl: String(raw.audioUrl || raw.audio_url || raw.audio || '').trim(),
+        optionA: String(raw.optionA ?? raw.option_a ?? '').trim(),
+        optionB: String(raw.optionB ?? raw.option_b ?? '').trim(),
+        optionC: String(raw.optionC ?? raw.option_c ?? '').trim(),
+        optionD: String(raw.optionD ?? raw.option_d ?? '').trim(),
+        optionAImage: String(raw.optionAImage || raw.option_a_image || '').trim(),
+        optionBImage: String(raw.optionBImage || raw.option_b_image || '').trim(),
+        optionCImage: String(raw.optionCImage || raw.option_c_image || '').trim(),
+        optionDImage: String(raw.optionDImage || raw.option_d_image || '').trim(),
+        answer: String(raw.answer || '').trim(),
+        explanation: String(raw.explanation || '').trim()
+      }))
+      .sort((a, b) => a.order - b.order);
+
+    const buildExerciseAudioHTML = (ex) => {
+      const audioSrc = ex.audioUrl ? backendAssetUrl(ex.audioUrl) : '';
+      const hasChinese = /[\u4e00-\u9fa5]/.test(ex.question || '');
+      if (!audioSrc && !hasChinese) return '';
+
+      return `
+        <div class="quiz-audio-bar">
+          ${
+            audioSrc
+              ? `<audio src="${escapeHTML(audioSrc)}" controls preload="none" class="quiz-audio-player"></audio>`
+              : ''
+          }
+          ${
+            hasChinese
+              ? `<button type="button" class="quiz-tts-btn" data-speak-text="${escapeHTML(ex.question)}">🔊 Listen</button>`
+              : ''
+          }
+        </div>
+      `;
+    };
+
+    const getExerciseSlots = (ex) => {
+      return ['A', 'B', 'C', 'D']
+        .map((letter) => ({
+          letter,
+          text: ex[`option${letter}`] || '',
+          image: ex[`option${letter}Image`] || ''
+        }))
+        .filter((slot) => slot.text || slot.image);
+    };
+
+    // Build render blocks, grouping shared-image-match rows sharing the same groupId
+    const renderBlocks = [];
+    const seenSharedGroups = new Map();
+    normalizedExercises.forEach((ex, idx) => {
+      const qNum = idx + 1;
+      if (ex.type === 'shared-image-match') {
+        const gKey = (ex.groupId || 'default-group').toLowerCase();
+        if (!seenSharedGroups.has(gKey)) {
+          const groupObj = {
+            kind: 'shared-image-match',
+            groupId: ex.groupId || 'Part II',
+            groupTitle: ex.groupTitle || '',
+            sharedSlots: [],
+            items: []
+          };
+          seenSharedGroups.set(gKey, groupObj);
+          renderBlocks.push(groupObj);
+        }
+        const groupObj = seenSharedGroups.get(gKey);
+        if (!groupObj.groupTitle && ex.groupTitle) {
+          groupObj.groupTitle = ex.groupTitle;
+        }
+        // Populate sharedSlots from the first item that provides images/options, or merge missing slots
+        const itemSlots = getExerciseSlots(ex);
+        if (!groupObj.sharedSlots.length) {
+          groupObj.sharedSlots = itemSlots;
+        } else {
+          itemSlots.forEach((s) => {
+            const existing = groupObj.sharedSlots.find((es) => es.letter === s.letter);
+            if (!existing) {
+              groupObj.sharedSlots.push(s);
+            } else {
+              if (!existing.image && s.image) existing.image = s.image;
+              if (!existing.text && s.text) existing.text = s.text;
+            }
+          });
+        }
+        groupObj.items.push({ ex, qNum });
+      } else {
+        renderBlocks.push({
+          kind: ex.type,
+          ex,
+          qNum
+        });
+      }
+    });
+
     panel.innerHTML = `
       <div class="exercises-workspace">
         <div class="quiz-header-bar">
           <div>
             <h3 style="margin: 0 0 4px; font-size: 1.3rem; font-weight: 800;">Interactive Practice Exercises</h3>
-            <span class="quiz-progress-counter">${exercises.length} Questions to Test Your Mastery</span>
+            <span class="quiz-progress-counter">${normalizedExercises.length} Questions to Test Your Mastery</span>
           </div>
           <div class="quiz-score-badge" id="quizScoreBadge">
-            <span>⭐ Score: 0 / ${exercises.length}</span>
+            <span>⭐ Score: 0 / ${normalizedExercises.length}</span>
           </div>
         </div>
 
         <div class="quiz-questions-stack">
-          ${exercises.map((ex, idx) => {
-            const num = idx + 1;
-            const qType = ex.type || 'multiple-choice';
-            const options = [ex.optionA, ex.optionB, ex.optionC, ex.optionD].filter(Boolean);
+          ${renderBlocks.map((block) => {
+            if (block.kind === 'shared-image-match') {
+              const slots = block.sharedSlots.length
+                ? block.sharedSlots
+                : [
+                    { letter: 'A', text: 'A', image: '' },
+                    { letter: 'B', text: 'B', image: '' },
+                    { letter: 'C', text: 'C', image: '' },
+                    { letter: 'D', text: 'D', image: '' }
+                  ];
+              const qNumbersLabel = block.items.length > 1
+                ? `Questions ${block.items[0].qNum}–${block.items[block.items.length - 1].qNum}`
+                : `Question ${block.items[0].qNum}`;
+
+              return `
+                <div class="quiz-card-item quiz-shared-bank-card">
+                  <div class="quiz-question-number">${escapeHTML(qNumbersLabel)} • Picture Matching</div>
+                  <h4 class="quiz-question-text">
+                    ${wrapChineseInKaiti(escapeHTML(block.groupTitle || 'Look at the pictures A, B, C, D below and choose the matching picture for each question.'))}
+                  </h4>
+
+                  <div class="quiz-shared-top-images ${slots.length <= 3 ? 'cols-3' : 'cols-2'}">
+                    ${slots.map((slot) => {
+                      const imgSrc = slot.image ? backendAssetUrl(slot.image) : '';
+                      return `
+                        <div class="quiz-shared-picture-tile">
+                          <div class="quiz-picture-letter-badge">${escapeHTML(slot.letter)}</div>
+                          <div class="quiz-picture-frame">
+                            ${
+                              imgSrc
+                                ? `<img src="${escapeHTML(imgSrc)}" alt="Choice ${escapeHTML(slot.letter)}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                                   <div class="quiz-picture-fallback" style="display:none;">Picture ${escapeHTML(slot.letter)}</div>`
+                                : `<div class="quiz-picture-fallback">Picture ${escapeHTML(slot.letter)}</div>`
+                            }
+                          </div>
+                          ${slot.text ? `<div class="quiz-picture-caption">${wrapChineseInKaiti(escapeHTML(slot.text))}</div>` : ''}
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+
+                  <div class="quiz-shared-questions-list">
+                    ${block.items.map(({ ex, qNum }) => `
+                      <div class="quiz-shared-question-row" id="quizCard-${qNum}">
+                        <div class="quiz-shared-row-main">
+                          <div class="quiz-shared-row-prompt">
+                            <span class="quiz-shared-row-num">${qNum}.</span>
+                            <div class="quiz-shared-row-text">
+                              ${ex.question ? `<div class="quiz-shared-prompt-line">${wrapChineseInKaiti(escapeHTML(ex.question))}</div>` : `<div class="quiz-shared-prompt-line muted">Choose A, B, C, or D for Question ${qNum}</div>`}
+                              ${buildExerciseAudioHTML(ex)}
+                            </div>
+                          </div>
+                          <div class="quiz-letter-choices" role="group" aria-label="Choices for Question ${qNum}">
+                            ${slots.map((slot) => `
+                              <button
+                                type="button"
+                                class="quiz-option-btn quiz-letter-btn"
+                                data-question-index="${qNum}"
+                                data-letter="${escapeHTML(slot.letter)}"
+                                data-option="${escapeHTML(slot.text || slot.letter)}"
+                                data-answer="${escapeHTML(ex.answer || '')}"
+                                data-explanation="${escapeHTML(ex.explanation || '')}"
+                              >
+                                <span class="quiz-letter-label">${escapeHTML(slot.letter)}</span>
+                                <span class="quiz-opt-icon"></span>
+                              </button>
+                            `).join('')}
+                          </div>
+                        </div>
+                        <div class="quiz-feedback-box" id="quizFeedback-${qNum}">
+                          <div class="quiz-feedback-status" id="feedbackStatus-${qNum}"></div>
+                          <p class="quiz-explanation-text" id="feedbackText-${qNum}"></p>
+                        </div>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              `;
+            }
+
+            const { ex, qNum } = block;
+            const slots = getExerciseSlots(ex);
+            const hasOptionImages = slots.some((s) => Boolean(s.image));
+            const isImageChoice = ex.type === 'image-choice' || hasOptionImages;
 
             return `
-              <div class="quiz-card-item" id="quizCard-${num}">
-                <div class="quiz-question-number">Question ${num} • ${qType === 'fill-blank' ? 'Fill in the Blank' : 'Multiple Choice'}</div>
-                <h4 class="quiz-question-text">${wrapChineseInKaiti(escapeHTML(ex.question))}</h4>
+              <div class="quiz-card-item" id="quizCard-${qNum}">
+                <div class="quiz-question-number">Question ${qNum} • ${
+              isImageChoice ? 'Picture Multiple Choice' : ex.type === 'fill-blank' ? 'Fill in the Blank' : 'Multiple Choice'
+            }</div>
+                ${ex.question ? `<h4 class="quiz-question-text">${wrapChineseInKaiti(escapeHTML(ex.question))}</h4>` : ''}
+                ${buildExerciseAudioHTML(ex)}
 
-                <div class="quiz-options-grid">
-                  ${options.map(opt => `
-                    <button type="button" class="quiz-option-btn" data-question-index="${num}" data-option="${escapeHTML(opt)}" data-answer="${escapeHTML(ex.answer || '')}" data-explanation="${escapeHTML(ex.explanation || '')}">
-                      <span>${wrapChineseInKaiti(escapeHTML(opt))}</span>
-                      <span class="quiz-opt-icon"></span>
-                    </button>
-                  `).join('')}
-                </div>
+                ${
+                  isImageChoice
+                    ? `
+                  <div class="quiz-image-options-grid ${slots.length === 3 ? 'cols-3' : 'cols-2'}">
+                    ${slots.map((slot) => {
+                      const imgSrc = slot.image ? backendAssetUrl(slot.image) : '';
+                      return `
+                        <button
+                          type="button"
+                          class="quiz-option-btn quiz-image-option-card"
+                          data-question-index="${qNum}"
+                          data-letter="${escapeHTML(slot.letter)}"
+                          data-option="${escapeHTML(slot.text || slot.letter)}"
+                          data-answer="${escapeHTML(ex.answer || '')}"
+                          data-explanation="${escapeHTML(ex.explanation || '')}"
+                        >
+                          <div class="quiz-image-option-frame">
+                            ${
+                              imgSrc
+                                ? `<img src="${escapeHTML(imgSrc)}" alt="Option ${escapeHTML(slot.letter)}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                                   <div class="quiz-picture-fallback" style="display:none;">Image ${escapeHTML(slot.letter)}</div>`
+                                : `<div class="quiz-picture-fallback">Option ${escapeHTML(slot.letter)}</div>`
+                            }
+                          </div>
+                          <div class="quiz-image-option-footer">
+                            <span class="quiz-image-option-letter">${escapeHTML(slot.letter)}</span>
+                            ${slot.text ? `<span class="quiz-image-option-caption">${wrapChineseInKaiti(escapeHTML(slot.text))}</span>` : ''}
+                            <span class="quiz-opt-icon"></span>
+                          </div>
+                        </button>
+                      `;
+                    }).join('')}
+                  </div>
+                `
+                    : `
+                  <div class="quiz-options-grid">
+                    ${slots.map((slot) => `
+                      <button
+                        type="button"
+                        class="quiz-option-btn"
+                        data-question-index="${qNum}"
+                        data-letter="${escapeHTML(slot.letter)}"
+                        data-option="${escapeHTML(slot.text)}"
+                        data-answer="${escapeHTML(ex.answer || '')}"
+                        data-explanation="${escapeHTML(ex.explanation || '')}"
+                      >
+                        <span>${wrapChineseInKaiti(escapeHTML(slot.text))}</span>
+                        <span class="quiz-opt-icon"></span>
+                      </button>
+                    `).join('')}
+                  </div>
+                `
+                }
 
-                <div class="quiz-feedback-box" id="quizFeedback-${num}">
-                  <div class="quiz-feedback-status" id="feedbackStatus-${num}"></div>
-                  <p class="quiz-explanation-text" id="feedbackText-${num}"></p>
+                <div class="quiz-feedback-box" id="quizFeedback-${qNum}">
+                  <div class="quiz-feedback-status" id="feedbackStatus-${qNum}"></div>
+                  <p class="quiz-explanation-text" id="feedbackText-${qNum}"></p>
                 </div>
               </div>
             `;
@@ -1211,21 +1440,33 @@
       </div>
     `;
 
+    // Attach TTS listen listeners for optional audio read-aloud
+    panel.querySelectorAll('.quiz-tts-btn').forEach((btn) => {
+      btn.onclick = () => {
+        const txt = btn.getAttribute('data-speak-text');
+        if (txt) speakChinese(txt);
+      };
+    });
+
     // Attach quiz answer validation listeners
-    panel.querySelectorAll('.quiz-option-btn').forEach(btn => {
+    panel.querySelectorAll('.quiz-option-btn').forEach((btn) => {
       btn.onclick = () => {
         const qNum = btn.dataset.questionIndex;
-        const selected = btn.dataset.option;
-        const correct = btn.dataset.answer;
-        const explanation = btn.dataset.explanation;
+        const selectedLetter = btn.dataset.letter || '';
+        const selected = btn.dataset.option || selectedLetter;
+        const correct = btn.dataset.answer || '';
+        const explanation = btn.dataset.explanation || '';
 
-        handleQuizSelection(qNum, selected, correct, explanation, exercises.length);
+        handleQuizSelection(qNum, selected, selectedLetter, correct, explanation, normalizedExercises.length);
       };
     });
 
     const resetBtn = document.getElementById('btnResetQuiz');
     if (resetBtn) {
-      resetBtn.onclick = () => renderExercisesSection(lesson);
+      resetBtn.onclick = () => {
+        exerciseAnswersState = {};
+        renderExercisesSection(lesson);
+      };
     }
 
     const nextWritingBtn = document.getElementById('btnNextToWriting');
@@ -1234,27 +1475,52 @@
     }
   }
 
-  function handleQuizSelection(qNum, selected, correct, explanation, totalQuestions) {
+  function handleQuizSelection(qNum, selected, selectedLetter, correct, explanation, totalQuestions) {
     const card = document.getElementById(`quizCard-${qNum}`);
     if (!card) return;
 
-    // Normalize comparison strings
-    const selNorm = String(selected).trim().toLowerCase();
-    const corrNorm = String(correct).trim().toLowerCase();
+    const selNorm = String(selected || '').trim().toLowerCase();
+    const selLetterNorm = String(selectedLetter || '').trim().toLowerCase();
+    const corrNorm = String(correct || '').trim().toLowerCase();
+    const isLetterAnswer = ['a', 'b', 'c', 'd'].includes(corrNorm);
 
-    // Check match either exactly or contains
-    const isCorrect = selNorm === corrNorm || selNorm.startsWith(corrNorm) || corrNorm.startsWith(selNorm);
+    const isOptionMatch = (optText, optLetter) => {
+      const oText = String(optText || '').trim().toLowerCase();
+      const oLet = String(optLetter || '').trim().toLowerCase();
+      if (!corrNorm) return false;
+      if (isLetterAnswer) {
+        return oLet === corrNorm;
+      }
+      return oText === corrNorm || (oText && (oText.startsWith(corrNorm) || corrNorm.startsWith(oText)));
+    };
 
-    // Disable buttons on this question card
-    card.querySelectorAll('.quiz-option-btn').forEach(btn => {
+    const isCorrect = isLetterAnswer
+      ? selLetterNorm === corrNorm
+      : isOptionMatch(selected, selectedLetter);
+
+    let resolvedCorrectDisplay = String(correct || '').trim();
+
+    // Disable buttons on this question card / row and highlight correct vs chosen
+    card.querySelectorAll('.quiz-option-btn').forEach((btn) => {
       btn.disabled = true;
-      const opt = String(btn.dataset.option).trim().toLowerCase();
-      if (opt === corrNorm || opt.startsWith(corrNorm) || corrNorm.startsWith(opt)) {
+      const opt = btn.dataset.option || '';
+      const letVal = btn.dataset.letter || '';
+      const iconEl = btn.querySelector('.quiz-opt-icon');
+
+      if (isOptionMatch(opt, letVal)) {
         btn.classList.add('correct');
-        btn.querySelector('.quiz-opt-icon').textContent = '✓';
-      } else if (btn.dataset.option === selected && !isCorrect) {
+        if (iconEl) iconEl.textContent = '✓';
+        if (isLetterAnswer && opt && opt.toLowerCase() !== letVal.toLowerCase()) {
+          resolvedCorrectDisplay = `${letVal} — ${opt}`;
+        } else if (isLetterAnswer && letVal) {
+          resolvedCorrectDisplay = letVal;
+        }
+      } else if (
+        !isCorrect &&
+        ((selLetterNorm && letVal.toLowerCase() === selLetterNorm) || (!selLetterNorm && opt.toLowerCase() === selNorm))
+      ) {
         btn.classList.add('incorrect');
-        btn.querySelector('.quiz-opt-icon').textContent = '✗';
+        if (iconEl) iconEl.textContent = '✗';
       }
     });
 
@@ -1271,7 +1537,7 @@
         playSound('correct');
       } else {
         statusEl.className = 'quiz-feedback-status incorrect';
-        statusEl.innerHTML = `<span>❌ Incorrect. The correct answer is: <strong>${wrapChineseInKaiti(escapeHTML(correct))}</strong></span>`;
+        statusEl.innerHTML = `<span>❌ Incorrect. The correct answer is: <strong>${wrapChineseInKaiti(escapeHTML(resolvedCorrectDisplay))}</strong></span>`;
         playSound('incorrect');
       }
       textEl.innerHTML = wrapChineseInKaiti(escapeHTML(explanation || (isCorrect ? 'Well done!' : 'Keep practicing!')));

@@ -139,7 +139,12 @@
         'lessonId', 'order', 'character', 'pinyin', 'meaning', 'strokeCount',
         'radical', 'strokeAnimationUrl', 'svgPath', 'strokeOrderSteps'
       ],
-      Exercises: ['lessonId', 'order', 'type', 'question', 'optionA', 'optionB', 'optionC', 'optionD', 'answer', 'explanation'],
+      Exercises: [
+        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'question', 'audioUrl',
+        'optionA', 'optionB', 'optionC', 'optionD',
+        'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage',
+        'answer', 'explanation'
+      ],
       Games: ['id', 'order', 'title', 'category', 'badge', 'description', 'embed_code', 'embed_url', 'width', 'height', 'active'],
       Pronunciation: ['lessonId', 'order', 'chinese', 'pinyin', 'meaning', 'focus']
     },
@@ -147,7 +152,12 @@
       Lessons: ['id', 'title', 'chineseTitle', 'pinyin', 'meaning', 'level', 'description', 'video', 'poster'],
       Story: ['lessonId', 'order', 'chinese', 'pinyin', 'english', 'image', 'audio'],
       Vocabulary: ['lessonId', 'order', 'character', 'pinyin', 'meaning', 'audio'],
-      Exercises: ['lessonId', 'order', 'type', 'question', 'optionA', 'optionB', 'optionC', 'optionD', 'answer', 'explanation']
+      Exercises: [
+        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'question', 'audioUrl',
+        'optionA', 'optionB', 'optionC', 'optionD',
+        'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage',
+        'answer', 'explanation'
+      ]
     },
     reels: {
       Videos: [
@@ -399,18 +409,25 @@
     var current = await loadWorkbook(target);
     var existingExercises = cloneArray(current.sheets.Exercises);
     var cleanIncoming = incomingRows.map(function (r, idx) {
-      var resolvedLessonId = String(r.lessonId || selectedLessonId || '').trim();
-      var optA = String(r.optionA || '').trim();
+      var resolvedLessonId = String(r.lessonId || r.lesson_id || selectedLessonId || '').trim();
+      var optA = String(r.optionA || r.option_a || '').trim();
       var resolvedAnswer = String(r.answer || r.correctAnswer || r.correct || optA || '').trim();
       return {
         lessonId: resolvedLessonId,
-        order: Number(r.order) || idx + 1,
+        order: Number(r.order || r.order_num) || idx + 1,
         type: String(r.type || 'multiple-choice').trim() || 'multiple-choice',
+        groupId: String(r.groupId || r.group_id || '').trim(),
+        groupTitle: String(r.groupTitle || r.group_title || '').trim(),
         question: String(r.question || '').trim(),
+        audioUrl: String(r.audioUrl || r.audio_url || r.audio || '').trim(),
         optionA: optA,
-        optionB: String(r.optionB || '').trim(),
-        optionC: String(r.optionC || '').trim(),
-        optionD: String(r.optionD || '').trim(),
+        optionB: String(r.optionB || r.option_b || '').trim(),
+        optionC: String(r.optionC || r.option_c || '').trim(),
+        optionD: String(r.optionD || r.option_d || '').trim(),
+        optionAImage: String(r.optionAImage || r.option_a_image || '').trim(),
+        optionBImage: String(r.optionBImage || r.option_b_image || '').trim(),
+        optionCImage: String(r.optionCImage || r.option_c_image || '').trim(),
+        optionDImage: String(r.optionDImage || r.option_d_image || '').trim(),
         answer: resolvedAnswer,
         explanation: String(r.explanation || '').trim()
       };
