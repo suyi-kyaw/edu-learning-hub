@@ -6,3 +6,5 @@ node_modules/
 !.env.example
 data/auth-store.json
 data/auth-secret.json
+├ Adding Wrangler files to the .gitignore file
+│ updated .gitignore file
