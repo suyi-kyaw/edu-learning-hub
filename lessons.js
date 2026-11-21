@@ -239,6 +239,199 @@
     return String(courseName || '').trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '');
   }
 
+  function isSameLessonId(a, b) {
+    const norm = (val) => String(val || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanA = norm(a);
+    const cleanB = norm(b);
+    if (!cleanA || !cleanB) return false;
+    return cleanA === cleanB || cleanA === `lesson${cleanB}` || cleanB === `lesson${cleanA}`;
+  }
+
+  function normalizeLessonRow(l) {
+    if (!l || typeof l !== 'object') return l;
+    const id = String(l.id || l.lessonId || l.lesson_id || '').trim();
+    const course = normalizeCourseName(l.course || l.courseName || l.category || 'HSK 2');
+    const category = String(l.category || l.course || course).trim();
+    const categoryKey = String(l.categoryKey || l.category_key || courseKeySlug(course)).trim();
+    const categoryNum = String(l.categoryNum || l.category_num || 'Course 1').trim();
+    const title = String(l.title || l.Title || id).trim();
+    const chineseTitle = String(l.chineseTitle || l.chinese_title || l.chinese || '').trim();
+    const pinyin = String(l.pinyin || l.Pinyin || '').trim();
+    const meaning = String(l.meaning || l.Meaning || '').trim();
+    const level = String(l.level || l.Level || course).trim();
+    const description = String(l.description || l.Description || '').trim();
+    const videoUrl = String(l.videoUrl || l.video_url || l.video || '').trim();
+    const posterUrl = String(l.posterUrl || l.poster_url || l.poster || '').trim();
+    const fullAudio = String(l.fullAudio || l.full_audio || l.audio || '').trim();
+    const keywords = String(l.keywords || l.Keywords || '').trim();
+    const accessType = String(l.accessType || l.access_type || 'paid').trim().toLowerCase() === 'free' ? 'free' : 'paid';
+    const price = Number(l.price) || (accessType === 'paid' ? 75000 : 0);
+    return {
+      ...l,
+      id,
+      lessonId: id,
+      lesson_id: id,
+      title,
+      chineseTitle,
+      chinese_title: chineseTitle,
+      pinyin,
+      meaning,
+      level,
+      course,
+      category,
+      categoryKey,
+      category_key: categoryKey,
+      categoryNum,
+      category_num: categoryNum,
+      description,
+      videoUrl,
+      video_url: videoUrl,
+      posterUrl,
+      poster_url: posterUrl,
+      fullAudio,
+      full_audio: fullAudio,
+      keywords,
+      accessType,
+      access_type: accessType,
+      price
+    };
+  }
+
+  function normalizeExerciseRow(r, idx) {
+    if (!r || typeof r !== 'object') return r;
+    const lessonId = String(r.lessonId || r.lesson_id || r.LessonId || r['Lesson ID'] || '').trim();
+    const order = Number(r.order || r.Order || r.order_num) || idx + 1;
+    const type = String(r.type || r.Type || 'multiple-choice').trim().toLowerCase() || 'multiple-choice';
+    const groupId = String(r.groupId || r.group_id || r.GroupId || '').trim();
+    const groupTitle = String(r.groupTitle || r.group_title || r.GroupTitle || '').trim();
+    const pinyin = String(r.pinyin || r.Pinyin || r.pinyinHint || r.pinyin_hint || '').trim();
+    const question = String(r.question || r.Question || '').trim();
+    const audioUrl = String(r.audioUrl || r.audio_url || r.AudioUrl || r.audio || '').trim();
+    const optionA = String(r.optionA ?? r.option_a ?? r.OptionA ?? '').trim();
+    const optionB = String(r.optionB ?? r.option_b ?? r.OptionB ?? '').trim();
+    const optionC = String(r.optionC ?? r.option_c ?? r.OptionC ?? '').trim();
+    const optionD = String(r.optionD ?? r.option_d ?? r.OptionD ?? '').trim();
+    const optionE = String(r.optionE ?? r.option_e ?? r.OptionE ?? '').trim();
+    const optionAImage = String(r.optionAImage || r.option_a_image || r.OptionAImage || '').trim();
+    const optionBImage = String(r.optionBImage || r.option_b_image || r.OptionBImage || '').trim();
+    const optionCImage = String(r.optionCImage || r.option_c_image || r.OptionCImage || '').trim();
+    const optionDImage = String(r.optionDImage || r.option_d_image || r.OptionDImage || '').trim();
+    const optionEImage = String(r.optionEImage || r.option_e_image || r.OptionEImage || '').trim();
+    const answer = String(r.answer || r.Answer || r.correct || r.correctAnswer || '').trim();
+    const explanation = String(r.explanation || r.Explanation || '').trim();
+    return {
+      ...r,
+      lessonId,
+      lesson_id: lessonId,
+      order,
+      type,
+      groupId,
+      group_id: groupId,
+      groupTitle,
+      group_title: groupTitle,
+      pinyin,
+      question,
+      audioUrl,
+      audio_url: audioUrl,
+      optionA,
+      option_a: optionA,
+      optionB,
+      option_b: optionB,
+      optionC,
+      option_c: optionC,
+      optionD,
+      option_d: optionD,
+      optionE,
+      option_e: optionE,
+      optionAImage,
+      option_a_image: optionAImage,
+      optionBImage,
+      option_b_image: optionBImage,
+      optionCImage,
+      option_c_image: optionCImage,
+      optionDImage,
+      option_d_image: optionDImage,
+      optionEImage,
+      option_e_image: optionEImage,
+      answer,
+      explanation
+    };
+  }
+
+  function normalizeWritingRow(w, idx) {
+    if (!w || typeof w !== 'object') return w;
+    const lessonId = String(w.lessonId || w.lesson_id || w.LessonId || w['Lesson ID'] || '').trim();
+    const order = Number(w.order || w.Order || w.order_num) || idx + 1;
+    const character = String(w.character || w.Character || '').trim();
+    const pinyin = String(w.pinyin || w.Pinyin || '').trim();
+    const meaning = String(w.meaning || w.Meaning || '').trim();
+    const strokeCount = Number(w.strokeCount || w.stroke_count || w.StrokeCount) || 6;
+    const radical = String(w.radical || w.Radical || '').trim();
+    const strokeAnimationUrl = String(w.strokeAnimationUrl || w.stroke_animation_url || '').trim();
+    const svgPath = String(w.svgPath || w.svg_path || '').trim();
+    const strokeOrderSteps = String(w.strokeOrderSteps || w.stroke_order_steps || w.StrokeOrderSteps || '').trim();
+    return {
+      ...w,
+      lessonId,
+      lesson_id: lessonId,
+      order,
+      character,
+      pinyin,
+      meaning,
+      strokeCount,
+      stroke_count: strokeCount,
+      radical,
+      strokeAnimationUrl,
+      stroke_animation_url: strokeAnimationUrl,
+      svgPath,
+      svg_path: svgPath,
+      strokeOrderSteps,
+      stroke_order_steps: strokeOrderSteps
+    };
+  }
+
+  function normalizeVocabularyRow(v, idx) {
+    if (!v || typeof v !== 'object') return v;
+    const lessonId = String(v.lessonId || v.lesson_id || v.LessonId || v['Lesson ID'] || '').trim();
+    const order = Number(v.order || v.Order || v.order_num) || idx + 1;
+    const character = String(v.character || v.Character || v.word || v.chinese || '').trim();
+    const pinyin = String(v.pinyin || v.Pinyin || '').trim();
+    const meaning = String(v.meaning || v.Meaning || v.english || '').trim();
+    const audio = String(v.audio || v.Audio || v.audioUrl || v.audio_url || '').trim();
+    return {
+      ...v,
+      lessonId,
+      lesson_id: lessonId,
+      order,
+      character,
+      pinyin,
+      meaning,
+      audio,
+      audioUrl: audio,
+      audio_url: audio
+    };
+  }
+
+  function normalizePronunciationRow(p, idx) {
+    if (!p || typeof p !== 'object') return p;
+    const lessonId = String(p.lessonId || p.lesson_id || p.LessonId || p['Lesson ID'] || '').trim();
+    const order = Number(p.order || p.Order || p.order_num) || idx + 1;
+    const chinese = String(p.chinese || p.Chinese || p.text || '').trim();
+    const pinyin = String(p.pinyin || p.Pinyin || '').trim();
+    const meaning = String(p.meaning || p.Meaning || '').trim();
+    const focus = String(p.focus || p.Focus || '').trim();
+    return {
+      ...p,
+      lessonId,
+      lesson_id: lessonId,
+      order,
+      chinese,
+      pinyin,
+      meaning,
+      focus
+    };
+  }
+
   function getLessonCourse(lesson) {
     if (!lesson || typeof lesson !== 'object') return 'HSK 2';
     if (window.LinguaAuth && typeof window.LinguaAuth.getLessonCourseName === 'function') {
@@ -414,6 +607,13 @@
       allExercises = FALLBACK_EXERCISES;
       allWriting = FALLBACK_WRITING;
     }
+
+    // Normalize all rows to support camelCase, snake_case, and clean IDs
+    allLessons = (allLessons || []).map(normalizeLessonRow);
+    allExercises = (allExercises || []).map(normalizeExerciseRow);
+    allWriting = (allWriting || []).map(normalizeWritingRow);
+    allVocabulary = (allVocabulary || []).map(normalizeVocabularyRow);
+    allPronunciation = (allPronunciation || []).map(normalizePronunciationRow);
 
     // Apply any saved local pricing overrides onto in-memory lessons
     applyLocalPricingOverrides(allLessons);
@@ -723,7 +923,7 @@
 
   // --- Open Lesson Workspace (4 Core Sections) ---
   function openLessonWorkspace(lessonId, updateUrl = true) {
-    const lesson = allLessons.find(l => String(l.id || '').trim().toLowerCase() === String(lessonId || '').trim().toLowerCase()) || allLessons[0];
+    const lesson = allLessons.find(l => isSameLessonId(l.id, lessonId)) || allLessons[0];
     if (!lesson) return;
 
     // Gate Paid Lessons unless user has course access / per-lesson unlock / admin
@@ -826,6 +1026,7 @@
     if (!hero) return;
 
     const courseName = getLessonCourse(lesson);
+    const catName = lesson.category || courseName || 'HSK 2';
 
     hero.innerHTML = `
       <div class="workspace-top-bar">
@@ -935,11 +1136,11 @@
     const panel = document.getElementById('panel-video');
     if (!panel) return;
 
-    const videoUrl = backendAssetUrl(lesson.videoUrl || lesson.video || 'assets/video/lesson-01.mp4');
-    const poster = backendAssetUrl(lesson.posterUrl || lesson.poster || 'assets/images/story-poster.jpg');
+    const videoUrl = backendAssetUrl(lesson.videoUrl || lesson.video_url || lesson.video || 'assets/video/lesson-02.mp4');
+    const poster = backendAssetUrl(lesson.posterUrl || lesson.poster_url || lesson.poster || 'assets/images/story-02.jpg');
 
     // Find vocabulary or story lines for this lesson
-    const vocabItems = allVocabulary.filter(v => String(v.lessonId || '').trim().toLowerCase() === String(lesson.id || '').trim().toLowerCase());
+    const vocabItems = allVocabulary.filter(v => isSameLessonId(v.lessonId || v.lesson_id, lesson.id));
 
     panel.innerHTML = `
       <div class="video-lesson-grid">
@@ -1037,7 +1238,7 @@
     const panel = document.getElementById('panel-exercises');
     if (!panel) return;
 
-    let exercises = allExercises.filter(ex => String(ex.lessonId || '').trim().toLowerCase() === String(lesson.id || '').trim().toLowerCase());
+    let exercises = allExercises.filter(ex => isSameLessonId(ex.lessonId || ex.lesson_id, lesson.id));
 
     if (!exercises.length) {
       const lessonTitle = lesson.title || 'Mandarin Practice';
@@ -1805,7 +2006,7 @@
     strokeScores = [];
     currentStrokePoints = [];
 
-    let chars = allWriting.filter(w => String(w.lessonId || '').trim().toLowerCase() === String(lesson.id || '').trim().toLowerCase());
+    let chars = allWriting.filter(w => isSameLessonId(w.lessonId || w.lesson_id, lesson.id));
 
     if (!chars.length) {
       if (lesson.chineseTitle) {
@@ -2261,7 +2462,7 @@
       window.LinguaReview.openLessonReviewModal({
         lessonId: lesson.id || 'lesson',
         title: lessonTitle,
-        audience: `${currentAudience} Track`
+        audience: `${getLessonCourse(lesson) || activeCourseName || 'HSK 2'} Track`
       });
     }
   }
@@ -3429,7 +3630,7 @@
 
     // Prioritize custom Pronunciation lines from lessons.xlsx / LinguaContentStore
     const customPron = (allPronunciation || []).filter(
-      p => String(p.lessonId || '').trim().toLowerCase() === lessonId && String(p.chinese || '').trim()
+      p => isSameLessonId(p.lessonId || p.lesson_id, lessonId) && String(p.chinese || '').trim()
     );
     if (customPron.length > 0) {
       return customPron
@@ -3443,10 +3644,10 @@
     }
 
     for (const [key, list] of Object.entries(PRONUNCIATION_PRACTICE_BANK)) {
-      if (key.toLowerCase() === lessonId) return list;
+      if (isSameLessonId(key, lessonId)) return list;
     }
     // Check if vocabulary items exist for this lesson
-    const vocab = allVocabulary.filter(v => String(v.lessonId || '').trim().toLowerCase() === lessonId);
+    const vocab = allVocabulary.filter(v => isSameLessonId(v.lessonId || v.lesson_id, lessonId));
     if (vocab.length > 0) {
       return vocab.slice(0, 5).map(v => ({
         chinese: v.character || lesson.chineseTitle || lesson.title,
@@ -5064,16 +5265,21 @@
 
     window.addEventListener('linguapath-content-change', (e) => {
       if (e?.detail?.domain === 'lessons' && e?.detail?.sheets) {
-        if (e.detail.sheets.Lessons) allLessons = e.detail.sheets.Lessons;
-        if (e.detail.sheets.Writing) allWriting = e.detail.sheets.Writing;
-        if (e.detail.sheets.Pronunciation) allPronunciation = e.detail.sheets.Pronunciation;
-        if (e.detail.sheets.Exercises) allExercises = e.detail.sheets.Exercises;
+        if (Array.isArray(e.detail.sheets.Lessons)) allLessons = e.detail.sheets.Lessons.map(normalizeLessonRow);
+        if (Array.isArray(e.detail.sheets.Writing)) allWriting = e.detail.sheets.Writing.map(normalizeWritingRow);
+        if (Array.isArray(e.detail.sheets.Vocabulary)) allVocabulary = e.detail.sheets.Vocabulary.map(normalizeVocabularyRow);
+        if (Array.isArray(e.detail.sheets.Pronunciation)) allPronunciation = e.detail.sheets.Pronunciation.map(normalizePronunciationRow);
+        if (Array.isArray(e.detail.sheets.Exercises)) allExercises = e.detail.sheets.Exercises.map(normalizeExerciseRow);
         renderCourseSidebar();
         renderLessonGrid();
         if (activeLesson) {
-          if (activeWorkspaceTab === 'writing') renderWritingSection(activeLesson);
-          else if (activeWorkspaceTab === 'pronunciation') renderPronunciationSection(activeLesson);
-          else if (activeWorkspaceTab === 'exercises') renderExercisesSection(activeLesson);
+          const fresh = allLessons.find(l => isSameLessonId(l.id, activeLesson.id));
+          if (fresh) activeLesson = fresh;
+          renderWorkspaceHeader(activeLesson);
+          renderVideoSection(activeLesson);
+          renderExercisesSection(activeLesson);
+          renderWritingSection(activeLesson);
+          renderPronunciationSection(activeLesson);
         }
       }
     });

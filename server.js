@@ -800,34 +800,57 @@ app.get(['/api/database/bundle', '/api/bundle'], (req, res) => {
 
     if (domain === 'lessons') {
       const lessonsWb = parseLessonsWorkbook();
+      const sheets = lessonsWb.sheets || {};
+      if (!Array.isArray(sheets.Pronunciation)) {
+        sheets.Pronunciation = [];
+      }
       return res.json({
         success: true,
         source: 'cloudflare-d1',
         database: 'edu-hub-db',
         domain: 'lessons',
-        sheets: lessonsWb.sheets || {}
+        counts: {
+          lessons: sheets.Lessons?.length || 0,
+          exercises: sheets.Exercises?.length || 0,
+          writing: sheets.Writing?.length || 0,
+          vocabulary: sheets.Vocabulary?.length || 0,
+          games: sheets.Games?.length || 0,
+          pronunciation: sheets.Pronunciation?.length || 0
+        },
+        sheets
       });
     }
 
     if (domain === 'stories') {
       const storiesWb = parseStoriesWorkbook();
+      const sheets = storiesWb.sheets || {};
       return res.json({
         success: true,
         source: 'cloudflare-d1',
         database: 'edu-hub-db',
         domain: 'stories',
-        sheets: storiesWb.sheets || {}
+        counts: {
+          lessons: sheets.Lessons?.length || 0,
+          story: sheets.Story?.length || 0,
+          vocabulary: sheets.Vocabulary?.length || 0,
+          exercises: sheets.Exercises?.length || 0
+        },
+        sheets
       });
     }
 
     if (domain === 'reels') {
       const reelsWb = parseReelsStoriesWorkbook();
+      const sheets = reelsWb.sheets || {};
       return res.json({
         success: true,
         source: 'cloudflare-d1',
         database: 'edu-hub-db',
         domain: 'reels',
-        sheets: reelsWb.sheets || {}
+        counts: {
+          videos: sheets.Videos?.length || 0
+        },
+        sheets
       });
     }
 
@@ -857,6 +880,139 @@ app.get(['/api/database/bundle', '/api/bundle'], (req, res) => {
   } catch (err) {
     console.error('API database bundle error:', err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Database Sync Endpoint (Parity with Cloudflare Worker API)
+app.post('/api/database/sync', jsonParser, (req, res) => {
+  try {
+    const domain = String(req.body?.domain || 'lessons').toLowerCase();
+    const sheets = req.body?.sheets;
+    if (!sheets || typeof sheets !== 'object') {
+      return res.status(400).json({ success: false, error: 'Invalid sheets payload' });
+    }
+
+    if (domain === 'lessons') {
+      const allowed = ['Lessons', 'Exercises', 'Writing', 'Vocabulary', 'Games', 'Pronunciation'];
+      const updates = {};
+      for (const sName of allowed) {
+        if (Array.isArray(sheets[sName])) {
+          updates[sName] = sheets[sName];
+        }
+      }
+      if (!Object.keys(updates).length) {
+        return res.status(400).json({ success: false, error: 'No valid lessons sheets supplied' });
+      }
+      const excelPath = path.join(__dirname, 'data', 'lessons.xlsx');
+      const result = writeUpdatedWorkbook(excelPath, updates, allowed);
+      syncLessonsJson();
+      if (Array.isArray(updates.Lessons)) {
+        syncCatalogFromLessonsRows(updates.Lessons, 'system-sync');
+      }
+      return res.json({
+        success: true,
+        syncedToServer: true,
+        database: 'edu-hub-db',
+        domain: 'lessons',
+        counts: {
+          lessons: updates.Lessons?.length || 0,
+          exercises: updates.Exercises?.length || 0,
+          writing: updates.Writing?.length || 0,
+          vocabulary: updates.Vocabulary?.length || 0,
+          games: updates.Games?.length || 0,
+          pronunciation: updates.Pronunciation?.length || 0
+        },
+        sheets: result.sheets
+      });
+    }
+
+    if (domain === 'stories') {
+      const allowed = ['Lessons', 'Story', 'Vocabulary', 'Exercises'];
+      const updates = {};
+      for (const sName of allowed) {
+        if (Array.isArray(sheets[sName])) {
+          updates[sName] = sheets[sName];
+        }
+      }
+      const excelPath = path.join(__dirname, 'data', 'stories.xlsx');
+      const result = writeUpdatedWorkbook(excelPath, updates, allowed);
+      syncStoriesJson();
+      return res.json({
+        success: true,
+        syncedToServer: true,
+        database: 'edu-hub-db',
+        domain: 'stories',
+        counts: {
+          lessons: updates.Lessons?.length || 0,
+          story: updates.Story?.length || 0,
+          vocabulary: updates.Vocabulary?.length || 0,
+          exercises: updates.Exercises?.length || 0
+        },
+        sheets: result.sheets
+      });
+    }
+
+    if (domain === 'reels') {
+      if (!Array.isArray(sheets.Videos)) {
+        return res.status(400).json({ success: false, error: 'Invalid reels Videos sheet' });
+      }
+      const excelPath = path.join(__dirname, 'data', 'reels_stories.xlsx');
+      const result = writeUpdatedWorkbook(excelPath, { Videos: sheets.Videos }, ['Videos']);
+      syncReelsStoriesJson();
+      return res.json({
+        success: true,
+        syncedToServer: true,
+        database: 'edu-hub-db',
+        domain: 'reels',
+        counts: {
+          videos: sheets.Videos?.length || 0
+        },
+        sheets: result.sheets
+      });
+    }
+
+    return res.status(400).json({ success: false, error: 'Unknown domain: ' + domain });
+  } catch (err) {
+    console.error('POST /api/database/sync error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Single Lesson Detail API (Parity with Cloudflare Worker API)
+app.get('/api/lessons/:id', (req, res) => {
+  try {
+    const reqId = String(req.params.id || '').trim().toLowerCase();
+    const isSameId = (a, b) => {
+      const sa = String(a || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      const sb = String(b || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      return sa && sb && (sa === sb || sa === 'lesson' + sb || sb === 'lesson' + sa);
+    };
+
+    const lessonsWb = parseLessonsWorkbook();
+    const sheets = lessonsWb.sheets || {};
+    const lessons = Array.isArray(sheets.Lessons) ? sheets.Lessons : [];
+    const lesson = lessons.find((l) => isSameId(l.id || l.lessonId, reqId));
+
+    if (!lesson) {
+      return res.status(404).json({ ok: false, error: 'Lesson not found' });
+    }
+
+    const exercises = (Array.isArray(sheets.Exercises) ? sheets.Exercises : []).filter((e) => isSameId(e.lessonId, reqId));
+    const writing_characters = (Array.isArray(sheets.Writing) ? sheets.Writing : []).filter((w) => isSameId(w.lessonId, reqId));
+    const vocabulary = (Array.isArray(sheets.Vocabulary) ? sheets.Vocabulary : []).filter((v) => isSameId(v.lessonId, reqId));
+    const pronunciation = (Array.isArray(sheets.Pronunciation) ? sheets.Pronunciation : []).filter((p) => isSameId(p.lessonId, reqId));
+
+    res.json({
+      ok: true,
+      lesson,
+      vocabulary,
+      exercises,
+      story_segments: [],
+      writing_characters,
+      pronunciation
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

@@ -12,21 +12,8 @@
       {
         "id": "hsk2-01",
         "course": "HSK 2",
-        "category": "HSK 2",
-        "categoryKey": "hsk2",
-        "categoryNum": "Course 1",
         "title": "She treated us to Peking Duck",
-        "chineseTitle": "她请我们吃了北京烤鸭",
-        "pinyin": "Tā qǐng wǒmen chī le Běijīng kǎoyā",
-        "meaning": "She treated us to Peking Duck",
-        "level": "HSK 2",
-        "description": "Practice HSK 2 expressions with 请 (to treat someone), completed-action 了 (le), and talking about Chinese dishes featuring Peking Duck (北京烤鸭).",
-        "videoUrl": "assets/video/lesson-02.mp4",
-        "posterUrl": "assets/images/story-02.jpg",
-        "fullAudio": "assets/audio/lesson-02-full.mp3",
-        "keywords": "HSK 2, 北京烤鸭, Peking Duck, 请, 吃了",
-        "accessType": "paid",
-        "price": 75000
+        "chineseTitle": "她请我们吃了北京烤鸭"
       }
     ],
     "Exercises": [

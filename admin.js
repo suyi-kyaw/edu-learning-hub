@@ -120,12 +120,20 @@
     return true;
   }
 
-  function updateBackendBadge() {
+  async function updateBackendBadge() {
     const badge = document.getElementById('adminBackendBadge');
     if (!badge) return;
     badge.classList.remove('is-warning');
     badge.classList.add('is-connected');
-    badge.textContent = 'Excel CMS (data/users.xlsx)';
+    try {
+      const res = await fetch(apiUrl('/api/database/status'));
+      const json = await res.json().catch(() => null);
+      if (json && json.success) {
+        badge.textContent = `Cloudflare D1 & Excel (${json.database || 'edu-hub-db'})`;
+        return;
+      }
+    } catch (_) {}
+    badge.textContent = 'Cloudflare D1 & Excel (edu-hub-db)';
   }
 
   function isSameId(a, b) {
@@ -212,7 +220,7 @@
     const store = window.LinguaContentStore;
     const hasDraft = store && typeof store.hasDraft === 'function' ? store.hasDraft(domain) : false;
     const dsInfo = store && typeof store.getDataSourceStatus === 'function' ? store.getDataSourceStatus(domain) : { source: 'xlsx-fallback', database: 'edu-hub-db' };
-    const isCloudflare = dsInfo.source === 'cloudflare-d1';
+    const isSynced = dsInfo.source === 'cloudflare-d1' || dsInfo.source === 'auto-synced' || dsInfo.source === 'cloudflare-d1-ahead';
     const needsAuthNotice = hasDraft && state.lastSyncNotice && state.lastSyncNotice.reason === 'auth-required';
 
     return `
@@ -221,13 +229,17 @@
       }; border:1px solid ${hasDraft ? '#fde047' : '#bbf7d0'}; border-radius:12px; padding:10px 14px; margin-bottom:14px;">
         <div style="font-size:0.84rem; color:${hasDraft ? '#854d0e' : '#166534'}; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <span style="display:inline-flex; align-items:center; gap:5px; font-weight:600; color:${
-            hasDraft ? '#b45309' : isCloudflare ? '#059669' : '#0284c7'
+            hasDraft ? '#b45309' : isSynced ? '#059669' : '#0284c7'
           };">
             ${
               hasDraft
                 ? '● Pending Server Sync (Browser Draft)'
-                : isCloudflare
-                ? '● Auto-Synced: Excel (data/' + escapeHTML(fileName) + ') & DB (edu-hub-db)'
+                : dsInfo.source === 'auto-synced'
+                ? '● Auto-Synced: Reconciled Excel (data/' + escapeHTML(fileName) + ') & DB (' + escapeHTML(dsInfo.database || 'edu-hub-db') + ')'
+                : dsInfo.source === 'cloudflare-d1-ahead'
+                ? '● Live Cloudflare D1 (' + escapeHTML(dsInfo.database || 'edu-hub-db') + ')'
+                : isSynced
+                ? '● Auto-Synced: Excel (data/' + escapeHTML(fileName) + ') & DB (' + escapeHTML(dsInfo.database || 'edu-hub-db') + ')'
                 : '● Loaded: Excel (data/' + escapeHTML(fileName) + ')'
             }
           </span>

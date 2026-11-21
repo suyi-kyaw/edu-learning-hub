@@ -185,11 +185,49 @@
     return out;
   }
 
+  function normalizeRecordRow(row) {
+    if (!row || typeof row !== 'object') return row;
+    var out = Object.assign({}, row);
+    var lid = String(row.lessonId || row.lesson_id || row.LessonId || row['Lesson ID'] || row.id || '').trim();
+    if (lid) {
+      out.lessonId = lid;
+      out.lesson_id = lid;
+    }
+    var ct = String(row.chineseTitle || row.chinese_title || row.chinese || row.Chinese || '').trim();
+    if (ct) {
+      out.chineseTitle = ct;
+      out.chinese_title = ct;
+    }
+    var vUrl = String(row.videoUrl || row.video_url || row.video || '').trim();
+    if (vUrl) {
+      out.videoUrl = vUrl;
+      out.video_url = vUrl;
+    }
+    var pUrl = String(row.posterUrl || row.poster_url || row.poster || '').trim();
+    if (pUrl) {
+      out.posterUrl = pUrl;
+      out.poster_url = pUrl;
+    }
+    var aUrl = String(row.audioUrl || row.audio_url || row.audio || '').trim();
+    if (aUrl) {
+      out.audioUrl = aUrl;
+      out.audio_url = aUrl;
+      out.audio = aUrl;
+    }
+    if (row.order !== undefined || row.order_num !== undefined || row.Order !== undefined) {
+      var ord = Number(row.order || row.order_num || row.Order) || 1;
+      out.order = ord;
+      out.order_num = ord;
+    }
+    return out;
+  }
+
   function normalizeSheetsForDomain(domain, rawSheets) {
     var meta = WORKBOOK_META[domain];
     var out = {};
     meta.sheets.forEach(function (name) {
-      out[name] = cloneArray(rawSheets && rawSheets[name]);
+      var arr = cloneArray(rawSheets && rawSheets[name]);
+      out[name] = arr.map(normalizeRecordRow);
     });
     return out;
   }
@@ -321,127 +359,252 @@
     return '';
   }
 
+  function evaluateDomainCompleteness(domain, sheets) {
+    if (!sheets || typeof sheets !== 'object') return 0;
+    var meta = WORKBOOK_META[domain];
+    if (!meta) return 0;
+    var totalRows = 0;
+    var filledSheets = 0;
+    meta.sheets.forEach(function (s) {
+      var list = sheets[s];
+      if (Array.isArray(list) && list.length > 0) {
+        totalRows += list.length;
+        filledSheets += 1;
+      }
+    });
+    return totalRows + filledSheets * 10;
+  }
+
+  function mergeRicherWorkbookSheets(domain, primary, secondary) {
+    var meta = WORKBOOK_META[domain];
+    var out = {};
+    meta.sheets.forEach(function (name) {
+      var a = Array.isArray(primary && primary[name]) ? primary[name] : [];
+      var b = Array.isArray(secondary && secondary[name]) ? secondary[name] : [];
+      if (a.length > 0 && b.length === 0) {
+        out[name] = cloneArray(a);
+      } else if (b.length > 0 && a.length === 0) {
+        out[name] = cloneArray(b);
+      } else if (b.length > a.length) {
+        out[name] = cloneArray(b);
+      } else {
+        out[name] = cloneArray(a);
+      }
+    });
+    return normalizeSheetsForDomain(domain, out);
+  }
+
+  async function autoSyncToServerIfPossible(domain, sheets) {
+    try {
+      var token = await getAuthBearerToken();
+      var headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      await fetch('/api/database/sync', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ domain: domain, sheets: sheets })
+      }).catch(function () {});
+    } catch (_) {}
+  }
+
   async function syncDomainToServer(domain, sheets) {
     var meta = WORKBOOK_META[domain];
     if (!meta) throw new Error('Unknown content domain: ' + domain);
     var normalized = normalizeSheetsForDomain(domain, sheets);
     var token = await getAuthBearerToken();
-    if (!token) {
-      return {
-        syncedToServer: false,
-        syncReason: 'auth-required',
-        error: 'No active Admin server session token found. Please sign out and sign in once.'
-      };
-    }
 
-    try {
-      var res = await fetch('/api/admin/workbook/' + encodeURIComponent(domain), {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + token
-        },
-        body: JSON.stringify({ sheets: normalized })
-      });
-      var data = await res.json().catch(function () {
-        return {};
-      });
-      if (!res.ok || !data || !data.success) {
-        return {
-          syncedToServer: false,
-          syncReason: res.status === 401 || res.status === 403 ? 'auth-required' : 'server-error',
-          error: (data && data.error) || 'Server returned HTTP ' + res.status
-        };
-      }
-
-      var serverSheets = data.sheets ? normalizeSheetsForDomain(domain, data.sheets) : normalized;
+    // 1. Try Admin API endpoint with auth token
+    if (token) {
       try {
-        if (global.localStorage) {
-          global.localStorage.removeItem(DRAFT_KEYS[domain]);
-          if (domain === 'lessons') {
-            global.localStorage.removeItem('linguapath_custom_lessons');
-            global.localStorage.removeItem('linguapath_local_lesson_pricing');
+        var res = await fetch('/api/admin/workbook/' + encodeURIComponent(domain), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + token
+          },
+          body: JSON.stringify({ sheets: normalized })
+        });
+        var data = await res.json().catch(function () {
+          return {};
+        });
+        if (res.ok && data && data.success) {
+          var serverSheets = data.sheets ? normalizeSheetsForDomain(domain, data.sheets) : normalized;
+          try {
+            if (global.localStorage) {
+              global.localStorage.removeItem(DRAFT_KEYS[domain]);
+              if (domain === 'lessons') {
+                global.localStorage.removeItem('linguapath_custom_lessons');
+                global.localStorage.removeItem('linguapath_local_lesson_pricing');
+              }
+            }
+          } catch (_) {}
+
+          setDataSourceStatus(domain, 'cloudflare-d1', 'edu-hub-db');
+          dispatchContentChange(domain, serverSheets);
+          if (domain === 'lessons' && data.lessonCatalog && global.LinguaAuth && typeof global.LinguaAuth.init === 'function') {
+            try {
+              if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+                window.dispatchEvent(
+                  new CustomEvent('linguapath-catalog-synced', {
+                    detail: { lessonCatalog: data.lessonCatalog }
+                  })
+                );
+              }
+            } catch (_) {}
           }
+
+          return {
+            syncedToServer: true,
+            sheets: serverSheets,
+            counts: data.counts || {},
+            lessonCatalog: data.lessonCatalog || null
+          };
         }
       } catch (_) {}
+    }
 
-      setDataSourceStatus(domain, 'cloudflare-d1', 'edu-hub-db');
-      dispatchContentChange(domain, serverSheets);
-      if (domain === 'lessons' && data.lessonCatalog && global.LinguaAuth && typeof global.LinguaAuth.init === 'function') {
+    // 2. Direct database sync endpoint (supported by Cloudflare Worker and Node server)
+    try {
+      var syncRes = await fetch('/api/database/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({ domain: domain, sheets: normalized })
+      });
+      var syncData = await syncRes.json().catch(function () {
+        return {};
+      });
+      if (syncRes.ok && syncData && syncData.success) {
         try {
-          if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
-            window.dispatchEvent(
-              new CustomEvent('linguapath-catalog-synced', {
-                detail: { lessonCatalog: data.lessonCatalog }
-              })
-            );
+          if (global.localStorage) {
+            global.localStorage.removeItem(DRAFT_KEYS[domain]);
           }
         } catch (_) {}
+        setDataSourceStatus(domain, 'cloudflare-d1', 'edu-hub-db');
+        dispatchContentChange(domain, normalized);
+        return {
+          syncedToServer: true,
+          sheets: normalized,
+          counts: syncData.counts || {}
+        };
       }
+    } catch (_) {}
 
-      return {
-        syncedToServer: true,
-        sheets: serverSheets,
-        counts: data.counts || {},
-        lessonCatalog: data.lessonCatalog || null
-      };
-    } catch (err) {
-      return {
-        syncedToServer: false,
-        syncReason: 'network-error',
-        error: err && err.message ? err.message : 'Unable to reach backend server.'
-      };
-    }
+    return {
+      syncedToServer: false,
+      syncReason: token ? 'server-error' : 'auth-required',
+      error: token
+        ? 'Could not sync with database.'
+        : 'Sign in as Admin to sync live edits to database & Excel.'
+    };
   }
 
   async function loadRepositoryWorkbook(domain) {
     var meta = WORKBOOK_META[domain];
     if (!meta) throw new Error('Unknown content domain: ' + domain);
 
-    // 0. Primary: Cloudflare D1 Database / Server Excel (data/*.xlsx)
-    try {
-      var d1Url = '/api/database/bundle?domain=' + encodeURIComponent(domain) + '&t=' + Date.now();
-      var d1Res = await fetch(d1Url, { cache: 'no-store' });
-      if (d1Res.ok) {
-        var d1Data = await d1Res.json();
-        if (d1Data && d1Data.success && d1Data.sheets) {
-          var normD1 = normalizeSheetsForDomain(domain, d1Data.sheets);
-          setDataSourceStatus(domain, 'cloudflare-d1', d1Data.database || 'edu-hub-db');
-          return {
-            sheets: normD1,
-            source: 'cloudflare-d1',
-            database: d1Data.database || 'edu-hub-db'
-          };
-        }
-      }
-    } catch (_) {}
-
-    // 1. Fallback: Direct binary Excel parsing via SheetJS (data/*.xlsx)
-    if (getXlsx()) {
+    // Fetch D1 Database bundle and static Excel/JSON workbook in parallel
+    var d1Promise = (async function () {
       try {
-        var xlsxRes = await fetch(meta.xlsxPath + '?t=' + Date.now(), { cache: 'no-store' });
-        if (xlsxRes.ok) {
-          var buf = await xlsxRes.arrayBuffer();
-          var parsedSheets = parseXlsxBuffer(domain, buf);
-          setDataSourceStatus(domain, 'xlsx-fallback', 'edu-hub-db');
-          return { sheets: parsedSheets, source: 'xlsx' };
+        var d1Url = '/api/database/bundle?domain=' + encodeURIComponent(domain) + '&t=' + Date.now();
+        var d1Res = await fetch(d1Url, { cache: 'no-store' });
+        if (d1Res.ok) {
+          var d1Data = await d1Res.json();
+          if (d1Data && d1Data.success && d1Data.sheets) {
+            return {
+              sheets: normalizeSheetsForDomain(domain, d1Data.sheets),
+              database: d1Data.database || 'edu-hub-db',
+              syncedWithRepo: Boolean(d1Data.syncedWithRepo)
+            };
+          }
         }
       } catch (_) {}
+      return null;
+    })();
+
+    var filePromise = (async function () {
+      // 1. Direct binary Excel parsing via SheetJS (data/*.xlsx)
+      if (getXlsx()) {
+        try {
+          var xlsxRes = await fetch(meta.xlsxPath + '?t=' + Date.now(), { cache: 'no-store' });
+          if (xlsxRes.ok) {
+            var buf = await xlsxRes.arrayBuffer();
+            var parsed = parseXlsxBuffer(domain, buf);
+            if (countRowsInSheets(parsed) > 0) {
+              return { sheets: normalizeSheetsForDomain(domain, parsed), source: 'xlsx' };
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Static JSON fallback if SheetJS unavailable or Excel missing
+      try {
+        var jsonRes = await fetch(meta.jsonPath + '?t=' + Date.now(), { cache: 'no-store' });
+        if (jsonRes.ok) {
+          var jsonData = await jsonRes.json();
+          if (jsonData && jsonData.sheets && countRowsInSheets(jsonData.sheets) > 0) {
+            return { sheets: normalizeSheetsForDomain(domain, jsonData.sheets), source: 'json' };
+          }
+        }
+      } catch (_) {}
+
+      return null;
+    })();
+
+    var results = await Promise.all([d1Promise, filePromise]);
+    var d1Result = results[0];
+    var fileResult = results[1];
+
+    // Case 1: Both D1 and Excel loaded -> Auto check and reconcile
+    if (d1Result && fileResult) {
+      var d1Score = evaluateDomainCompleteness(domain, d1Result.sheets);
+      var fileScore = evaluateDomainCompleteness(domain, fileResult.sheets);
+
+      // If Excel in repo has more rows or missing sheets that D1 lacks:
+      if (fileScore > d1Score) {
+        var mergedExcelDominant = mergeRicherWorkbookSheets(domain, fileResult.sheets, d1Result.sheets);
+        setDataSourceStatus(domain, 'auto-synced', d1Result.database || 'edu-hub-db');
+        autoSyncToServerIfPossible(domain, mergedExcelDominant);
+        return {
+          sheets: mergedExcelDominant,
+          source: 'auto-synced',
+          database: d1Result.database || 'edu-hub-db'
+        };
+      } else {
+        // D1 has equal or richer data
+        var mergedD1Dominant = mergeRicherWorkbookSheets(domain, d1Result.sheets, fileResult.sheets);
+        var sourceLabel = d1Score > fileScore ? 'cloudflare-d1-ahead' : 'cloudflare-d1';
+        setDataSourceStatus(domain, sourceLabel, d1Result.database || 'edu-hub-db');
+        return {
+          sheets: mergedD1Dominant,
+          source: sourceLabel,
+          database: d1Result.database || 'edu-hub-db'
+        };
+      }
     }
 
-    // 2. Static JSON fallback if SheetJS unavailable or Excel missing
-    try {
-      var jsonRes = await fetch(meta.jsonPath + '?t=' + Date.now(), { cache: 'no-store' });
-      if (jsonRes.ok) {
-        var jsonData = await jsonRes.json();
-        if (jsonData && jsonData.sheets) {
-          var normJson = normalizeSheetsForDomain(domain, jsonData.sheets);
-          setDataSourceStatus(domain, 'json-fallback', 'edu-hub-db');
-          return { sheets: normJson, source: 'json' };
-        }
-      }
-    } catch (_) {}
+    // Case 2: Only D1 succeeded
+    if (d1Result) {
+      setDataSourceStatus(domain, 'cloudflare-d1', d1Result.database || 'edu-hub-db');
+      return {
+        sheets: d1Result.sheets,
+        source: 'cloudflare-d1',
+        database: d1Result.database || 'edu-hub-db'
+      };
+    }
 
+    // Case 3: Only Excel succeeded (D1 offline or unreachable)
+    if (fileResult) {
+      setDataSourceStatus(domain, fileResult.source + '-fallback', 'edu-hub-db');
+      return {
+        sheets: fileResult.sheets,
+        source: fileResult.source
+      };
+    }
+
+    // Case 4: Neither succeeded
     setDataSourceStatus(domain, 'empty', 'edu-hub-db');
     return { sheets: createEmptySheets(domain), source: 'empty' };
   }
