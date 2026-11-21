@@ -130,7 +130,7 @@
   var DEFAULT_COLUMNS = {
     lessons: {
       Lessons: [
-        'id', 'audience', 'category', 'categoryKey', 'categoryNum', 'title',
+        'id', 'course', 'category', 'categoryKey', 'categoryNum', 'title',
         'chineseTitle', 'pinyin', 'meaning', 'level', 'description',
         'videoUrl', 'posterUrl', 'fullAudio', 'keywords', 'accessType', 'price'
       ],
@@ -305,26 +305,113 @@
     return activeDataSources[domain] || { source: 'xlsx-fallback', database: 'edu-hub-db' };
   }
 
+  async function getAuthBearerToken() {
+    try {
+      if (global.localStorage) {
+        var directToken = String(global.localStorage.getItem('linguapath_api_token') || '').trim();
+        if (directToken) return directToken;
+      }
+    } catch (_) {}
+    try {
+      if (global.LinguaAuth && typeof global.LinguaAuth.getIdToken === 'function') {
+        var authTok = await global.LinguaAuth.getIdToken();
+        if (authTok && String(authTok).indexOf('.') !== -1) return String(authTok).trim();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  async function syncDomainToServer(domain, sheets) {
+    var meta = WORKBOOK_META[domain];
+    if (!meta) throw new Error('Unknown content domain: ' + domain);
+    var normalized = normalizeSheetsForDomain(domain, sheets);
+    var token = await getAuthBearerToken();
+    if (!token) {
+      return {
+        syncedToServer: false,
+        syncReason: 'auth-required',
+        error: 'No active Admin server session token found. Please sign out and sign in once.'
+      };
+    }
+
+    try {
+      var res = await fetch('/api/admin/workbook/' + encodeURIComponent(domain), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token
+        },
+        body: JSON.stringify({ sheets: normalized })
+      });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok || !data || !data.success) {
+        return {
+          syncedToServer: false,
+          syncReason: res.status === 401 || res.status === 403 ? 'auth-required' : 'server-error',
+          error: (data && data.error) || 'Server returned HTTP ' + res.status
+        };
+      }
+
+      var serverSheets = data.sheets ? normalizeSheetsForDomain(domain, data.sheets) : normalized;
+      try {
+        if (global.localStorage) {
+          global.localStorage.removeItem(DRAFT_KEYS[domain]);
+          if (domain === 'lessons') {
+            global.localStorage.removeItem('linguapath_custom_lessons');
+            global.localStorage.removeItem('linguapath_local_lesson_pricing');
+          }
+        }
+      } catch (_) {}
+
+      setDataSourceStatus(domain, 'cloudflare-d1', 'edu-hub-db');
+      dispatchContentChange(domain, serverSheets);
+      if (domain === 'lessons' && data.lessonCatalog && global.LinguaAuth && typeof global.LinguaAuth.init === 'function') {
+        try {
+          if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+            window.dispatchEvent(
+              new CustomEvent('linguapath-catalog-synced', {
+                detail: { lessonCatalog: data.lessonCatalog }
+              })
+            );
+          }
+        } catch (_) {}
+      }
+
+      return {
+        syncedToServer: true,
+        sheets: serverSheets,
+        counts: data.counts || {},
+        lessonCatalog: data.lessonCatalog || null
+      };
+    } catch (err) {
+      return {
+        syncedToServer: false,
+        syncReason: 'network-error',
+        error: err && err.message ? err.message : 'Unable to reach backend server.'
+      };
+    }
+  }
+
   async function loadRepositoryWorkbook(domain) {
     var meta = WORKBOOK_META[domain];
     if (!meta) throw new Error('Unknown content domain: ' + domain);
 
-    // 0. Primary: Cloudflare D1 Database (edu-hub-db via Cloudflare Worker / API)
+    // 0. Primary: Cloudflare D1 Database / Server Excel (data/*.xlsx)
     try {
       var d1Url = '/api/database/bundle?domain=' + encodeURIComponent(domain) + '&t=' + Date.now();
       var d1Res = await fetch(d1Url, { cache: 'no-store' });
       if (d1Res.ok) {
         var d1Data = await d1Res.json();
-        if (d1Data && d1Data.sheets) {
+        if (d1Data && d1Data.success && d1Data.sheets) {
           var normD1 = normalizeSheetsForDomain(domain, d1Data.sheets);
-          if (countRowsInSheets(normD1) > 0) {
-            setDataSourceStatus(domain, 'cloudflare-d1', d1Data.database || 'edu-hub-db');
-            return {
-              sheets: normD1,
-              source: 'cloudflare-d1',
-              database: d1Data.database || 'edu-hub-db'
-            };
-          }
+          setDataSourceStatus(domain, 'cloudflare-d1', d1Data.database || 'edu-hub-db');
+          return {
+            sheets: normD1,
+            source: 'cloudflare-d1',
+            database: d1Data.database || 'edu-hub-db'
+          };
         }
       }
     } catch (_) {}
@@ -336,10 +423,8 @@
         if (xlsxRes.ok) {
           var buf = await xlsxRes.arrayBuffer();
           var parsedSheets = parseXlsxBuffer(domain, buf);
-          if (countRowsInSheets(parsedSheets) > 0) {
-            setDataSourceStatus(domain, 'xlsx-fallback', 'edu-hub-db');
-            return { sheets: parsedSheets, source: 'xlsx' };
-          }
+          setDataSourceStatus(domain, 'xlsx-fallback', 'edu-hub-db');
+          return { sheets: parsedSheets, source: 'xlsx' };
         }
       } catch (_) {}
     }
@@ -351,10 +436,8 @@
         var jsonData = await jsonRes.json();
         if (jsonData && jsonData.sheets) {
           var normJson = normalizeSheetsForDomain(domain, jsonData.sheets);
-          if (countRowsInSheets(normJson) > 0) {
-            setDataSourceStatus(domain, 'json-fallback', 'edu-hub-db');
-            return { sheets: normJson, source: 'json' };
-          }
+          setDataSourceStatus(domain, 'json-fallback', 'edu-hub-db');
+          return { sheets: normJson, source: 'json' };
         }
       }
     } catch (_) {}
@@ -394,7 +477,25 @@
       }
     });
     var saved = writeDraft(domain, merged);
-    return { success: true, sheets: saved, hasDraft: true };
+    var syncRes = await syncDomainToServer(domain, saved);
+    if (syncRes.syncedToServer) {
+      return {
+        success: true,
+        sheets: syncRes.sheets || saved,
+        hasDraft: false,
+        syncedToServer: true,
+        counts: syncRes.counts || {},
+        lessonCatalog: syncRes.lessonCatalog || null
+      };
+    }
+    return {
+      success: true,
+      sheets: saved,
+      hasDraft: true,
+      syncedToServer: false,
+      syncReason: syncRes.syncReason || 'local-only',
+      syncError: syncRes.error || ''
+    };
   }
 
   async function importExercisesLocal(params) {
@@ -460,7 +561,11 @@
     return {
       success: true,
       importedCount: cleanIncoming.length,
-      exercises: res.sheets.Exercises
+      exercises: res.sheets.Exercises,
+      hasDraft: Boolean(res.hasDraft),
+      syncedToServer: Boolean(res.syncedToServer),
+      syncReason: res.syncReason || '',
+      syncError: res.syncError || ''
     };
   }
 
@@ -509,12 +614,18 @@
       );
     }
     var saved = writeDraft(domain, parsed);
+    var syncRes = await syncDomainToServer(domain, saved);
+    var finalSheets = syncRes.syncedToServer && syncRes.sheets ? syncRes.sheets : saved;
     return {
       success: true,
       fileName: meta.fileName,
-      sheets: saved,
+      sheets: finalSheets,
+      hasDraft: !syncRes.syncedToServer,
+      syncedToServer: Boolean(syncRes.syncedToServer),
+      syncReason: syncRes.syncReason || '',
+      syncError: syncRes.error || '',
       counts: meta.sheets.reduce(function (acc, s) {
-        acc[s] = (saved[s] || []).length;
+        acc[s] = (finalSheets[s] || []).length;
         return acc;
       }, {})
     };
@@ -600,6 +711,7 @@
     importExercisesLocal: importExercisesLocal,
     exportWorkbook: exportWorkbook,
     importWorkbookFile: importWorkbookFile,
+    syncDomainToServer: syncDomainToServer,
     clearDraft: clearDraft,
     readFileAsInlineMedia: readFileAsInlineMedia,
     cloneArray: cloneArray

@@ -13,6 +13,32 @@ let currentLoadedLessonId = "lesson-01";
 let currentLoadedLesson = null;
 let currentLoadedAllLessons = [];
 
+let cachedStoryWorkbook = {
+  loaded: false,
+  lessons: [],
+  allStoryRows: [],
+  allVocabularyRows: [],
+  allExerciseRows: []
+};
+
+function normalizeStoryLessonId(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function storyIdsMatch(a, b) {
+  const normA = normalizeStoryLessonId(a);
+  const normB = normalizeStoryLessonId(b);
+  if (!normA && !normB) return false;
+  return (
+    normA === normB ||
+    normA === normalizeStoryLessonId(`lesson-${normB}`) ||
+    normA === normalizeStoryLessonId(`lesson-0${normB}`) ||
+    normB === normalizeStoryLessonId(`lesson-${normA}`) ||
+    normB === normalizeStoryLessonId(`lesson-0${normA}`) ||
+    String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase()
+  );
+}
+
 
 /* =========================================================
    HELPERS
@@ -206,12 +232,35 @@ function stopCurrentStoryAudio() {
 
   if (currentPlayingButton) {
 
-    currentPlayingButton.textContent = "▶ Play";
+    currentPlayingButton.textContent =
+      currentPlayingButton.id === "fullStoryAudioBtn"
+        ? "▶ Play Full Story"
+        : "▶ Play";
     currentPlayingButton.classList.remove("playing");
     currentPlayingButton = null;
 
   }
 
+}
+
+function stopAllStoryPlayback() {
+  stopCurrentStoryAudio();
+
+  const videoElement = document.getElementById("lessonVideo");
+  if (videoElement) {
+    try {
+      videoElement.pause();
+      videoElement.currentTime = 0;
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  const fullStoryBtn = document.getElementById("fullStoryAudioBtn");
+  if (fullStoryBtn) {
+    fullStoryBtn.textContent = "▶ Play Full Story";
+    fullStoryBtn.classList.remove("playing");
+  }
 }
 
 function speakText(
@@ -1702,64 +1751,22 @@ async function loadStoryLesson() {
       loaded = true;
     }
 
-    // Match lesson by ID or fall back to first lesson
-    const norm = str => String(str || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-    const targetNorm = norm(lessonId);
-    const lesson = lessons.find(row => {
-      const id = getValue(row, "id", "ID", "lessonId");
-      const rNorm = norm(id);
-      return (
-        rNorm === targetNorm ||
-        rNorm === norm(`lesson-${targetNorm}`) ||
-        rNorm === norm(`lesson-0${targetNorm}`) ||
-        String(id).trim().toLowerCase() === String(lessonId).trim().toLowerCase()
-      );
-    }) || lessons[0];
+    cachedStoryWorkbook = {
+      loaded: true,
+      lessons,
+      allStoryRows,
+      allVocabularyRows,
+      allExerciseRows
+    };
 
-    if (!lesson) {
-      throw new Error(`Lesson "${lessonId}" was not found in the Lessons sheet.`);
-    }
-
-    const currentLessonId = getValue(lesson, "id", "ID", "lessonId") || lessonId;
-
-    // Filter by active lesson ID
-    let storyRows = sortByOrder(filterByLesson(allStoryRows, currentLessonId));
-    let vocabularyRows = sortByOrder(filterByLesson(allVocabularyRows, currentLessonId));
-    let exerciseRows = sortByOrder(filterByLesson(allExerciseRows, currentLessonId));
-
-    // Fall back to all sheet rows only if there is only 1 lesson and filtering returned empty
-    if (storyRows.length === 0 && allStoryRows.length > 0 && lessons.length <= 1) {
-      storyRows = sortByOrder(allStoryRows);
-    }
-    if (vocabularyRows.length === 0 && allVocabularyRows.length > 0 && lessons.length <= 1) {
-      vocabularyRows = sortByOrder(allVocabularyRows);
-    }
-    if (exerciseRows.length === 0 && allExerciseRows.length > 0 && lessons.length <= 1) {
-      exerciseRows = sortByOrder(allExerciseRows);
-    }
-
-    currentLoadedLessonId = currentLessonId;
-    currentLoadedLesson = lesson;
-    currentLoadedAllLessons = lessons;
-
-    // Render all page sections
-    renderLessonHeader(lesson);
-    renderVideo(lesson);
-    renderStoryImages(storyRows);
-    renderStoryReading(storyRows);
-    renderVocabulary(vocabularyRows);
-    renderExercises(exerciseRows);
-    updateLessonNavigation(storyRows, vocabularyRows, exerciseRows);
-    renderStorySwitcher(lessons, currentLessonId);
-    renderStoryPagination(lessons, currentLessonId);
-    setupStoryProgress(currentLessonId);
+    const currentLessonId = renderActiveStoryById(lessonId);
 
     console.log("Story lesson loaded successfully:", {
       lessonId: currentLessonId,
-      lesson,
-      storyCount: storyRows.length,
-      vocabularyCount: vocabularyRows.length,
-      exerciseCount: exerciseRows.length
+      lesson: currentLoadedLesson,
+      storyCount: sortByOrder(filterByLesson(allStoryRows, currentLessonId)).length,
+      vocabularyCount: sortByOrder(filterByLesson(allVocabularyRows, currentLessonId)).length,
+      exerciseCount: sortByOrder(filterByLesson(allExerciseRows, currentLessonId)).length
     });
 
   } catch (error) {
@@ -1768,41 +1775,164 @@ async function loadStoryLesson() {
   }
 }
 
+function renderActiveStoryById(lessonId) {
+  const lessons = cachedStoryWorkbook.lessons || [];
+  const allStoryRows = cachedStoryWorkbook.allStoryRows || [];
+  const allVocabularyRows = cachedStoryWorkbook.allVocabularyRows || [];
+  const allExerciseRows = cachedStoryWorkbook.allExerciseRows || [];
 
-/* =========================================================
-   RENDER STORY SWITCHER & PAGINATION
-   ========================================================= */
+  // Match lesson by ID or fall back to first lesson
+  const lesson = lessons.find(row => {
+    const id = getValue(row, "id", "ID", "lessonId");
+    return storyIdsMatch(id, lessonId);
+  }) || lessons[0];
 
-function renderStorySwitcher(lessons, currentLessonId) {
-  const container = document.getElementById("storySwitcher");
-  if (!container) return;
+  if (!lesson) {
+    throw new Error(`Lesson "${lessonId}" was not found in the Lessons sheet.`);
+  }
 
-  if (!lessons || lessons.length <= 1) {
-    container.innerHTML = "";
+  const currentLessonId = getValue(lesson, "id", "ID", "lessonId") || lessonId;
+
+  // Filter by active lesson ID
+  let storyRows = sortByOrder(filterByLesson(allStoryRows, currentLessonId));
+  let vocabularyRows = sortByOrder(filterByLesson(allVocabularyRows, currentLessonId));
+  let exerciseRows = sortByOrder(filterByLesson(allExerciseRows, currentLessonId));
+
+  // Fall back to all sheet rows only if there is only 1 lesson and filtering returned empty
+  if (storyRows.length === 0 && allStoryRows.length > 0 && lessons.length <= 1) {
+    storyRows = sortByOrder(allStoryRows);
+  }
+  if (vocabularyRows.length === 0 && allVocabularyRows.length > 0 && lessons.length <= 1) {
+    vocabularyRows = sortByOrder(allVocabularyRows);
+  }
+  if (exerciseRows.length === 0 && allExerciseRows.length > 0 && lessons.length <= 1) {
+    exerciseRows = sortByOrder(allExerciseRows);
+  }
+
+  currentLoadedLessonId = currentLessonId;
+  currentLoadedLesson = lesson;
+  currentLoadedAllLessons = lessons;
+
+  // Render all page sections
+  renderLessonHeader(lesson);
+  renderVideo(lesson);
+  renderStoryImages(storyRows);
+  renderStoryReading(storyRows);
+  renderVocabulary(vocabularyRows);
+  renderExercises(exerciseRows);
+  updateLessonNavigation(storyRows, vocabularyRows, exerciseRows);
+  renderStorySidebar(lessons, currentLessonId);
+  renderStoryPagination(lessons, currentLessonId);
+  setupStoryProgress(currentLessonId);
+
+  return currentLessonId;
+}
+
+function switchStory(targetLessonId, updateUrl = true, shouldScroll = true) {
+  if (!targetLessonId) return;
+
+  stopAllStoryPlayback();
+
+  if (!cachedStoryWorkbook.loaded) {
+    if (updateUrl) {
+      try {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set("id", targetLessonId);
+        window.history.pushState({ storyId: targetLessonId }, "", nextUrl.toString());
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    loadStoryLesson();
     return;
   }
 
-  const norm = str => String(str || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-  const currentNorm = norm(currentLessonId);
+  const resolvedId = renderActiveStoryById(targetLessonId);
 
-  let html = "";
-  lessons.forEach((l, index) => {
+  if (updateUrl) {
+    try {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set("id", resolvedId);
+      window.history.pushState({ storyId: resolvedId }, "", nextUrl.toString());
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  if (shouldScroll) {
+    const mainStage = document.getElementById("storiesMainStage") || document.getElementById("stories-view");
+    if (mainStage) {
+      mainStage.classList.remove("is-switching");
+      void mainStage.offsetWidth;
+      mainStage.classList.add("is-switching");
+      const rect = mainStage.getBoundingClientRect();
+      const topOffset = window.innerWidth <= 900 ? 84 : 92;
+      const targetTop = Math.max(0, window.pageYOffset + rect.top - topOffset);
+      window.scrollTo({ top: targetTop, behavior: "smooth" });
+    }
+  }
+}
+
+
+/* =========================================================
+   RENDER LEFT SIDEBAR STORY MENU & BOTTOM PAGINATION
+   ========================================================= */
+
+function renderStorySidebar(lessons, currentLessonId) {
+  const sidebar = document.getElementById("storyCourseSidebar");
+  if (!sidebar) return;
+
+  if (!lessons || !lessons.length) {
+    sidebar.innerHTML = "";
+    return;
+  }
+
+  const itemsHtml = lessons.map((l, index) => {
     const lId = getValue(l, "id", "ID", "lessonId") || `lesson-0${index + 1}`;
-    const lTitle = getValue(l, "chineseTitle") || getValue(l, "title") || `Story ${index + 1}`;
-    const isActive = norm(lId) === currentNorm || norm(`lesson-${currentNorm}`) === norm(lId);
+    const cnTitle = getValue(l, "chineseTitle", "ChineseTitle") || getValue(l, "title", "Title") || `Story ${index + 1}`;
+    const enTitle = getValue(l, "title", "Title");
+    const showEnTitle = Boolean(enTitle && enTitle !== cnTitle);
+    const isActive = storyIdsMatch(lId, currentLessonId);
+    const prog = getStoryLessonProgress(lId);
+    const isDone = isStoryLessonCompleted(lId);
+    const isInProgress = !isDone && prog && prog.percent > 0;
+    const statusClass = isDone ? "is-done" : (isInProgress ? "is-progress" : "");
+    const statusLabel = isDone ? "✓ Done" : (isInProgress ? "In Progress" : "Unread");
 
-    html += `
-      <a
-        href="story.html?id=${encodeURIComponent(lId)}"
-        class="story-switcher-btn ${isActive ? "active" : ""}"
+    return `
+      <button
+        type="button"
+        class="story-sidebar-btn ${isActive ? "active" : ""}"
+        data-story-id="${escapeHTML(lId)}"
+        ${isActive ? 'aria-current="page"' : ""}
       >
-        <span class="story-switcher-badge">Story ${index + 1}</span>
-        <span>${escapeHTML(lTitle)}</span>
-      </a>
+        <div class="story-sidebar-top">
+          <span class="story-sidebar-index">Story ${index + 1}</span>
+          <span class="story-sidebar-status ${statusClass}">${escapeHTML(statusLabel)}</span>
+        </div>
+        <span class="story-sidebar-title-cn">${escapeHTML(cnTitle)}</span>
+        ${showEnTitle ? `<span class="story-sidebar-title-en">${escapeHTML(enTitle)}</span>` : ""}
+      </button>
     `;
-  });
+  }).join("");
 
-  container.innerHTML = html;
+  sidebar.innerHTML = `
+    <div class="stories-sidebar-header">
+      <span class="stories-sidebar-kicker">Stories</span>
+      <h2 class="stories-sidebar-title">Story Library</h2>
+    </div>
+    <nav class="stories-nav" aria-label="Story Lessons">
+      ${itemsHtml}
+    </nav>
+  `;
+
+  sidebar.querySelectorAll(".story-sidebar-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.getAttribute("data-story-id");
+      if (!targetId) return;
+      switchStory(targetId, true, true);
+    });
+  });
 }
 
 function renderStoryPagination(lessons, currentLessonId) {
@@ -1824,11 +1954,9 @@ function renderStoryPagination(lessons, currentLessonId) {
     return;
   }
 
-  const norm = str => String(str || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-  const currentNorm = norm(currentLessonId);
   const currentIndex = lessons.findIndex(l => {
     const lId = getValue(l, "id", "ID", "lessonId");
-    return norm(lId) === currentNorm || norm(`lesson-${currentNorm}`) === norm(lId);
+    return storyIdsMatch(lId, currentLessonId);
   });
 
   const prevLesson = currentIndex > 0 ? lessons[currentIndex - 1] : null;
@@ -1839,7 +1967,7 @@ function renderStoryPagination(lessons, currentLessonId) {
     const prevId = getValue(prevLesson, "id", "ID", "lessonId");
     const prevTitle = getValue(prevLesson, "chineseTitle") || getValue(prevLesson, "title") || "Previous Story";
     actionsHtml += `
-      <a href="story.html?id=${encodeURIComponent(prevId)}" class="btn btn-secondary">
+      <a href="story.html?id=${encodeURIComponent(prevId)}" data-story-nav="${escapeHTML(prevId)}" class="btn btn-secondary">
         &larr; Story ${currentIndex}: ${escapeHTML(prevTitle)}
       </a>
     `;
@@ -1855,7 +1983,7 @@ function renderStoryPagination(lessons, currentLessonId) {
     const nextId = getValue(nextLesson, "id", "ID", "lessonId");
     const nextTitle = getValue(nextLesson, "chineseTitle") || getValue(nextLesson, "title") || "Next Story";
     actionsHtml += `
-      <a href="story.html?id=${encodeURIComponent(nextId)}" class="btn btn-primary">
+      <a href="story.html?id=${encodeURIComponent(nextId)}" data-story-nav="${escapeHTML(nextId)}" class="btn btn-primary">
         Story ${currentIndex + 2}: ${escapeHTML(nextTitle)} &rarr;
       </a>
     `;
@@ -1870,6 +1998,17 @@ function renderStoryPagination(lessons, currentLessonId) {
       ${actionsHtml}
     </div>
   `;
+
+  container.querySelectorAll("[data-story-nav]").forEach(link => {
+    link.addEventListener("click", (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      const targetId = link.getAttribute("data-story-nav");
+      if (targetId) {
+        switchStory(targetId, true, true);
+      }
+    });
+  });
 }
 
 
@@ -2020,6 +2159,20 @@ function saveStoryLessonProgress(lessonId, percent, completed) {
   }
 }
 
+function isStoryLessonCompleted(lessonId) {
+  const prog = getStoryLessonProgress(lessonId);
+  if (prog && (prog.completed || prog.percent >= 100)) {
+    return true;
+  }
+  if (isAuthenticatedMember() && window.LinguaAuth && typeof window.LinguaAuth.getUserProgress === "function") {
+    const cloud = window.LinguaAuth.getUserProgress();
+    if (cloud && Array.isArray(cloud.completedLessonIds)) {
+      return cloud.completedLessonIds.some(id => storyIdsMatch(id, lessonId));
+    }
+  }
+  return false;
+}
+
 function updateStoryProgressUI(lessonId) {
   const btn = document.getElementById("storyProgressToggleBtn");
   const icon = document.getElementById("storyProgressIcon");
@@ -2027,7 +2180,7 @@ function updateStoryProgressUI(lessonId) {
   if (!btn) return;
 
   const prog = getStoryLessonProgress(lessonId);
-  const isDone = Boolean(prog.completed || prog.percent >= 100);
+  const isDone = isStoryLessonCompleted(lessonId);
 
   if (isDone) {
     btn.classList.add("is-completed");
@@ -2046,6 +2199,7 @@ function finishStoryLessonAndReview() {
   if (currentLoadedLessonId) {
     saveStoryLessonProgress(currentLoadedLessonId, 100, true);
     updateStoryProgressUI(currentLoadedLessonId);
+    renderStorySidebar(currentLoadedAllLessons, currentLoadedLessonId);
     recordLessonCompletionStreak();
   }
   const title = getCurrentStoryDisplayTitle();
@@ -2148,10 +2302,11 @@ function showStoryCompletionModal(lessonTitle, lessonId, lessons) {
   }
 
   // Find next lesson if available
-  const nextLesson = (lessons || []).find((l) => {
-    const lid = String(l.id || l.lessonId || "").trim().toLowerCase();
-    return lid && lid !== String(lessonId).trim().toLowerCase();
-  });
+  const list = lessons || [];
+  const currIdx = list.findIndex(l => storyIdsMatch(l.id || l.lessonId, lessonId));
+  const nextLesson = (currIdx >= 0 && currIdx + 1 < list.length)
+    ? list[currIdx + 1]
+    : list.find(l => !storyIdsMatch(l.id || l.lessonId, lessonId));
 
   const actionsContainer = document.getElementById("completionModalActions");
   if (actionsContainer) {
@@ -2174,10 +2329,17 @@ function showStoryCompletionModal(lessonTitle, lessonId, lessons) {
     actionsContainer.appendChild(reviewBtn);
 
     if (nextLesson) {
+      const nextId = nextLesson.id || nextLesson.lessonId;
       const nextBtn = document.createElement("a");
-      nextBtn.href = `story.html?id=${encodeURIComponent(nextLesson.id || nextLesson.lessonId)}`;
+      nextBtn.href = `story.html?id=${encodeURIComponent(nextId)}`;
       nextBtn.className = "btn btn-secondary";
       nextBtn.textContent = `Next: ${nextLesson.title || "Next Lesson"} →`;
+      nextBtn.addEventListener("click", (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        closeStoryCompletionModal();
+        switchStory(nextId, true, true);
+      });
       actionsContainer.appendChild(nextBtn);
     }
 
@@ -2232,27 +2394,29 @@ function setupStoryCompletionModalListeners() {
 function setupStoryProgress(lessonId) {
   const current = getStoryLessonProgress(lessonId);
   // Mark as started (e.g. 35% in progress) if not started yet
-  if (!current.completed && current.percent === 0) {
+  if (!isStoryLessonCompleted(lessonId) && current.percent === 0) {
     saveStoryLessonProgress(lessonId, 35, false);
   }
   updateStoryProgressUI(lessonId);
+  renderStorySidebar(currentLoadedAllLessons, lessonId);
 
   const btn = document.getElementById("storyProgressToggleBtn");
   if (btn && !btn.dataset.bound) {
     btn.dataset.bound = "true";
     btn.addEventListener("click", () => {
-      const prog = getStoryLessonProgress(lessonId);
-      const isDone = Boolean(prog.completed || prog.percent >= 100);
+      const activeId = currentLoadedLessonId || lessonId;
+      const isDone = isStoryLessonCompleted(activeId);
       const newDone = !isDone;
-      saveStoryLessonProgress(lessonId, newDone ? 100 : 35, newDone);
-      updateStoryProgressUI(lessonId);
+      saveStoryLessonProgress(activeId, newDone ? 100 : 35, newDone);
+      updateStoryProgressUI(activeId);
+      renderStorySidebar(currentLoadedAllLessons, activeId);
 
       if (newDone) {
         recordLessonCompletionStreak();
         const title = currentLoadedLesson
-          ? (currentLoadedLesson.title ? `${currentLoadedLesson.title} (${currentLoadedLesson.chineseTitle || ""})` : lessonId)
-          : lessonId;
-        showStoryCompletionModal(title, lessonId, currentLoadedAllLessons);
+          ? (currentLoadedLesson.title ? `${currentLoadedLesson.title} (${currentLoadedLesson.chineseTitle || ""})` : activeId)
+          : activeId;
+        showStoryCompletionModal(title, activeId, currentLoadedAllLessons);
       }
     });
   }
@@ -3758,6 +3922,21 @@ document.addEventListener(
     loadStoryLesson();
     initStoriesAndReelsSystem();
 
+    window.addEventListener("popstate", () => {
+      if (!document.getElementById("storyCourseSidebar")) return;
+      const targetId = getLessonId();
+      if (cachedStoryWorkbook.loaded) {
+        switchStory(targetId, false, true);
+      } else {
+        loadStoryLesson();
+      }
+    });
+
+    window.addEventListener("linguapath-content-change", () => {
+      cachedStoryWorkbook.loaded = false;
+      loadStoryLesson();
+    });
+
     window.addEventListener("lingua-auth-change", () => {
       updateHeaderStreakUI();
       updateUserLevelUI();
@@ -3766,6 +3945,7 @@ document.addEventListener(
       checkAndTriggerDailyReminder();
       if (currentLoadedLessonId) {
         updateStoryProgressUI(currentLoadedLessonId);
+        renderStorySidebar(currentLoadedAllLessons, currentLoadedLessonId);
       }
     });
   }

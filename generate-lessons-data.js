@@ -2,280 +2,356 @@ const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 
-// Focused starter curriculum: HSK 2 only (all 5 exercise types included)
+// Focused HSK 2 curriculum: single lesson — 她请我们吃了北京烤鸭 (Paid 75,000 Kyat)
 const lessons = [
   {
-    id: "hsk2-01",
-    course: "HSK 2",
-    category: "HSK 2",
-    categoryKey: "hsk2",
-    categoryNum: "Course 1",
-    title: "Ordering Food, Transit & Everyday Plans",
-    chineseTitle: "餐厅点餐与日常出行交流",
-    pinyin: "Cāntīng diǎncài yǔ rìcháng chūxíng jiāoliú",
-    meaning: "Ordering meals, taking city transport, and coordinating daily plans",
-    level: "HSK 2",
-    description: "Build HSK 2 fluency across restaurants, taxis and subways, workplace scheduling, and everyday dialogues.",
-    videoUrl: "assets/video/lesson-02.mp4",
-    posterUrl: "assets/images/story-02.jpg",
-    fullAudio: "assets/audio/lesson-02-full.mp3",
-    keywords: "HSK 2, Dining, Transit, Schedule, Conversation",
-    accessType: "paid",
-    price: 9
+    id: 'hsk2-01',
+    course: 'HSK 2',
+    category: 'HSK 2',
+    categoryKey: 'hsk2',
+    categoryNum: 'Course 1',
+    title: 'She treated us to Peking Duck',
+    chineseTitle: '她请我们吃了北京烤鸭',
+    pinyin: 'Tā qǐng wǒmen chī le Běijīng kǎoyā',
+    meaning: 'She treated us to Peking Duck',
+    level: 'HSK 2',
+    description:
+      'Practice HSK 2 expressions with 请 (to treat someone), completed-action 了 (le), and talking about Chinese dishes featuring Peking Duck (北京烤鸭).',
+    videoUrl: 'assets/video/lesson-02.mp4',
+    posterUrl: 'assets/images/story-02.jpg',
+    fullAudio: 'assets/audio/lesson-02-full.mp3',
+    keywords: 'HSK 2, 北京烤鸭, Peking Duck, 请, 吃了',
+    accessType: 'paid',
+    price: 75000
   }
 ];
 
 const rawExercises = [
-  // =========================================================================
-  // hsk2-01 (HSK 2) — Covers all 5 exercise types
-  // =========================================================================
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 1,
-    type: "multiple-choice",
-    question: "When ordering food in a restaurant, how do you say 'Waiter, bring the menu please'?",
-    optionA: "服务员，请给我菜单！",
-    optionB: "服务员，买单！",
-    optionC: "请问洗手间在哪儿？",
-    optionD: "我要一杯冰茶。",
-    answer: "服务员，请给我菜单！",
-    explanation: "菜单 (càidān) means 'menu'; 请给我菜单 politely asks to see the menu."
+    type: 'multiple-choice',
+    question: "What does '她请我们吃了北京烤鸭' (Tā qǐng wǒmen chī le Běijīng kǎoyā) mean?",
+    optionA: 'She treated us to Peking Duck',
+    optionB: 'We invited her to cook noodles',
+    optionC: 'She ordered two cups of green tea',
+    optionD: 'We walked to a Beijing supermarket',
+    answer: 'She treated us to Peking Duck',
+    explanation: '请 (qǐng) means to treat or invite, 吃了 (chī le) means ate, and 北京烤鸭 (Běijīng kǎoyā) is Peking Duck.'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 2,
-    type: "multiple-choice",
-    question: "What does '坐地铁去公司很快' (Zuò dìtiě qù gōngsī hěn kuài) mean?",
-    optionA: "Taking the subway to the company is very fast",
-    optionB: "Walking to the airport takes too long",
-    optionC: "The bus stop is behind the restaurant",
-    optionD: "Wait at the taxi stand outside",
-    answer: "Taking the subway to the company is very fast",
-    explanation: "地铁 (dìtiě) = subway, 公司 (gōngsī) = company/office, 很快 = very fast."
+    type: 'multiple-choice',
+    question: "In the sentence '她请我们吃了北京烤鸭', what does the character 请 (qǐng) express?",
+    optionA: 'To treat / pay for a meal for others',
+    optionB: 'To ask for directions to the station',
+    optionC: 'To arrive late for dinner',
+    optionD: 'To return home by taxi',
+    answer: 'To treat / pay for a meal for others',
+    explanation: '请 + someone + verb (e.g. 请我们吃饭) means to treat someone to food or drink.'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 3,
-    type: "image-choice",
-    audioUrl: "assets/audio/tian-haochi.mp3",
-    question: "我想点一碗热腾腾的牛肉面。(I'd like to order a bowl of beef noodles.) Choose the matching picture.",
-    optionA: "牛肉面 (Beef noodles)",
-    optionB: "冰茶 (Iced tea)",
-    optionC: "菜单 (Menu)",
-    optionAImage: "assets/images/exercises/noodles-bowl.svg",
-    optionBImage: "assets/images/exercises/iced-tea-cup.svg",
-    optionCImage: "assets/images/exercises/menu-book.svg",
-    answer: "A",
-    explanation: "面 (miàn / noodles) matches the steaming bowl of noodles in picture A."
+    type: 'image-choice',
+    audioUrl: 'assets/audio/tian-haochi.mp3',
+    question: '昨天晚上她请我们吃了香喷喷的北京烤鸭。(Last night she treated us to delicious Peking Duck.) Choose the matching picture.',
+    optionA: '北京烤鸭 (Peking Duck)',
+    optionB: '冰茶 (Iced tea)',
+    optionC: '菜单 (Menu)',
+    optionAImage: 'assets/images/exercises/roast-duck.svg',
+    optionBImage: 'assets/images/exercises/iced-tea-cup.svg',
+    optionCImage: 'assets/images/exercises/menu-book.svg',
+    answer: 'A',
+    explanation: '北京烤鸭 (Běijīng kǎoyā) matches the roasted Peking Duck platter in picture A.'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 4,
-    type: "shared-image-match",
-    groupId: "hsk2-transit-pic",
-    groupTitle: "Part II: Match Picture A, B, C, or D to each HSK 2 travel dialogue.",
-    pinyin: "Wǒ měitiān zǎoshang zuò dìtiě qù shàngbān.",
-    question: "我每天早上坐地铁去上班，只要二十分钟。",
-    optionA: "坐地铁 (Subway)",
-    optionB: "出租车 (Taxi)",
-    optionC: "坐飞机 (Airplane)",
-    optionD: "菜单 (Menu)",
-    optionAImage: "assets/images/exercises/subway-train.svg",
-    optionBImage: "assets/images/exercises/taxi-cab.svg",
-    optionCImage: "assets/images/exercises/airplane.svg",
-    optionDImage: "assets/images/exercises/menu-book.svg",
-    answer: "A",
-    explanation: "地铁 (dìtiě) means subway/metro train (A)."
+    type: 'shared-image-match',
+    groupId: 'hsk2-duck-pic',
+    groupTitle: 'Part II: Match Picture A, B, C, or D to each HSK 2 dining sentence.',
+    pinyin: 'Běijīng kǎoyā yòu xiāng yòu cuì, wǒmen dōu hěn xǐhuan chī.',
+    question: '北京烤鸭又香又脆，大家都非常喜欢吃。',
+    optionA: '北京烤鸭 (Peking Duck)',
+    optionB: '牛肉面 (Noodles)',
+    optionC: '菜单 (Menu)',
+    optionD: '买单 (Bill)',
+    optionAImage: 'assets/images/exercises/roast-duck.svg',
+    optionBImage: 'assets/images/exercises/noodles-bowl.svg',
+    optionCImage: 'assets/images/exercises/menu-book.svg',
+    optionDImage: 'assets/images/exercises/bill-receipt.svg',
+    answer: 'A',
+    explanation: '北京烤鸭 (Běijīng kǎoyā) refers to roasted Peking Duck (A).'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 5,
-    type: "shared-image-match",
-    groupId: "hsk2-transit-pic",
-    groupTitle: "Part II: Match Picture A, B, C, or D to each HSK 2 travel dialogue.",
-    pinyin: "Xiàyǔ le, wǒmen dǎ chūzūchē qù jīchǎng ba.",
-    question: "外面下雨了，我们打出租车去火车站吧。",
-    optionA: "坐地铁 (Subway)",
-    optionB: "出租车 (Taxi)",
-    optionC: "坐飞机 (Airplane)",
-    optionD: "菜单 (Menu)",
-    optionAImage: "assets/images/exercises/subway-train.svg",
-    optionBImage: "assets/images/exercises/taxi-cab.svg",
-    optionCImage: "assets/images/exercises/airplane.svg",
-    optionDImage: "assets/images/exercises/menu-book.svg",
-    answer: "B",
-    explanation: "出租车 (chūzūchē) means taxi cab (B)."
+    type: 'shared-image-match',
+    groupId: 'hsk2-duck-pic',
+    groupTitle: 'Part II: Match Picture A, B, C, or D to each HSK 2 dining sentence.',
+    pinyin: 'Chī wán kǎoyā yǐhòu, tā qù mǎidān le.',
+    question: '吃完烤鸭以后，她走去服务台买单了。',
+    optionA: '北京烤鸭 (Peking Duck)',
+    optionB: '牛肉面 (Noodles)',
+    optionC: '菜单 (Menu)',
+    optionD: '买单 (Bill)',
+    optionAImage: 'assets/images/exercises/roast-duck.svg',
+    optionBImage: 'assets/images/exercises/noodles-bowl.svg',
+    optionCImage: 'assets/images/exercises/menu-book.svg',
+    optionDImage: 'assets/images/exercises/bill-receipt.svg',
+    answer: 'D',
+    explanation: '买单 (mǎidān) means to pay the check/bill (D).'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 6,
-    type: "shared-text-match",
-    groupId: "hsk2-wordbank",
-    groupTitle: "Sentence & Word Bank: Pick the best choice (A–E) for each HSK 2 sentence.",
-    pinyin: "Zhè dào cài tài là le, wǒ bù xǐhuan (   ).",
-    question: "这道菜太辣了，我不太喜欢 (   ) 辣的食物。",
-    optionA: "吃 (chī)",
-    optionB: "喝 (hē)",
-    optionC: "买单 (mǎidān)",
-    optionD: "左 (zuǒ)",
-    optionE: "右 (yòu)",
-    answer: "A",
-    explanation: "吃 (chī) means 'to eat'."
+    type: 'shared-text-match',
+    groupId: 'hsk2-duck-bank',
+    groupTitle: 'Sentence & Word Bank: Pick the best word (A–E) for each blank.',
+    pinyin: 'Jīntiān shì tā de shēngrì, tā (   ) wǒmen chī wǎnfàn.',
+    question: '今天是她的生日，她 (   ) 我们去餐厅吃晚饭。',
+    optionA: '请 (qǐng)',
+    optionB: '吃 (chī)',
+    optionC: '烤鸭 (kǎoyā)',
+    optionD: '了 (le)',
+    optionE: '买单 (mǎidān)',
+    answer: 'A',
+    explanation: '她请我们去餐厅吃晚饭 means "She treated us to dinner at a restaurant."'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 7,
-    type: "shared-text-match",
-    groupId: "hsk2-wordbank",
-    groupTitle: "Sentence & Word Bank: Pick the best choice (A–E) for each HSK 2 sentence.",
-    pinyin: "Chī bǎo le, fúwùyuán qǐng (   )!",
-    question: "我们吃饱了，服务员，请 (   )！",
-    optionA: "吃 (chī)",
-    optionB: "喝 (hē)",
-    optionC: "买单 (mǎidān)",
-    optionD: "左 (zuǒ)",
-    optionE: "右 (yòu)",
-    answer: "C",
-    explanation: "买单 (mǎidān) means 'to pay the bill / check please' (C)."
+    type: 'shared-text-match',
+    groupId: 'hsk2-duck-bank',
+    groupTitle: 'Sentence & Word Bank: Pick the best word (A–E) for each blank.',
+    pinyin: 'Zhuō shàng de Běijīng (   ) zhēn hǎochī!',
+    question: '桌上的北京 (   ) 又香又好吃！',
+    optionA: '请 (qǐng)',
+    optionB: '吃 (chī)',
+    optionC: '烤鸭 (kǎoyā)',
+    optionD: '了 (le)',
+    optionE: '买单 (mǎidān)',
+    answer: 'C',
+    explanation: '北京烤鸭 (Běijīng kǎoyā) means Peking Duck (C).'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 8,
-    type: "fill-blank",
-    pinyin: "chá",
-    question: "吃饭的时候我想喝一杯冰绿 (   )。",
-    answer: "茶",
-    explanation: "绿茶 (lǜchá) means 'green tea'."
+    type: 'fill-blank',
+    pinyin: 'qǐng',
+    question: '昨天晚上她 (   ) 我们吃了北京烤鸭。',
+    answer: '请',
+    explanation: '请 (qǐng) means to treat or invite someone to eat.'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 9,
-    type: "fill-blank",
-    pinyin: "zuǒ",
-    question: "前面的路口往 (   ) 拐就是地铁站。",
-    answer: "左",
-    explanation: "往左拐 (wǎng zuǒ guǎi) means 'turn left'."
+    type: 'fill-blank',
+    pinyin: 'chī',
+    question: '周末我们一起去北京餐厅 (   ) 烤鸭。',
+    answer: '吃',
+    explanation: '吃 (chī) means to eat.'
   }
 ];
 
 const exercises = rawExercises.map((ex) => ({
-  lessonId: ex.lessonId || "",
+  lessonId: ex.lessonId || '',
   order: ex.order || 1,
-  type: ex.type || "multiple-choice",
-  groupId: ex.groupId || "",
-  groupTitle: ex.groupTitle || "",
-  pinyin: ex.pinyin || "",
-  question: ex.question || "",
-  audioUrl: ex.audioUrl || "",
-  optionA: ex.optionA || "",
-  optionB: ex.optionB || "",
-  optionC: ex.optionC || "",
-  optionD: ex.optionD || "",
-  optionE: ex.optionE || "",
-  optionAImage: ex.optionAImage || "",
-  optionBImage: ex.optionBImage || "",
-  optionCImage: ex.optionCImage || "",
-  optionDImage: ex.optionDImage || "",
-  optionEImage: ex.optionEImage || "",
-  answer: ex.answer || "",
-  explanation: ex.explanation || ""
+  type: ex.type || 'multiple-choice',
+  groupId: ex.groupId || '',
+  groupTitle: ex.groupTitle || '',
+  pinyin: ex.pinyin || '',
+  question: ex.question || '',
+  audioUrl: ex.audioUrl || '',
+  optionA: ex.optionA || '',
+  optionB: ex.optionB || '',
+  optionC: ex.optionC || '',
+  optionD: ex.optionD || '',
+  optionE: ex.optionE || '',
+  optionAImage: ex.optionAImage || '',
+  optionBImage: ex.optionBImage || '',
+  optionCImage: ex.optionCImage || '',
+  optionDImage: ex.optionDImage || '',
+  optionEImage: ex.optionEImage || '',
+  answer: ex.answer || '',
+  explanation: ex.explanation || ''
 }));
 
 const writing = [
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 1,
-    character: "吃",
-    pinyin: "chī",
-    meaning: "to eat",
-    strokeCount: 6,
-    radical: "口 (Mouth)",
-    strokeAnimationUrl: "",
-    svgPath: "",
-    strokeOrderSteps: "1. Vertical (丨), 2. Horizontal-turn (𠃍), 3. Horizontal (一), 4. Top slant (丿), 5. Horizontal (一), 6. Curved hook (乙)"
+    character: '请',
+    pinyin: 'qǐng',
+    meaning: 'to treat / invite / please',
+    strokeCount: 10,
+    radical: '讠 (Speech)',
+    strokeAnimationUrl: '',
+    svgPath: '',
+    strokeOrderSteps:
+      '1. Dot (丶), 2. Horizontal-turn-lift (㇊), 3. Horizontal (一), 4. Horizontal (一), 5. Vertical (丨), 6. Horizontal (一), 7. Vertical (丨), 8. Horizontal-turn-hook (𠃌), 9. Horizontal (一), 10. Horizontal (一)'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 2,
-    character: "茶",
-    pinyin: "chá",
-    meaning: "tea",
-    strokeCount: 9,
-    radical: "艹 (Grass)",
-    strokeAnimationUrl: "",
-    svgPath: "",
-    strokeOrderSteps: "1. Horizontal (一), 2. Left vertical (丨), 3. Right vertical (丨), 4. Slant (丿), 5. Right press (乀), 6. Horizontal (一), 7. Vertical hook (亅), 8. Left slant (丿), 9. Right dot (丶)"
+    character: '鸭',
+    pinyin: 'yā',
+    meaning: 'duck',
+    strokeCount: 10,
+    radical: '鸟 (Bird)',
+    strokeAnimationUrl: '',
+    svgPath: '',
+    strokeOrderSteps:
+      '1. Vertical (丨), 2. Horizontal-turn (𠃍), 3. Horizontal (一), 4. Horizontal (一), 5. Vertical (丨), 6. Slant (丿), 7. Horizontal-turn-hook (𠃌), 8. Dot (丶), 9. Vertical-turn-hook (㇉), 10. Horizontal (一)'
   },
   {
-    lessonId: "hsk2-01",
+    lessonId: 'hsk2-01',
     order: 3,
-    character: "左",
-    pinyin: "zuǒ",
-    meaning: "left",
-    strokeCount: 5,
-    radical: "工 (Work)",
-    strokeOrderSteps: "1. Horizontal (一), 2. Left slant (丿), 3. Horizontal (一), 4. Vertical (丨), 5. Horizontal (一)"
+    character: '吃',
+    pinyin: 'chī',
+    meaning: 'to eat',
+    strokeCount: 6,
+    radical: '口 (Mouth)',
+    strokeAnimationUrl: '',
+    svgPath: '',
+    strokeOrderSteps:
+      '1. Vertical (丨), 2. Horizontal-turn (𠃍), 3. Horizontal (一), 4. Top slant (丿), 5. Horizontal (一), 6. Curved hook (乙)'
   }
 ];
 
 const vocabulary = [
-  { lessonId: "hsk2-01", order: 1, character: "点菜", pinyin: "diǎn cài", meaning: "order dishes", audio: "assets/audio/tian-haochi.mp3" },
-  { lessonId: "hsk2-01", order: 2, character: "买单", pinyin: "mǎidān", meaning: "pay the bill", audio: "assets/audio/tian-haochi.mp3" },
-  { lessonId: "hsk2-01", order: 3, character: "地铁", pinyin: "dìtiě", meaning: "subway / metro", audio: "assets/audio/shichang.mp3" },
-  { lessonId: "hsk2-01", order: 4, character: "出租车", pinyin: "chūzūchē", meaning: "taxi cab", audio: "assets/audio/shichang.mp3" },
-  { lessonId: "hsk2-01", order: 5, character: "往左拐", pinyin: "wǎng zuǒ guǎi", meaning: "turn left", audio: "assets/audio/dianyingyuan.mp3" }
+  { lessonId: 'hsk2-01', order: 1, character: '请', pinyin: 'qǐng', meaning: 'to treat / invite someone', audio: 'assets/audio/tian-haochi.mp3' },
+  { lessonId: 'hsk2-01', order: 2, character: '我们', pinyin: 'wǒmen', meaning: 'we / us', audio: 'assets/audio/tian-haochi.mp3' },
+  { lessonId: 'hsk2-01', order: 3, character: '吃', pinyin: 'chī', meaning: 'to eat', audio: 'assets/audio/tian-haochi.mp3' },
+  { lessonId: 'hsk2-01', order: 4, character: '了', pinyin: 'le', meaning: 'completed action marker', audio: 'assets/audio/tian-haochi.mp3' },
+  { lessonId: 'hsk2-01', order: 5, character: '北京烤鸭', pinyin: 'Běijīng kǎoyā', meaning: 'Peking Duck', audio: 'assets/audio/shichang.mp3' },
+  { lessonId: 'hsk2-01', order: 6, character: '买单', pinyin: 'mǎidān', meaning: 'pay the bill', audio: 'assets/audio/dianyingyuan.mp3' }
+];
+
+const pronunciation = [
+  {
+    lessonId: 'hsk2-01',
+    order: 1,
+    chinese: '她请我们吃了北京烤鸭。',
+    pinyin: 'Tā qǐng wǒmen chī le Běijīng kǎoyā.',
+    meaning: 'She treated us to Peking Duck.',
+    focus: 'Past tense 了 (le) & 请 (treating someone)'
+  },
+  {
+    lessonId: 'hsk2-01',
+    order: 2,
+    chinese: '北京烤鸭又香又脆，真好吃！',
+    pinyin: 'Běijīng kǎoyā yòu xiāng yòu cuì, zhēn hǎochī!',
+    meaning: 'Peking Duck is fragrant and crispy, really delicious!',
+    focus: 'Complimenting food (又…又…)'
+  },
+  {
+    lessonId: 'hsk2-01',
+    order: 3,
+    chinese: '谢谢你请我们吃晚饭！',
+    pinyin: 'Xièxie nǐ qǐng wǒmen chī wǎnfàn!',
+    meaning: 'Thank you for treating us to dinner!',
+    focus: 'Expressing gratitude'
+  },
+  {
+    lessonId: 'hsk2-01',
+    order: 4,
+    chinese: '服务员，请给我们一份北京烤鸭。',
+    pinyin: 'Fúwùyuán, qǐng gěi wǒmen yí fèn Běijīng kǎoyā.',
+    meaning: 'Waiter, please bring us one order of Peking Duck.',
+    focus: 'Ordering at a restaurant'
+  }
 ];
 
 const games = [
   {
-    id: "game-01",
+    id: 'game-01',
     order: 1,
-    title: "Tone Hunter — Character & Tone Matcher",
-    category: "Tone Recognition",
-    badge: "Wordwall Challenge 1",
-    description: "Match Mandarin characters to their correct tone mark and phonetic pitch. Practice tonal accuracy and ear training.",
+    title: 'Tone Hunter — Character & Tone Matcher',
+    category: 'Tone Recognition',
+    badge: 'Wordwall Challenge 1',
+    description: 'Match Mandarin characters to their correct tone mark and phonetic pitch. Practice tonal accuracy and ear training.',
     embed_code: '<iframe style="max-width:100%" src="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0" width="500" height="380" frameborder="0" allowfullscreen></iframe>',
-    embed_url: "https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0",
+    embed_url: 'https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=27&templateId=82&fontStackId=0',
     width: 500,
     height: 380,
-    active: "TRUE"
+    active: 'TRUE'
   },
   {
-    id: "game-02",
+    id: 'game-02',
     order: 2,
-    title: "Word Speed Quiz — Vocabulary Match",
-    category: "Rapid Recall",
-    badge: "Wordwall Challenge 2",
-    description: "Fast-paced Mandarin vocabulary identification. Test your speed recognition of characters, pinyin, and definitions.",
+    title: 'Word Speed Quiz — Vocabulary Match',
+    category: 'Rapid Recall',
+    badge: 'Wordwall Challenge 2',
+    description: 'Fast-paced Mandarin vocabulary identification. Test your speed recognition of characters, pinyin, and definitions.',
     embed_code: '<iframe style="max-width:100%" src="https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0" width="500" height="380" frameborder="0" allowfullscreen></iframe>',
-    embed_url: "https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0",
+    embed_url: 'https://wordwall.net/embed/9dfb097b6b4a405ca39a08514e805030?themeId=23&templateId=49&fontStackId=0',
     width: 500,
     height: 380,
-    active: "TRUE"
+    active: 'TRUE'
   }
 ];
 
 const wb = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lessons), "Lessons");
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exercises), "Exercises");
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(writing), "Writing");
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vocabulary), "Vocabulary");
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(games), "Games");
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lessons), 'Lessons');
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exercises), 'Exercises');
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(writing), 'Writing');
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vocabulary), 'Vocabulary');
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(games), 'Games');
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pronunciation), 'Pronunciation');
 
 const outExcel = path.join(__dirname, 'data', 'lessons.xlsx');
 XLSX.writeFile(wb, outExcel);
-console.log('Wrote data/lessons.xlsx successfully! (HSK 2 only: hsk2-01)');
+console.log('Wrote data/lessons.xlsx successfully! (HSK 2 only: hsk2-01 — 她请我们吃了北京烤鸭, 75000 Kyat)');
 
 const outJson = path.join(__dirname, 'data', 'lessons.json');
 const jsonData = {
-  sheetNames: ["Lessons", "Exercises", "Writing", "Vocabulary", "Games"],
+  sheetNames: ['Lessons', 'Exercises', 'Writing', 'Vocabulary', 'Games', 'Pronunciation'],
   sheets: {
     Lessons: lessons,
     Exercises: exercises,
     Writing: writing,
     Vocabulary: vocabulary,
-    Games: games
+    Games: games,
+    Pronunciation: pronunciation
   }
 };
 fs.writeFileSync(outJson, JSON.stringify(jsonData, null, 2), 'utf8');
 console.log('Wrote data/lessons.json successfully!');
+
+const sqlEsc = (val) => `'${String(val == null ? '' : val).replace(/'/g, "''")}'`;
+const sqlLines = [
+  '-- Idempotent reset script for Cloudflare D1 (edu-hub-db)',
+  '-- Purges all previous lessons/exercises/vocabulary/writing and inserts the single HSK 2 lesson:',
+  '--   hsk2-01: 她请我们吃了北京烤鸭 / She treated us to Peking Duck (Paid 75,000 Kyat)',
+  '',
+  'DELETE FROM exercises;',
+  'DELETE FROM vocabulary;',
+  'DELETE FROM writing_characters;',
+  'DELETE FROM lessons;',
+  '',
+  ...lessons.map(
+    (l) =>
+      `INSERT INTO lessons (id, course, category, categoryKey, categoryNum, title, chineseTitle, pinyin, meaning, level, description, videoUrl, posterUrl, fullAudio, keywords, accessType, price) VALUES (${sqlEsc(l.id)}, ${sqlEsc(l.course)}, ${sqlEsc(l.category)}, ${sqlEsc(l.categoryKey)}, ${sqlEsc(l.categoryNum)}, ${sqlEsc(l.title)}, ${sqlEsc(l.chineseTitle)}, ${sqlEsc(l.pinyin)}, ${sqlEsc(l.meaning)}, ${sqlEsc(l.level)}, ${sqlEsc(l.description)}, ${sqlEsc(l.videoUrl)}, ${sqlEsc(l.posterUrl)}, ${sqlEsc(l.fullAudio)}, ${sqlEsc(l.keywords)}, ${sqlEsc(l.accessType)}, ${Number(l.price) || 0});`
+  ),
+  '',
+  ...vocabulary.map(
+    (v) =>
+      `INSERT INTO vocabulary (lessonId, "order", character, pinyin, meaning, audio) VALUES (${sqlEsc(v.lessonId)}, ${Number(v.order) || 1}, ${sqlEsc(v.character)}, ${sqlEsc(v.pinyin)}, ${sqlEsc(v.meaning)}, ${sqlEsc(v.audio)});`
+  ),
+  '',
+  ...writing.map(
+    (w) =>
+      `INSERT INTO writing_characters (lessonId, "order", character, pinyin, meaning, strokeCount, radical, strokeAnimationUrl, svgPath, strokeOrderSteps) VALUES (${sqlEsc(w.lessonId)}, ${Number(w.order) || 1}, ${sqlEsc(w.character)}, ${sqlEsc(w.pinyin)}, ${sqlEsc(w.meaning)}, ${Number(w.strokeCount) || 6}, ${sqlEsc(w.radical)}, ${sqlEsc(w.strokeAnimationUrl || '')}, ${sqlEsc(w.svgPath || '')}, ${sqlEsc(w.strokeOrderSteps || '')});`
+  ),
+  '',
+  ...exercises.map(
+    (ex) =>
+      `INSERT INTO exercises (lessonId, "order", type, groupId, groupTitle, pinyin, question, audioUrl, optionA, optionB, optionC, optionD, optionE, optionAImage, optionBImage, optionCImage, optionDImage, optionEImage, answer, explanation) VALUES (${sqlEsc(ex.lessonId)}, ${Number(ex.order) || 1}, ${sqlEsc(ex.type)}, ${sqlEsc(ex.groupId)}, ${sqlEsc(ex.groupTitle)}, ${sqlEsc(ex.pinyin)}, ${sqlEsc(ex.question)}, ${sqlEsc(ex.audioUrl)}, ${sqlEsc(ex.optionA)}, ${sqlEsc(ex.optionB)}, ${sqlEsc(ex.optionC)}, ${sqlEsc(ex.optionD)}, ${sqlEsc(ex.optionE)}, ${sqlEsc(ex.optionAImage)}, ${sqlEsc(ex.optionBImage)}, ${sqlEsc(ex.optionCImage)}, ${sqlEsc(ex.optionDImage)}, ${sqlEsc(ex.optionEImage)}, ${sqlEsc(ex.answer)}, ${sqlEsc(ex.explanation)});`
+  ),
+  ''
+];
+fs.writeFileSync(path.join(__dirname, 'data', 'edu-hub-db-hsk2-reset.sql'), sqlLines.join('\n'), 'utf8');
+console.log('Wrote data/edu-hub-db-hsk2-reset.sql successfully!');

@@ -47,7 +47,7 @@
         },
         "membershipPlan": {
           "type": "string",
-          "enum": ["none", "monthly", "annual", "per_lesson"],
+          "enum": ["none", "monthly", "annual", "per_lesson", "course"],
           "description": "Active or requested membership tier"
         },
         "membershipExpiresAt": {
@@ -127,7 +127,7 @@
         },
         "planType": {
           "type": "string",
-          "enum": ["monthly", "annual", "per_lesson"],
+          "enum": ["monthly", "annual", "per_lesson", "course"],
           "description": "Requested subscription plan type"
         },
         "lessonId": {
@@ -217,10 +217,14 @@
           "description": "Lesson title",
           "maxLength": 160
         },
+        "course": {
+          "type": "string",
+          "description": "Course name (e.g. HSK 2)"
+        },
         "audience": {
           "type": "string",
-          "enum": ["Adult", "Kids"],
-          "description": "Curriculum track"
+          "enum": ["Adult", "Kids", "HSK 1", "HSK 2"],
+          "description": "Legacy curriculum track"
         },
         "accessType": {
           "type": "string",
@@ -229,7 +233,7 @@
         },
         "price": {
           "type": "number",
-          "description": "Per-lesson unlock price in USD"
+          "description": "Per-lesson unlock price in Kyat"
         },
         "updatedBy": {
           "type": "string",
@@ -245,7 +249,7 @@
       "required": [
         "lessonId",
         "title",
-        "audience",
+        "course",
         "accessType",
         "price",
         "updatedBy",

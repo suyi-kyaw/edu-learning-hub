@@ -84,54 +84,60 @@
     ========================== -->
     <div id="stories-view">
 
-      <!-- =========================
-           LESSON NAVIGATION
-      ========================== -->
+      <section class="stories-workspace-section">
+        <div class="container stories-workspace-container">
+          <div class="stories-layout">
 
-      <div class="lesson-navigation">
+            <aside class="stories-sidebar" id="storyCourseSidebar" aria-label="Stories Menu"></aside>
 
-    <div class="container lesson-navigation-inner">
+            <div class="stories-main-stage" id="storiesMainStage">
 
-      <a href="#watch">
-        01 Watch
-      </a>
+              <!-- =========================
+                   LESSON NAVIGATION
+              ========================== -->
 
-      <a href="#understand">
-        02 Understand
-      </a>
+              <div class="lesson-navigation">
 
-      <a href="#reading">
-        03 Story
-      </a>
+                <div class="container lesson-navigation-inner">
 
-      <a href="#vocabulary">
-        04 Vocabulary
-      </a>
+                  <a href="#watch">
+                    01 Watch
+                  </a>
 
-      <a href="#exercises">
-        05 Exercises
-      </a>
+                  <a href="#understand">
+                    02 Understand
+                  </a>
 
-    </div>
+                  <a href="#reading">
+                    03 Story
+                  </a>
 
-  </div>
+                  <a href="#vocabulary">
+                    04 Vocabulary
+                  </a>
+
+                  <a href="#exercises">
+                    05 Exercises
+                  </a>
+
+                </div>
+
+              </div>
 
 
-  <!-- =========================
-       STORY HERO
-  ========================== -->
+              <!-- =========================
+                   STORY HERO
+              ========================== -->
 
-  <header class="story-hero section-light">
+              <header class="story-hero section-light">
 
-    <div class="container">
+                <div class="container">
 
-      <span class="section-label">
-        Chinese Story Lesson
-      </span>
+                  <span class="section-label">
+                    Chinese Story Lesson
+                  </span>
 
-      <div class="story-switcher" id="storySwitcher"></div>
-
-      <h1 id="storyTitle">
+                  <h1 id="storyTitle">
         Loading lesson...
       </h1>
 
@@ -420,12 +426,19 @@
   </section>
 
 
-      <!-- =========================
-           STORY PAGINATION & LESSON SELECTOR
-      ========================== -->
-      <section class="story-pagination-section" id="storyPaginationSection">
-        <div class="container">
-          <div class="story-pagination-card" id="storyPaginationCard"></div>
+              <!-- =========================
+                   STORY PAGINATION & LESSON SELECTOR
+              ========================== -->
+              <section class="story-pagination-section" id="storyPaginationSection">
+                <div class="container">
+                  <div class="story-pagination-card" id="storyPaginationCard"></div>
+                </div>
+              </section>
+
+            </div>
+            <!-- End of #storiesMainStage -->
+
+          </div>
         </div>
       </section>
 
@@ -580,11 +593,11 @@
   <script src="backend-config.js?v=excel3"></script>
 
   <!-- Story JavaScript -->
-  <script src="story.js?v=excel3"></script>
+  <script src="story.js?v=excel4"></script>
 
   <!-- Excel Auth & Membership Client -->
-  <script src="vendor/firebase-app.js?v=excel2"></script>
-  <script src="auth-ui.js?v=excel2"></script>
+  <script src="vendor/firebase-app.js?v=excel3"></script>
+  <script src="auth-ui.js?v=excel3"></script>
 
   <!-- Shared Header Script -->
   <script src="header.js" defer></script>

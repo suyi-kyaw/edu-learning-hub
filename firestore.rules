@@ -69,7 +69,7 @@ service cloud.firestore {
         data.dob.matches('^(\\d{4}-\\d{2}-\\d{2})?$') &&
         data.role in ['student', 'admin'] &&
         data.membershipStatus in ['free', 'pending', 'active', 'expired'] &&
-        data.membershipPlan in ['none', 'monthly', 'annual', 'per_lesson'] &&
+        data.membershipPlan in ['none', 'monthly', 'annual', 'per_lesson', 'course'] &&
         data.membershipExpiresAt is string && data.membershipExpiresAt.size() <= 40 &&
         data.subscribedLessonIds is list && data.subscribedLessonIds.size() <= 100 &&
         (data.subscribedLessonIds.size() == 0 || (data.subscribedLessonIds[0] is string && data.subscribedLessonIds[0].size() <= 128)) &&
@@ -125,7 +125,7 @@ service cloud.firestore {
         data.username is string && data.username.size() <= 60 &&
         data.userEmail is string && data.userEmail.size() <= 160 &&
         data.userPhone is string && data.userPhone.size() <= 32 &&
-        data.planType in ['monthly', 'annual', 'per_lesson'] &&
+        data.planType in ['monthly', 'annual', 'per_lesson', 'course'] &&
         data.lessonId is string && data.lessonId.size() <= 128 &&
         data.lessonTitle is string && data.lessonTitle.size() <= 160 &&
         data.amountLabel is string && data.amountLabel.size() <= 40 &&
@@ -140,16 +140,17 @@ service cloud.firestore {
 
     function isValidLessonCatalogItem(data) {
       return data.keys().hasAll([
-          'lessonId', 'title', 'audience', 'accessType', 'price', 'updatedBy', 'updatedAt'
+          'lessonId', 'title', 'accessType', 'price', 'updatedBy', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
-          'lessonId', 'title', 'audience', 'accessType', 'price', 'updatedBy', 'updatedAt'
+          'lessonId', 'title', 'audience', 'course', 'accessType', 'price', 'updatedBy', 'updatedAt'
         ]) &&
         isValidId(data.lessonId) &&
         data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
-        data.audience in ['Adult', 'Kids'] &&
+        (!('audience' in data) || data.audience in ['Adult', 'Kids', 'HSK 1', 'HSK 2']) &&
+        (!('course' in data) || (data.course is string && data.course.size() >= 1 && data.course.size() <= 80)) &&
         data.accessType in ['free', 'paid'] &&
-        data.price is number && data.price >= 0 && data.price <= 9999 &&
+        data.price is number && data.price >= 0 && data.price <= 10000000 &&
         isValidId(data.updatedBy) &&
         data.updatedAt is timestamp;
     }

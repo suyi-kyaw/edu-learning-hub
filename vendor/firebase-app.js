@@ -77,7 +77,42 @@
   var OVERLAY_KEY = 'linguapath_excel_overlay_v1';
   var LEGACY_AUTH_KEY = 'linguapath_local_auth_store_v1';
   var SESSION_UID_KEY = 'linguapath_local_session_uid';
+  var API_TOKEN_KEY = 'linguapath_api_token';
   var PRIMARY_ADMIN_EMAIL = 'syndkyaw@gmail.com';
+
+  function getStoredApiToken() {
+    try {
+      var v = localStorage.getItem(API_TOKEN_KEY);
+      return v ? v.trim() : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function setStoredApiToken(token) {
+    try {
+      if (token) localStorage.setItem(API_TOKEN_KEY, String(token).trim());
+      else localStorage.removeItem(API_TOKEN_KEY);
+    } catch (e) {}
+  }
+
+  async function syncServerAuth(endpoint, body) {
+    try {
+      var res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {})
+      });
+      if (!res.ok) return null;
+      var data = await res.json();
+      if (data && data.token) {
+        setStoredApiToken(data.token);
+      }
+      return data;
+    } catch (e) {
+      return null;
+    }
+  }
 
   function getXLSX() {
     return window.XLSX || null;
@@ -349,6 +384,7 @@
           requests: parsed && parsed.requests && typeof parsed.requests === 'object' ? parsed.requests : {},
           progress: parsed && parsed.progress && typeof parsed.progress === 'object' ? parsed.progress : {},
           lessonCatalog: parsed && parsed.lessonCatalog && typeof parsed.lessonCatalog === 'object' ? parsed.lessonCatalog : {},
+          deletedCatalogIds: Array.isArray(parsed && parsed.deletedCatalogIds) ? parsed.deletedCatalogIds : [],
           siteConfig: parsed && parsed.siteConfig && typeof parsed.siteConfig === 'object' ? parsed.siteConfig : undefined
         };
       }
@@ -622,6 +658,14 @@
         merged.lessonCatalog[e[0]] = Object.assign({}, e[1]);
       }
     });
+    if (Array.isArray(overlay.deletedCatalogIds)) {
+      overlay.deletedCatalogIds.forEach(function (delId) {
+        var cid = cleanId(delId);
+        if (cid && merged.lessonCatalog[cid] && !overlay.lessonCatalog[cid]) {
+          delete merged.lessonCatalog[cid];
+        }
+      });
+    }
 
     merged.siteConfig = overlay.siteConfig;
     return merged;
@@ -820,6 +864,7 @@
 
   function clearSession() {
     setStoredUid(null);
+    setStoredApiToken(null);
     state.user = null;
     state.profile = null;
     state.userProgress = null;
@@ -846,11 +891,40 @@
   async function initAuth(force) {
     var fetchedConfig = {};
     try {
-      var r = await fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' });
-      if (r.ok) fetchedConfig = await r.json();
+      var apiCfgRes = await fetch('/api/site-config?t=' + Date.now(), { cache: 'no-store' });
+      if (apiCfgRes.ok) {
+        var apiCfgJson = await apiCfgRes.json();
+        if (apiCfgJson && apiCfgJson.config) fetchedConfig = apiCfgJson.config;
+      }
     } catch (e) {}
+    if (!fetchedConfig || !Object.keys(fetchedConfig).length) {
+      try {
+        var r = await fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' });
+        if (r.ok) fetchedConfig = await r.json();
+      } catch (e) {}
+    }
+
+    var serverCatalog = null;
+    try {
+      var catRes = await fetch('/api/catalog?t=' + Date.now(), { cache: 'no-store' });
+      if (catRes.ok) {
+        var catJson = await catRes.json();
+        if (catJson && catJson.lessonCatalog && typeof catJson.lessonCatalog === 'object') {
+          serverCatalog = catJson.lessonCatalog;
+        }
+      }
+    } catch (e) {}
+
     await loadBaseUsersWorkbook(Boolean(force));
     var store = mergeStore();
+    if (serverCatalog) {
+      // Authoritative server catalog overrides stale local catalog snapshot when available
+      store.lessonCatalog = serverCatalog;
+      var ov = readOverlay();
+      ov.lessonCatalog = Object.assign({}, serverCatalog);
+      ov.deletedCatalogIds = [];
+      writeOverlay(ov);
+    }
     state.siteConfig = normalizeSiteConfig(store.siteConfig ? Object.assign({}, fetchedConfig, store.siteConfig) : fetchedConfig);
     notifySiteConfig();
     hydrateSession(store);
@@ -895,6 +969,19 @@
       createdAt: nowIso,
       updatedAt: nowIso
     };
+
+    var srvReg = await syncServerAuth('/api/auth/register', {
+      username: username,
+      email: email,
+      phoneNumber: phoneNumber,
+      dob: dob,
+      password: password
+    });
+    if (srvReg && srvReg.profile && srvReg.profile.uid) {
+      profile = Object.assign({}, profile, srvReg.profile);
+      uid = profile.uid;
+    }
+
     var overlay = readOverlay();
     overlay.users[uid] = { profile: profile, passwordHash: pwHash };
     overlay.progress[uid] = defaultProgress(uid);
@@ -919,6 +1006,10 @@
     }
     var ok = await verifyPassword(p, found.passwordHash);
     if (!ok) throw new Error('Incorrect email or password.');
+
+    // Bridge authentication to Node server Bearer token so Admin workbook/DB auto-syncs immediately
+    await syncServerAuth('/api/auth/login', { email: e, password: p });
+
     var uid = found.profile.uid;
     setStoredUid(uid);
     hydrateSession(store, uid);
@@ -1206,13 +1297,20 @@
     return { temporaryPassword: tmp, user: nextProfile };
   }
 
-  async function saveLessonCatalogItems(items) {
+  async function saveLessonCatalogItems(items, opts) {
     if (!state.user || !isAdminUser()) throw new Error('Administrator access required.');
     var overlay = readOverlay();
     var nowIso = new Date().toISOString();
+    var replaceAll = Boolean(opts && opts.replaceAll);
+    if (replaceAll) {
+      overlay.lessonCatalog = {};
+      overlay.deletedCatalogIds = Object.keys(baseWorkbookData.lessonCatalog || {});
+    }
+    var delSet = new Set(overlay.deletedCatalogIds || []);
+    var cleanItems = [];
     (items || []).forEach(function (item) {
       var lid = cleanId(item.lessonId);
-      overlay.lessonCatalog[lid] = {
+      var entry = {
         lessonId: lid,
         title: String(item.title || lid).trim(),
         course: normalizeCourseName(item.course || item.audience || 'HSK 2'),
@@ -1221,14 +1319,82 @@
         updatedBy: state.user.email,
         updatedAt: nowIso
       };
+      overlay.lessonCatalog[lid] = entry;
+      delSet.delete(lid);
+      cleanItems.push(entry);
     });
+    overlay.deletedCatalogIds = Array.from(delSet);
     writeOverlay(overlay);
+
+    var token = getStoredApiToken();
+    if (token) {
+      try {
+        var res = await fetch('/api/admin/catalog', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ items: cleanItems, replaceAll: replaceAll })
+        });
+        if (res.ok) {
+          var data = await res.json();
+          if (data && data.lessonCatalog) {
+            overlay.lessonCatalog = data.lessonCatalog;
+            writeOverlay(overlay);
+          }
+        }
+      } catch (e) {}
+    }
+
+    hydrateSession(mergeStore(), state.user.uid);
+    notify();
+  }
+
+  async function removeLessonCatalogItems(lessonIds) {
+    if (!state.user || !isAdminUser()) throw new Error('Administrator access required.');
+    var ids = (Array.isArray(lessonIds) ? lessonIds : [lessonIds]).map(cleanId).filter(Boolean);
+    if (!ids.length) return;
+    var overlay = readOverlay();
+    var delSet = new Set(overlay.deletedCatalogIds || []);
+    ids.forEach(function (lid) {
+      delete overlay.lessonCatalog[lid];
+      delSet.add(lid);
+    });
+    overlay.deletedCatalogIds = Array.from(delSet);
+    writeOverlay(overlay);
+
+    var token = getStoredApiToken();
+    if (token) {
+      try {
+        var res = await fetch('/api/admin/catalog', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ removeIds: ids })
+        });
+        if (res.ok) {
+          var data = await res.json();
+          if (data && data.lessonCatalog) {
+            overlay.lessonCatalog = data.lessonCatalog;
+            writeOverlay(overlay);
+          }
+        }
+      } catch (e) {}
+    }
+
     hydrateSession(mergeStore(), state.user.uid);
     notify();
   }
 
   async function getIdToken() {
-    return state.user ? state.user.uid : null;
+    return getStoredApiToken() || null;
+  }
+
+  function hasServerToken() {
+    return Boolean(getStoredApiToken());
   }
 
   function getSiteConfig() {
@@ -1259,6 +1425,29 @@
     });
     writeOverlay(overlay);
     state.siteConfig = normalizeSiteConfig(overlay.siteConfig);
+
+    var token = getStoredApiToken();
+    if (token) {
+      try {
+        var res = await fetch('/api/admin/site-config', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify(normalized)
+        });
+        if (res.ok) {
+          var json = await res.json();
+          if (json && json.config) {
+            state.siteConfig = normalizeSiteConfig(json.config);
+            overlay.siteConfig = Object.assign({}, state.siteConfig, { updatedBy: state.user.email, updatedAt: new Date().toISOString() });
+            writeOverlay(overlay);
+          }
+        }
+      } catch (e) {}
+    }
+
     notifySiteConfig();
     notify();
     return state.siteConfig;
@@ -1343,7 +1532,7 @@
       return {
         lessonId: a.lessonId,
         title: a.title,
-        course: a.course || 'HSK 1',
+        course: a.course || 'HSK 2',
         accessType: a.accessType,
         price: Number(a.price) || 0,
         updatedBy: a.updatedBy || '',
@@ -1644,6 +1833,7 @@
     getState: getState,
     subscribe: subscribe,
     getIdToken: getIdToken,
+    hasServerToken: hasServerToken,
     getSiteConfig: getSiteConfig,
     saveSiteConfig: saveSiteConfig,
     exportSiteConfigJson: exportSiteConfigJson,
@@ -1663,6 +1853,7 @@
     adminUpdateUserDetails: adminUpdateUserDetails,
     adminResetUserPassword: adminResetUserPassword,
     saveLessonCatalogItems: saveLessonCatalogItems,
+    removeLessonCatalogItems: removeLessonCatalogItems,
     exportUsersWorkbook: exportUsersWorkbook,
     importUsersWorkbook: importUsersWorkbook,
     reloadUsersWorkbookFromRepo: reloadUsersWorkbookFromRepo,
@@ -1676,6 +1867,26 @@
     recordLessonCompletedProgress: recordLessonCompletedProgress,
     saveReminderPreferences: saveReminderPreferences
   };
+
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('linguapath-catalog-synced', function (e) {
+      var cat = e && e.detail && e.detail.lessonCatalog;
+      if (cat && typeof cat === 'object') {
+        var ov = readOverlay();
+        ov.lessonCatalog = Object.assign({}, cat);
+        ov.deletedCatalogIds = Object.keys(baseWorkbookData.lessonCatalog || {}).filter(function (id) {
+          return !Object.prototype.hasOwnProperty.call(cat, id);
+        });
+        writeOverlay(ov);
+        if (state.user && state.user.uid) {
+          hydrateSession(mergeStore(), state.user.uid);
+        } else {
+          state.lessonCatalog = cat;
+        }
+        notify();
+      }
+    });
+  }
 
   window.LinguaAuth = api;
 })();

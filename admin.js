@@ -45,7 +45,8 @@
     editingLessonVocab: [],
     editingLessonWriting: [],
     pendingExercisesRows: [],
-    pendingExercisesMeta: { target: 'lessons', lessonId: '', mode: 'merge_lesson', fileName: '' }
+    pendingExercisesMeta: { target: 'lessons', lessonId: '', mode: 'merge_lesson', fileName: '' },
+    lastSyncNotice: null
   };
 
   // --- Utilities ---
@@ -74,6 +75,28 @@
   function setSyncStatus(text) {
     const el = document.getElementById('adminSyncStatus');
     if (el) el.textContent = text;
+  }
+
+  function applySyncFeedback(res, syncedMsg, localMsg) {
+    if (res && res.syncedToServer) {
+      state.lastSyncNotice = null;
+      setSyncStatus('Synced to Excel & DB');
+      toast(syncedMsg);
+    } else {
+      state.lastSyncNotice = {
+        syncedToServer: false,
+        reason: (res && res.syncReason) || 'local-only',
+        error: res && res.syncError
+      };
+      const needsAuth = res && res.syncReason === 'auth-required';
+      setSyncStatus(needsAuth ? 'Sign in again to sync' : 'Saved locally (pending sync)');
+      toast(
+        needsAuth
+          ? `${localMsg} (Sign out & sign back in once to auto-sync to Excel & DB.)`
+          : localMsg,
+        needsAuth ? 'info' : 'success'
+      );
+    }
   }
 
   function apiUrl(path) {
@@ -190,27 +213,47 @@
     const hasDraft = store && typeof store.hasDraft === 'function' ? store.hasDraft(domain) : false;
     const dsInfo = store && typeof store.getDataSourceStatus === 'function' ? store.getDataSourceStatus(domain) : { source: 'xlsx-fallback', database: 'edu-hub-db' };
     const isCloudflare = dsInfo.source === 'cloudflare-d1';
+    const needsAuthNotice = hasDraft && state.lastSyncNotice && state.lastSyncNotice.reason === 'auth-required';
 
     return `
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; background:${
-        hasDraft ? '#fef9c3' : '#f8fafc'
-      }; border:1px solid ${hasDraft ? '#fde047' : '#e2e8f0'}; border-radius:12px; padding:10px 14px; margin-bottom:14px;">
-        <div style="font-size:0.84rem; color:${hasDraft ? '#854d0e' : '#475569'}; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <span style="display:inline-flex; align-items:center; gap:5px; font-weight:600; color:${isCloudflare ? '#059669' : '#0284c7'};">
-            ${isCloudflare ? '● Cloudflare D1 Database (edu-hub-db)' : '○ Excel Fallback (data/' + escapeHTML(fileName) + ')'}
+        hasDraft ? '#fef9c3' : '#f0fdf4'
+      }; border:1px solid ${hasDraft ? '#fde047' : '#bbf7d0'}; border-radius:12px; padding:10px 14px; margin-bottom:14px;">
+        <div style="font-size:0.84rem; color:${hasDraft ? '#854d0e' : '#166534'}; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="display:inline-flex; align-items:center; gap:5px; font-weight:600; color:${
+            hasDraft ? '#b45309' : isCloudflare ? '#059669' : '#0284c7'
+          };">
+            ${
+              hasDraft
+                ? '● Pending Server Sync (Browser Draft)'
+                : isCloudflare
+                ? '● Auto-Synced: Excel (data/' + escapeHTML(fileName) + ') & DB (edu-hub-db)'
+                : '● Loaded: Excel (data/' + escapeHTML(fileName) + ')'
+            }
           </span>
           <span style="color:#94a3b8;">|</span>
           <span>
             ${
-              hasDraft
-                ? `<strong>Local browser changes active:</strong> Click <strong>Export ${escapeHTML(
+              needsAuthNotice
+                ? `<strong>Session refresh needed:</strong> Sign out &amp; sign in once (or click <strong>Sync to Excel &amp; DB</strong>) to save browser changes into <code>data/${escapeHTML(
                     fileName
-                  )}</strong> and commit to <code>data/${escapeHTML(fileName)}</code> to publish.`
-                : `Reading curriculum records directly from <strong>${isCloudflare ? 'Cloudflare D1' : 'Excel (.xlsx)'}</strong>.`
+                  )}</code>.`
+                : hasDraft
+                ? `<strong>Local browser draft active:</strong> Click <strong>Sync to Excel &amp; DB</strong> or <strong>Export ${escapeHTML(
+                    fileName
+                  )}</strong> to publish.`
+                : `All edits &amp; deletions auto-sync immediately to <code>data/${escapeHTML(fileName)}</code> and database.`
             }
           </span>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          ${
+            hasDraft
+              ? `<button type="button" class="admin-btn admin-btn-primary admin-btn-sm" data-cms-sync="${escapeHTML(
+                  domain
+                )}">Sync to Excel &amp; DB</button>`
+              : ''
+          }
           <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-cms-test-db="true" title="Verify connection to Cloudflare D1 edu-hub-db">Test D1 DB</button>
           <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-cms-export="${escapeHTML(
             domain
@@ -233,6 +276,50 @@
 
   function wireWorkbookSyncToolbar(viewport) {
     if (!viewport) return;
+
+    viewport.querySelectorAll('[data-cms-sync]').forEach((btn) => {
+      btn.onclick = async () => {
+        const domain = btn.getAttribute('data-cms-sync');
+        const sheets =
+          domain === 'stories'
+            ? state.storiesData
+            : domain === 'reels'
+            ? state.reelsData
+            : state.lessonsData;
+        btn.disabled = true;
+        btn.textContent = 'Syncing…';
+        try {
+          const store = getContentStore();
+          const syncRes = await store.syncDomainToServer(domain, sheets);
+          if (syncRes && syncRes.syncedToServer) {
+            if (domain === 'stories' && syncRes.sheets) state.storiesData = syncRes.sheets;
+            else if (domain === 'reels' && syncRes.sheets) state.reelsData = syncRes.sheets;
+            else if (domain === 'lessons' && syncRes.sheets) state.lessonsData = syncRes.sheets;
+            state.lastSyncNotice = null;
+            updateNavCounts();
+            renderActiveTab();
+            setSyncStatus('Synced to Excel & DB');
+            toast(`Synced ${domain} workbook with Excel & Database!`);
+          } else {
+            state.lastSyncNotice = {
+              syncedToServer: false,
+              reason: (syncRes && syncRes.syncReason) || 'error',
+              error: syncRes && syncRes.error
+            };
+            renderActiveTab();
+            toast(
+              (syncRes && syncRes.error) || 'Could not sync with server. Please sign out and sign in as Admin.',
+              'error'
+            );
+          }
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Sync failed.', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Sync to Excel & DB';
+        }
+      };
+    });
 
     viewport.querySelectorAll('[data-cms-test-db]').forEach((btn) => {
       btn.onclick = async () => {
@@ -260,7 +347,7 @@
         const domain = btn.getAttribute('data-cms-export');
         try {
           const res = await getContentStore().exportWorkbook(domain);
-          toast(`Downloaded ${res.fileName} — commit it to data/${res.fileName} in your repo to publish.`);
+          toast(`Downloaded ${res.fileName}.`);
         } catch (err) {
           toast(err instanceof Error ? err.message : 'Could not export Excel workbook.', 'error');
         }
@@ -279,9 +366,12 @@
           else if (domain === 'reels') state.reelsData = res.sheets;
           else if (domain === 'lessons') state.lessonsData = res.sheets;
           updateNavCounts();
+          applySyncFeedback(
+            res,
+            `Imported ${file.name} and synced to Excel & DB.`,
+            `Imported ${file.name} into local preview.`
+          );
           renderActiveTab();
-          setSyncStatus('Imported locally');
-          toast(`Imported ${file.name} into local preview.`);
         } catch (err) {
           setSyncStatus('Import failed');
           toast(err instanceof Error ? err.message : 'Failed to import Excel workbook.', 'error');
@@ -295,7 +385,7 @@
         const domain = btn.getAttribute('data-cms-reset');
         openConfirmDialog({
           title: 'Reset local browser edits?',
-          message: 'This clears unexported browser changes for this section and reloads directly from the repository Excel file.',
+          message: 'This clears pending browser changes for this section and reloads directly from the server Excel workbook.',
           confirmLabel: 'Reset to Repo File',
           onConfirm: async () => {
             try {
@@ -303,9 +393,10 @@
               if (domain === 'stories') state.storiesData = res.sheets;
               else if (domain === 'reels') state.reelsData = res.sheets;
               else if (domain === 'lessons') state.lessonsData = res.sheets;
+              state.lastSyncNotice = null;
               updateNavCounts();
               renderActiveTab();
-              toast('Reverted to repository Excel workbook.');
+              toast('Reverted to server Excel workbook.');
             } catch (err) {
               toast(err instanceof Error ? err.message : 'Failed to reset draft.', 'error');
             }
@@ -1592,9 +1683,12 @@
             }
 
             closeModal();
+            applySyncFeedback(
+              res,
+              `Saved ${cleaned.length} exercise(s) to Excel & DB!`,
+              `Saved ${cleaned.length} exercise(s) locally.`
+            );
             renderActiveTab();
-            setSyncStatus('Saved locally');
-            toast(`Saved ${cleaned.length} exercise(s) successfully! Export ${target}.xlsx to publish.`);
           } catch (err) {
             commitBtn.disabled = false;
             commitBtn.textContent = '💾 Save All Exercises';
@@ -1730,23 +1824,28 @@
         const id = btn.getAttribute('data-del-story');
         openConfirmDialog({
           title: `Delete story "${id}"?`,
-          message: 'This removes the story, its reading scenes, and vocabulary from your local draft (export stories.xlsx to publish).',
+          message: 'This permanently deletes the story, its reading scenes, vocabulary, and exercises from Excel and the database.',
           confirmLabel: 'Delete Story',
           onConfirm: async () => {
             const nextLessons = stories.filter((x) => !isSameId(x.id, id));
             const nextScenes = state.storiesData.Story.filter((x) => !isSameId(x.lessonId, id));
             const nextVocab = state.storiesData.Vocabulary.filter((x) => !isSameId(x.lessonId, id));
+            const nextExercises = (state.storiesData.Exercises || []).filter((x) => !isSameId(x.lessonId, id));
             try {
               const res = await getContentStore().saveStoriesSheets({
                 Lessons: nextLessons,
                 Story: nextScenes,
-                Vocabulary: nextVocab
+                Vocabulary: nextVocab,
+                Exercises: nextExercises
               });
               state.storiesData = { ...state.storiesData, ...res.sheets };
               updateNavCounts();
+              applySyncFeedback(
+                res,
+                `Deleted story ${id} and synced to Excel & DB.`,
+                `Deleted story ${id} locally.`
+              );
               renderActiveTab();
-              setSyncStatus('Saved locally');
-              toast(`Deleted story ${id}. Export stories.xlsx to publish.`);
             } catch (err) {
               toast(err instanceof Error ? err.message : 'Failed to delete story.', 'error');
             }
@@ -2063,9 +2162,12 @@
         await toggleFeaturedId('featuredStoryIds', id, document.getElementById('stFeatured').checked);
         closeModal();
         updateNavCounts();
+        applySyncFeedback(
+          res,
+          `Saved story "${record.title}" to Excel & DB.`,
+          `Saved story "${record.title}" locally.`
+        );
         renderActiveTab();
-        setSyncStatus('Saved locally');
-        toast(`Saved story "${record.title}". Export stories.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save story.', 'error');
@@ -2194,7 +2296,7 @@
         const id = btn.getAttribute('data-del-reel');
         openConfirmDialog({
           title: `Delete reel "${id}"?`,
-          message: 'This removes the video reel from your local draft (export reels_stories.xlsx to publish).',
+          message: 'This permanently deletes the video reel from Excel and the database.',
           confirmLabel: 'Delete Reel',
           onConfirm: async () => {
             const nextVideos = videos.filter((x) => !isSameId(x.id, id));
@@ -2202,9 +2304,12 @@
               const res = await getContentStore().saveReelsSheets({ Videos: nextVideos });
               state.reelsData = { ...state.reelsData, ...res.sheets };
               updateNavCounts();
+              applySyncFeedback(
+                res,
+                `Deleted reel ${id} and synced to Excel & DB.`,
+                `Deleted reel ${id} locally.`
+              );
               renderActiveTab();
-              setSyncStatus('Saved locally');
-              toast(`Deleted reel ${id}. Export reels_stories.xlsx to publish.`);
             } catch (err) {
               toast(err instanceof Error ? err.message : 'Failed to delete reel.', 'error');
             }
@@ -2364,9 +2469,12 @@
         await toggleFeaturedId('featuredReelIds', id, document.getElementById('rlFeatured').checked);
         closeModal();
         updateNavCounts();
+        applySyncFeedback(
+          res,
+          `Saved reel "${rec.title}" to Excel & DB.`,
+          `Saved reel "${rec.title}" locally.`
+        );
         renderActiveTab();
-        setSyncStatus('Saved locally');
-        toast(`Saved reel "${rec.title}". Export reels_stories.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save reel.', 'error');
@@ -2578,23 +2686,42 @@
         const id = btn.getAttribute('data-del-lesson');
         openConfirmDialog({
           title: `Delete lesson "${id}"?`,
-          message: 'This deletes the lesson, its vocabulary, and its writing entries from your local draft (export lessons.xlsx to publish).',
+          message: 'This permanently deletes the lesson, its exercises, vocabulary, writing, and pronunciation entries from Excel and the database.',
           confirmLabel: 'Delete Lesson',
           onConfirm: async () => {
             const nextLessons = lessons.filter((x) => !isSameId(x.id, id));
-            const nextVocab = state.lessonsData.Vocabulary.filter((x) => !isSameId(x.lessonId, id));
-            const nextWriting = state.lessonsData.Writing.filter((x) => !isSameId(x.lessonId, id));
+            const nextVocab = (state.lessonsData.Vocabulary || []).filter((x) => !isSameId(x.lessonId, id));
+            const nextWriting = (state.lessonsData.Writing || []).filter((x) => !isSameId(x.lessonId, id));
+            const nextExercises = (state.lessonsData.Exercises || []).filter((x) => !isSameId(x.lessonId, id));
+            const nextPron = (state.lessonsData.Pronunciation || []).filter((x) => !isSameId(x.lessonId, id));
             try {
               const res = await getContentStore().saveLessonsSheets({
                 Lessons: nextLessons,
                 Vocabulary: nextVocab,
-                Writing: nextWriting
+                Writing: nextWriting,
+                Exercises: nextExercises,
+                Pronunciation: nextPron
               });
               state.lessonsData = { ...state.lessonsData, ...res.sheets };
+              if (window.LinguaAuth && typeof window.LinguaAuth.removeLessonCatalogItems === 'function') {
+                await window.LinguaAuth.removeLessonCatalogItems([id]);
+              }
+              try {
+                const pricingRaw = localStorage.getItem('linguapath_local_lesson_pricing');
+                if (pricingRaw) {
+                  const pricingMap = JSON.parse(pricingRaw);
+                  delete pricingMap[id];
+                  localStorage.setItem('linguapath_local_lesson_pricing', JSON.stringify(pricingMap));
+                }
+                localStorage.removeItem('linguapath_custom_lessons');
+              } catch (_) {}
               updateNavCounts();
+              applySyncFeedback(
+                res,
+                `Deleted lesson ${id} and synced to Excel & DB.`,
+                `Deleted lesson ${id} locally.`
+              );
               renderActiveTab();
-              setSyncStatus('Saved locally');
-              toast(`Deleted lesson ${id}. Export lessons.xlsx to publish.`);
             } catch (err) {
               toast(err instanceof Error ? err.message : 'Failed to delete lesson.', 'error');
             }
@@ -2801,8 +2928,8 @@
           </div>
           <div class="admin-field">
             <label for="lsPrice">Single-Lesson Price (Kyat)</label>
-            <input type="number" class="admin-input" id="lsPrice" min="0" max="999999" value="${escapeHTML(
-              pricing.price || 9
+            <input type="number" class="admin-input" id="lsPrice" min="0" max="10000000" value="${escapeHTML(
+              pricing.accessType === 'free' ? 0 : (pricing.price ?? 75000)
             )}" />
           </div>
           <div class="admin-field">
@@ -2901,7 +3028,7 @@
       const id = document.getElementById('lsId').value.trim();
       const courseName = normalizeCourseName(document.getElementById('lsCourse').value);
       const accessType = document.getElementById('lsAccess').value === 'paid' ? 'paid' : 'free';
-      const price = accessType === 'free' ? 0 : Math.max(0, Number(document.getElementById('lsPrice').value) || 9);
+      const price = accessType === 'free' ? 0 : Math.max(0, Number(document.getElementById('lsPrice').value) || 0);
 
       const rec = {
         id,
@@ -2952,16 +3079,24 @@
           ]);
         }
         try {
-          const pricingRaw = localStorage.getItem('linguapath_local_lesson_pricing');
-          const pricingMap = pricingRaw ? JSON.parse(pricingRaw) : {};
-          pricingMap[id] = { accessType, price };
-          localStorage.setItem('linguapath_local_lesson_pricing', JSON.stringify(pricingMap));
+          if (!res.syncedToServer) {
+            const pricingRaw = localStorage.getItem('linguapath_local_lesson_pricing');
+            const pricingMap = pricingRaw ? JSON.parse(pricingRaw) : {};
+            pricingMap[id] = { accessType, price };
+            localStorage.setItem('linguapath_local_lesson_pricing', JSON.stringify(pricingMap));
+          } else {
+            localStorage.removeItem('linguapath_custom_lessons');
+          }
         } catch (_) {}
         closeModal();
         updateNavCounts();
+        const priceLabel = accessType === 'paid' ? `${Number(price).toLocaleString()} Kyat` : 'Free';
+        applySyncFeedback(
+          res,
+          `Saved "${rec.title}" under ${courseName} (${priceLabel}) and synced to Excel & DB.`,
+          `Saved "${rec.title}" under ${courseName} (${priceLabel}) locally.`
+        );
         renderActiveTab();
-        setSyncStatus('Saved locally');
-        toast(`Saved "${rec.title}" under ${courseName} (${accessType === 'paid' ? `${price} Kyat` : 'Free'}). Export lessons.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save lesson.', 'error');
@@ -3170,9 +3305,12 @@
           });
           state.lessonsData = { ...state.lessonsData, ...res.sheets };
           closeModal();
+          applySyncFeedback(
+            res,
+            `Saved ${cleaned.length} writing character(s) for "${lesson.title}" to Excel & DB.`,
+            `Saved ${cleaned.length} writing character(s) for "${lesson.title}" locally.`
+          );
           renderActiveTab();
-          setSyncStatus('Saved locally');
-          toast(`Saved ${cleaned.length} writing character(s) for "${lesson.title}". Export lessons.xlsx to publish.`);
         } catch (err) {
           saveBtn.disabled = false;
           saveBtn.textContent = '💾 Save Writing Characters';
@@ -3421,9 +3559,12 @@
           });
           state.lessonsData = { ...state.lessonsData, ...res.sheets };
           closeModal();
+          applySyncFeedback(
+            res,
+            `Saved ${cleaned.length} pronunciation practice line(s) for "${lesson.title}" to Excel & DB.`,
+            `Saved ${cleaned.length} pronunciation practice line(s) for "${lesson.title}" locally.`
+          );
           renderActiveTab();
-          setSyncStatus('Saved locally');
-          toast(`Saved ${cleaned.length} pronunciation practice line(s) for "${lesson.title}". Export lessons.xlsx to publish.`);
         } catch (err) {
           saveBtn.disabled = false;
           saveBtn.textContent = '💾 Save Pronunciation Lines';
@@ -3531,10 +3672,13 @@
         setSyncStatus('Saving games…');
         const res = await getContentStore().saveLessonsSheets({ Games: normalized });
         state.lessonsData = { ...state.lessonsData, ...res.sheets };
-        setSyncStatus('Saved locally');
         updateNavCounts();
+        if (message) {
+          applySyncFeedback(res, `${message} Synced to Excel & DB.`, `${message} Saved locally.`);
+        } else {
+          setSyncStatus(res && res.syncedToServer ? 'Synced to Excel & DB' : 'Saved locally');
+        }
         renderActiveTab();
-        if (message) toast(`${message} Export lessons.xlsx to publish.`);
       } catch (err) {
         setSyncStatus('Save error');
         toast(err instanceof Error ? err.message : 'Failed to save games.', 'error');

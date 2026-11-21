@@ -153,14 +153,110 @@ function hashPassword(password, existingSalt = null) {
 }
 
 function verifyPassword(password, salt, expectedHash) {
-  if (!salt || !expectedHash) return false;
+  if (!expectedHash) return false;
+  const expectedStr = String(expectedHash).trim();
+  const shaMatch = expectedStr.match(/^sha256\$([^$]+)\$([a-f0-9]{64})$/i);
+  if (shaMatch) {
+    try {
+      const candidateHex = crypto
+        .createHash('sha256')
+        .update(`${shaMatch[1]}:${String(password)}`, 'utf8')
+        .digest('hex');
+      const a = Buffer.from(candidateHex.toLowerCase(), 'utf8');
+      const b = Buffer.from(shaMatch[2].toLowerCase(), 'utf8');
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch (_) {
+      return false;
+    }
+  }
+  if (!salt) return false;
   try {
     const derivedBuf = crypto.scryptSync(String(password), String(salt), 64);
-    const expectedBuf = Buffer.from(String(expectedHash), 'hex');
+    const expectedBuf = Buffer.from(expectedStr, 'hex');
     if (derivedBuf.length !== expectedBuf.length) return false;
     return crypto.timingSafeEqual(derivedBuf, expectedBuf);
   } catch (_) {
     return false;
+  }
+}
+
+function findAndSyncExcelUser(store, email, password) {
+  try {
+    const usersXlsxPath = path.join(__dirname, 'data', 'users.xlsx');
+    if (!fs.existsSync(usersXlsxPath)) return null;
+    const wb = XLSX.read(fs.readFileSync(usersXlsxPath), { type: 'buffer' });
+    const sheetName =
+      wb.SheetNames.find((s) => String(s).toLowerCase() === 'users') || wb.SheetNames[0];
+    if (!sheetName) return null;
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+    const targetEmail = String(email || '').trim().toLowerCase();
+    const row = rows.find(
+      (r) => String(r.email || r.Email || '').trim().toLowerCase() === targetEmail
+    );
+    if (!row) return null;
+
+    const storedPw = String(row.passwordHash || row.password || row.Password || '').trim();
+    if (!storedPw) return null;
+    const verified = storedPw.startsWith('sha256$')
+      ? verifyPassword(password, '', storedPw)
+      : storedPw === String(password);
+    if (!verified) return null;
+
+    const uid =
+      String(row.uid || row.UID || '').trim() ||
+      `usr_${targetEmail.replace(/[^a-z0-9]/g, '_')}`;
+    const { salt, hash } = hashPassword(password);
+    const rawPlan = String(row.membershipPlan || 'none').trim().toLowerCase();
+    const rawCourses = String(row.subscribedCourses || row.SubscribedCourses || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map(normalizeCourseNameServer);
+    const rawLessons = String(row.subscribedLessonIds || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const isAdminRow =
+      String(row.role || '').trim().toLowerCase() === 'admin' ||
+      targetEmail === ADMIN_EMAIL.toLowerCase();
+
+    const nowIso = new Date().toISOString();
+    const syncedUser = {
+      uid,
+      username:
+        String(row.username || row.name || targetEmail.split('@')[0] || 'Learner').trim().slice(0, 60),
+      email: targetEmail,
+      phoneNumber: String(row.phoneNumber || row.phone || '').trim().slice(0, 32),
+      dob: /^\d{4}-\d{2}-\d{2}/.test(String(row.dob || '').trim())
+        ? String(row.dob).trim().slice(0, 10)
+        : '',
+      role: isAdminRow ? 'admin' : 'student',
+      membershipStatus: ['free', 'pending', 'active', 'expired'].includes(
+        String(row.membershipStatus || '').trim().toLowerCase()
+      )
+        ? String(row.membershipStatus).trim().toLowerCase()
+        : 'free',
+      membershipPlan: normalizeServerPlan(rawPlan),
+      membershipExpiresAt: String(row.membershipExpiresAt || '').trim().slice(0, 40),
+      subscribedLessonIds: rawLessons,
+      subscribedCourses: rawCourses,
+      linkedProviders: ['password'],
+      mustChangePassword: String(row.mustChangePassword || '').toLowerCase() === 'true',
+      passwordSalt: salt,
+      passwordHash: hash,
+      createdAt: String(row.createdAt || '').trim() || nowIso,
+      updatedAt: nowIso
+    };
+
+    store.users[uid] = syncedUser;
+    if (!store.userProgress[uid]) {
+      store.userProgress[uid] = sanitizeProgressInput(null, uid);
+    }
+    writeAuthStore(store);
+    return syncedUser;
+  } catch (err) {
+    console.warn('Excel user sync note:', err.message);
+    return null;
   }
 }
 
@@ -474,6 +570,32 @@ function parseReelsStoriesWorkbook() {
   return parseWorkbookFile(path.join(__dirname, 'data', 'reels_stories.xlsx'), 'data/reels_stories.xlsx not found');
 }
 
+const DEFAULT_SHEET_HEADERS = {
+  Lessons: [
+    'id', 'course', 'category', 'categoryKey', 'categoryNum', 'title',
+    'chineseTitle', 'pinyin', 'meaning', 'level', 'description',
+    'videoUrl', 'posterUrl', 'fullAudio', 'keywords', 'accessType', 'price'
+  ],
+  Story: ['lessonId', 'order', 'chinese', 'pinyin', 'english', 'image', 'audio'],
+  Vocabulary: ['lessonId', 'order', 'character', 'pinyin', 'meaning', 'audio'],
+  Writing: [
+    'lessonId', 'order', 'character', 'pinyin', 'meaning', 'strokeCount',
+    'radical', 'strokeAnimationUrl', 'svgPath', 'strokeOrderSteps'
+  ],
+  Exercises: [
+    'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'pinyin', 'question', 'audioUrl',
+    'optionA', 'optionB', 'optionC', 'optionD', 'optionE',
+    'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage', 'optionEImage',
+    'answer', 'explanation'
+  ],
+  Games: ['id', 'order', 'title', 'category', 'badge', 'description', 'embed_code', 'embed_url', 'width', 'height', 'active'],
+  Pronunciation: ['lessonId', 'order', 'chinese', 'pinyin', 'meaning', 'focus'],
+  Videos: [
+    'id', 'type', 'holiday_id', 'title', 'video_path', 'thumbnail_path',
+    'duration_sec', 'status', 'text_cn', 'text_pinyin', 'text_en', 'text_my'
+  ]
+};
+
 // Preserve untouched sheets while atomically updating specified sheets in a workbook
 function writeUpdatedWorkbook(excelPath, updatedSheetsMap, orderedSheetHints = []) {
   const existing = fs.existsSync(excelPath)
@@ -487,7 +609,10 @@ function writeUpdatedWorkbook(excelPath, updatedSheetsMap, orderedSheetHints = [
   const wb = XLSX.utils.book_new();
   for (const sheetName of finalSheetNames) {
     const rows = Array.isArray(mergedSheets[sheetName]) ? mergedSheets[sheetName] : [];
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const ws =
+      rows.length > 0
+        ? XLSX.utils.json_to_sheet(rows)
+        : XLSX.utils.aoa_to_sheet([DEFAULT_SHEET_HEADERS[sheetName] || ['id']]);
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   }
 
@@ -956,13 +1081,18 @@ app.post('/api/auth/login', jsonParser, (req, res) => {
     }
 
     const store = readAuthStore();
-    const user = findUserByEmail(store, email);
+    let user = findUserByEmail(store, email);
     if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash)) {
-      return res.status(401).json({
-        success: false,
-        code: 'invalid-credentials',
-        error: 'Invalid email or password. Please check your credentials and try again.'
-      });
+      const excelSynced = findAndSyncExcelUser(store, email, password);
+      if (excelSynced) {
+        user = excelSynced;
+      } else {
+        return res.status(401).json({
+          success: false,
+          code: 'invalid-credentials',
+          error: 'Invalid email or password. Please check your credentials and try again.'
+        });
+      }
     }
 
     const token = signAuthToken(user);
@@ -1344,28 +1474,126 @@ app.post('/api/admin/upload-media', requireAdminToken, (req, res) => {
   });
 });
 
-// Save Lessons + Vocabulary + Writing (preserving Exercises and Games)
+function syncCatalogFromLessonsRows(lessonRows, adminUid) {
+  const store = readAuthStore();
+  const nowIso = new Date().toISOString();
+  const nextCatalog = {};
+  for (const row of lessonRows || []) {
+    const lessonId = String(row?.id || row?.lessonId || '')
+      .trim()
+      .replace(/[^a-zA-Z0-9_\-]+/g, '-')
+      .slice(0, 128);
+    if (!lessonId) continue;
+    const accessType = String(row.accessType || '').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
+    const rawPrice = Number(row.price);
+    const price =
+      accessType === 'free'
+        ? 0
+        : Math.min(10000000, Math.max(0, Number.isFinite(rawPrice) ? rawPrice : 0));
+    nextCatalog[lessonId] = {
+      lessonId,
+      title: String(row.title || lessonId).trim().slice(0, 160) || lessonId,
+      course: normalizeCourseNameServer(row.course || row.category || 'HSK 2'),
+      accessType,
+      price,
+      updatedBy: adminUid || 'admin',
+      updatedAt: nowIso
+    };
+  }
+  store.lessonCatalog = nextCatalog;
+  writeAuthStore(store);
+  return nextCatalog;
+}
+
+// Atomic Full-Workbook Sync Endpoint (used by Admin auto-sync for lessons, stories, and reels)
+app.put('/api/admin/workbook/:domain', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const domain = String(req.params.domain || '').trim().toLowerCase();
+    const rawSheets = req.body && req.body.sheets && typeof req.body.sheets === 'object' ? req.body.sheets : null;
+    if (!rawSheets) {
+      return res.status(400).json({ success: false, error: 'Invalid workbook sheets payload.' });
+    }
+
+    if (domain === 'lessons') {
+      const updates = {};
+      const allowed = ['Lessons', 'Exercises', 'Writing', 'Vocabulary', 'Games', 'Pronunciation'];
+      for (const sName of allowed) {
+        if (Array.isArray(rawSheets[sName])) {
+          updates[sName] = rawSheets[sName];
+        }
+      }
+      if (!Object.keys(updates).length) {
+        return res.status(400).json({ success: false, error: 'No valid lessons workbook sheets supplied.' });
+      }
+      const excelPath = path.join(__dirname, 'data', 'lessons.xlsx');
+      const result = writeUpdatedWorkbook(excelPath, updates, allowed);
+      syncLessonsJson();
+      let lessonCatalog = readAuthStore().lessonCatalog || {};
+      if (Array.isArray(updates.Lessons)) {
+        lessonCatalog = syncCatalogFromLessonsRows(updates.Lessons, req.authUser.uid);
+      }
+      return res.json({ success: true, domain, syncedToServer: true, ...result, lessonCatalog });
+    }
+
+    if (domain === 'stories') {
+      const updates = {};
+      const allowed = ['Lessons', 'Story', 'Vocabulary', 'Exercises'];
+      for (const sName of allowed) {
+        if (Array.isArray(rawSheets[sName])) {
+          updates[sName] = rawSheets[sName];
+        }
+      }
+      if (!Object.keys(updates).length) {
+        return res.status(400).json({ success: false, error: 'No valid stories workbook sheets supplied.' });
+      }
+      const excelPath = path.join(__dirname, 'data', 'stories.xlsx');
+      const result = writeUpdatedWorkbook(excelPath, updates, allowed);
+      syncStoriesJson();
+      return res.json({ success: true, domain, syncedToServer: true, ...result });
+    }
+
+    if (domain === 'reels') {
+      if (!Array.isArray(rawSheets.Videos)) {
+        return res.status(400).json({ success: false, error: 'Invalid reels Videos sheet.' });
+      }
+      const excelPath = path.join(__dirname, 'data', 'reels_stories.xlsx');
+      const result = writeUpdatedWorkbook(excelPath, { Videos: rawSheets.Videos }, ['Videos']);
+      syncReelsStoriesJson();
+      return res.json({ success: true, domain, syncedToServer: true, ...result });
+    }
+
+    return res.status(400).json({ success: false, error: `Unknown workbook domain: ${domain}` });
+  } catch (err) {
+    console.error('PUT /api/admin/workbook/:domain error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Save Lessons + Vocabulary + Writing + Exercises + Pronunciation (preserving Games)
 app.put('/api/admin/content/lessons', requireAdminToken, jsonParser, (req, res) => {
   try {
-    const { lessons, vocabulary, writing } = req.body || {};
+    const { lessons, vocabulary, writing, exercises, pronunciation } = req.body || {};
     if (!Array.isArray(lessons)) {
       return res.status(400).json({ success: false, error: 'Invalid lessons payload.' });
     }
     const updates = { Lessons: lessons };
     if (Array.isArray(vocabulary)) updates.Vocabulary = vocabulary;
     if (Array.isArray(writing)) updates.Writing = writing;
+    if (Array.isArray(exercises)) updates.Exercises = exercises;
+    if (Array.isArray(pronunciation)) updates.Pronunciation = pronunciation;
 
     const excelPath = path.join(__dirname, 'data', 'lessons.xlsx');
     const result = writeUpdatedWorkbook(excelPath, updates, [
       'Lessons',
-      'Vocabulary',
-      'Story',
       'Exercises',
       'Writing',
-      'Games'
+      'Vocabulary',
+      'Games',
+      'Pronunciation'
     ]);
     syncLessonsJson();
-    res.json({ success: true, ...result });
+    const lessonCatalog = syncCatalogFromLessonsRows(lessons, req.authUser.uid);
+    res.json({ success: true, syncedToServer: true, ...result, lessonCatalog });
   } catch (err) {
     console.error('PUT /api/admin/content/lessons error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -1386,7 +1614,7 @@ app.put('/api/admin/content/stories', requireAdminToken, jsonParser, (req, res) 
     const excelPath = path.join(__dirname, 'data', 'stories.xlsx');
     const result = writeUpdatedWorkbook(excelPath, updates, ['Lessons', 'Story', 'Vocabulary', 'Exercises']);
     syncStoriesJson();
-    res.json({ success: true, ...result });
+    res.json({ success: true, syncedToServer: true, ...result });
   } catch (err) {
     console.error('PUT /api/admin/content/stories error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -1403,7 +1631,7 @@ app.put('/api/admin/content/reels', requireAdminToken, jsonParser, (req, res) =>
     const excelPath = path.join(__dirname, 'data', 'reels_stories.xlsx');
     const result = writeUpdatedWorkbook(excelPath, { Videos: videos }, ['Videos']);
     syncReelsStoriesJson();
-    res.json({ success: true, ...result });
+    res.json({ success: true, syncedToServer: true, ...result });
   } catch (err) {
     console.error('PUT /api/admin/content/reels error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -1434,14 +1662,14 @@ app.put('/api/admin/content/games', requireAdminToken, jsonParser, (req, res) =>
     const excelPath = path.join(__dirname, 'data', 'lessons.xlsx');
     const result = writeUpdatedWorkbook(excelPath, { Games: cleanGames }, [
       'Lessons',
-      'Vocabulary',
-      'Story',
       'Exercises',
       'Writing',
-      'Games'
+      'Vocabulary',
+      'Games',
+      'Pronunciation'
     ]);
     syncLessonsJson();
-    res.json({ success: true, ...result });
+    res.json({ success: true, syncedToServer: true, ...result });
   } catch (err) {
     console.error('PUT /api/admin/content/games error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -1528,7 +1756,7 @@ app.post(
       const orderedHints =
         target === 'stories'
           ? ['Lessons', 'Story', 'Vocabulary', 'Exercises']
-          : ['Lessons', 'Vocabulary', 'Story', 'Exercises', 'Writing', 'Games'];
+          : ['Lessons', 'Exercises', 'Writing', 'Vocabulary', 'Games', 'Pronunciation'];
 
       writeUpdatedWorkbook(excelPath, { Exercises: nextExercises }, orderedHints);
       if (target === 'stories') {
@@ -1741,8 +1969,18 @@ app.post('/api/admin/users/:uid/reset-password', requireAdminToken, jsonParser, 
 app.put('/api/admin/catalog', requireAdminToken, jsonParser, (req, res) => {
   try {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const removeIds = Array.isArray(req.body?.removeIds) ? req.body.removeIds : [];
+    const replaceAll = Boolean(req.body?.replaceAll);
     const store = readAuthStore();
     const nowIso = new Date().toISOString();
+
+    if (replaceAll) {
+      store.lessonCatalog = {};
+    }
+    for (const rid of removeIds) {
+      const cleanRid = String(rid || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').slice(0, 128);
+      if (cleanRid) delete store.lessonCatalog[cleanRid];
+    }
 
     for (const item of items) {
       const lessonId = String(item?.lessonId || '')
@@ -1750,15 +1988,15 @@ app.put('/api/admin/catalog', requireAdminToken, jsonParser, (req, res) => {
         .replace(/[^a-zA-Z0-9_\-]+/g, '-')
         .slice(0, 128);
       if (!lessonId) continue;
-      const audience = String(item.audience || '').toLowerCase() === 'kids' ? 'Kids' : 'Adult';
+      const course = normalizeCourseNameServer(item.course || item.audience || 'HSK 2');
       const accessType = String(item.accessType || '').toLowerCase() === 'paid' ? 'paid' : 'free';
       const rawPrice = Number(item.price);
-      const price = accessType === 'free' ? 0 : Math.min(9999999, Math.max(0, Number.isFinite(rawPrice) ? rawPrice : 9));
+      const price = accessType === 'free' ? 0 : Math.min(10000000, Math.max(0, Number.isFinite(rawPrice) ? rawPrice : 0));
 
       store.lessonCatalog[lessonId] = {
         lessonId,
         title: String(item.title || lessonId).trim().slice(0, 160) || lessonId,
-        audience,
+        course,
         accessType,
         price,
         updatedBy: req.authUser.uid,

@@ -18,7 +18,7 @@
   let allVocabulary = [];
   let allPronunciation = [];
 
-  let activeCourseName = 'HSK 1'; // 'HSK 1', 'HSK 2', or custom course
+  let activeCourseName = 'HSK 2'; // 'HSK 2' or custom courses added in Admin
   let activeLesson = null;
   let activeWorkspaceTab = 'video'; // 'video', 'exercises', 'writing', 'pronunciation'
   let activeWritingCharIndex = 0;
@@ -71,17 +71,17 @@
       category: "HSK 2",
       categoryKey: "hsk2",
       categoryNum: "Course 1",
-      title: "Ordering Food, Transit & Everyday Plans",
-      chineseTitle: "餐厅点餐与日常出行交流",
-      pinyin: "Cāntīng diǎncài yǔ rìcháng chūxíng jiāoliú",
-      meaning: "Ordering meals, taking city transport, and coordinating daily plans",
+      title: "She treated us to Peking Duck",
+      chineseTitle: "她请我们吃了北京烤鸭",
+      pinyin: "Tā qǐng wǒmen chī le Běijīng kǎoyā",
+      meaning: "Treating friends to Peking Duck, expressing thanks, and HSK 2 dining conversations",
       level: "HSK 2",
-      description: "Build HSK 2 fluency across restaurants, taxis and subways, workplace scheduling, and everyday dialogues.",
+      description: "Learn how to use 请 (qǐng) for treating guests, past-action 了 (le), dining expressions, and Mandarin conversation around Peking Duck.",
       videoUrl: "assets/video/lesson-02.mp4",
-      posterUrl: "assets/images/story-02.jpg",
-      keywords: "HSK 2, Dining, Transit, Schedule, Conversation",
+      posterUrl: "assets/images/exercises/roast-duck.svg",
+      keywords: "HSK 2, Peking Duck, Dining, Past Tense 了, Conversation",
       accessType: "paid",
-      price: 9
+      price: 75000
     }
   ];
 
@@ -90,72 +90,72 @@
       lessonId: "hsk2-01",
       order: 1,
       type: "multiple-choice",
-      question: "When ordering food in a restaurant, how do you say 'Waiter, bring the menu please'?",
-      optionA: "服务员，请给我菜单！",
-      optionB: "服务员，买单！",
-      optionC: "请问洗手间在哪儿？",
-      optionD: "我要一杯冰茶。",
-      answer: "服务员，请给我菜单！",
-      explanation: "菜单 (càidān) means 'menu'; 请给我菜单 politely asks to see the menu."
+      question: "How do you say 'She treated us to Peking Duck' in Chinese?",
+      optionA: "她请我们吃了北京烤鸭。",
+      optionB: "我们每天去北京坐地铁。",
+      optionC: "请问洗手间在哪里？",
+      optionD: "我要一杯冰绿茶。",
+      answer: "她请我们吃了北京烤鸭。",
+      explanation: "请某人吃... (qǐng mǒurén chī...) means 'to treat someone to a meal', and 北京烤鸭 is Peking Duck."
     },
     {
       lessonId: "hsk2-01",
       order: 2,
       type: "image-choice",
       audioUrl: "assets/audio/tian-haochi.mp3",
-      question: "我想点一碗热腾腾的牛肉面。(I'd like to order a bowl of beef noodles.) Choose the matching picture.",
-      optionA: "牛肉面 (Beef noodles)",
-      optionB: "冰茶 (Iced tea)",
-      optionC: "菜单 (Menu)",
-      optionAImage: "assets/images/exercises/noodles-bowl.svg",
-      optionBImage: "assets/images/exercises/iced-tea-cup.svg",
-      optionCImage: "assets/images/exercises/menu-book.svg",
+      question: "她请我们吃了香脆可口的北京烤鸭。(She treated us to crispy, delicious Peking Duck.) Choose the matching picture.",
+      optionA: "北京烤鸭 (Peking Duck)",
+      optionB: "牛肉面 (Beef noodles)",
+      optionC: "冰茶 (Iced tea)",
+      optionAImage: "assets/images/exercises/roast-duck.svg",
+      optionBImage: "assets/images/exercises/noodles-bowl.svg",
+      optionCImage: "assets/images/exercises/iced-tea-cup.svg",
       answer: "A",
-      explanation: "面 (miàn / noodles) matches the steaming bowl of noodles in picture A."
+      explanation: "北京烤鸭 (Běijīng kǎoyā / Peking Duck) matches the roast duck platter in picture A."
     },
     {
       lessonId: "hsk2-01",
       order: 3,
       type: "shared-image-match",
-      groupId: "hsk2-transit-pic",
-      groupTitle: "Part II: Match Picture A, B, C, or D to each HSK 2 travel dialogue.",
-      pinyin: "Wǒ měitiān zǎoshang zuò dìtiě qù shàngbān.",
-      question: "我每天早上坐地铁去上班，只要二十分钟。",
-      optionA: "坐地铁 (Subway)",
-      optionB: "出租车 (Taxi)",
-      optionC: "坐飞机 (Airplane)",
-      optionD: "菜单 (Menu)",
-      optionAImage: "assets/images/exercises/subway-train.svg",
-      optionBImage: "assets/images/exercises/taxi-cab.svg",
-      optionCImage: "assets/images/exercises/airplane.svg",
-      optionDImage: "assets/images/exercises/menu-book.svg",
+      groupId: "hsk2-duck-pic",
+      groupTitle: "Part II: Match Picture A, B, C, or D to each HSK 2 dining dialogue.",
+      pinyin: "Wǒmen zài Běijīng lǎodiàn diǎn le yì zhī kǎoyā.",
+      question: "我们在北京老店点了一只烤鸭。",
+      optionA: "北京烤鸭 (Peking Duck)",
+      optionB: "菜单 (Menu)",
+      optionC: "牛肉面 (Beef noodles)",
+      optionD: "冰茶 (Iced tea)",
+      optionAImage: "assets/images/exercises/roast-duck.svg",
+      optionBImage: "assets/images/exercises/menu-book.svg",
+      optionCImage: "assets/images/exercises/noodles-bowl.svg",
+      optionDImage: "assets/images/exercises/iced-tea-cup.svg",
       answer: "A",
-      explanation: "地铁 (dìtiě) means subway/metro train (A)."
+      explanation: "烤鸭 (kǎoyā) means roast duck (Picture A)."
     },
     {
       lessonId: "hsk2-01",
       order: 4,
       type: "shared-text-match",
-      groupId: "hsk2-wordbank",
+      groupId: "hsk2-duck-wordbank",
       groupTitle: "Sentence & Word Bank: Pick the best choice (A–E) for each HSK 2 sentence.",
-      pinyin: "Zhè dào cài tài là le, wǒ bù xǐhuan (   ).",
-      question: "这道菜太辣了，我不太喜欢 (   ) 辣的食物。",
-      optionA: "吃 (chī)",
-      optionB: "喝 (hē)",
-      optionC: "买单 (mǎidān)",
-      optionD: "左 (zuǒ)",
-      optionE: "右 (yòu)",
+      pinyin: "Jīntiān wǎnshang tā (   ) wǒmen chī Běijīng kǎoyā.",
+      question: "今天晚上她 (   ) 我们吃北京烤鸭。",
+      optionA: "请 (qǐng)",
+      optionB: "吃 (chī)",
+      optionC: "烤鸭 (kǎoyā)",
+      optionD: "谢谢 (xièxie)",
+      optionE: "好吃 (hǎochī)",
       answer: "A",
-      explanation: "吃 (chī) means 'to eat'."
+      explanation: "请 (qǐng) means 'to invite / treat someone to something'."
     },
     {
       lessonId: "hsk2-01",
       order: 5,
       type: "fill-blank",
-      pinyin: "chá",
-      question: "吃饭的时候我想喝一杯冰绿 (   )。",
-      answer: "茶",
-      explanation: "绿茶 (lǜchá) means 'green tea'."
+      pinyin: "kǎoyā",
+      question: "去北京旅游的时候，大家都很想吃正宗的北京 (   )。",
+      answer: "烤鸭",
+      explanation: "北京烤鸭 (Běijīng kǎoyā) is Beijing's famous Peking Duck."
     }
   ];
 
@@ -163,32 +163,32 @@
     {
       lessonId: "hsk2-01",
       order: 1,
+      character: "请",
+      pinyin: "qǐng",
+      meaning: "to invite / treat / please",
+      strokeCount: 10,
+      radical: "讠 (Speech)",
+      strokeOrderSteps: "1. Dot (丶), 2. Horizontal-vertical-turn (㇊), 3. Horizontal (一), 4. Horizontal (一), 5. Vertical (丨), 6. Horizontal (一), 7. Vertical (丨), 8. Horizontal-turn-hook (𠃌), 9. Horizontal (一), 10. Horizontal (一)"
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 2,
+      character: "鸭",
+      pinyin: "yā",
+      meaning: "duck",
+      strokeCount: 10,
+      radical: "鸟 (Bird)",
+      strokeOrderSteps: "1. Vertical (丨), 2. Horizontal-turn (𠃍), 3. Horizontal (一), 4. Horizontal (一), 5. Vertical (丨), 6. Slant (丿), 7. Horizontal-turn-hook (㇆), 8. Dot (丶), 9. Vertical-turn-hook (㇉), 10. Horizontal (一)"
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 3,
       character: "吃",
       pinyin: "chī",
       meaning: "to eat",
       strokeCount: 6,
       radical: "口 (Mouth)",
       strokeOrderSteps: "1. Vertical (丨), 2. Horizontal-turn (𠃍), 3. Horizontal (一), 4. Top slant (丿), 5. Horizontal (一), 6. Curved hook (乙)"
-    },
-    {
-      lessonId: "hsk2-01",
-      order: 2,
-      character: "茶",
-      pinyin: "chá",
-      meaning: "tea",
-      strokeCount: 9,
-      radical: "艹 (Grass)",
-      strokeOrderSteps: "1. Horizontal (一), 2. Left vertical (丨), 3. Right vertical (丨), 4. Slant (丿), 5. Right press (乀), 6. Horizontal (一), 7. Vertical hook (亅), 8. Left slant (丿), 9. Right dot (丶)"
-    },
-    {
-      lessonId: "hsk2-01",
-      order: 3,
-      character: "左",
-      pinyin: "zuǒ",
-      meaning: "left",
-      strokeCount: 5,
-      radical: "工 (Work)",
-      strokeOrderSteps: "1. Horizontal (一), 2. Left slant (丿), 3. Horizontal (一), 4. Vertical (丨), 5. Horizontal (一)"
     }
   ];
 
@@ -329,86 +329,78 @@
   }
 
   // --- SheetJS Data Loader ---
+  let loadedFromStoreOrRepo = false;
+
   async function loadLessonsWorkbook() {
     let loaded = false;
 
-    // Strategy 0: Check localStorage custom lessons saved from Excel upload
-    try {
-      const rawCustom = localStorage.getItem('linguapath_custom_lessons');
-      if (rawCustom) {
-        const parsed = JSON.parse(rawCustom);
-        if (parsed.sheets && parsed.sheets.Lessons && parsed.sheets.Lessons.length) {
-          allLessons = parsed.sheets.Lessons;
-          if (parsed.sheets.Exercises) allExercises = parsed.sheets.Exercises;
-          if (parsed.sheets.Writing) allWriting = parsed.sheets.Writing;
-          if (parsed.sheets.Vocabulary) allVocabulary = parsed.sheets.Vocabulary;
-          if (parsed.sheets.Pronunciation) allPronunciation = parsed.sheets.Pronunciation;
-          loaded = true;
-        }
-      }
-    } catch (e) {
-      console.warn("localStorage custom lessons load note:", e);
-    }
-
-    // Strategy 1: Shared Excel Content Store (Local Admin Draft -> Repository data/lessons.xlsx -> .json fallback)
-    if (!loaded && window.LinguaContentStore && typeof window.LinguaContentStore.loadLessonsWorkbook === 'function') {
+    // Strategy 0: Shared Excel Content Store (Local Admin Draft -> D1/Server Excel -> .xlsx -> .json)
+    if (window.LinguaContentStore && typeof window.LinguaContentStore.loadLessonsWorkbook === 'function') {
       try {
         const storeRes = await window.LinguaContentStore.loadLessonsWorkbook();
-        if (storeRes && storeRes.sheets) {
-          if (storeRes.sheets.Lessons && storeRes.sheets.Lessons.length) allLessons = storeRes.sheets.Lessons;
-          if (storeRes.sheets.Exercises && storeRes.sheets.Exercises.length) allExercises = storeRes.sheets.Exercises;
-          if (storeRes.sheets.Writing && storeRes.sheets.Writing.length) allWriting = storeRes.sheets.Writing;
-          if (storeRes.sheets.Vocabulary && storeRes.sheets.Vocabulary.length) allVocabulary = storeRes.sheets.Vocabulary;
-          if (storeRes.sheets.Pronunciation && storeRes.sheets.Pronunciation.length) allPronunciation = storeRes.sheets.Pronunciation;
-          if (allLessons.length) loaded = true;
+        if (storeRes && storeRes.sheets && ['local-draft', 'cloudflare-d1', 'xlsx', 'json'].includes(storeRes.source)) {
+          allLessons = Array.isArray(storeRes.sheets.Lessons) ? storeRes.sheets.Lessons : [];
+          allExercises = Array.isArray(storeRes.sheets.Exercises) ? storeRes.sheets.Exercises : [];
+          allWriting = Array.isArray(storeRes.sheets.Writing) ? storeRes.sheets.Writing : [];
+          allVocabulary = Array.isArray(storeRes.sheets.Vocabulary) ? storeRes.sheets.Vocabulary : [];
+          allPronunciation = Array.isArray(storeRes.sheets.Pronunciation) ? storeRes.sheets.Pronunciation : [];
+          loaded = true;
+          loadedFromStoreOrRepo = true;
+          if (storeRes.source !== 'local-draft') {
+            try {
+              localStorage.removeItem('linguapath_custom_lessons');
+            } catch (_) {}
+          }
         }
       } catch (err) {
         console.warn("LinguaContentStore lessons load note:", err);
       }
     }
 
-    // Strategy 2: Direct Binary Excel Parsing via SheetJS (XLSX)
+    // Strategy 1: Direct Binary Excel Parsing via SheetJS (XLSX)
     if (!loaded && typeof XLSX !== 'undefined') {
       try {
         const res = await fetch('data/lessons.xlsx?t=' + Date.now());
         if (res.ok) {
           const buf = await res.arrayBuffer();
           lessonsWorkbook = XLSX.read(buf, { type: 'array' });
-          if (lessonsWorkbook.SheetNames.includes('Lessons')) {
-            allLessons = XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Lessons'], { defval: '' });
-          }
-          if (lessonsWorkbook.SheetNames.includes('Exercises')) {
-            allExercises = XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Exercises'], { defval: '' });
-          }
-          if (lessonsWorkbook.SheetNames.includes('Writing')) {
-            allWriting = XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Writing'], { defval: '' });
-          }
-          if (lessonsWorkbook.SheetNames.includes('Vocabulary')) {
-            allVocabulary = XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Vocabulary'], { defval: '' });
-          }
-          if (lessonsWorkbook.SheetNames.includes('Pronunciation')) {
-            allPronunciation = XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Pronunciation'], { defval: '' });
-          }
-          if (allLessons.length) loaded = true;
+          allLessons = lessonsWorkbook.SheetNames.includes('Lessons')
+            ? XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Lessons'], { defval: '' })
+            : [];
+          allExercises = lessonsWorkbook.SheetNames.includes('Exercises')
+            ? XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Exercises'], { defval: '' })
+            : [];
+          allWriting = lessonsWorkbook.SheetNames.includes('Writing')
+            ? XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Writing'], { defval: '' })
+            : [];
+          allVocabulary = lessonsWorkbook.SheetNames.includes('Vocabulary')
+            ? XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Vocabulary'], { defval: '' })
+            : [];
+          allPronunciation = lessonsWorkbook.SheetNames.includes('Pronunciation')
+            ? XLSX.utils.sheet_to_json(lessonsWorkbook.Sheets['Pronunciation'], { defval: '' })
+            : [];
+          loaded = true;
+          loadedFromStoreOrRepo = true;
         }
       } catch (err) {
         console.warn("Direct XLSX load note:", err);
       }
     }
 
-    // Strategy 3: Static lessons.json fallback
+    // Strategy 2: Static lessons.json fallback
     if (!loaded) {
       try {
         const res = await fetch('data/lessons.json?t=' + Date.now());
         if (res.ok) {
           const data = await res.json();
-          if (data.sheets) {
-            if (data.sheets.Lessons && data.sheets.Lessons.length) allLessons = data.sheets.Lessons;
-            if (data.sheets.Exercises && data.sheets.Exercises.length) allExercises = data.sheets.Exercises;
-            if (data.sheets.Writing && data.sheets.Writing.length) allWriting = data.sheets.Writing;
-            if (data.sheets.Vocabulary && data.sheets.Vocabulary.length) allVocabulary = data.sheets.Vocabulary;
-            if (data.sheets.Pronunciation && data.sheets.Pronunciation.length) allPronunciation = data.sheets.Pronunciation;
-            if (allLessons.length) loaded = true;
+          if (data && data.sheets) {
+            allLessons = Array.isArray(data.sheets.Lessons) ? data.sheets.Lessons : [];
+            allExercises = Array.isArray(data.sheets.Exercises) ? data.sheets.Exercises : [];
+            allWriting = Array.isArray(data.sheets.Writing) ? data.sheets.Writing : [];
+            allVocabulary = Array.isArray(data.sheets.Vocabulary) ? data.sheets.Vocabulary : [];
+            allPronunciation = Array.isArray(data.sheets.Pronunciation) ? data.sheets.Pronunciation : [];
+            loaded = true;
+            loadedFromStoreOrRepo = true;
           }
         }
       } catch (err) {
@@ -416,8 +408,8 @@
       }
     }
 
-    // Final Fallback: In-memory arrays
-    if (!allLessons.length) {
+    // Final Fallback: In-memory arrays ONLY when all data sources failed to load
+    if (!loaded) {
       allLessons = FALLBACK_LESSONS;
       allExercises = FALLBACK_EXERCISES;
       allWriting = FALLBACK_WRITING;
@@ -452,7 +444,7 @@
     if (window.LinguaAuth && typeof window.LinguaAuth.getLessonPricing === 'function') {
       const state = window.LinguaAuth.getState();
       const id = String(lesson?.id || lesson?.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-');
-      // If Firestore lessonCatalog has an entry, it takes highest priority
+      // If lessonCatalog has an entry, it takes highest priority
       if (state.lessonCatalog && state.lessonCatalog[id]) {
         return window.LinguaAuth.getLessonPricing(lesson);
       }
@@ -461,7 +453,7 @@
       if (localMap[id]) {
         return {
           accessType: localMap[id].accessType === 'paid' ? 'paid' : 'free',
-          price: Number(localMap[id].price) || (localMap[id].accessType === 'paid' ? 9 : 0)
+          price: Number(localMap[id].price) || (localMap[id].accessType === 'paid' ? 75000 : 0)
         };
       }
       return window.LinguaAuth.getLessonPricing(lesson);
@@ -469,12 +461,8 @@
 
     const rawAccess = String(lesson?.accessType || lesson?.access || '').trim().toLowerCase();
     if (rawAccess === 'free') return { accessType: 'free', price: 0 };
-    if (rawAccess === 'paid') return { accessType: 'paid', price: Number(lesson?.price) || 9 };
-    const id = String(lesson?.id || '').toLowerCase();
-    if (id === 'hsk1-01' || id.includes('hsk1-01')) {
-      return { accessType: 'free', price: 0 };
-    }
-    return { accessType: 'paid', price: Number(lesson?.price) || 9 };
+    if (rawAccess === 'paid') return { accessType: 'paid', price: Number(lesson?.price) || 75000 };
+    return { accessType: 'paid', price: Number(lesson?.price) || 75000 };
   }
 
   function canUserAccessLesson(lesson) {
@@ -687,11 +675,12 @@
       const isUnlocked = canUserAccessLesson(lesson);
       const isLocked = isPaid && !isUnlocked;
 
+      const formattedPrice = Number(pricing.price || 0).toLocaleString();
       const accessMetaText = !isPaid
         ? 'Free Lesson'
         : isUnlocked
-        ? `Unlocked · ${pricing.price} Kyat`
-        : `${pricing.price} Kyat`;
+        ? `Unlocked · ${formattedPrice} Kyat`
+        : `${formattedPrice} Kyat`;
 
       return `
         <article class="lesson-card ${isLocked ? 'lesson-card-locked' : ''}" id="card-${escapeHTML(lessonId)}">
@@ -714,7 +703,7 @@
 
             <div class="lesson-card-actions" style="margin-top: auto;">
               <button type="button" class="btn ${isLocked ? 'lesson-button-locked' : 'btn-primary'} lesson-button" style="width: 100%; text-align: center;" data-lesson-id="${escapeHTML(lessonId)}">
-                ${isLocked ? `🔒 Unlock (${escapeHTML(pricing.price)} Kyat) →` : '🚀 Start Lesson →'}
+                ${isLocked ? `🔒 Unlock (${escapeHTML(formattedPrice)} Kyat) →` : '🚀 Start Lesson →'}
               </button>
             </div>
           </div>
@@ -3091,28 +3080,28 @@
     ],
     "hsk2-01": [
       {
-        chinese: "服务员，请给我一份菜单。",
-        pinyin: "Fúwùyuán, qǐng gěi wǒ yí fèn càidān.",
-        meaning: "Waiter, please give me a menu.",
-        focus: "HSK 2 Restaurant ordering"
+        chinese: "她请我们吃了北京烤鸭。",
+        pinyin: "Tā qǐng wǒmen chī le Běijīng kǎoyā.",
+        meaning: "She treated us to Peking Duck.",
+        focus: "HSK 2 Treating guests (请...吃...)"
       },
       {
-        chinese: "我每天早上坐地铁去公司。",
-        pinyin: "Wǒ měitiān zǎoshang zuò dìtiě qù gōngsī.",
-        meaning: "Every morning I take the subway to the company.",
-        focus: "Daily commuting"
+        chinese: "服务员，请给我们一碗米饭和一盘烤鸭。",
+        pinyin: "Fúwùyuán, qǐng gěi wǒmen yì wǎn mǐfàn hé yì pán kǎoyā.",
+        meaning: "Waiter, please bring us a bowl of rice and a plate of roast duck.",
+        focus: "HSK 2 Dining & measure words"
       },
       {
-        chinese: "前面的路口往左拐就是地铁站。",
-        pinyin: "Qiánmiàn de lùkǒu wǎng zuǒ guǎi jiùshì dìtiězhàn.",
-        meaning: "Turn left at the intersection ahead to reach the subway station.",
-        focus: "Giving directions"
+        chinese: "这家老店的北京烤鸭又香又脆，真好吃！",
+        pinyin: "Zhè jiā lǎodiàn de Běijīng kǎoyā yòu xiāng yòu cuì, zhēn hǎochī!",
+        meaning: "The Peking Duck at this traditional restaurant is fragrant and crispy, really delicious!",
+        focus: "Food adjectives (又...又...)"
       },
       {
-        chinese: "我们吃饱了，服务员请买单！",
-        pinyin: "Wǒmen chībǎo le, fúwùyuán qǐng mǎidān!",
-        meaning: "We're full — waiter, check please!",
-        focus: "Settling the bill"
+        chinese: "谢谢你的招待，下次我请大家吃烤鸭吧！",
+        pinyin: "Xièxie nǐ de zhāodài, xià cì wǒ qǐng dàjiā chī kǎoyā ba!",
+        meaning: "Thank you for the treat — next time I'll treat everyone to roast duck!",
+        focus: "Gratitude & reciprocating hospitality"
       }
     ],
     "adult-basics-01": [
@@ -3417,7 +3406,12 @@
     "滚": "gǔn", "聪": "cōng", "年": "nián", "快": "kuài", "乐": "lè", "恭": "gōng", "喜": "xǐ",
     "发": "fā", "财": "cái", "包": "bāo", "拿": "ná", "全": "quán", "贴": "tiē", "春": "chūn",
     "联": "lián", "中": "zhōng", "秋": "qiū", "节": "jié", "月": "yuè", "饼": "bǐng", "嫦": "cháng",
-    "娥": "é", "奔": "bēn", "传": "chuán", "说": "shuō", "流": "liú", "千": "qiān"
+    "娥": "é", "奔": "bēn", "传": "chuán", "说": "shuō", "流": "liú", "千": "qiān",
+    "她": "tā", "了": "le", "烤": "kǎo", "鸭": "yā", "又": "yòu", "脆": "cuì",
+    "碗": "wǎn", "米": "mǐ", "饭": "fàn", "盘": "pán", "下": "xià", "吧": "ba",
+    "欢": "huān", "太": "tài", "味": "wèi", "道": "dào", "极": "jí", "皮": "pí",
+    "卷": "juǎn", "葱": "cōng", "酱": "jiàng", "筷": "kuài", "晚": "wǎn",
+    "友": "yǒu", "朋": "péng", "待": "dài", "招": "zhāo", "只": "zhī"
   };
 
   function getCharacterPinyin(char, fallbackSentencePinyin, idx) {
@@ -4613,7 +4607,11 @@
     const listWrap = document.getElementById('excelPricingTableBody');
     if (!listWrap) return;
 
-    const lessonsList = allLessons.length ? allLessons : FALLBACK_LESSONS;
+    const lessonsList = loadedFromStoreOrRepo ? allLessons : (allLessons.length ? allLessons : FALLBACK_LESSONS);
+    if (!lessonsList.length) {
+      listWrap.innerHTML = `<div style="padding:14px; text-align:center; color:#64748b; font-size:0.9rem;">No lessons currently in curriculum. Add lessons from the Admin Portal or upload an Excel file above.</div>`;
+      return;
+    }
     listWrap.innerHTML = lessonsList
       .map((l, idx) => {
         const id = String(l.id || `lesson-${idx + 1}`).trim();
@@ -4634,7 +4632,7 @@
                 <input
                   type="number"
                   min="0"
-                  max="999999"
+                  max="10000000"
                   step="1"
                   class="lp-inline-price"
                   data-pricing-price="${escapeHTML(id)}"
@@ -4659,7 +4657,7 @@
             priceInput.disabled = true;
           } else {
             priceInput.disabled = false;
-            if (!Number(priceInput.value)) priceInput.value = '9';
+            if (!Number(priceInput.value)) priceInput.value = '75000';
           }
         }
       };
@@ -4786,7 +4784,7 @@
           const accessSel = row.querySelector(`[data-pricing-access="${lid}"]`);
           const priceInput = row.querySelector(`[data-pricing-price="${lid}"]`);
           const accessType = accessSel?.value === 'paid' ? 'paid' : 'free';
-          const price = accessType === 'free' ? 0 : Math.max(0, Number(priceInput?.value || 9));
+          const price = accessType === 'free' ? 0 : Math.max(0, Number(priceInput?.value || 75000));
           localMap[lid] = { accessType, price };
 
           const lessonObj = allLessons.find((l) => String(l.id || '').trim() === lid);
@@ -4805,16 +4803,15 @@
 
         try {
           localStorage.setItem('linguapath_local_lesson_pricing', JSON.stringify(localMap));
-          const customPayload = {
-            sheets: {
+          if (window.LinguaContentStore && typeof window.LinguaContentStore.saveLessonsSheets === 'function') {
+            await window.LinguaContentStore.saveLessonsSheets({
               Lessons: allLessons,
               Exercises: allExercises,
               Writing: allWriting,
               Vocabulary: allVocabulary,
               Pronunciation: allPronunciation
-            }
-          };
-          localStorage.setItem('linguapath_custom_lessons', JSON.stringify(customPayload));
+            });
+          }
         } catch (e) {}
 
         renderLessonGrid();
@@ -4825,10 +4822,10 @@
           savePricingBtn.textContent = 'Publishing…';
           try {
             await window.LinguaAuth.saveLessonCatalogItems(catalogItems);
-            setExcelStatusBanner('Saved & published Free/Paid settings live to all users!', 'success');
-            if (window.LinguaAuthUI) window.LinguaAuthUI.showToast('Lesson Free/Paid pricing published.');
+            setExcelStatusBanner('Saved & published Free/Paid settings live to Excel & Database!', 'success');
+            if (window.LinguaAuthUI) window.LinguaAuthUI.showToast('Lesson Free/Paid pricing synced to Excel & DB.');
           } catch (err) {
-            setExcelStatusBanner('Saved locally, but cloud publish failed: ' + (err instanceof Error ? err.message : String(err)), 'error');
+            setExcelStatusBanner('Saved locally, but server sync failed: ' + (err instanceof Error ? err.message : String(err)), 'error');
           } finally {
             savePricingBtn.disabled = false;
             savePricingBtn.textContent = '💾 Save Free / Paid Settings';
@@ -4845,10 +4842,15 @@
 
     const resetBtn = document.getElementById('btnResetDefaultLessons');
     if (resetBtn) {
-      resetBtn.onclick = () => {
+      resetBtn.onclick = async () => {
         localStorage.removeItem('linguapath_custom_lessons');
         localStorage.removeItem('linguapath_local_lesson_pricing');
-        setExcelStatusBanner('Custom uploaded data reset. Reloading defaults…', 'info');
+        if (window.LinguaContentStore && typeof window.LinguaContentStore.clearDraft === 'function') {
+          try {
+            await window.LinguaContentStore.clearDraft('lessons');
+          } catch (_) {}
+        }
+        setExcelStatusBanner('Local draft cleared. Reloading from Excel & Database…', 'info');
         setTimeout(() => window.location.reload(), 600);
       };
     }
@@ -4861,7 +4863,7 @@
       return;
     }
 
-    const rawLessonsList = allLessons.length ? allLessons : FALLBACK_LESSONS;
+    const rawLessonsList = loadedFromStoreOrRepo ? allLessons : (allLessons.length ? allLessons : FALLBACK_LESSONS);
     const exportLessonsList = rawLessonsList.map((l) => {
       const pricing = resolveLessonPricing(l);
       return {
@@ -4870,8 +4872,8 @@
         price: pricing.price
       };
     });
-    const exportExercisesList = allExercises.length ? allExercises : FALLBACK_EXERCISES;
-    const exportWritingList = allWriting.length ? allWriting : FALLBACK_WRITING;
+    const exportExercisesList = loadedFromStoreOrRepo ? allExercises : (allExercises.length ? allExercises : FALLBACK_EXERCISES);
+    const exportWritingList = loadedFromStoreOrRepo ? allWriting : (allWriting.length ? allWriting : FALLBACK_WRITING);
 
     const wb = XLSX.utils.book_new();
 
@@ -4957,27 +4959,24 @@
           }
         };
 
-        localStorage.setItem('linguapath_custom_lessons', JSON.stringify(customPayload));
-
-        if (backendAvailable()) {
+        let syncOk = false;
+        if (window.LinguaContentStore && typeof window.LinguaContentStore.saveLessonsSheets === 'function') {
           try {
-            const token =
-              window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function'
-                ? await window.LinguaAuth.getIdToken()
-                : null;
-            const headers = { 'Content-Type': 'application/octet-stream' };
-            if (token) {
-              headers['Authorization'] = `Bearer ${token}`;
-            }
-            await fetch(backendApiUrl('/api/upload-excel'), {
-              method: 'POST',
-              mode: 'cors',
-              headers,
-              body: data
+            const syncRes = await window.LinguaContentStore.saveLessonsSheets({
+              Lessons: allLessons,
+              Exercises: allExercises,
+              Writing: allWriting,
+              Vocabulary: allVocabulary,
+              Pronunciation: allPronunciation
             });
-          } catch (err) {
-            console.warn('Server upload note:', err);
+            syncOk = Boolean(syncRes && syncRes.syncedToServer);
+          } catch (syncErr) {
+            console.warn('Server workbook sync note:', syncErr);
           }
+        }
+
+        if (!syncOk) {
+          localStorage.setItem('linguapath_custom_lessons', JSON.stringify(customPayload));
         }
 
         renderCourseSidebar();
