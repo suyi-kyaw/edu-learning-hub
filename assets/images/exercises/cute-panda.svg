@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="100%" stop-color="#bbf7d0"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+  <rect width="400" height="280" rx="18" fill="url(#bgGrad)"/>
+  <circle cx="52" cy="48" r="38" fill="#ffffff" fill-opacity="0.28"/>
+  <circle cx="352" cy="230" r="52" fill="#ffffff" fill-opacity="0.2"/>
+  
+    <g filter="url(#cardShadow)">
+      <circle cx="142" cy="86" r="26" fill="#0f172a"/>
+      <circle cx="258" cy="86" r="26" fill="#0f172a"/>
+      <circle cx="200" cy="148" r="72" fill="#ffffff"/>
+    </g>
+    <ellipse cx="170" cy="138" rx="18" ry="24" fill="#0f172a" transform="rotate(18 170 138)"/>
+    <ellipse cx="230" cy="138" rx="18" ry="24" fill="#0f172a" transform="rotate(-18 230 138)"/>
+    <circle cx="172" cy="136" r="6" fill="#ffffff"/>
+    <circle cx="228" cy="136" r="6" fill="#ffffff"/>
+    <ellipse cx="200" cy="166" rx="12" ry="8" fill="#0f172a"/>
+    <path d="M186 182 Q200 192 214 182" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round"/>
+    <rect x="294" y="54" width="18" height="176" rx="6" fill="#16a34a"/>
+  
+</svg>

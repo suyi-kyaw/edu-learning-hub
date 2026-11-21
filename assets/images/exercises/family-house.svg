@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#fed7aa"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+  <rect width="400" height="280" rx="18" fill="url(#bgGrad)"/>
+  <circle cx="52" cy="48" r="38" fill="#ffffff" fill-opacity="0.28"/>
+  <circle cx="352" cy="230" r="52" fill="#ffffff" fill-opacity="0.2"/>
+  
+    <rect x="0" y="218" width="400" height="62" fill="#4ade80"/>
+    <g filter="url(#cardShadow)">
+      <rect x="112" y="128" width="176" height="104" rx="8" fill="#ffffff"/>
+      <polygon points="92,134 200,56 308,134" fill="#ea580c"/>
+    </g>
+    <rect x="180" y="168" width="40" height="64" rx="6" fill="#9a3412"/>
+    <rect x="130" y="154" width="34" height="34" rx="4" fill="#bae6fd" stroke="#0284c7" stroke-width="3"/>
+    <rect x="236" y="154" width="34" height="34" rx="4" fill="#bae6fd" stroke="#0284c7" stroke-width="3"/>
+    <path d="M200 42 C192 28 174 34 184 48 L200 62 L216 48 C226 34 208 28 200 42 Z" fill="#ef4444"/>
+  
+</svg>

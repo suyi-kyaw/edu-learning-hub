@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="100%" stop-color="#dbeafe"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+  <rect width="400" height="280" rx="18" fill="url(#bgGrad)"/>
+  <circle cx="52" cy="48" r="38" fill="#ffffff" fill-opacity="0.28"/>
+  <circle cx="352" cy="230" r="52" fill="#ffffff" fill-opacity="0.2"/>
+  
+    <g filter="url(#cardShadow)">
+      <rect x="78" y="64" width="244" height="148" rx="14" fill="#1e293b"/>
+      <rect x="92" y="78" width="216" height="120" rx="6" fill="#f8fafc"/>
+      <path d="M52 212 L348 212 L364 232 L36 232 Z" fill="#64748b"/>
+    </g>
+    <g filter="url(#cardShadow)">
+      <rect x="136" y="96" width="128" height="82" rx="10" fill="#3b82f6"/>
+      <path d="M136 102 L200 144 L264 102" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  
+</svg>

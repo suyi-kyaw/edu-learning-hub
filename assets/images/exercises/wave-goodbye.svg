@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0e7ff"/>
+      <stop offset="100%" stop-color="#c7d2fe"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+  <rect width="400" height="280" rx="18" fill="url(#bgGrad)"/>
+  <circle cx="52" cy="48" r="38" fill="#ffffff" fill-opacity="0.28"/>
+  <circle cx="352" cy="230" r="52" fill="#ffffff" fill-opacity="0.2"/>
+  
+    <path d="M0 220 Q200 195 400 220 L400 280 L0 280 Z" fill="#6366f1" opacity="0.25"/>
+    <g filter="url(#cardShadow)">
+      <rect x="125" y="46" width="150" height="175" rx="28" fill="#ffffff"/>
+    </g>
+    <g transform="translate(200, 145)">
+      <path d="M-24 22 L-24 -28 C-24 -34 -15 -34 -15 -28 L-15 -2 L-10 -2 L-10 -42 C-10 -48 -1 -48 -1 -42 L-1 -2 L4 -2 L4 -45 C4 -51 13 -51 13 -45 L13 -2 L18 -2 L18 -34 C18 -40 27 -40 27 -34 L27 16 C27 36 12 46 -2 46 C-18 46 -24 35 -24 22 Z" fill="#fbbf24" stroke="#d97706" stroke-width="3"/>
+      <path d="M-38 -25 Q-48 -38 -36 -50" fill="none" stroke="#6366f1" stroke-width="4" stroke-linecap="round"/>
+      <path d="M36 -25 Q46 -38 34 -50" fill="none" stroke="#6366f1" stroke-width="4" stroke-linecap="round"/>
+    </g>
+  
+</svg>

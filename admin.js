@@ -989,7 +989,8 @@
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddImgBtn">+ Image Choice</button>
-              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddSharedBtn">+ Shared Top-Image Group</button>
+              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddSharedBtn">+ Shared Top Bank</button>
+              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddFillBtn">+ Write Character (Pinyin)</button>
               <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="exAddRowBtn">+ Add Text Exercise</button>
             </div>
           </div>
@@ -1002,11 +1003,20 @@
                       const globalIndex = state.editingExercisesList.indexOf(ex);
                       const qType = String(ex.type || 'multiple-choice').trim().toLowerCase();
                       const isImageChoice = qType === 'image-choice';
-                      const isSharedBank = qType === 'shared-image-match';
+                      const isSharedImage = qType === 'shared-image-match';
+                      const isSharedText = qType === 'shared-text-match';
+                      const isSharedBank = isSharedImage || isSharedText;
+                      const isFillBlank = qType === 'fill-blank' || qType === 'pinyin-write' || qType === 'write-hanzi';
                       const showImageControls =
                         isImageChoice ||
-                        isSharedBank ||
-                        Boolean(ex.optionAImage || ex.optionBImage || ex.optionCImage || ex.optionDImage);
+                        isSharedImage ||
+                        Boolean(
+                          ex.optionAImage ||
+                            ex.optionBImage ||
+                            ex.optionCImage ||
+                            ex.optionDImage ||
+                            ex.optionEImage
+                        );
                       const audioVal = String(ex.audioUrl || '').trim();
                       const ansVal = String(ex.answer || '').trim();
                       const ansUpper = ansVal.toUpperCase();
@@ -1023,17 +1033,18 @@
                               <input type="text" class="admin-input" style="width:140px;" placeholder="Lesson ID" data-ex-field="${globalIndex}:lessonId" value="${escapeHTML(
                         ex.lessonId || activeLessonId || ''
                       )}" />
-                              <select class="admin-select" style="width:225px;" data-ex-type="${globalIndex}">
+                              <select class="admin-select" style="width:245px;" data-ex-type="${globalIndex}">
                                 <option value="multiple-choice" ${qType === 'multiple-choice' ? 'selected' : ''}>Multiple Choice (Text)</option>
                                 <option value="image-choice" ${qType === 'image-choice' ? 'selected' : ''}>Image Choice (Per Question)</option>
-                                <option value="shared-image-match" ${qType === 'shared-image-match' ? 'selected' : ''}>Shared Top-Image Match</option>
-                                <option value="fill-blank" ${qType === 'fill-blank' ? 'selected' : ''}>Fill in the Blank</option>
+                                <option value="shared-image-match" ${qType === 'shared-image-match' ? 'selected' : ''}>Shared Top Bank (Images or Text)</option>
+                                <option value="shared-text-match" ${qType === 'shared-text-match' ? 'selected' : ''}>Shared Top Text Bank (Words / Sentences)</option>
+                                <option value="fill-blank" ${isFillBlank ? 'selected' : ''}>Write Chinese / Fill Blank (Pinyin)</option>
                               </select>
                             </div>
                             <div style="display:flex; gap:6px; align-items:center;">
                               ${
                                 isSharedBank
-                                  ? `<button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-clone-group="${globalIndex}" title="Add another question below that uses the exact same top A/B/C/D images">+ Question in Group</button>`
+                                  ? `<button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-clone-group="${globalIndex}" title="Add another question below that uses the exact same top A–E choices">+ Question in Group</button>`
                                   : ''
                               }
                               <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-ex-del="${globalIndex}">Delete</button>
@@ -1043,28 +1054,41 @@
                           ${
                             isSharedBank
                               ? `
-                            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; display:grid; grid-template-columns:160px 1fr; gap:8px; align-items:center;">
-                              <div>
-                                <label style="display:block; font-size:0.74rem; font-weight:700; color:#1e40af; margin-bottom:2px;">Group ID *</label>
-                                <input type="text" class="admin-input" placeholder="e.g. part-2" data-ex-field="${globalIndex}:groupId" value="${escapeHTML(
-                                  ex.groupId || 'part-2'
-                                )}" />
+                            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+                              <div style="display:grid; grid-template-columns:160px 1fr; gap:8px; align-items:center;">
+                                <div>
+                                  <label style="display:block; font-size:0.74rem; font-weight:700; color:#1e40af; margin-bottom:2px;">Group ID *</label>
+                                  <input type="text" class="admin-input" placeholder="e.g. part-2" data-ex-field="${globalIndex}:groupId" value="${escapeHTML(
+                                    ex.groupId || 'part-2'
+                                  )}" />
+                                </div>
+                                <div>
+                                  <label style="display:block; font-size:0.74rem; font-weight:700; color:#1e40af; margin-bottom:2px;">Top Section Instruction (shared above A–E choices)</label>
+                                  <input type="text" class="admin-input" placeholder="e.g. Questions 14–17: Choose the correct word or sentence for each question." data-ex-field="${globalIndex}:groupTitle" value="${escapeHTML(
+                                    ex.groupTitle || ''
+                                  )}" />
+                                </div>
                               </div>
-                              <div>
-                                <label style="display:block; font-size:0.74rem; font-weight:700; color:#1e40af; margin-bottom:2px;">Top Section Instruction (shared above A–D images)</label>
-                                <input type="text" class="admin-input" placeholder="e.g. Questions 4–6: Listen to each dialogue and choose the correct picture." data-ex-field="${globalIndex}:groupTitle" value="${escapeHTML(
-                                  ex.groupTitle || ''
-                                )}" />
+                              <div style="font-size:0.74rem; color:#1e40af;">
+                                Tip: Leave Option Image fields empty to display a text-only shared Word Bank or Sentence Matching bank at the top (supports A–E).
                               </div>
                             </div>
                           `
                               : ''
                           }
 
-                          <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:8px; align-items:start;">
+                          <div style="display:grid; grid-template-columns:1.3fr 1fr; gap:8px; align-items:start;">
                             <div>
-                              <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:3px;">Question Text / Dialogue Prompt</label>
-                              <input type="text" class="admin-input" placeholder="Enter question text or listening transcript..." data-ex-field="${globalIndex}:question" value="${escapeHTML(
+                              <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:3px;">${
+                                isFillBlank
+                                  ? 'Sentence with Blank (use ( ) or ____ where character goes)'
+                                  : 'Question Text / Dialogue Prompt'
+                              }</label>
+                              <input type="text" class="admin-input" placeholder="${
+                                isFillBlank
+                                  ? 'e.g. 他 ( ) 时候 不 吃 晚饭。'
+                                  : 'Enter question text or dialogue prompt...'
+                              }" data-ex-field="${globalIndex}:question" value="${escapeHTML(
                         ex.question || ''
                       )}" />
                             </div>
@@ -1087,25 +1111,66 @@
                             </div>
                           </div>
 
-                          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                            ${renderOptionCardHTML(ex, globalIndex, 'A', showImageControls)}
-                            ${renderOptionCardHTML(ex, globalIndex, 'B', showImageControls)}
-                            ${renderOptionCardHTML(ex, globalIndex, 'C', showImageControls)}
-                            ${renderOptionCardHTML(ex, globalIndex, 'D', showImageControls)}
-                          </div>
-
-                          <div style="display:grid; grid-template-columns:260px 1fr; gap:8px; align-items:start;">
+                          ${
+                            isFillBlank || isSharedBank
+                              ? `
                             <div>
-                              <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:3px;">Correct Answer (Letter A–D or Exact Text)</label>
+                              <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:3px;">${
+                                isFillBlank
+                                  ? 'Pinyin Cue for Blank / Full Sentence Pinyin *'
+                                  : 'Optional Pinyin Line (shown above/with question)'
+                              }</label>
+                              <input type="text" class="admin-input" placeholder="${
+                                isFillBlank
+                                  ? 'e.g. yǒu  (or full pinyin: Tā yǒu shíhou bù chī wǎnfàn.)'
+                                  : 'e.g. Nǐ shì lái lǚyóu de ba?'
+                              }" data-ex-field="${globalIndex}:pinyin" value="${escapeHTML(
+                                  ex.pinyin || ''
+                                )}" />
+                            </div>
+                          `
+                              : ''
+                          }
+
+                          ${
+                            isFillBlank
+                              ? ''
+                              : `
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                              ${renderOptionCardHTML(ex, globalIndex, 'A', showImageControls)}
+                              ${renderOptionCardHTML(ex, globalIndex, 'B', showImageControls)}
+                              ${renderOptionCardHTML(ex, globalIndex, 'C', showImageControls)}
+                              ${renderOptionCardHTML(ex, globalIndex, 'D', showImageControls)}
+                              ${renderOptionCardHTML(ex, globalIndex, 'E', showImageControls)}
+                            </div>
+                          `
+                          }
+
+                          <div style="display:grid; grid-template-columns:280px 1fr; gap:8px; align-items:start;">
+                            <div>
+                              <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:3px;">${
+                                isFillBlank
+                                  ? 'Correct Chinese Character(s) (separate alternatives with /)'
+                                  : 'Correct Answer (Letter A–E or Exact Text)'
+                              }</label>
                               <div style="display:flex; gap:4px; align-items:center;">
-                                <select class="admin-select" style="width:82px;" data-ex-ans-letter="${globalIndex}" title="Quick select correct letter A, B, C, or D">
-                                  <option value="">Pick</option>
-                                  <option value="A" ${ansUpper === 'A' ? 'selected' : ''}>A</option>
-                                  <option value="B" ${ansUpper === 'B' ? 'selected' : ''}>B</option>
-                                  <option value="C" ${ansUpper === 'C' ? 'selected' : ''}>C</option>
-                                  <option value="D" ${ansUpper === 'D' ? 'selected' : ''}>D</option>
-                                </select>
-                                <input type="text" class="admin-input" placeholder="e.g. D or Option text" data-ex-field="${globalIndex}:answer" value="${escapeHTML(
+                                ${
+                                  isFillBlank
+                                    ? ''
+                                    : `
+                                  <select class="admin-select" style="width:82px;" data-ex-ans-letter="${globalIndex}" title="Quick select correct letter A, B, C, D, or E">
+                                    <option value="">Pick</option>
+                                    <option value="A" ${ansUpper === 'A' ? 'selected' : ''}>A</option>
+                                    <option value="B" ${ansUpper === 'B' ? 'selected' : ''}>B</option>
+                                    <option value="C" ${ansUpper === 'C' ? 'selected' : ''}>C</option>
+                                    <option value="D" ${ansUpper === 'D' ? 'selected' : ''}>D</option>
+                                    <option value="E" ${ansUpper === 'E' ? 'selected' : ''}>E</option>
+                                  </select>
+                                `
+                                }
+                                <input type="text" class="admin-input" placeholder="${
+                                  isFillBlank ? 'e.g. 有' : 'e.g. D or Option text'
+                                }" data-ex-field="${globalIndex}:answer" value="${escapeHTML(
                         ansVal
                       )}" />
                               </div>
@@ -1121,7 +1186,7 @@
                       `;
                     })
                     .join('')
-                : `<div style="text-align:center; color:#64748b; padding:28px; border:1px dashed #cbd5e1; border-radius:12px;">No exercises found for this lesson. Click <strong>+ Add Text Exercise</strong>, <strong>+ Image Choice</strong>, or <strong>+ Shared Top-Image Group</strong> above.</div>`
+                : `<div style="text-align:center; color:#64748b; padding:28px; border:1px dashed #cbd5e1; border-radius:12px;">No exercises found for this lesson. Click <strong>+ Add Text Exercise</strong>, <strong>+ Image Choice</strong>, <strong>+ Shared Top Bank</strong>, or <strong>+ Write Character (Pinyin)</strong> above.</div>`
             }
           </div>
         `;
@@ -1137,26 +1202,29 @@
         const pushNewExercise = (typePreset, extra = {}) => {
           const targetLesson = state.editingExercisesLessonId || (lessonsList[0] ? lessonsList[0].id : 'lesson-01');
           const lessonCount = state.editingExercisesList.filter((x) => isSameId(x.lessonId, targetLesson)).length;
+          const isSharedPreset = typePreset === 'shared-image-match' || typePreset === 'shared-text-match';
           state.editingExercisesList.push({
             lessonId: targetLesson,
             order: lessonCount + 1,
             type: typePreset,
-            groupId: typePreset === 'shared-image-match' ? 'part-2' : '',
-            groupTitle:
-              typePreset === 'shared-image-match'
-                ? 'Listen or read each prompt and choose the matching picture (A, B, C, or D).'
-                : '',
-            question: '',
+            groupId: isSharedPreset ? 'part-2' : '',
+            groupTitle: isSharedPreset
+              ? 'Choose the matching option (A–E) from the choices above for each question.'
+              : '',
+            pinyin: '',
+            question: typePreset === 'fill-blank' ? '他 ( ) 时候 不 吃 晚饭。' : '',
             audioUrl: '',
             optionA: '',
             optionB: '',
             optionC: '',
             optionD: '',
+            optionE: '',
             optionAImage: '',
             optionBImage: '',
             optionCImage: '',
             optionDImage: '',
-            answer: typePreset === 'image-choice' || typePreset === 'shared-image-match' ? 'A' : '',
+            optionEImage: '',
+            answer: typePreset === 'image-choice' || isSharedPreset ? 'A' : '',
             explanation: '',
             ...extra
           });
@@ -1172,12 +1240,15 @@
         const addSharedBtn = document.getElementById('exAddSharedBtn');
         if (addSharedBtn) addSharedBtn.onclick = () => pushNewExercise('shared-image-match');
 
+        const addFillBtn = document.getElementById('exAddFillBtn');
+        if (addFillBtn) addFillBtn.onclick = () => pushNewExercise('fill-blank');
+
         container.querySelectorAll('[data-ex-clone-group]').forEach((btn) => {
           btn.onclick = () => {
             const srcIdx = Number(btn.getAttribute('data-ex-clone-group'));
             const src = state.editingExercisesList[srcIdx];
             if (!src) return;
-            pushNewExercise('shared-image-match', {
+            pushNewExercise(src.type || 'shared-image-match', {
               lessonId: src.lessonId,
               groupId: src.groupId || 'part-2',
               groupTitle: src.groupTitle || '',
@@ -1185,10 +1256,12 @@
               optionB: src.optionB || '',
               optionC: src.optionC || '',
               optionD: src.optionD || '',
+              optionE: src.optionE || '',
               optionAImage: src.optionAImage || '',
               optionBImage: src.optionBImage || '',
               optionCImage: src.optionCImage || '',
               optionDImage: src.optionDImage || '',
+              optionEImage: src.optionEImage || '',
               answer: 'A'
             });
           };
@@ -1199,7 +1272,10 @@
             const gIdx = Number(sel.getAttribute('data-ex-type'));
             if (state.editingExercisesList[gIdx]) {
               state.editingExercisesList[gIdx].type = sel.value;
-              if (sel.value === 'shared-image-match' && !state.editingExercisesList[gIdx].groupId) {
+              if (
+                (sel.value === 'shared-image-match' || sel.value === 'shared-text-match') &&
+                !state.editingExercisesList[gIdx].groupId
+              ) {
                 state.editingExercisesList[gIdx].groupId = 'part-2';
               }
               renderEditorBody();
@@ -1231,7 +1307,8 @@
                 state.editingExercisesList[gIdx][fieldKey] = result.url;
                 // If uploading an image for a shared-image-match group, also propagate empty slots to matching groupId siblings
                 if (
-                  state.editingExercisesList[gIdx].type === 'shared-image-match' &&
+                  (state.editingExercisesList[gIdx].type === 'shared-image-match' ||
+                    state.editingExercisesList[gIdx].type === 'shared-text-match') &&
                   state.editingExercisesList[gIdx].groupId &&
                   fieldKey.endsWith('Image')
                 ) {
@@ -1239,7 +1316,7 @@
                   const lId = String(state.editingExercisesList[gIdx].lessonId || '').trim().toLowerCase();
                   state.editingExercisesList.forEach((row) => {
                     if (
-                      row.type === 'shared-image-match' &&
+                      (row.type === 'shared-image-match' || row.type === 'shared-text-match') &&
                       String(row.lessonId || '').trim().toLowerCase() === lId &&
                       String(row.groupId || '').trim().toLowerCase() === gId &&
                       !row[fieldKey]
@@ -1303,16 +1380,19 @@
                 type: String(r.type || r.Type || 'multiple-choice').trim(),
                 groupId: String(r.groupId || r.GroupId || r.group_id || '').trim(),
                 groupTitle: String(r.groupTitle || r.GroupTitle || r.group_title || '').trim(),
+                pinyin: String(r.pinyin || r.Pinyin || r.pinyinHint || r.pinyin_hint || '').trim(),
                 question: String(r.question || r.Question || '').trim(),
                 audioUrl: String(r.audioUrl || r.AudioUrl || r.audio_url || r.audio || '').trim(),
                 optionA: String(r.optionA ?? r.OptionA ?? '').trim(),
                 optionB: String(r.optionB ?? r.OptionB ?? '').trim(),
                 optionC: String(r.optionC ?? r.OptionC ?? '').trim(),
                 optionD: String(r.optionD ?? r.OptionD ?? '').trim(),
+                optionE: String(r.optionE ?? r.OptionE ?? '').trim(),
                 optionAImage: String(r.optionAImage || r.option_a_image || '').trim(),
                 optionBImage: String(r.optionBImage || r.option_b_image || '').trim(),
                 optionCImage: String(r.optionCImage || r.option_c_image || '').trim(),
                 optionDImage: String(r.optionDImage || r.option_d_image || '').trim(),
+                optionEImage: String(r.optionEImage || r.option_e_image || '').trim(),
                 answer: String(r.answer || r.Answer || r.correct || '').trim(),
                 explanation: String(r.explanation || r.Explanation || '').trim()
               }));
@@ -1341,18 +1421,43 @@
                 type: 'image-choice',
                 groupId: '',
                 groupTitle: '',
+                pinyin: '',
                 question: '我每天坐公交车去上班。(I take the bus to work every day.)',
                 audioUrl: '',
                 optionA: 'Bus',
                 optionB: 'Airplane',
                 optionC: 'Bicycle',
                 optionD: '',
+                optionE: '',
                 optionAImage: 'assets/images/bus.jpg',
                 optionBImage: 'assets/images/plane.jpg',
                 optionCImage: 'assets/images/bike.jpg',
                 optionDImage: '',
+                optionEImage: '',
                 answer: 'A',
                 explanation: '公交车 (gōngjiāochē) means bus.'
+              },
+              {
+                lessonId: state.editingExercisesLessonId || 'lesson-01',
+                order: 2,
+                type: 'fill-blank',
+                groupId: '',
+                groupTitle: '',
+                pinyin: 'yǒu',
+                question: '他 ( ) 时候 不 吃 晚饭。',
+                audioUrl: '',
+                optionA: '',
+                optionB: '',
+                optionC: '',
+                optionD: '',
+                optionE: '',
+                optionAImage: '',
+                optionBImage: '',
+                optionCImage: '',
+                optionDImage: '',
+                optionEImage: '',
+                answer: '有',
+                explanation: '有时候 (yǒu shíhou) means sometimes.'
               }
             ];
             const ws = window.XLSX.utils.json_to_sheet(sampleRows);
@@ -1384,27 +1489,32 @@
                 type: String(r.type || 'multiple-choice').trim(),
                 groupId: String(r.groupId || '').trim(),
                 groupTitle: String(r.groupTitle || '').trim(),
+                pinyin: String(r.pinyin || '').trim(),
                 question: String(r.question || '').trim(),
                 audioUrl: String(r.audioUrl || '').trim(),
                 optionA: String(r.optionA || '').trim(),
                 optionB: String(r.optionB || '').trim(),
                 optionC: String(r.optionC || '').trim(),
                 optionD: String(r.optionD || '').trim(),
+                optionE: String(r.optionE || '').trim(),
                 optionAImage: String(r.optionAImage || '').trim(),
                 optionBImage: String(r.optionBImage || '').trim(),
                 optionCImage: String(r.optionCImage || '').trim(),
                 optionDImage: String(r.optionDImage || '').trim(),
+                optionEImage: String(r.optionEImage || '').trim(),
                 answer: String(r.answer || '').trim(),
                 explanation: String(r.explanation || '').trim()
               }))
               .filter(
                 (r) =>
                   r.question ||
+                  r.pinyin ||
                   r.audioUrl ||
                   r.optionAImage ||
                   r.optionBImage ||
                   r.optionCImage ||
-                  r.optionDImage
+                  r.optionDImage ||
+                  r.optionEImage
               );
 
             const res = await getContentStore().importExercisesLocal({

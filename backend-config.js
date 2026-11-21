@@ -140,9 +140,9 @@
         'radical', 'strokeAnimationUrl', 'svgPath', 'strokeOrderSteps'
       ],
       Exercises: [
-        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'question', 'audioUrl',
-        'optionA', 'optionB', 'optionC', 'optionD',
-        'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage',
+        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'pinyin', 'question', 'audioUrl',
+        'optionA', 'optionB', 'optionC', 'optionD', 'optionE',
+        'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage', 'optionEImage',
         'answer', 'explanation'
       ],
       Games: ['id', 'order', 'title', 'category', 'badge', 'description', 'embed_code', 'embed_url', 'width', 'height', 'active'],
@@ -153,9 +153,9 @@
       Story: ['lessonId', 'order', 'chinese', 'pinyin', 'english', 'image', 'audio'],
       Vocabulary: ['lessonId', 'order', 'character', 'pinyin', 'meaning', 'audio'],
       Exercises: [
-        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'question', 'audioUrl',
-        'optionA', 'optionB', 'optionC', 'optionD',
-        'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage',
+        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'pinyin', 'question', 'audioUrl',
+        'optionA', 'optionB', 'optionC', 'optionD', 'optionE',
+        'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage', 'optionEImage',
         'answer', 'explanation'
       ]
     },
@@ -418,16 +418,19 @@
         type: String(r.type || 'multiple-choice').trim() || 'multiple-choice',
         groupId: String(r.groupId || r.group_id || '').trim(),
         groupTitle: String(r.groupTitle || r.group_title || '').trim(),
+        pinyin: String(r.pinyin || r.Pinyin || r.pinyinHint || r.pinyin_hint || '').trim(),
         question: String(r.question || '').trim(),
         audioUrl: String(r.audioUrl || r.audio_url || r.audio || '').trim(),
         optionA: optA,
         optionB: String(r.optionB || r.option_b || '').trim(),
         optionC: String(r.optionC || r.option_c || '').trim(),
         optionD: String(r.optionD || r.option_d || '').trim(),
+        optionE: String(r.optionE || r.option_e || '').trim(),
         optionAImage: String(r.optionAImage || r.option_a_image || '').trim(),
         optionBImage: String(r.optionBImage || r.option_b_image || '').trim(),
         optionCImage: String(r.optionCImage || r.option_c_image || '').trim(),
         optionDImage: String(r.optionDImage || r.option_d_image || '').trim(),
+        optionEImage: String(r.optionEImage || r.option_e_image || '').trim(),
         answer: resolvedAnswer,
         explanation: String(r.explanation || '').trim()
       };

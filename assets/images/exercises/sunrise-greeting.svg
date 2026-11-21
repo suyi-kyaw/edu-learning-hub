@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#fde68a"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+  <rect width="400" height="280" rx="18" fill="url(#bgGrad)"/>
+  <circle cx="52" cy="48" r="38" fill="#ffffff" fill-opacity="0.28"/>
+  <circle cx="352" cy="230" r="52" fill="#ffffff" fill-opacity="0.2"/>
+  
+    <path d="M0 215 Q110 175 210 205 T400 195 L400 280 L0 280 Z" fill="#84cc16" opacity="0.85"/>
+    <path d="M0 232 Q140 205 260 228 T400 222 L400 280 L0 280 Z" fill="#65a30d"/>
+    <circle cx="200" cy="145" r="54" fill="#fb923c" opacity="0.28"/>
+    <circle cx="200" cy="145" r="38" fill="#f59e0b"/>
+    <g stroke="#f59e0b" stroke-width="5" stroke-linecap="round">
+      <line x1="200" y1="84" x2="200" y2="66"/>
+      <line x1="145" y1="108" x2="132" y2="96"/>
+      <line x1="255" y1="108" x2="268" y2="96"/>
+      <line x1="128" y1="145" x2="110" y2="145"/>
+      <line x1="272" y1="145" x2="290" y2="145"/>
+    </g>
+    <circle cx="130" cy="166" r="18" fill="#1e293b"/>
+    <path d="M108 228 C108 192 152 192 152 228 Z" fill="#ea580c"/>
+    <path d="M148 198 L175 170" stroke="#1e293b" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="177" cy="166" r="6" fill="#fed7aa"/>
+  
+</svg>

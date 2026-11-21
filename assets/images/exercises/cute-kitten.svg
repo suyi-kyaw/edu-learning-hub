@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffe4e6"/>
+      <stop offset="100%" stop-color="#fecdd3"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+  <rect width="400" height="280" rx="18" fill="url(#bgGrad)"/>
+  <circle cx="52" cy="48" r="38" fill="#ffffff" fill-opacity="0.28"/>
+  <circle cx="352" cy="230" r="52" fill="#ffffff" fill-opacity="0.2"/>
+  
+    <g filter="url(#cardShadow)">
+      <polygon points="136,118 148,54 186,96" fill="#fb923c"/>
+      <polygon points="264,118 252,54 214,96" fill="#fb923c"/>
+      <circle cx="200" cy="150" r="68" fill="#fdba74"/>
+    </g>
+    <circle cx="174" cy="142" r="9" fill="#0f172a"/>
+    <circle cx="226" cy="142" r="9" fill="#0f172a"/>
+    <polygon points="193,160 207,160 200,169" fill="#f43f5e"/>
+    <g stroke="#7c2d12" stroke-width="3" stroke-linecap="round">
+      <line x1="116" y1="154" x2="152" y2="158"/>
+      <line x1="114" y1="168" x2="152" y2="168"/>
+      <line x1="248" y1="158" x2="284" y2="154"/>
+      <line x1="248" y1="168" x2="286" y2="168"/>
+    </g>
+  
+</svg>

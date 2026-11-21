@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffedd5"/>
+      <stop offset="100%" stop-color="#fed7aa"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+  <rect width="400" height="280" rx="18" fill="url(#bgGrad)"/>
+  <circle cx="52" cy="48" r="38" fill="#ffffff" fill-opacity="0.28"/>
+  <circle cx="352" cy="230" r="52" fill="#ffffff" fill-opacity="0.2"/>
+  
+    <g stroke="#9a3412" stroke-width="6" stroke-linecap="round">
+      <line x1="225" y1="45" x2="315" y2="112"/>
+      <line x1="212" y1="62" x2="305" y2="128"/>
+    </g>
+    <path d="M135 128 Q128 102 142 82" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.85"/>
+    <path d="M180 124 Q172 95 186 72" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.85"/>
+    <path d="M225 128 Q218 100 232 80" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.85"/>
+    <g filter="url(#cardShadow)">
+      <ellipse cx="200" cy="142" rx="108" ry="26" fill="#fef08a"/>
+      <path d="M92 142 C92 222 140 240 200 240 C260 240 308 222 308 142 Z" fill="#ffffff" stroke="#ea580c" stroke-width="4"/>
+    </g>
+    <path d="M130 236 L270 236 L256 250 L144 250 Z" fill="#ea580c"/>
+    <path d="M122 144 Q165 126 200 144 T278 144" fill="none" stroke="#eab308" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="164" cy="134" r="14" fill="#22c55e"/>
+    <circle cx="234" cy="132" r="15" fill="#fef9c3" stroke="#f59e0b" stroke-width="3"/>
+    <circle cx="234" cy="132" r="6" fill="#f59e0b"/>
+  
+</svg>
