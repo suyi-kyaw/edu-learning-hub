@@ -1,0 +1,15 @@
+# Never publish these as static assets
+.git
+.gitignore
+.wrangler
+node_modules
+src
+package.json
+bun.lock
+bun.lockb
+package-lock.json
+wrangler.jsonc
+wrangler.toml
+wrangler.toml_
+.assetsignore
+README.md
