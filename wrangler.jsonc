@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "edu-learning-hub",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-21",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "edu-hub-db",
+      "database_id": "9b171f7c-905a-4acd-994f-a98e0fa0c670"
+    }
+  ]
+}
