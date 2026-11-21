@@ -20,8 +20,8 @@
     course: {
       id: 'course',
       title: 'Full Course Pass',
-      defaultAmount: '100 Kyat',
-      subtitle: 'Unlock every lesson inside a selected course (e.g., HSK 1 or HSK 2)'
+      defaultAmount: '120 Kyat',
+      subtitle: 'Unlock every lesson inside a selected course (e.g., HSK 2)'
     }
   };
 
@@ -33,8 +33,8 @@
     planType: 'course',
     lessonId: '',
     lessonTitle: '',
-    courseName: 'HSK 1',
-    amountLabel: '100 Kyat',
+    courseName: 'HSK 2',
+    amountLabel: '120 Kyat',
     contactChannel: 'viber'
   };
   let pendingPostAuthSubscribe = null;
@@ -206,17 +206,18 @@
 
   function getAvailableCoursesList() {
     const api = getAuthApi();
-    const cfg = api && typeof api.getSiteConfig === 'function' ? api.getSiteConfig() : null;
-    const set = new Set(['HSK 1', 'HSK 2']);
-    if (cfg && cfg.coursePrices && typeof cfg.coursePrices === 'object') {
-      Object.keys(cfg.coursePrices).forEach((k) => {
-        if (k && String(k).trim()) set.add(String(k).trim());
-      });
-    }
+    const set = new Set(['HSK 2']);
     if (window.LinguaLessons && typeof window.LinguaLessons.getAllCourses === 'function') {
       (window.LinguaLessons.getAllCourses() || []).forEach((c) => {
         if (c && String(c).trim()) set.add(String(c).trim());
       });
+    } else {
+      const cfg = api && typeof api.getSiteConfig === 'function' ? api.getSiteConfig() : null;
+      if (cfg && cfg.coursePrices && typeof cfg.coursePrices === 'object') {
+        Object.keys(cfg.coursePrices).forEach((k) => {
+          if (k && String(k).trim()) set.add(String(k).trim());
+        });
+      }
     }
     return Array.from(set);
   }
@@ -226,7 +227,7 @@
     if (api && typeof api.getCoursePrice === 'function') {
       return api.getCoursePrice(courseName);
     }
-    return String(courseName).toUpperCase().includes('2') ? 120 : 100;
+    return 120;
   }
 
   function openSubscribeModal(lessonOrOpts) {
@@ -236,8 +237,8 @@
 
     if (lessonOrOpts && lessonOrOpts.mode === 'course') {
       const cName = api && api.normalizeCourseName
-        ? api.normalizeCourseName(lessonOrOpts.courseName || 'HSK 1')
-        : (lessonOrOpts.courseName || 'HSK 1');
+        ? api.normalizeCourseName(lessonOrOpts.courseName || 'HSK 2')
+        : (lessonOrOpts.courseName || 'HSK 2');
       const cPrice = resolveCoursePriceKyat(cName);
       subscribeContext = {
         planType: 'course',
@@ -253,7 +254,7 @@
       const lessonTitle = String(lessonOrOpts.title || lessonId);
       const cName = api && api.getLessonCourseName
         ? api.getLessonCourseName(lessonOrOpts)
-        : (lessonOrOpts.course || lessonOrOpts.category || 'HSK 1');
+        : (lessonOrOpts.course || lessonOrOpts.category || 'HSK 2');
       subscribeContext = {
         planType: 'per_lesson',
         lessonId,
@@ -263,7 +264,7 @@
         contactChannel: subscribeContext.contactChannel || 'viber'
       };
     } else {
-      const firstCourse = getAvailableCoursesList()[0] || 'HSK 1';
+      const firstCourse = getAvailableCoursesList()[0] || 'HSK 2';
       const cPrice = resolveCoursePriceKyat(firstCourse);
       subscribeContext = {
         planType: 'course',
@@ -283,7 +284,7 @@
   }
 
   function openSubscribeCourseModal(courseName) {
-    openSubscribeModal({ mode: 'course', courseName: courseName || 'HSK 1' });
+    openSubscribeModal({ mode: 'course', courseName: courseName || 'HSK 2' });
   }
 
   function showToast(message, type = 'success') {
@@ -486,7 +487,7 @@
     const coursesList = getAvailableCoursesList();
     const activeCourse = coursesList.includes(subscribeContext.courseName)
       ? subscribeContext.courseName
-      : coursesList[0] || 'HSK 1';
+      : coursesList[0] || 'HSK 2';
     subscribeContext.courseName = activeCourse;
 
     const perLessonTitle = subscribeContext.lessonTitle || 'Selected Paid Lesson';
@@ -1392,7 +1393,7 @@
         const planId = card.dataset.selectPlan;
         subscribeContext.planType = planId === 'per_lesson' ? 'per_lesson' : 'course';
         if (subscribeContext.planType === 'course') {
-          const cName = subscribeContext.courseName || 'HSK 1';
+          const cName = subscribeContext.courseName || 'HSK 2';
           subscribeContext.amountLabel = `${resolveCoursePriceKyat(cName)} Kyat`;
         }
         renderModal();
@@ -1403,7 +1404,7 @@
     if (subCourseSelect) {
       subCourseSelect.onchange = (e) => {
         e.stopPropagation();
-        const chosen = subCourseSelect.value || 'HSK 1';
+        const chosen = subCourseSelect.value || 'HSK 2';
         subscribeContext.planType = 'course';
         subscribeContext.courseName = chosen;
         subscribeContext.lessonTitle = `${chosen} Full Course`;

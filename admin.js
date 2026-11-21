@@ -114,7 +114,7 @@
       return window.LinguaAuth.normalizeCourseName(val);
     }
     const raw = String(val || '').trim();
-    if (!raw) return 'HSK 1';
+    if (!raw) return 'HSK 2';
     const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
     if (compact === 'hsk1') return 'HSK 1';
     if (compact === 'hsk2') return 'HSK 2';
@@ -131,11 +131,10 @@
     if (window.LinguaAuth && typeof window.LinguaAuth.getLessonCourseName === 'function') {
       return window.LinguaAuth.getLessonCourseName(lesson);
     }
-    if (!lesson || typeof lesson !== 'object') return 'HSK 1';
+    if (!lesson || typeof lesson !== 'object') return 'HSK 2';
     const raw = String(lesson.course || lesson.courseName || lesson.category || '').trim();
     if (raw) return normalizeCourseName(raw);
-    const id = String(lesson.id || '').toLowerCase();
-    return id.includes('hsk2') || id.includes('lesson-02') ? 'HSK 2' : 'HSK 1';
+    return 'HSK 2';
   }
 
   function getAdminCoursesList() {
@@ -149,11 +148,8 @@
         out.push(norm);
       }
     };
-    pushCourse('HSK 1');
     pushCourse('HSK 2');
     (state.lessonsData.Lessons || []).forEach((l) => pushCourse(getLessonCourse(l)));
-    const cp = (state.siteConfig && state.siteConfig.coursePrices) || {};
-    Object.keys(cp).forEach(pushCourse);
     return out;
   }
 
@@ -2405,7 +2401,7 @@
         <div class="admin-panel-head">
           <div>
             <h2>Curriculum Lessons &amp; Courses (${lessons.length})</h2>
-            <p>Assign lessons to <strong>HSK 1</strong>, <strong>HSK 2</strong>, or create custom course names. Configure Free/Paid pricing (Kyat), media, Vocabulary/Writing, Pronunciation, and all 5 Exercise types.</p>
+            <p>Assign lessons to <strong>HSK 2</strong> or create custom course names. Configure Free/Paid pricing (Kyat), media, Vocabulary/Writing, Pronunciation, and all 5 Exercise types.</p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button type="button" class="admin-btn admin-btn-secondary" id="btnUploadLessonExercises">Upload Exercises (.xlsx)</button>
@@ -2611,7 +2607,7 @@
   function openLessonEditorModal(lesson) {
     const isNew = !lesson;
     const coursesList = getAdminCoursesList();
-    const defaultCourse = state.filters.lessonCourse !== 'all' ? state.filters.lessonCourse : 'HSK 1';
+    const defaultCourse = state.filters.lessonCourse !== 'all' ? state.filters.lessonCourse : 'HSK 2';
     const base = lesson || {
       id: `hsk-${Date.now().toString().slice(-4)}`,
       course: defaultCourse,
@@ -2771,8 +2767,8 @@
             <input type="text" class="admin-input" id="lsId" value="${escapeHTML(base.id)}" ${isNew ? '' : 'readonly'} required />
           </div>
           <div class="admin-field">
-            <label for="lsCourse">Course Name * (e.g. HSK 1, HSK 2)</label>
-            <input type="text" class="admin-input" id="lsCourse" list="lsCourseOptions" value="${escapeHTML(baseCourse)}" placeholder="HSK 1" required />
+            <label for="lsCourse">Course Name * (e.g. HSK 2)</label>
+            <input type="text" class="admin-input" id="lsCourse" list="lsCourseOptions" value="${escapeHTML(baseCourse)}" placeholder="HSK 2" required />
             <datalist id="lsCourseOptions">
               ${coursesList.map((c) => `<option value="${escapeHTML(c)}"></option>`).join('')}
             </datalist>
@@ -2911,7 +2907,7 @@
         id,
         course: courseName,
         category: courseName,
-        categoryKey: courseSlug(courseName) || 'hsk1',
+        categoryKey: courseSlug(courseName) || 'hsk2',
         categoryNum: courseName,
         title: document.getElementById('lsTitle').value.trim(),
         chineseTitle: document.getElementById('lsCn').value.trim(),
@@ -2976,7 +2972,7 @@
   // --- Writing & Stroke Order Editor Modal ---
   function openWritingEditorModal(lessonId) {
     const lessons = state.lessonsData.Lessons || [];
-    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'hsk1-01');
+    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'hsk2-01');
 
     const renderWritingModalContent = () => {
       const lesson = lessons.find((x) => isSameId(x.id, currentLessonId)) || { id: currentLessonId, title: currentLessonId };
@@ -3217,7 +3213,7 @@
 
   function openPronunciationEditorModal(lessonId) {
     const lessons = state.lessonsData.Lessons || [];
-    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'hsk1-01');
+    let currentLessonId = lessonId || (lessons[0] ? lessons[0].id : 'hsk2-01');
 
     const renderPronModalContent = () => {
       const lesson = lessons.find((x) => isSameId(x.id, currentLessonId)) || { id: currentLessonId, title: currentLessonId };

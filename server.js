@@ -107,7 +107,7 @@ function findUserByEmail(store, email) {
 
 function normalizeCourseNameServer(val) {
   const raw = String(val || '').trim();
-  if (!raw) return 'HSK 1';
+  if (!raw) return 'HSK 2';
   const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
   if (compact === 'hsk1') return 'HSK 1';
   if (compact === 'hsk2') return 'HSK 2';
@@ -305,20 +305,19 @@ const DEFAULT_SITE_CONFIG = {
   lessonsLabel: 'Structured HSK Curriculum',
   lessonsTitle: 'Mandarin Courses & Lessons',
   lessonsSubtitle:
-    'Study step by step with HSK 1, HSK 2, and custom courses featuring video lessons, 5 interactive exercise types, and stroke writing.',
-  lessonsBadge: 'HSK 1 · HSK 2 · All Levels',
-  lessonsCardTitle: 'Explore HSK Courses & Lessons',
+    'Study step by step with HSK 2 and custom courses featuring video lessons, 5 interactive exercise types, and stroke writing.',
+  lessonsBadge: 'HSK 2 • Structured Course',
+  lessonsCardTitle: 'Explore HSK 2 Courses & Lessons',
   lessonsCardSubtitle: '系统汉语课程 • Video, Exercises & Stroke Order',
   lessonsCardDesc:
-    'Browse structured lessons organized by course in our learning workspace. Practice listening, picture matching, pinyin character writing, and speaking.',
+    'Browse structured HSK 2 lessons in our learning workspace. Practice listening, picture matching, pinyin character writing, and speaking.',
   lessonsBullets: [
-    'HSK 1 & HSK 2 foundational to conversational courses',
+    'HSK 2 conversational and grammar curriculum',
     '5 interactive exercise formats including Pinyin character writing',
-    'Unlock individual lessons or an entire course in Kyat'
+    'Unlock individual lessons or the full HSK 2 course in Kyat'
   ],
   lessonsCta: 'Go to Lessons →',
   coursePrices: {
-    'HSK 1': 100,
     'HSK 2': 120
   },
   contactEmail: 'syndkyaw@gmail.com',
@@ -1141,15 +1140,15 @@ app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
     const siteCfg = readSiteConfig();
     const courseName =
       planType === 'course'
-        ? normalizeCourseNameServer(body.courseName || body.lessonTitle || 'HSK 1')
+        ? normalizeCourseNameServer(body.courseName || body.lessonTitle || 'HSK 2')
         : '';
     const defaultCoursePrice =
       (siteCfg.coursePrices && siteCfg.coursePrices[courseName]) != null
         ? Number(siteCfg.coursePrices[courseName])
-        : 100;
+        : 120;
     const planMeta = {
       per_lesson: { name: 'Lesson Pass', amountLabel: '9 Kyat / lesson' },
-      course: { name: `${courseName || 'HSK 1'} Course Pass`, amountLabel: `${defaultCoursePrice} Kyat / course` }
+      course: { name: `${courseName || 'HSK 2'} Course Pass`, amountLabel: `${defaultCoursePrice} Kyat / course` }
     }[planType];
 
     const lessonId =
@@ -1584,7 +1583,7 @@ app.post('/api/admin/requests/:requestId/approve', requireAdminToken, jsonParser
         nextPlan = 'per_lesson';
       }
     } else {
-      const targetCourse = normalizeCourseNameServer(reqDoc.courseName || reqDoc.lessonTitle || 'HSK 1');
+      const targetCourse = normalizeCourseNameServer(reqDoc.courseName || reqDoc.lessonTitle || 'HSK 2');
       if (targetCourse && !nextCourses.includes(targetCourse) && nextCourses.length < 50) {
         nextCourses.push(targetCourse);
       }

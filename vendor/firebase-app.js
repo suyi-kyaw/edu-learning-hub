@@ -28,19 +28,18 @@
     gamesSubtitle: 'Reinforce your Chinese tones, character recognition, and rapid recall through interactive gameplay.',
     lessonsLabel: 'Structured Curriculum',
     lessonsTitle: 'Mandarin Lessons',
-    lessonsSubtitle: 'Master Chinese step by step across HSK 1, HSK 2, and structured courses with video lessons, exercises, and character writing.',
-    lessonsBadge: 'HSK 1 & HSK 2 • Structured Courses',
-    lessonsCardTitle: 'Interactive HSK Mandarin Courses',
+    lessonsSubtitle: 'Master Chinese step by step with HSK 2 and structured courses featuring video lessons, exercises, and character writing.',
+    lessonsBadge: 'HSK 2 • Structured Course',
+    lessonsCardTitle: 'Interactive HSK 2 Mandarin Course',
     lessonsCardSubtitle: 'HSK 标准课程 • Step-by-Step Fluency',
     lessonsCardDesc: 'Explore guided video lessons, HSK listening and matching exercises, pinyin fill-in-the-blank writing, and stroke-order practice.',
     lessonsBullets: [
-      'HSK 1 & HSK 2 Structured Curriculum',
+      'HSK 2 Structured Curriculum',
       'Listening, Image Choice & Pinyin Exercises',
       'Stroke-Order Writing & Pronunciation Check'
     ],
     lessonsCta: 'Go to Lessons →',
     coursePrices: {
-      'HSK 1': 100,
       'HSK 2': 120
     },
     contactEmail: 'syndkyaw@gmail.com',
@@ -68,9 +67,9 @@
     course: {
       id: 'course',
       name: 'Course Pass',
-      price: 100,
-      amountLabel: '100 Kyat / course',
-      description: 'Unlock every lesson in the selected course (e.g. HSK 1 or HSK 2).'
+      price: 120,
+      amountLabel: '120 Kyat / course',
+      description: 'Unlock every lesson in the selected course (e.g. HSK 2).'
     }
   };
 
@@ -136,7 +135,7 @@
 
   function normalizeCourseName(val) {
     var raw = String(val || '').trim();
-    if (!raw) return 'HSK 1';
+    if (!raw) return 'HSK 2';
     var compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
     if (compact === 'hsk1') return 'HSK 1';
     if (compact === 'hsk2') return 'HSK 2';
@@ -150,12 +149,10 @@
   }
 
   function getLessonCourseName(lesson) {
-    if (!lesson || typeof lesson !== 'object') return 'HSK 1';
+    if (!lesson || typeof lesson !== 'object') return 'HSK 2';
     var c = String(lesson.course || lesson.courseName || lesson.category || '').trim();
     if (c) return normalizeCourseName(c);
-    var lid = String(lesson.id || lesson.lessonId || '').toLowerCase();
-    if (lid.indexOf('hsk2') !== -1 || lid.indexOf('lesson-02') !== -1) return 'HSK 2';
-    return 'HSK 1';
+    return 'HSK 2';
   }
 
   function randomHex(bytes) {
@@ -440,7 +437,7 @@
           : (rawPlan === 'monthly' || rawPlan === 'annual' ? 'course' : 'none');
         var subCourses = parseList(o.subscribedCourses || o.SubscribedCourses || '', normalizeCourseName);
         if ((rawPlan === 'monthly' || rawPlan === 'annual') && status === 'active' && subCourses.length === 0) {
-          subCourses = ['HSK 1', 'HSK 2'];
+          subCourses = ['HSK 2'];
         }
         out.users[uid] = {
           profile: {
@@ -527,7 +524,7 @@
         out.lessonCatalog[lid] = {
           lessonId: lid,
           title: String(o.title || lid).trim(),
-          course: normalizeCourseName(o.course || o.audience || 'HSK 1'),
+          course: normalizeCourseName(o.course || o.audience || 'HSK 2'),
           accessType: String(o.accessType || '').trim().toLowerCase() === 'paid' ? 'paid' : 'free',
           price: Math.max(0, Number(o.price) || 0),
           updatedBy: String(o.updatedBy || '').trim(),
@@ -892,7 +889,7 @@
       membershipPlan: claimAdmin ? 'course' : 'none',
       membershipExpiresAt: '',
       subscribedLessonIds: [],
-      subscribedCourses: claimAdmin ? ['HSK 1', 'HSK 2'] : [],
+      subscribedCourses: claimAdmin ? ['HSK 2'] : [],
       linkedProviders: ['password'],
       mustChangePassword: false,
       createdAt: nowIso,
@@ -1055,7 +1052,7 @@
     if (!state.user || !state.profile) throw new Error('Please sign in first.');
     var nowIso = new Date().toISOString();
     var planType = opts.planType === 'per_lesson' ? 'per_lesson' : 'course';
-    var courseName = opts.courseName ? normalizeCourseName(opts.courseName) : (opts.lessonTitle ? normalizeCourseName(opts.lessonTitle) : 'HSK 1');
+    var courseName = opts.courseName ? normalizeCourseName(opts.courseName) : (opts.lessonTitle ? normalizeCourseName(opts.lessonTitle) : 'HSK 2');
     var defaultAmt = planType === 'per_lesson' ? '9 Kyat' : (getCoursePrice(courseName) + ' Kyat');
     var req = {
       requestId: 'req_' + Date.now().toString(36) + '_' + randomHex(3),
@@ -1124,7 +1121,7 @@
         lessonSet.add(cleanId(req.lessonId));
         nextProfile.subscribedLessonIds = Array.from(lessonSet);
       } else {
-        var cName = normalizeCourseName(req.courseName || req.lessonTitle || 'HSK 1');
+        var cName = normalizeCourseName(req.courseName || req.lessonTitle || 'HSK 2');
         var courseSet = new Set((nextProfile.subscribedCourses || []).map(normalizeCourseName));
         courseSet.add(cName);
         nextProfile.subscribedCourses = Array.from(courseSet);
@@ -1218,7 +1215,7 @@
       overlay.lessonCatalog[lid] = {
         lessonId: lid,
         title: String(item.title || lid).trim(),
-        course: normalizeCourseName(item.course || item.audience || 'HSK 1'),
+        course: normalizeCourseName(item.course || item.audience || 'HSK 2'),
         accessType: item.accessType === 'paid' ? 'paid' : 'free',
         price: Math.max(0, Number(item.price) || 0),
         updatedBy: state.user.email,
@@ -1249,7 +1246,7 @@
       var entry = Object.entries(cfg.coursePrices).find(function (e) { return courseKey(e[0]) === matchKey; });
       if (entry) return Number(entry[1]) || 0;
     }
-    return cname === 'HSK 2' ? 120 : 100;
+    return 120;
   }
 
   async function saveSiteConfig(partial) {

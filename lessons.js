@@ -63,32 +63,14 @@
   let lastY = 0;
   let showGhostChar = true;
 
-  // --- Embedded Offline Fallbacks (1 HSK 1 starter + 1 HSK 2 starter) ---
+  // --- Embedded Offline Fallbacks (HSK 2 starter only) ---
   const FALLBACK_LESSONS = [
-    {
-      id: "hsk1-01",
-      course: "HSK 1",
-      category: "HSK 1",
-      categoryKey: "hsk1",
-      categoryNum: "Course 1",
-      title: "Morning Greetings & Daily Politeness",
-      chineseTitle: "早上好！日常礼貌问候",
-      pinyin: "Zǎoshang hǎo! Rìcháng lǐmào wènhòu",
-      meaning: "Good morning! Everyday greetings and polite expressions",
-      level: "HSK 1",
-      description: "Master essential HSK 1 greetings, polite introductions (您好, 谢谢), and natural Mandarin tone flow.",
-      videoUrl: "assets/video/lesson-01.mp4",
-      posterUrl: "assets/images/story-01.jpg",
-      keywords: "HSK 1, Greetings, Hello, Morning, Politeness",
-      accessType: "free",
-      price: 0
-    },
     {
       id: "hsk2-01",
       course: "HSK 2",
       category: "HSK 2",
       categoryKey: "hsk2",
-      categoryNum: "Course 2",
+      categoryNum: "Course 1",
       title: "Ordering Food, Transit & Everyday Plans",
       chineseTitle: "餐厅点餐与日常出行交流",
       pinyin: "Cāntīng diǎncài yǔ rìcháng chūxíng jiāoliú",
@@ -105,110 +87,79 @@
 
   const FALLBACK_EXERCISES = [
     {
-      lessonId: "hsk1-01",
+      lessonId: "hsk2-01",
       order: 1,
       type: "multiple-choice",
-      question: "How do you politely greet a teacher, elder, or colleague in Chinese?",
-      optionA: "你好 (Nǐ hǎo)",
-      optionB: "您好 (Nín hǎo)",
-      optionC: "早上 (Zǎoshang)",
-      optionD: "再见 (Zàijiàn)",
-      answer: "您好 (Nín hǎo)",
-      explanation: "您 (nín) is the polite, respectful form of 'you' in Mandarin."
+      question: "When ordering food in a restaurant, how do you say 'Waiter, bring the menu please'?",
+      optionA: "服务员，请给我菜单！",
+      optionB: "服务员，买单！",
+      optionC: "请问洗手间在哪儿？",
+      optionD: "我要一杯冰茶。",
+      answer: "服务员，请给我菜单！",
+      explanation: "菜单 (càidān) means 'menu'; 请给我菜单 politely asks to see the menu."
     },
     {
-      lessonId: "hsk1-01",
+      lessonId: "hsk2-01",
       order: 2,
       type: "image-choice",
-      audioUrl: "assets/audio/zaoshang.mp3",
-      question: "Listen & choose the picture that matches '早上好！' (Zǎoshang hǎo!).",
-      optionA: "早上好 (Morning sunrise)",
-      optionB: "谢谢 (Thank you gift)",
-      optionC: "再见 (Waving goodbye)",
-      optionAImage: "assets/images/exercises/sunrise-greeting.svg",
-      optionBImage: "assets/images/exercises/thank-you-gift.svg",
-      optionCImage: "assets/images/exercises/wave-goodbye.svg",
+      audioUrl: "assets/audio/tian-haochi.mp3",
+      question: "我想点一碗热腾腾的牛肉面。(I'd like to order a bowl of beef noodles.) Choose the matching picture.",
+      optionA: "牛肉面 (Beef noodles)",
+      optionB: "冰茶 (Iced tea)",
+      optionC: "菜单 (Menu)",
+      optionAImage: "assets/images/exercises/noodles-bowl.svg",
+      optionBImage: "assets/images/exercises/iced-tea-cup.svg",
+      optionCImage: "assets/images/exercises/menu-book.svg",
       answer: "A",
-      explanation: "早上好 (Zǎoshang hǎo) is used to say Good Morning at sunrise (A)."
+      explanation: "面 (miàn / noodles) matches the steaming bowl of noodles in picture A."
     },
     {
-      lessonId: "hsk1-01",
+      lessonId: "hsk2-01",
       order: 3,
       type: "shared-image-match",
-      groupId: "hsk1-greetings-pic",
-      groupTitle: "Part II: Listen or read the dialogue and match Picture A, B, C, or D.",
-      audioUrl: "assets/audio/xiexie.mp3",
-      pinyin: "Nán: Xièxie nǐ de lǐwù!  Nǚ: Bú kèqi!",
-      question: "男：谢谢你的礼物！ 女：不客气！",
-      optionA: "早上好 (Morning)",
-      optionB: "谢谢 (Thank you)",
-      optionC: "再见 (Goodbye)",
-      optionD: "打电话 (Phone call)",
-      optionAImage: "assets/images/exercises/sunrise-greeting.svg",
-      optionBImage: "assets/images/exercises/thank-you-gift.svg",
-      optionCImage: "assets/images/exercises/wave-goodbye.svg",
-      optionDImage: "assets/images/exercises/phone-call.svg",
-      answer: "B",
-      explanation: "Giving a gift and saying 谢谢 (Thank you) matches picture B."
+      groupId: "hsk2-transit-pic",
+      groupTitle: "Part II: Match Picture A, B, C, or D to each HSK 2 travel dialogue.",
+      pinyin: "Wǒ měitiān zǎoshang zuò dìtiě qù shàngbān.",
+      question: "我每天早上坐地铁去上班，只要二十分钟。",
+      optionA: "坐地铁 (Subway)",
+      optionB: "出租车 (Taxi)",
+      optionC: "坐飞机 (Airplane)",
+      optionD: "菜单 (Menu)",
+      optionAImage: "assets/images/exercises/subway-train.svg",
+      optionBImage: "assets/images/exercises/taxi-cab.svg",
+      optionCImage: "assets/images/exercises/airplane.svg",
+      optionDImage: "assets/images/exercises/menu-book.svg",
+      answer: "A",
+      explanation: "地铁 (dìtiě) means subway/metro train (A)."
     },
     {
-      lessonId: "hsk1-01",
+      lessonId: "hsk2-01",
       order: 4,
       type: "shared-text-match",
-      groupId: "hsk1-bank",
-      groupTitle: "Word Bank: Choose A–E to complete each HSK 1 sentence.",
-      pinyin: "Lǎoshī, (   ) zǎoshang hǎo!",
-      question: "老师，(   ) 早上好！",
-      optionA: "您 (nín)",
-      optionB: "早上好 (zǎoshang hǎo)",
-      optionC: "谢谢 (xièxie)",
-      optionD: "不客气 (bú kèqi)",
-      optionE: "再见 (zàijiàn)",
+      groupId: "hsk2-wordbank",
+      groupTitle: "Sentence & Word Bank: Pick the best choice (A–E) for each HSK 2 sentence.",
+      pinyin: "Zhè dào cài tài là le, wǒ bù xǐhuan (   ).",
+      question: "这道菜太辣了，我不太喜欢 (   ) 辣的食物。",
+      optionA: "吃 (chī)",
+      optionB: "喝 (hē)",
+      optionC: "买单 (mǎidān)",
+      optionD: "左 (zuǒ)",
+      optionE: "右 (yòu)",
       answer: "A",
-      explanation: "Use the polite pronoun 您 (nín) when addressing your teacher."
+      explanation: "吃 (chī) means 'to eat'."
     },
     {
-      lessonId: "hsk1-01",
+      lessonId: "hsk2-01",
       order: 5,
       type: "fill-blank",
-      pinyin: "hǎo",
-      question: "早上 (   )！今天天气真不错。",
-      answer: "好",
-      explanation: "早上好 (Zǎoshang hǎo) means 'Good morning'."
+      pinyin: "chá",
+      question: "吃饭的时候我想喝一杯冰绿 (   )。",
+      answer: "茶",
+      explanation: "绿茶 (lǜchá) means 'green tea'."
     }
   ];
 
   const FALLBACK_WRITING = [
-    {
-      lessonId: "hsk1-01",
-      order: 1,
-      character: "早",
-      pinyin: "zǎo",
-      meaning: "morning / early",
-      strokeCount: 6,
-      radical: "日 (Sun)",
-      strokeOrderSteps: "1. Vertical (丨), 2. Horizontal-turning (𠃍), 3. Horizontal (一), 4. Horizontal close (一), 5. Horizontal baseline (一), 6. Center vertical (丨)"
-    },
-    {
-      lessonId: "hsk1-01",
-      order: 2,
-      character: "好",
-      pinyin: "hǎo",
-      meaning: "good / fine / well",
-      strokeCount: 6,
-      radical: "女 (Woman)",
-      strokeOrderSteps: "1. Turning stroke (ㄑ), 2. Slanted curve (ノ), 3. Horizontal crossing (一), 4. Horizontal hook (乛), 5. Vertical curve hook (亅), 6. Horizontal (一)"
-    },
-    {
-      lessonId: "hsk1-01",
-      order: 3,
-      character: "您",
-      pinyin: "nín",
-      meaning: "you (polite/respectful)",
-      strokeCount: 11,
-      radical: "心 (Heart)",
-      strokeOrderSteps: "1. Slant (ノ), 2. Vertical (丨), 3. Slant (ノ), 4. Horizontal-hook (𠃍), 5. Vertical (丨), 6. Left dot (丶), 7. Right dot (丶), 8. Heart dot (丶), 9. Heart curve (㇃), 10. Inner dot (丶), 11. Outer dot (丶)"
-    },
     {
       lessonId: "hsk2-01",
       order: 1,
@@ -241,8 +192,8 @@
     }
   ];
 
-  // --- Guaranteed Core Courses (plus any dynamic Admin courses) ---
-  const BASE_COURSES = ['HSK 1', 'HSK 2'];
+  // --- Guaranteed Core Courses (plus any dynamic Admin courses with lessons) ---
+  const BASE_COURSES = ['HSK 2'];
 
   // --- Utilities ---
   function escapeHTML(str) {
@@ -275,7 +226,7 @@
       return window.LinguaAuth.normalizeCourseName(val);
     }
     const raw = String(val || '').trim();
-    if (!raw) return 'HSK 1';
+    if (!raw) return 'HSK 2';
     const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
     if (compact === 'hsk1') return 'HSK 1';
     if (compact === 'hsk2') return 'HSK 2';
@@ -289,15 +240,13 @@
   }
 
   function getLessonCourse(lesson) {
-    if (!lesson || typeof lesson !== 'object') return 'HSK 1';
+    if (!lesson || typeof lesson !== 'object') return 'HSK 2';
     if (window.LinguaAuth && typeof window.LinguaAuth.getLessonCourseName === 'function') {
       return window.LinguaAuth.getLessonCourseName(lesson);
     }
     const raw = String(lesson.course || lesson.courseName || lesson.category || '').trim();
     if (raw) return normalizeCourseName(raw);
-    const lid = String(lesson.id || lesson.lessonId || '').toLowerCase();
-    if (lid.includes('hsk2') || lid.includes('lesson-02')) return 'HSK 2';
-    return 'HSK 1';
+    return 'HSK 2';
   }
 
   function getCategoryKey(lesson) {
@@ -317,12 +266,6 @@
     };
     BASE_COURSES.forEach(pushCourse);
     (allLessons || []).forEach((l) => pushCourse(getLessonCourse(l)));
-    if (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === 'function') {
-      const cfg = window.LinguaAuth.getSiteConfig();
-      if (cfg && cfg.coursePrices && typeof cfg.coursePrices === 'object') {
-        Object.keys(cfg.coursePrices).forEach(pushCourse);
-      }
-    }
     return result;
   }
 
@@ -330,7 +273,7 @@
     const norm = normalizeCourseName(courseName);
     const price = window.LinguaAuth && typeof window.LinguaAuth.getCoursePrice === 'function'
       ? window.LinguaAuth.getCoursePrice(norm)
-      : (courseKeySlug(norm) === 'hsk2' ? 120 : 100);
+      : 120;
     const unlocked = window.LinguaAuth && typeof window.LinguaAuth.hasCourseAccess === 'function'
       ? window.LinguaAuth.hasCourseAccess(norm)
       : false;
@@ -555,7 +498,7 @@
 
     const courses = computeCoursesList();
     if (!courses.some((c) => courseKeySlug(c) === courseKeySlug(activeCourseName))) {
-      activeCourseName = courses[0] || 'HSK 1';
+      activeCourseName = courses[0] || 'HSK 2';
     }
 
     sidebar.innerHTML = `
@@ -5076,9 +5019,9 @@
       activeCourseName = getLessonCourse(targetLessonObj);
     } else if (courseParam) {
       const matchedCourse = courses.find((c) => courseKeySlug(c) === courseKeySlug(courseParam));
-      activeCourseName = matchedCourse || courses[0] || 'HSK 1';
+      activeCourseName = matchedCourse || courses[0] || 'HSK 2';
     } else {
-      activeCourseName = courses[0] || 'HSK 1';
+      activeCourseName = courses[0] || 'HSK 2';
     }
 
     renderCourseSidebar();

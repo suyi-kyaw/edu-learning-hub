@@ -2,34 +2,14 @@ const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 
-// Minimal, clean starter curriculum:
-// 1 lesson under HSK 1 and 1 lesson under HSK 2 (all 5 exercise types included in each)
+// Focused starter curriculum: HSK 2 only (all 5 exercise types included)
 const lessons = [
-  {
-    id: "hsk1-01",
-    course: "HSK 1",
-    category: "HSK 1",
-    categoryKey: "hsk1",
-    categoryNum: "Course 1",
-    title: "Morning Greetings & Daily Politeness",
-    chineseTitle: "早上好！日常礼貌问候",
-    pinyin: "Zǎoshang hǎo! Rìcháng lǐmào wènhòu",
-    meaning: "Good morning! Everyday greetings and polite expressions",
-    level: "HSK 1",
-    description: "Master essential HSK 1 greetings, polite introductions (您好, 谢谢), and natural Mandarin tone flow.",
-    videoUrl: "assets/video/lesson-01.mp4",
-    posterUrl: "assets/images/story-01.jpg",
-    fullAudio: "assets/audio/morning-conversation.mp3",
-    keywords: "HSK 1, Greetings, Hello, Morning, Politeness",
-    accessType: "free",
-    price: 0
-  },
   {
     id: "hsk2-01",
     course: "HSK 2",
     category: "HSK 2",
     categoryKey: "hsk2",
-    categoryNum: "Course 2",
+    categoryNum: "Course 1",
     title: "Ordering Food, Transit & Everyday Plans",
     chineseTitle: "餐厅点餐与日常出行交流",
     pinyin: "Cāntīng diǎncài yǔ rìcháng chūxíng jiāoliú",
@@ -47,140 +27,7 @@ const lessons = [
 
 const rawExercises = [
   // =========================================================================
-  // 1. hsk1-01 (HSK 1) — Covers all 5 exercise types
-  // =========================================================================
-  {
-    lessonId: "hsk1-01",
-    order: 1,
-    type: "multiple-choice",
-    question: "How do you politely greet a teacher, elder, or colleague in Chinese?",
-    optionA: "你好 (Nǐ hǎo)",
-    optionB: "您好 (Nín hǎo)",
-    optionC: "早上 (Zǎoshang)",
-    optionD: "再见 (Zàijiàn)",
-    answer: "您好 (Nín hǎo)",
-    explanation: "您 (nín) is the polite, respectful form of 'you' in Mandarin."
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 2,
-    type: "multiple-choice",
-    question: "What is the natural response when someone says '谢谢你' (Thank you)?",
-    optionA: "不客气 (Bú kèqi)",
-    optionB: "对不起 (Duìbuqǐ)",
-    optionC: "没关系 (Méi guānxi)",
-    optionD: "早上好 (Zǎoshang hǎo)",
-    answer: "不客气 (Bú kèqi)",
-    explanation: "不客气 (bú kèqi) means 'You're welcome'."
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 3,
-    type: "image-choice",
-    audioUrl: "assets/audio/zaoshang.mp3",
-    question: "Listen & choose the picture that matches '早上好！' (Zǎoshang hǎo!).",
-    optionA: "早上好 (Morning sunrise)",
-    optionB: "谢谢 (Thank you gift)",
-    optionC: "再见 (Waving goodbye)",
-    optionAImage: "assets/images/exercises/sunrise-greeting.svg",
-    optionBImage: "assets/images/exercises/thank-you-gift.svg",
-    optionCImage: "assets/images/exercises/wave-goodbye.svg",
-    answer: "A",
-    explanation: "早上好 (Zǎoshang hǎo) is used to say Good Morning at sunrise (A)."
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 4,
-    type: "shared-image-match",
-    groupId: "hsk1-greetings-pic",
-    groupTitle: "Part II: Listen or read the dialogue and match Picture A, B, C, or D.",
-    audioUrl: "assets/audio/xiexie.mp3",
-    pinyin: "Nán: Xièxie nǐ de lǐwù!  Nǚ: Bú kèqi!",
-    question: "男：谢谢你的礼物！ 女：不客气！",
-    optionA: "早上好 (Morning)",
-    optionB: "谢谢 (Thank you)",
-    optionC: "再见 (Goodbye)",
-    optionD: "打电话 (Phone call)",
-    optionAImage: "assets/images/exercises/sunrise-greeting.svg",
-    optionBImage: "assets/images/exercises/thank-you-gift.svg",
-    optionCImage: "assets/images/exercises/wave-goodbye.svg",
-    optionDImage: "assets/images/exercises/phone-call.svg",
-    answer: "B",
-    explanation: "Giving a gift and saying 谢谢 (Thank you) matches picture B."
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 5,
-    type: "shared-image-match",
-    groupId: "hsk1-greetings-pic",
-    groupTitle: "Part II: Listen or read the dialogue and match Picture A, B, C, or D.",
-    audioUrl: "assets/audio/zaijian.mp3",
-    pinyin: "Míngtiān jiàn, zàijiàn!",
-    question: "女：明天见，再见！",
-    optionA: "早上好 (Morning)",
-    optionB: "谢谢 (Thank you)",
-    optionC: "再见 (Goodbye)",
-    optionD: "打电话 (Phone call)",
-    optionAImage: "assets/images/exercises/sunrise-greeting.svg",
-    optionBImage: "assets/images/exercises/thank-you-gift.svg",
-    optionCImage: "assets/images/exercises/wave-goodbye.svg",
-    optionDImage: "assets/images/exercises/phone-call.svg",
-    answer: "C",
-    explanation: "再见 (Zàijiàn — Goodbye) matches picture C."
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 6,
-    type: "shared-text-match",
-    groupId: "hsk1-bank",
-    groupTitle: "Word Bank: Choose A–E to complete each HSK 1 sentence.",
-    pinyin: "Lǎoshī, (   ) zǎoshang hǎo!",
-    question: "老师，(   ) 早上好！",
-    optionA: "您 (nín)",
-    optionB: "早上好 (zǎoshang hǎo)",
-    optionC: "谢谢 (xièxie)",
-    optionD: "不客气 (bú kèqi)",
-    optionE: "再见 (zàijiàn)",
-    answer: "A",
-    explanation: "Use the polite pronoun 您 (nín) when addressing your teacher."
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 7,
-    type: "shared-text-match",
-    groupId: "hsk1-bank",
-    groupTitle: "Word Bank: Choose A–E to complete each HSK 1 sentence.",
-    pinyin: "Fàngxué le, tóngxuémen (   )!",
-    question: "放学了，同学们 (   )！",
-    optionA: "您 (nín)",
-    optionB: "早上好 (zǎoshang hǎo)",
-    optionC: "谢谢 (xièxie)",
-    optionD: "不客气 (bú kèqi)",
-    optionE: "再见 (zàijiàn)",
-    answer: "E",
-    explanation: "When leaving class, say 再见 (zàijiàn — goodbye) (E)."
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 8,
-    type: "fill-blank",
-    pinyin: "hǎo",
-    question: "早上 (   )！今天天气真不错。",
-    answer: "好",
-    explanation: "早上好 (Zǎoshang hǎo) means 'Good morning'."
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 9,
-    type: "fill-blank",
-    pinyin: "xiè",
-    question: "非常感 (   ) 您的帮助，不客气！",
-    answer: "谢",
-    explanation: "感谢 (gǎnxiè) / 谢谢 (xièxie) expresses gratitude."
-  },
-
-  // =========================================================================
-  // 2. hsk2-01 (HSK 2) — Covers all 5 exercise types
+  // hsk2-01 (HSK 2) — Covers all 5 exercise types
   // =========================================================================
   {
     lessonId: "hsk2-01",
@@ -335,44 +182,6 @@ const exercises = rawExercises.map((ex) => ({
 }));
 
 const writing = [
-  // hsk1-01
-  {
-    lessonId: "hsk1-01",
-    order: 1,
-    character: "早",
-    pinyin: "zǎo",
-    meaning: "morning / early",
-    strokeCount: 6,
-    radical: "日 (Sun)",
-    strokeAnimationUrl: "https://raw.githubusercontent.com/skishore/makemeahanzi/master/svgs/26089.svg",
-    svgPath: "M20 20 L80 20 L80 50 L20 50 Z M20 35 L80 35 M50 20 L50 90",
-    strokeOrderSteps: "1. Vertical (丨), 2. Horizontal-turning (𠃍), 3. Horizontal (一), 4. Horizontal close (一), 5. Horizontal baseline (一), 6. Center vertical (丨)"
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 2,
-    character: "好",
-    pinyin: "hǎo",
-    meaning: "good / fine / well",
-    strokeCount: 6,
-    radical: "女 (Woman)",
-    strokeAnimationUrl: "https://raw.githubusercontent.com/skishore/makemeahanzi/master/svgs/22909.svg",
-    svgPath: "M30 20 L20 50 L45 50 M15 35 L45 35 M60 20 L60 80 M48 40 L72 40",
-    strokeOrderSteps: "1. Turning stroke (ㄑ), 2. Slanted curve (ノ), 3. Horizontal crossing (一), 4. Horizontal hook (乛), 5. Vertical curve hook (亅), 6. Horizontal (一)"
-  },
-  {
-    lessonId: "hsk1-01",
-    order: 3,
-    character: "您",
-    pinyin: "nín",
-    meaning: "you (polite/respectful)",
-    strokeCount: 11,
-    radical: "心 (Heart)",
-    strokeAnimationUrl: "https://raw.githubusercontent.com/skishore/makemeahanzi/master/svgs/24744.svg",
-    svgPath: "M25 20 L25 80 M50 20 L50 80",
-    strokeOrderSteps: "1. Slant (ノ), 2. Vertical (丨), 3. Slant (ノ), 4. Horizontal-hook (𠃍), 5. Vertical (丨), 6. Left dot (丶), 7. Right dot (丶), 8. Heart dot (丶), 9. Heart curve (㇃), 10. Inner dot (丶), 11. Outer dot (丶)"
-  },
-  // hsk2-01
   {
     lessonId: "hsk2-01",
     order: 1,
@@ -405,19 +214,11 @@ const writing = [
     meaning: "left",
     strokeCount: 5,
     radical: "工 (Work)",
-    strokeAnimationUrl: "",
-    svgPath: "",
     strokeOrderSteps: "1. Horizontal (一), 2. Left slant (丿), 3. Horizontal (一), 4. Vertical (丨), 5. Horizontal (一)"
   }
 ];
 
 const vocabulary = [
-  { lessonId: "hsk1-01", order: 1, character: "早上好", pinyin: "zǎoshang hǎo", meaning: "good morning", audio: "assets/audio/zaoshang.mp3" },
-  { lessonId: "hsk1-01", order: 2, character: "您好", pinyin: "nín hǎo", meaning: "hello (polite)", audio: "assets/audio/nihao-ma.mp3" },
-  { lessonId: "hsk1-01", order: 3, character: "谢谢", pinyin: "xièxie", meaning: "thank you", audio: "assets/audio/xiexie.mp3" },
-  { lessonId: "hsk1-01", order: 4, character: "不客气", pinyin: "bú kèqi", meaning: "you're welcome", audio: "assets/audio/xiexie.mp3" },
-  { lessonId: "hsk1-01", order: 5, character: "再见", pinyin: "zàijiàn", meaning: "goodbye", audio: "assets/audio/zaijian.mp3" },
-
   { lessonId: "hsk2-01", order: 1, character: "点菜", pinyin: "diǎn cài", meaning: "order dishes", audio: "assets/audio/tian-haochi.mp3" },
   { lessonId: "hsk2-01", order: 2, character: "买单", pinyin: "mǎidān", meaning: "pay the bill", audio: "assets/audio/tian-haochi.mp3" },
   { lessonId: "hsk2-01", order: 3, character: "地铁", pinyin: "dìtiě", meaning: "subway / metro", audio: "assets/audio/shichang.mp3" },
@@ -463,7 +264,7 @@ XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(games), "Games");
 
 const outExcel = path.join(__dirname, 'data', 'lessons.xlsx');
 XLSX.writeFile(wb, outExcel);
-console.log('Wrote data/lessons.xlsx successfully! (1 HSK 1 lesson + 1 HSK 2 lesson)');
+console.log('Wrote data/lessons.xlsx successfully! (HSK 2 only: hsk2-01)');
 
 const outJson = path.join(__dirname, 'data', 'lessons.json');
 const jsonData = {
