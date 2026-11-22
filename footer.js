@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * LINGUAPATH - SHARED FOOTER LOADER (footer.js)
+ * JIEDEEDU - SHARED FOOTER LOADER (footer.js)
  * Automatically loads and injects footer.html into all pages
  * Dynamically hydrates Contact Us fields from SiteConfig.
  * =========================================================
@@ -13,7 +13,7 @@
   <footer class="site-footer">
     <div class="container footer-content">
       <div class="footer-brand">
-        <div class="footer-logo"><span>语</span> LinguaPath</div>
+        <div class="footer-logo"><span>语</span> JiedeEdu</div>
         <p>A practical path to learning Chinese.</p>
       </div>
 
@@ -62,7 +62,7 @@
 
     <div class="footer-bottom">
       <div class="container">
-        <p>© 2026 LinguaPath. All rights reserved. Practical Chinese Learning.</p>
+        <p>© 2026 JiedeEdu. All rights reserved. Practical Chinese Learning.</p>
       </div>
     </div>
   </footer>
@@ -81,7 +81,7 @@
     return clean;
   }
 
-  const DEFAULT_FOOTER_LOGO_HTML = '<span>语</span> LinguaPath';
+  const DEFAULT_FOOTER_LOGO_HTML = '<span>语</span> JiedeEdu';
 
   function hydrateFooterContact(cfg) {
     if (!cfg) return;
@@ -100,7 +100,7 @@
         const img = document.createElement('img');
         img.className = 'footer-brand-logo-img';
         img.src = resolveFooterLogoUrl(rawLogo);
-        img.alt = 'LinguaPath';
+        img.alt = 'JiedeEdu';
         img.decoding = 'async';
         img.onerror = function () {
           footerLogoEl.classList.remove('has-custom-logo');
@@ -143,13 +143,10 @@
       hydrateFooterContact(window.LinguaAuth.getSiteConfig());
       return;
     }
-    if (window.LinguaBackend && !window.LinguaBackend.hasBackend()) {
-      return;
-    }
     try {
       const apiPath = '/api/site-config?t=' + Date.now();
       const url = window.LinguaBackend ? window.LinguaBackend.apiUrl(apiPath) : apiPath;
-      const r = await fetch(url);
+      const r = await fetch(url, { cache: 'no-store' });
       if (r.ok) {
         const j = await r.json();
         if (j && j.config) hydrateFooterContact(j.config);

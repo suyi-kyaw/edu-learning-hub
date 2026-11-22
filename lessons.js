@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * LINGUAPATH - LESSONS & CURRICULUM CONTROLLER (lessons.js)
+ * JIEDEEDU - LESSONS & CURRICULUM CONTROLLER (lessons.js)
  * 3-Category Dynamic Curriculum System & 3-Section Lesson Workspace
  * (Video Lesson, Practice Exercises, Writing & Stroke Order)
  * Driven by SheetJS (XLSX) parser reading data/lessons.xlsx
@@ -4820,7 +4820,7 @@
 
     ectx.font = '700 22px "KaiTi", "STKaiti", "楷体", "Plus Jakarta Sans", sans-serif';
     ectx.fillStyle = '#292524';
-    ectx.fillText(`LinguaPath Practice: ${currentChar.character} (${currentChar.pinyin || ''})`, 300, 95);
+    ectx.fillText(`JiedeEdu Practice: ${currentChar.character} (${currentChar.pinyin || ''})`, 300, 95);
 
     ectx.font = '600 16px "Plus Jakarta Sans", sans-serif';
     ectx.fillStyle = '#78716c';
@@ -5240,10 +5240,10 @@
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'Linguapath_Mandarin_Lessons.csv';
+      link.download = 'JiedeEdu_Mandarin_Lessons.csv';
       link.click();
     } else {
-      XLSX.writeFile(wb, 'Linguapath_Mandarin_Lessons.xlsx');
+      XLSX.writeFile(wb, 'JiedeEdu_Mandarin_Lessons.xlsx');
     }
   }
 

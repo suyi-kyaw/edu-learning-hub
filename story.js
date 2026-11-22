@@ -1,5 +1,5 @@
 /* =========================================================
-   LinguaPath - Story Lesson JavaScript
+   JiedeEdu - Story Lesson JavaScript
    ========================================================= */
 
 
@@ -567,7 +567,7 @@ function renderLessonHeader(
 
 
   document.title =
-    `LinguaPath | ${title || "Chinese Story Lesson"}`;
+    `JiedeEdu | ${title || "Chinese Story Lesson"}`;
 
 }
 
@@ -2832,7 +2832,7 @@ function checkAndTriggerDailyReminder() {
       ? `story.html?id=${encodeURIComponent(currentLoadedLessonId)}#exercises`
       : "index.html#lessons";
 
-    sendBrowserNotification("LinguaPath Daily Lesson Reminder 🎯", {
+    sendBrowserNotification("JiedeEdu Daily Lesson Reminder 🎯", {
       body: "You haven't completed a lesson yet today! Practice now to keep your streak burning 🔥",
       tag: "daily-study-reminder-" + today,
       url: targetUrl
@@ -3076,7 +3076,7 @@ function setupReminderUI() {
         await requestBrowserNotificationPermission();
       }
       const timeVal = customInput ? customInput.value : "18:00";
-      sendBrowserNotification("LinguaPath Daily Reminder 🔔", {
+      sendBrowserNotification("JiedeEdu Daily Reminder 🔔", {
         body: `Test successful! You'll be reminded at ${formatReminderTimeDisplay(timeVal)} if today's lesson isn't completed.`,
         url: typeof currentLoadedLessonId !== "undefined"
           ? `story.html?id=${encodeURIComponent(currentLoadedLessonId)}#exercises`
@@ -3342,8 +3342,8 @@ function toggleReelFavorite(id) {
 async function shareReelItem(item) {
   const url = `${window.location.origin}${window.location.pathname}?tab=reels&reel=${encodeURIComponent(item.id)}`;
   const shareData = {
-    title: `LinguaPath Reel: ${item.title || "Mandarin Short Video"}`,
-    text: `Watch "${item.title || "Chinese Short Reel"}" on LinguaPath!`,
+    title: `JiedeEdu Reel: ${item.title || "Mandarin Short Video"}`,
+    text: `Watch "${item.title || "Chinese Short Reel"}" on JiedeEdu!`,
     url: url
   };
 

@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * LINGUAPATH - AUDIO ENGINE & iOS SAFARI UNLOCKER (audio-engine.js)
+ * JIEDEEDU - AUDIO ENGINE & iOS SAFARI UNLOCKER (audio-engine.js)
  * High-performance, zero-latency audio playback, Web Audio tone synthesis,
  * pre-buffering cache, and iOS Safari autoplay restriction unlocker.
  * =========================================================

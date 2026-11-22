@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * LINGUAPATH - STATIC EXCEL-BACKED AUTHENTICATION & CMS CLIENT
+ * JIEDEEDU - STATIC EXCEL-BACKED AUTHENTICATION & CMS CLIENT
  * Reads data/users.xlsx directly in the browser using SheetJS,
  * compares salted SHA-256 hashes or plain-text Excel edits,
  * overlays local browser registrations/progress, and lets the

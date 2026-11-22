@@ -1,6 +1,6 @@
 
 /* =========================================================
-   LINGUAPATH
+   JIEDEEDU
    Main JavaScript
 ========================================================= */
 
@@ -1250,7 +1250,7 @@ function checkAndTriggerDailyReminder() {
 
   if (currentMinutes >= targetMinutes) {
     // Trigger notification!
-    sendBrowserNotification("LinguaPath Daily Lesson Reminder 🎯", {
+    sendBrowserNotification("JiedeEdu Daily Lesson Reminder 🎯", {
       body: "You haven't completed a lesson yet today! Practice now to keep your streak burning 🔥",
       tag: "daily-study-reminder-" + today,
       url: "index.html#lessons"
@@ -1495,7 +1495,7 @@ function setupReminderUI() {
         await requestBrowserNotificationPermission();
       }
       const timeVal = customInput ? customInput.value : "18:00";
-      sendBrowserNotification("LinguaPath Daily Reminder 🔔", {
+      sendBrowserNotification("JiedeEdu Daily Reminder 🔔", {
         body: `Test successful! You'll be reminded at ${formatReminderTimeDisplay(timeVal)} if today's lesson isn't completed.`,
         url: "index.html#lessons"
       });

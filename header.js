@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * LINGUAPATH - SHARED HEADER LOADER & THEME CONTROLLER (header.js)
+ * JIEDEEDU - SHARED HEADER LOADER & THEME CONTROLLER (header.js)
  * Automatically loads and injects header.html into all pages
  * Provides unified, bulletproof Dark/Light Mode toggle & navigation
  * =========================================================
@@ -223,7 +223,7 @@
     <div class="container nav-container">
       <a href="index.html" class="logo">
         <span class="logo-chinese">语</span>
-        <span class="logo-text">LinguaPath</span>
+        <span class="logo-text">JiedeEdu</span>
       </a>
 
       <nav class="desktop-nav" aria-label="Main Navigation">
@@ -509,7 +509,7 @@
     return clean;
   }
 
-  const DEFAULT_HEADER_LOGO_HTML = '<span class="logo-chinese">语</span><span class="logo-text">LinguaPath</span>';
+  const DEFAULT_HEADER_LOGO_HTML = '<span class="logo-chinese">语</span><span class="logo-text">JiedeEdu</span>';
 
   function hydrateHeaderLogo(cfg) {
     const logoLink = document.querySelector('.site-header .logo');
@@ -526,7 +526,7 @@
     const img = document.createElement('img');
     img.className = 'site-brand-logo-img';
     img.src = resolved;
-    img.alt = 'LinguaPath';
+    img.alt = 'JiedeEdu';
     img.decoding = 'async';
     img.onerror = function () {
       logoLink.classList.remove('has-custom-logo');
@@ -540,13 +540,10 @@
       hydrateHeaderLogo(window.LinguaAuth.getSiteConfig());
       return;
     }
-    if (window.LinguaBackend && !window.LinguaBackend.hasBackend()) {
-      return;
-    }
     try {
       const apiPath = '/api/site-config?t=' + Date.now();
       const url = window.LinguaBackend ? window.LinguaBackend.apiUrl(apiPath) : apiPath;
-      const r = await fetch(url);
+      const r = await fetch(url, { cache: 'no-store' });
       if (r.ok) {
         const j = await r.json();
         if (j && j.config) hydrateHeaderLogo(j.config);
@@ -666,7 +663,7 @@
         }
       });
     } catch (err) {
-      console.warn('LinguaPath: Error highlighting active navigation link', err);
+      console.warn('JiedeEdu: Error highlighting active navigation link', err);
     }
   }
 

@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * LINGUAPATH - CLIENT AUTH, MEMBERSHIP & SITE CONFIG STORE
+ * JIEDEEDU - CLIENT AUTH, MEMBERSHIP & SITE CONFIG STORE
  * Backed by data/users.xlsx + data/site-config.json + localStorage overlay
  * Supports Lesson Pass (per_lesson) & Course Pass (course) in Kyat
  * =========================================================
@@ -866,7 +866,9 @@
     if (typeof val !== 'string') return '';
     var clean = val.trim();
     if (!clean) return '';
-    if (clean.indexOf('data:image/') === 0) return clean.slice(0, 200000);
+    if (clean.indexOf('data:image/') === 0) {
+      return clean.length <= 2500000 ? clean : '';
+    }
     return clean.slice(0, 500);
   }
 
@@ -1005,7 +1007,20 @@
       ov.deletedCatalogIds = [];
       writeOverlay(ov);
     }
-    state.siteConfig = normalizeSiteConfig(store.siteConfig ? Object.assign({}, fetchedConfig, store.siteConfig) : fetchedConfig);
+    var mergedSiteCfg = fetchedConfig;
+    if (store.siteConfig) {
+      var localTs = tsMs(store.siteConfig.updatedAt);
+      var serverTs = tsMs(fetchedConfig && fetchedConfig.updatedAt);
+      if (!serverTs || localTs >= serverTs) {
+        mergedSiteCfg = Object.assign({}, fetchedConfig, store.siteConfig);
+      } else {
+        var syncOv = readOverlay();
+        syncOv.siteConfig = fetchedConfig;
+        writeOverlay(syncOv);
+        mergedSiteCfg = fetchedConfig;
+      }
+    }
+    state.siteConfig = normalizeSiteConfig(mergedSiteCfg);
     notifySiteConfig();
     hydrateSession(store);
     state.ready = true;
@@ -1090,7 +1105,16 @@
     if (!ok) throw new Error('Incorrect email or password.');
 
     // Bridge authentication to Node server Bearer token so Admin workbook/DB auto-syncs immediately
-    await syncServerAuth('/api/auth/login', { email: e, password: p });
+    var srvAuth = await syncServerAuth('/api/auth/login', { email: e, password: p });
+    if (!srvAuth) {
+      await syncServerAuth('/api/auth/register', {
+        username: (found.profile && found.profile.username) || e.split('@')[0],
+        email: e,
+        phoneNumber: (found.profile && found.profile.phoneNumber) || '',
+        dob: (found.profile && found.profile.dob) || '',
+        password: p
+      });
+    }
 
     var uid = found.profile.uid;
     setStoredUid(uid);

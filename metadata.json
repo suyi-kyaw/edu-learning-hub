@@ -1,5 +1,5 @@
 {
-  "name": "LinguaPath - Learn Chinese",
+  "name": "JiedeEdu - Learn Chinese",
   "description": "Learn Chinese through pronunciation, everyday conversations, vocabulary, exercises, and interactive lessons.",
   "requestFramePermissions": ["notifications"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

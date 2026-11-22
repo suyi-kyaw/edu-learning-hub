@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * LINGUAPATH - STATIC RUNTIME CONFIG, MEDIA RESOLVER & EXCEL CONTENT STORE
+ * JIEDEEDU - STATIC RUNTIME CONFIG, MEDIA RESOLVER & EXCEL CONTENT STORE
  * 100% static GitHub Pages runtime backed by repository Excel workbooks
  * (data/lessons.xlsx, data/stories.xlsx, data/reels_stories.xlsx, data/users.xlsx)
  * merged with browser-saved Admin CMS drafts.
@@ -75,7 +75,7 @@
   async function testConnection() {
     return {
       ok: false,
-      error: 'LinguaPath is configured for 100% static GitHub Pages mode using Excel workbooks.'
+      error: 'JiedeEdu is configured for 100% static GitHub Pages mode using Excel workbooks.'
     };
   }
 
@@ -812,6 +812,67 @@
     };
   }
 
+  function compressRasterDataUrlIfNeeded(dataUrl, mimeType) {
+    return new Promise(function (resolve) {
+      try {
+        if (
+          typeof document === 'undefined' ||
+          typeof Image === 'undefined' ||
+          !/^image\/(jpeg|jpg|png|webp)$/i.test(String(mimeType || '')) ||
+          String(dataUrl || '').length <= 160000
+        ) {
+          resolve(dataUrl);
+          return;
+        }
+        var img = new Image();
+        img.onload = function () {
+          try {
+            var w = img.naturalWidth || img.width || 0;
+            var h = img.naturalHeight || img.height || 0;
+            if (!w || !h) {
+              resolve(dataUrl);
+              return;
+            }
+            var maxDim = 960;
+            var scale = Math.min(1, maxDim / Math.max(w, h));
+            var tw = Math.max(1, Math.round(w * scale));
+            var th = Math.max(1, Math.round(h * scale));
+            var canvas = document.createElement('canvas');
+            canvas.width = tw;
+            canvas.height = th;
+            var ctx = canvas.getContext('2d');
+            if (!ctx) {
+              resolve(dataUrl);
+              return;
+            }
+            ctx.drawImage(img, 0, 0, tw, th);
+            var outMime = /^image\/png$/i.test(mimeType) ? 'image/png' : 'image/jpeg';
+            var candidate = outMime === 'image/png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.86);
+            if (outMime === 'image/png' && candidate.length > 180000) {
+              var webpCandidate = canvas.toDataURL('image/webp', 0.86);
+              if (webpCandidate && webpCandidate.indexOf('data:image/webp') === 0 && webpCandidate.length < candidate.length) {
+                candidate = webpCandidate;
+              }
+            }
+            if (candidate && candidate.indexOf('data:image/') === 0 && candidate.length < dataUrl.length) {
+              resolve(candidate);
+            } else {
+              resolve(dataUrl);
+            }
+          } catch (_) {
+            resolve(dataUrl);
+          }
+        };
+        img.onerror = function () {
+          resolve(dataUrl);
+        };
+        img.src = dataUrl;
+      } catch (_) {
+        resolve(dataUrl);
+      }
+    });
+  }
+
   function readFileAsInlineMedia(file) {
     return new Promise(function (resolve, reject) {
       if (!file) {
@@ -832,9 +893,11 @@
         return;
       }
       var reader = new FileReader();
-      reader.onload = function () {
+      reader.onload = async function () {
+        var rawUrl = String(reader.result || '');
+        var finalUrl = await compressRasterDataUrlIfNeeded(rawUrl, file.type);
         resolve({
-          url: String(reader.result || ''),
+          url: finalUrl,
           inline: true,
           size: file.size,
           name: file.name

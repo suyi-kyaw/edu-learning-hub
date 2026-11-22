@@ -362,7 +362,7 @@ function getSmtpConfig() {
   const secure = secureEnv ? secureEnv === 'true' || secureEnv === '1' : port === 465;
   const user = String(process.env.SMTP_USER || '').trim();
   const pass = String(process.env.SMTP_PASS || '').trim();
-  const from = String(process.env.SMTP_FROM || user || `LinguaPath <${ADMIN_EMAIL}>`).trim();
+  const from = String(process.env.SMTP_FROM || user || `JiedeEdu <${ADMIN_EMAIL}>`).trim();
   const configured = Boolean(host && user && pass);
   return { configured, host, port, secure, user, pass, from };
 }
@@ -755,7 +755,7 @@ function sanitizeLogoUrlServer(val) {
   const clean = val.trim();
   if (!clean) return '';
   if (clean.startsWith('data:image/')) {
-    return clean.slice(0, 200000);
+    return clean.length <= 2500000 ? clean : '';
   }
   return clean.slice(0, 500);
 }
@@ -821,7 +821,8 @@ function sanitizeSiteConfigInput(raw) {
     contactViber: str('contactViber', 40),
     featuredReelIds: strList('featuredReelIds', 12, 128, !('featuredReelIds' in input)),
     featuredStoryIds: strList('featuredStoryIds', 12, 128, !('featuredStoryIds' in input)),
-    featuredGameIds: strList('featuredGameIds', 12, 128, !('featuredGameIds' in input))
+    featuredGameIds: strList('featuredGameIds', 12, 128, !('featuredGameIds' in input)),
+    updatedAt: typeof input.updatedAt === 'string' && input.updatedAt.trim() ? input.updatedAt.trim().slice(0, 64) : undefined
   };
 }
 
@@ -1219,7 +1220,7 @@ app.get('/api/health', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.json({
     success: true,
-    service: 'linguapath-backend',
+    service: 'jiedeedu-backend',
     authMode: 'email-password',
     adminClaimed: isAdminClaimed(store),
     smtpConfigured: isSmtpConfigured(),
@@ -1383,22 +1384,22 @@ app.post('/api/auth/forgot-password', jsonParser, async (req, res) => {
     // Send email BEFORE committing new hash so SMTP failure does not invalidate user's current password
     await sendSmtpMail({
       to: user.email,
-      subject: 'LinguaPath Temporary Password',
+      subject: 'JiedeEdu Temporary Password',
       text: [
         `Hello ${user.username || 'Learner'},`,
         '',
-        'You requested a password reset for your LinguaPath account.',
+        'You requested a password reset for your JiedeEdu account.',
         `Your new temporary password is: ${tempPassword}`,
         '',
         'Please sign in with this temporary password and change it right away under Profile & Membership.',
         '',
-        '— LinguaPath Team'
+        '— JiedeEdu Team'
       ].join('\n'),
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0f172a; line-height:1.5; max-width:520px;">
-          <h2 style="margin:0 0 12px; color:#ea580c;">LinguaPath Password Reset</h2>
+          <h2 style="margin:0 0 12px; color:#ea580c;">JiedeEdu Password Reset</h2>
           <p>Hello <strong>${user.username || 'Learner'}</strong>,</p>
-          <p>Here is your generated temporary password for signing in to LinguaPath:</p>
+          <p>Here is your generated temporary password for signing in to JiedeEdu:</p>
           <p style="padding:12px 16px; background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; font-family:monospace; font-size:18px; font-weight:700; letter-spacing:0.06em; color:#9a3412;">
             ${tempPassword}
           </p>
@@ -1662,6 +1663,7 @@ app.post('/api/upload-excel', requireAdminToken, express.raw({ type: '*/*', limi
 app.put('/api/admin/site-config', requireAdminToken, jsonParser, (req, res) => {
   try {
     const clean = sanitizeSiteConfigInput(req.body);
+    clean.updatedAt = new Date().toISOString();
     fs.writeFileSync(SITE_CONFIG_PATH, JSON.stringify(clean, null, 2), 'utf8');
     res.json({ success: true, config: clean });
   } catch (err) {
@@ -2481,16 +2483,16 @@ app.post('/api/admin/users/:uid/reset-password', requireAdminToken, jsonParser, 
       try {
         await sendSmtpMail({
           to: targetUser.email,
-          subject: 'LinguaPath Password Reset by Administrator',
+          subject: 'JiedeEdu Password Reset by Administrator',
           text: [
             `Hello ${targetUser.username || 'Learner'},`,
             '',
-            'An administrator has reset your LinguaPath account password.',
+            'An administrator has reset your JiedeEdu account password.',
             `Your temporary password is: ${tempPassword}`,
             '',
             'Please sign in and update your password inside Account -> Profile & Membership.',
             '',
-            '— LinguaPath Team'
+            '— JiedeEdu Team'
           ].join('\n')
         });
         emailed = true;
@@ -2593,9 +2595,9 @@ app.post('/api/admin/test-smtp', requireAdminToken, jsonParser, async (req, res)
   try {
     await sendSmtpMail({
       to,
-      subject: 'LinguaPath SMTP Test Email',
-      text: `SMTP delivery test succeeded at ${new Date().toISOString()} from your LinguaPath Node server.`,
-      html: `<p>SMTP delivery test <strong>succeeded</strong> at ${new Date().toISOString()} from your LinguaPath Node server.</p>`
+      subject: 'JiedeEdu SMTP Test Email',
+      text: `SMTP delivery test succeeded at ${new Date().toISOString()} from your JiedeEdu Node server.`,
+      html: `<p>SMTP delivery test <strong>succeeded</strong> at ${new Date().toISOString()} from your JiedeEdu Node server.</p>`
     });
     res.json({ success: true, message: `Test email sent successfully to ${to}.` });
   } catch (err) {

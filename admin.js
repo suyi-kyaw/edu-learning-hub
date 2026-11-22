@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * LINGUAPATH - ADMIN CMS PORTAL CONTROLLER (admin.js)
+ * JIEDEEDU - ADMIN CMS PORTAL CONTROLLER (admin.js)
  * Same-site Backend CMS for Verified Admin:
  * - Homepage Copy, Hero Banner, Contact Us & Featured Picks
  * - Stories & Story Scenes + Exercise Spreadsheets
@@ -575,7 +575,7 @@
       `;
     }
     return `
-      <img src="${escapeHTML(resolved)}" alt="Preview" onerror="this.style.opacity='0.3'" />
+      <img src="${escapeHTML(resolved)}" alt="Preview" onerror="this.style.opacity='0.3'; this.nextElementSibling && (this.nextElementSibling.textContent='Image could not be decoded — please re-upload or Reset to Default');" />
       <span class="admin-media-preview-label" title="${escapeHTML(titleText)}">${escapeHTML(labelText)}</span>
     `;
   }
@@ -873,14 +873,14 @@
       const resolved = assetUrl(clean);
       return `
         <span class="logo has-custom-logo" style="${darkSurface ? 'background:rgba(255,255,255,0.96); padding:4px 10px; border-radius:10px;' : ''}">
-          <img src="${escapeHTML(resolved)}" alt="Custom Brand Logo Preview" class="site-brand-logo-img" />
+          <img src="${escapeHTML(resolved)}" alt="Custom Brand Logo" class="site-brand-logo-img" onerror="this.style.display='none'; this.parentElement && this.parentElement.insertAdjacentHTML('beforeend', '<span style=&quot;font-size:0.8rem;color:#dc2626;font-weight:600;&quot;>Unable to load image — please re-upload</span>');" />
         </span>
       `;
     }
     return `
       <span class="logo" style="pointer-events:none;">
         <span class="logo-chinese">语</span>
-        <span class="logo-text" style="${darkSurface ? 'color:#f8fafc;' : ''}">LinguaPath</span>
+        <span class="logo-text" style="${darkSurface ? 'color:#f8fafc;' : ''}">JiedeEdu</span>
       </span>
     `;
   }
@@ -904,7 +904,7 @@
           <div class="admin-panel-head">
             <div>
               <h2>Site Branding &amp; Custom Logo</h2>
-              <p>Upload a custom logo lockup to replace the <code>语 LinguaPath</code> brand mark in both header and footer sitewide.</p>
+              <p>Upload a custom logo lockup to replace the <code>语 JiedeEdu</code> brand mark in both header and footer sitewide.</p>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnUseSampleLogo">Use Attached Sample</button>
@@ -919,7 +919,7 @@
             value: currentLogoUrl,
             accept: 'image/*',
             kind: 'image',
-            placeholder: 'Leave blank for default 语 LinguaPath lockup, or upload custom logo...'
+            placeholder: 'Leave blank for default 语 JiedeEdu lockup, or upload custom logo...'
           })}
 
           <div class="admin-logo-preview-grid" id="cfgLogoDualPreview">
@@ -1268,7 +1268,7 @@
       resetLogoBtn.onclick = () => {
         logoInput.value = '';
         logoInput.dispatchEvent(new Event('input', { bubbles: true }));
-        toast('Logo field cleared — click Save Logo to restore default 语 LinguaPath lockup.');
+        toast('Logo field cleared — click Save Logo to restore default 语 JiedeEdu lockup.');
       };
     }
 
@@ -1283,7 +1283,7 @@
           const saved = await window.LinguaAuth.saveSiteConfig({ siteLogoUrl: nextLogoUrl });
           state.siteConfig = saved;
           setSyncStatus('Logo saved');
-          toast(nextLogoUrl ? 'Custom site logo saved & applied sitewide.' : 'Restored default 语 LinguaPath brand lockup.');
+          toast(nextLogoUrl ? 'Custom site logo saved & applied sitewide.' : 'Restored default 语 JiedeEdu brand lockup.');
         } catch (err) {
           setSyncStatus('Save failed');
           toast(err instanceof Error ? err.message : 'Failed to save logo.', 'error');
@@ -2071,7 +2071,7 @@
             const ws = window.XLSX.utils.json_to_sheet(sampleRows);
             const wb = window.XLSX.utils.book_new();
             window.XLSX.utils.book_append_sheet(wb, ws, 'Exercises');
-            window.XLSX.writeFile(wb, `linguapath-${target}-exercises-template.xlsx`);
+            window.XLSX.writeFile(wb, `jiedeedu-${target}-exercises-template.xlsx`);
             toast('Downloaded exercise template (.xlsx).');
           };
         }

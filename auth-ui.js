@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * LINGUAPATH - AUTHENTICATION, PROFILE & SUBSCRIPTION UI
+ * JIEDEEDU - AUTHENTICATION, PROFILE & SUBSCRIPTION UI
  * Handles Account Modal (Email & Password Auth),
  * Profile + DOB/Age + Change Password, Membership Plans,
  * Email/Viber QR Payment Request Flow, and Admin Approvals.
@@ -381,7 +381,7 @@
     return `
       <div class="lp-modal-header">
         <div>
-          <span class="lp-modal-eyebrow">LinguaPath Account</span>
+          <span class="lp-modal-eyebrow">JiedeEdu Account</span>
           <h2 id="lpAuthModalTitle">${
             authTab === 'register'
               ? 'Create Your Learner Profile'
@@ -574,9 +574,9 @@
         ? profile?.phoneNumber || ''
         : profile?.email || state?.user?.email || '';
 
-    const subject = encodeURIComponent(`LinguaPath QR Subscription Request: ${selectedLabel}`);
+    const subject = encodeURIComponent(`JiedeEdu QR Subscription Request: ${selectedLabel}`);
     const body = encodeURIComponent(
-      `Hello LinguaPath Team,\n\nI would like to subscribe to: ${selectedLabel}\nUsername: ${
+      `Hello JiedeEdu Team,\n\nI would like to subscribe to: ${selectedLabel}\nUsername: ${
         profile?.username || ''
       }\nEmail: ${profile?.email || state?.user?.email || ''}\nPhone/Viber: ${
         profile?.phoneNumber || ''
@@ -1083,7 +1083,7 @@
     return `
       <div class="lp-modal-header">
         <div>
-          <span class="lp-modal-eyebrow">My LinguaPath Account</span>
+          <span class="lp-modal-eyebrow">My JiedeEdu Account</span>
           <h2 id="lpAuthModalTitle">${escapeHTML(state.profile?.username || state.user?.displayName || 'Learner Profile')}</h2>
         </div>
         <button type="button" class="lp-modal-close" id="lpCloseAuthModalBtn" aria-label="Close modal">✕</button>
@@ -1375,7 +1375,7 @@
             return;
           }
           feedbackBanner = { type: 'success', text: 'Account created and signed in!' };
-          showToast('Welcome to LinguaPath!');
+          showToast('Welcome to JiedeEdu!');
           if (pendingPostAuthSubscribe) {
             subscribeContext = { ...pendingPostAuthSubscribe };
             pendingPostAuthSubscribe = null;
@@ -2208,7 +2208,7 @@
         }
 
         const ratingLabel = RATING_LABELS[reviewState.rating] || 'Rated';
-        const subjectText = `LinguaPath Lesson Review: ${reviewState.title} (${reviewState.rating}/5)`;
+        const subjectText = `JiedeEdu Lesson Review: ${reviewState.title} (${reviewState.rating}/5)`;
         const bodyText = [
           `Lesson: ${reviewState.title}`,
           `Lesson ID: ${reviewState.lessonId}`,
