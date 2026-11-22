@@ -7,6 +7,7 @@
   "heroPrimaryCta": "Explore Stories",
   "heroSecondaryCta": "Explore Lessons",
   "heroBannerUrl": "assets/hero-banner.png",
+  "siteLogoUrl": "",
   "storiesLabel": "Interactive Reading",
   "storiesTitle": "Featured Stories",
   "storiesSubtitle": "Explore illustrated Mandarin stories with native narration, sentence-by-sentence pinyin, key vocabulary, and comprehension exercises.",
@@ -29,6 +30,9 @@
     "Unlock individual lessons or the full HSK 2 course in Kyat"
   ],
   "lessonsCta": "Go to Lessons →",
+  "courses": [
+    "HSK 2"
+  ],
   "coursePrices": {
     "HSK 2": 120
   },

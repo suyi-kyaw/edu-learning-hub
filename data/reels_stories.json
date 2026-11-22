@@ -9,7 +9,7 @@
         "type": "reel",
         "holiday_id": "cny",
         "title": "红包拿来 - Red Packet Tradition",
-        "video_path": "assets/video/Reels Red Envelope.mp4",
+        "video_path": "assets/video/CNY01.mp4",
         "thumbnail_path": "assets/images/story-poster.jpg",
         "duration_sec": 15,
         "status": "active",
@@ -51,7 +51,7 @@
         "type": "reel",
         "holiday_id": "midautumn",
         "title": "中秋赏月 - Mid-Autumn Moon Festival",
-        "video_path": "assets/video/lesson-01.mp4",
+        "video_path": "assets/video/midautumn01.mp4",
         "thumbnail_path": "assets/images/story2-01.jpg",
         "duration_sec": 15,
         "status": "active",
@@ -107,7 +107,7 @@
         "type": "reel",
         "holiday_id": "culture",
         "title": "中国茶道 - Chinese Tea Etiquette",
-        "video_path": "assets/video/Reels Red Envelope.mp4",
+        "video_path": "assets/video/culture01.mp4",
         "thumbnail_path": "assets/images/story-04.jpg",
         "duration_sec": 16,
         "status": "active",
@@ -143,6 +143,20 @@
         "text_pinyin": "Jīntiān tiānqì zhēn hǎo! Xiǎomíng qù shuǐguǒ shìchǎng. Shìchǎng lǐ yǒu hěn duō xīnxiān de hóng píngguǒ. Tā mǎi le sān gè dà píngguǒ. Píngguǒ yòu tián yòu hǎochī, tā zhēn kāixīn!",
         "text_en": "The weather is great today! Xiaoming goes to the fruit market. There are many fresh red apples in the market. He bought three big apples. The apples are sweet and delicious, he is very happy!",
         "text_my": "ဒီနေ့ ရာသီဥတု သိပ်ကောင်းတယ်! ရှောင်မင်း သစ်သီးဈေးကို သွားပါတယ်။ ဈေးထဲမှာ လတ်ဆတ်တဲ့ ပန်းသီးနီတွေ အများကြီးရှိတယ်။ သူ ပန်းသီးကြီး ၃ လုံး ဝယ်ခဲ့ပါတယ်။ ပန်းသီးတွေက ချိုပြီး အရသာရှိလို့ သူ အရမ်း ပျော်ရွှင်နေပါတယ်။"
+      },
+      {
+        "id": "qixi",
+        "type": "reel",
+        "holiday_id": "qixi",
+        "title": "看牛郎织女星 - Stargazing Love",
+        "video_path": "assets/video/Qixi01.mp4",
+        "thumbnail_path": "assets/images/story2-poster.jpg",
+        "duration_sec": 11,
+        "status": "active",
+        "text_cn": "仰望星空，寻找牛郎织女",
+        "text_pinyin": "yǎng wàng xīng kōng, xún zhǎo niú láng zhī nǚ",
+        "text_en": "Look up at the starry night sky for the lovers!",
+        "text_my": "မိုးကောင်းကင်ထက်မှ ချစ်သူကြယ်ပွင့်နှစ်ပွင့်!"
       }
     ]
   }

@@ -116,6 +116,19 @@ function normalizeCourseNameServer(val) {
   return raw.slice(0, 80);
 }
 
+function courseSlugServer(val) {
+  return String(val || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '');
+}
+
+function getLessonCourseServer(lesson) {
+  if (!lesson || typeof lesson !== 'object') return 'HSK 2';
+  const raw = String(lesson.course || lesson.courseName || lesson.category || '').trim();
+  return raw ? normalizeCourseNameServer(raw) : 'HSK 2';
+}
+
 function normalizeServerPlan(plan) {
   const p = String(plan || 'none').trim().toLowerCase();
   if (p === 'practice_lesson' || p === 'practice-lesson') return 'practice_lesson';
@@ -403,6 +416,7 @@ const DEFAULT_SITE_CONFIG = {
   heroPrimaryCta: 'Explore Stories',
   heroSecondaryCta: 'Explore Lessons',
   heroBannerUrl: 'assets/hero-banner.png',
+  siteLogoUrl: '',
   storiesLabel: 'Interactive Reading',
   storiesTitle: 'Featured Stories',
   storiesSubtitle:
@@ -430,6 +444,7 @@ const DEFAULT_SITE_CONFIG = {
     'Unlock individual lessons or the full HSK 2 course in Kyat'
   ],
   lessonsCta: 'Go to Lessons →',
+  courses: ['HSK 2'],
   coursePrices: {
     'HSK 2': 120
   },
@@ -680,18 +695,69 @@ function readSiteConfigFile() {
   return { ...DEFAULT_SITE_CONFIG };
 }
 
-function normalizeCoursePricesServer(rawPrices) {
-  const out = { ...DEFAULT_SITE_CONFIG.coursePrices };
-  if (rawPrices && typeof rawPrices === 'object' && !Array.isArray(rawPrices)) {
+function normalizeCoursesServer(rawCourses, rawPrices) {
+  const out = [];
+  const seen = new Set();
+  const push = (val) => {
+    const rawStr = String(val || '').trim();
+    if (!rawStr) return;
+    const norm = normalizeCourseNameServer(rawStr);
+    const slug = courseSlugServer(norm);
+    if (slug && !seen.has(slug)) {
+      seen.add(slug);
+      out.push(norm);
+    }
+  };
+  if (Array.isArray(rawCourses)) {
+    rawCourses.forEach(push);
+    if (rawPrices && typeof rawPrices === 'object' && !Array.isArray(rawPrices)) {
+      Object.keys(rawPrices).forEach(push);
+    }
+    return out.slice(0, 60);
+  }
+  if (rawPrices && typeof rawPrices === 'object' && !Array.isArray(rawPrices) && Object.keys(rawPrices).length > 0) {
+    Object.keys(rawPrices).forEach(push);
+    if (out.length > 0) return out.slice(0, 60);
+  }
+  return [...DEFAULT_SITE_CONFIG.courses];
+}
+
+function normalizeCoursePricesServer(rawPrices, coursesList) {
+  const out = {};
+  const hasExplicitPrices = rawPrices && typeof rawPrices === 'object' && !Array.isArray(rawPrices);
+  if (hasExplicitPrices) {
     for (const [k, v] of Object.entries(rawPrices)) {
+      if (!String(k || '').trim()) continue;
       const name = normalizeCourseNameServer(k);
       const n = Number(v);
       if (name && Number.isFinite(n) && n >= 0) {
         out[name] = Math.round(n);
       }
     }
+  } else {
+    Object.assign(out, DEFAULT_SITE_CONFIG.coursePrices);
+  }
+  if (Array.isArray(coursesList)) {
+    for (const cName of coursesList) {
+      if (!cName) continue;
+      const slug = courseSlugServer(cName);
+      const existingKey = Object.keys(out).find((k) => courseSlugServer(k) === slug);
+      if (!existingKey) {
+        out[cName] = courseSlugServer(cName) === 'hsk2' ? 120 : 120;
+      }
+    }
   }
   return out;
+}
+
+function sanitizeLogoUrlServer(val) {
+  if (typeof val !== 'string') return '';
+  const clean = val.trim();
+  if (!clean) return '';
+  if (clean.startsWith('data:image/')) {
+    return clean.slice(0, 200000);
+  }
+  return clean.slice(0, 500);
 }
 
 function sanitizeSiteConfigInput(raw) {
@@ -714,6 +780,11 @@ function sanitizeSiteConfigInput(raw) {
       .slice(0, maxItems);
   };
 
+  const courses = normalizeCoursesServer(
+    'courses' in input ? input.courses : undefined,
+    input.coursePrices
+  );
+
   return {
     configId: 'homepage',
     heroEyebrow: str('heroEyebrow', 100),
@@ -723,6 +794,7 @@ function sanitizeSiteConfigInput(raw) {
     heroPrimaryCta: str('heroPrimaryCta', 60),
     heroSecondaryCta: str('heroSecondaryCta', 60),
     heroBannerUrl: optStr('heroBannerUrl', 500),
+    siteLogoUrl: 'siteLogoUrl' in input ? sanitizeLogoUrlServer(input.siteLogoUrl) : DEFAULT_SITE_CONFIG.siteLogoUrl,
     storiesLabel: str('storiesLabel', 100),
     storiesTitle: str('storiesTitle', 120),
     storiesSubtitle: str('storiesSubtitle', 400),
@@ -741,7 +813,8 @@ function sanitizeSiteConfigInput(raw) {
     lessonsCardDesc: str('lessonsCardDesc', 400),
     lessonsBullets: strList('lessonsBullets', 6, 140, true),
     lessonsCta: str('lessonsCta', 80),
-    coursePrices: normalizeCoursePricesServer(input.coursePrices),
+    courses,
+    coursePrices: normalizeCoursePricesServer(input.coursePrices, courses),
     practicePrice: Number.isFinite(Number(input.practicePrice)) && Number(input.practicePrice) >= 0 ? Math.round(Number(input.practicePrice)) : DEFAULT_SITE_CONFIG.practicePrice,
     contactEmail: str('contactEmail', 160),
     contactPhone: str('contactPhone', 40),
@@ -1593,6 +1666,258 @@ app.put('/api/admin/site-config', requireAdminToken, jsonParser, (req, res) => {
     res.json({ success: true, config: clean });
   } catch (err) {
     console.error('API admin site-config error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create a new course in site-config
+app.post('/api/admin/courses', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const rawName = String(req.body?.name || '').trim();
+    if (!rawName) {
+      return res.status(400).json({ success: false, error: 'Course name is required.' });
+    }
+    const normName = normalizeCourseNameServer(rawName);
+    const targetSlug = courseSlugServer(normName);
+    if (!targetSlug) {
+      return res.status(400).json({ success: false, error: 'Course name must contain valid letters or numbers.' });
+    }
+    const priceNum = Number(req.body?.price);
+    const price = Number.isFinite(priceNum) && priceNum >= 0 ? Math.round(priceNum) : 120;
+
+    const currentCfg = readSiteConfigFile();
+    let lessonsRows = [];
+    try {
+      lessonsRows = parseLessonsWorkbook().sheets.Lessons || [];
+    } catch (_) {}
+
+    const existingNames = new Set((currentCfg.courses || []).map(courseSlugServer));
+    lessonsRows.forEach((l) => existingNames.add(courseSlugServer(getLessonCourseServer(l))));
+
+    if (existingNames.has(targetSlug)) {
+      return res.status(409).json({ success: false, error: `Course "${normName}" already exists.` });
+    }
+
+    const nextCourses = [...(currentCfg.courses || []), normName];
+    const nextPrices = { ...(currentCfg.coursePrices || {}), [normName]: price };
+    const cleanCfg = sanitizeSiteConfigInput({ ...currentCfg, courses: nextCourses, coursePrices: nextPrices });
+    fs.writeFileSync(SITE_CONFIG_PATH, JSON.stringify(cleanCfg, null, 2), 'utf8');
+    res.status(201).json({ success: true, course: { name: normName, price, lessonCount: 0 }, config: cleanCfg });
+  } catch (err) {
+    console.error('POST /api/admin/courses error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Edit / Rename a course with automatic cascade across lessons, catalog & user subscriptions
+app.put('/api/admin/courses/:courseName', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const oldRaw = decodeURIComponent(String(req.params.courseName || '').trim());
+    if (!oldRaw) {
+      return res.status(400).json({ success: false, error: 'Original course name is required.' });
+    }
+    const oldNorm = normalizeCourseNameServer(oldRaw);
+    const oldSlug = courseSlugServer(oldNorm);
+
+    const newRaw = String(req.body?.newName !== undefined ? req.body.newName : oldNorm).trim();
+    if (!newRaw) {
+      return res.status(400).json({ success: false, error: 'New course name cannot be empty.' });
+    }
+    const newNorm = normalizeCourseNameServer(newRaw);
+    const newSlug = courseSlugServer(newNorm);
+    if (!newSlug) {
+      return res.status(400).json({ success: false, error: 'Course name must contain valid letters or numbers.' });
+    }
+
+    const currentCfg = readSiteConfigFile();
+    const excelPath = path.join(__dirname, 'data', 'lessons.xlsx');
+    const lessonsWb = fs.existsSync(excelPath) ? parseLessonsWorkbook() : { sheets: { Lessons: [] } };
+    const lessonsRows = Array.isArray(lessonsWb.sheets.Lessons) ? lessonsWb.sheets.Lessons : [];
+
+    // Check collision only when renaming to a different slug
+    if (newSlug !== oldSlug) {
+      const existingSlugs = new Set((currentCfg.courses || []).map(courseSlugServer));
+      lessonsRows.forEach((l) => existingSlugs.add(courseSlugServer(getLessonCourseServer(l))));
+      if (existingSlugs.has(newSlug)) {
+        return res.status(409).json({
+          success: false,
+          error: `Course "${newNorm}" already exists. Choose a unique course name.`
+        });
+      }
+    }
+
+    const prevPrice =
+      Object.entries(currentCfg.coursePrices || {}).find(([k]) => courseSlugServer(k) === oldSlug)?.[1] ?? 120;
+    const priceNum = req.body?.price !== undefined ? Number(req.body.price) : Number(prevPrice);
+    const nextPrice = Number.isFinite(priceNum) && priceNum >= 0 ? Math.round(priceNum) : Math.round(Number(prevPrice) || 120);
+
+    // 1. Update site-config courses & coursePrices
+    const updatedCourses = [];
+    const seenSlugs = new Set();
+    let replacedOld = false;
+    (currentCfg.courses || []).forEach((c) => {
+      const s = courseSlugServer(c);
+      if (s === oldSlug) {
+        if (!seenSlugs.has(newSlug)) {
+          seenSlugs.add(newSlug);
+          updatedCourses.push(newNorm);
+        }
+        replacedOld = true;
+      } else if (s && !seenSlugs.has(s)) {
+        seenSlugs.add(s);
+        updatedCourses.push(c);
+      }
+    });
+    if (!replacedOld && !seenSlugs.has(newSlug)) {
+      updatedCourses.push(newNorm);
+    }
+
+    const nextPrices = {};
+    Object.entries(currentCfg.coursePrices || {}).forEach(([k, v]) => {
+      if (courseSlugServer(k) !== oldSlug && courseSlugServer(k) !== newSlug) {
+        nextPrices[k] = v;
+      }
+    });
+    nextPrices[newNorm] = nextPrice;
+
+    const cleanCfg = sanitizeSiteConfigInput({
+      ...currentCfg,
+      courses: updatedCourses,
+      coursePrices: nextPrices
+    });
+    fs.writeFileSync(SITE_CONFIG_PATH, JSON.stringify(cleanCfg, null, 2), 'utf8');
+
+    // 2. Cascade rename across Lessons in lessons.xlsx & lessons.json
+    let updatedLessonsResult = null;
+    const renamedLessonIds = new Set();
+    if (newNorm !== oldNorm || newSlug !== oldSlug) {
+      const nextLessonsRows = lessonsRows.map((l) => {
+        if (courseSlugServer(getLessonCourseServer(l)) === oldSlug) {
+          if (l.id) renamedLessonIds.add(String(l.id).trim().toLowerCase());
+          const curLevel = String(l.level || '').trim();
+          return {
+            ...l,
+            course: newNorm,
+            category: newNorm,
+            categoryKey: newSlug || 'course',
+            categoryNum: newNorm,
+            level: !curLevel || courseSlugServer(curLevel) === oldSlug ? newNorm : curLevel
+          };
+        }
+        return l;
+      });
+      if (fs.existsSync(excelPath)) {
+        updatedLessonsResult = writeUpdatedWorkbook(
+          excelPath,
+          { Lessons: nextLessonsRows },
+          ['Lessons', 'Exercises', 'Writing', 'Vocabulary', 'Games', 'Pronunciation']
+        );
+        syncLessonsJson();
+      }
+    }
+
+    // 3. Cascade rename across auth-store.json (lessonCatalog, user subscribedCourses & practiceCourses, requests)
+    const store = readAuthStore();
+    if (newNorm !== oldNorm || newSlug !== oldSlug) {
+      Object.values(store.lessonCatalog || {}).forEach((item) => {
+        if (!item) return;
+        const itemIdLow = String(item.lessonId || '').trim().toLowerCase();
+        if (courseSlugServer(item.course) === oldSlug || renamedLessonIds.has(itemIdLow)) {
+          item.course = newNorm;
+          item.updatedAt = new Date().toISOString();
+        }
+      });
+
+      const remapCourseArray = (arr) =>
+        Array.from(
+          new Set(
+            (Array.isArray(arr) ? arr : [])
+              .map((c) => (courseSlugServer(c) === oldSlug ? newNorm : normalizeCourseNameServer(c)))
+              .filter(Boolean)
+          )
+        ).slice(0, 50);
+
+      Object.values(store.users || {}).forEach((u) => {
+        if (!u) return;
+        u.subscribedCourses = remapCourseArray(u.subscribedCourses);
+        u.practiceCourses = remapCourseArray(u.practiceCourses);
+        u.updatedAt = new Date().toISOString();
+      });
+
+      (store.subscriptionRequests || []).forEach((r) => {
+        if (!r) return;
+        if (courseSlugServer(r.courseName) === oldSlug) {
+          r.courseName = newNorm;
+          if (r.planType === 'practice_course') {
+            r.lessonTitle = `${newNorm} Course (Practice Only)`;
+          } else if (r.planType === 'course') {
+            r.lessonTitle = `${newNorm} Course Pass`;
+          }
+          r.updatedAt = new Date().toISOString();
+        }
+      });
+
+      writeAuthStore(store);
+    }
+
+    const allUsers = Object.values(store.users || {}).map(sanitizeUserPublic);
+    const allRequests = [...(store.subscriptionRequests || [])];
+
+    res.json({
+      success: true,
+      config: cleanCfg,
+      lessonsSheets: updatedLessonsResult ? updatedLessonsResult.sheets : null,
+      lessonCatalog: store.lessonCatalog || {},
+      allUsers,
+      allRequests
+    });
+  } catch (err) {
+    console.error('PUT /api/admin/courses/:courseName error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete a course (strictly blocked if any lessons belong to the course)
+app.delete('/api/admin/courses/:courseName', requireAdminToken, (req, res) => {
+  try {
+    const rawName = decodeURIComponent(String(req.params.courseName || '').trim());
+    if (!rawName) {
+      return res.status(400).json({ success: false, error: 'Course name is required.' });
+    }
+    const normName = normalizeCourseNameServer(rawName);
+    const targetSlug = courseSlugServer(normName);
+
+    let lessonsRows = [];
+    try {
+      lessonsRows = parseLessonsWorkbook().sheets.Lessons || [];
+    } catch (_) {}
+
+    const assignedCount = lessonsRows.filter((l) => courseSlugServer(getLessonCourseServer(l)) === targetSlug).length;
+    if (assignedCount > 0) {
+      return res.status(409).json({
+        success: false,
+        error: `Cannot delete "${normName}" because ${assignedCount} lesson(s) are still under this course. Move or delete those lessons first.`
+      });
+    }
+
+    const currentCfg = readSiteConfigFile();
+    const nextCourses = (currentCfg.courses || []).filter((c) => courseSlugServer(c) !== targetSlug);
+    const nextPrices = {};
+    Object.entries(currentCfg.coursePrices || {}).forEach(([k, v]) => {
+      if (courseSlugServer(k) !== targetSlug) {
+        nextPrices[k] = v;
+      }
+    });
+
+    const cleanCfg = sanitizeSiteConfigInput({
+      ...currentCfg,
+      courses: nextCourses,
+      coursePrices: nextPrices
+    });
+    fs.writeFileSync(SITE_CONFIG_PATH, JSON.stringify(cleanCfg, null, 2), 'utf8');
+    res.json({ success: true, config: cleanCfg });
+  } catch (err) {
+    console.error('DELETE /api/admin/courses/:courseName error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

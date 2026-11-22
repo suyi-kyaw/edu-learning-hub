@@ -72,10 +72,43 @@
     return String(phone || '').replace(/[^+\d]/g, '');
   }
 
+  function resolveFooterLogoUrl(url) {
+    const clean = String(url || '').trim();
+    if (!clean) return '';
+    if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function') {
+      return window.LinguaBackend.assetUrl(clean);
+    }
+    return clean;
+  }
+
+  const DEFAULT_FOOTER_LOGO_HTML = '<span>语</span> LinguaPath';
+
   function hydrateFooterContact(cfg) {
     if (!cfg) return;
     const footer = document.querySelector('footer.site-footer');
     if (!footer) return;
+
+    const footerLogoEl = footer.querySelector('.footer-logo');
+    if (footerLogoEl) {
+      const rawLogo = typeof cfg.siteLogoUrl === 'string' ? cfg.siteLogoUrl.trim() : '';
+      if (!rawLogo) {
+        footerLogoEl.classList.remove('has-custom-logo');
+        footerLogoEl.innerHTML = DEFAULT_FOOTER_LOGO_HTML;
+      } else {
+        footerLogoEl.classList.add('has-custom-logo');
+        footerLogoEl.innerHTML = '';
+        const img = document.createElement('img');
+        img.className = 'footer-brand-logo-img';
+        img.src = resolveFooterLogoUrl(rawLogo);
+        img.alt = 'LinguaPath';
+        img.decoding = 'async';
+        img.onerror = function () {
+          footerLogoEl.classList.remove('has-custom-logo');
+          footerLogoEl.innerHTML = DEFAULT_FOOTER_LOGO_HTML;
+        };
+        footerLogoEl.appendChild(img);
+      }
+    }
 
     const email = String(cfg.contactEmail || 'syndkyaw@gmail.com').trim();
     const phone = String(cfg.contactPhone || '+95 9 798 123 456').trim();

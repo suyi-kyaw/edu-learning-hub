@@ -172,15 +172,26 @@
     const out = [];
     const seen = new Set();
     const pushCourse = (name) => {
-      const norm = normalizeCourseName(name);
+      const raw = String(name || '').trim();
+      if (!raw) return;
+      const norm = normalizeCourseName(raw);
       const slug = courseSlug(norm);
       if (slug && !seen.has(slug)) {
         seen.add(slug);
         out.push(norm);
       }
     };
-    pushCourse('HSK 2');
+    const cfg = state.siteConfig || {};
+    if (Array.isArray(cfg.courses)) {
+      cfg.courses.forEach(pushCourse);
+    }
+    if (cfg.coursePrices && typeof cfg.coursePrices === 'object') {
+      Object.keys(cfg.coursePrices).forEach(pushCourse);
+    }
     (state.lessonsData.Lessons || []).forEach((l) => pushCourse(getLessonCourse(l)));
+    if (!out.length && !Array.isArray(cfg.courses)) {
+      pushCourse('HSK 2');
+    }
     return out;
   }
 
@@ -544,6 +555,30 @@
     `;
   }
 
+  async function uploadAdminMediaFile(file) {
+    const token =
+      window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function'
+        ? await window.LinguaAuth.getIdToken()
+        : '';
+    if (token && hasBackend()) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch(apiUrl('/api/admin/upload-media'), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData
+        });
+        const json = await res.json().catch(() => null);
+        if (res.ok && json && json.success && json.url) {
+          return { url: json.url, uploadedToServer: true };
+        }
+      } catch (_) {}
+    }
+    const inline = await getContentStore().readFileAsInlineMedia(file);
+    return { url: inline.url, uploadedToServer: false };
+  }
+
   function wireMediaPickers(container) {
     if (!container) return;
     container.querySelectorAll('[data-picker-root]').forEach((root) => {
@@ -563,9 +598,9 @@
         fileInput.addEventListener('change', async () => {
           const file = fileInput.files && fileInput.files[0];
           if (!file) return;
-          setSyncStatus(`Attaching ${file.name}…`);
+          setSyncStatus(`Uploading ${file.name}…`);
           try {
-            const result = await getContentStore().readFileAsInlineMedia(file);
+            const result = await uploadAdminMediaFile(file);
             if (textInput) {
               textInput.value = result.url;
               textInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -573,8 +608,13 @@
             if (previewEl) {
               previewEl.innerHTML = renderMediaPreviewInner(result.url, kind);
             }
-            setSyncStatus('Media attached locally');
-            toast(`Attached ${file.name} locally. For large files, commit to assets/ and paste path.`);
+            if (result.uploadedToServer) {
+              setSyncStatus('Media uploaded');
+              toast(`Uploaded ${file.name} to server (${result.url}).`);
+            } else {
+              setSyncStatus('Media attached locally');
+              toast(`Attached ${file.name} locally. For large files, commit to assets/ and paste path.`);
+            }
           } catch (err) {
             setSyncStatus('Media note');
             toast(err instanceof Error ? err.message : 'Could not attach media file.', 'error');
@@ -586,7 +626,7 @@
     });
   }
 
-  // --- Modal Helpers (No window.alert / window.confirm) ---
+  // --- Modal Helpers (No window.alert / window.confirm / window.prompt) ---
   function openModal(html) {
     const backdrop = document.getElementById('adminModalBackdrop');
     const dialog = document.getElementById('adminModalDialog');
@@ -598,8 +638,47 @@
   }
 
   function closeModal() {
+    closeSubModal();
     const backdrop = document.getElementById('adminModalBackdrop');
     const dialog = document.getElementById('adminModalDialog');
+    if (backdrop) {
+      backdrop.classList.remove('is-open');
+      backdrop.setAttribute('aria-hidden', 'true');
+    }
+    if (dialog) dialog.innerHTML = '';
+  }
+
+  function ensureSubModalDOM() {
+    let backdrop = document.getElementById('adminSubModalBackdrop');
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'adminSubModalBackdrop';
+      backdrop.className = 'admin-submodal-backdrop';
+      backdrop.setAttribute('aria-hidden', 'true');
+      backdrop.innerHTML = '<div class="admin-submodal-dialog" id="adminSubModalDialog" role="dialog" aria-modal="true"></div>';
+      document.body.appendChild(backdrop);
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) closeSubModal();
+      });
+    }
+    return {
+      backdrop,
+      dialog: document.getElementById('adminSubModalDialog')
+    };
+  }
+
+  function openSubModal(html) {
+    const { backdrop, dialog } = ensureSubModalDOM();
+    if (!backdrop || !dialog) return;
+    dialog.innerHTML = html;
+    backdrop.classList.add('is-open');
+    backdrop.setAttribute('aria-hidden', 'false');
+    wireMediaPickers(dialog);
+  }
+
+  function closeSubModal() {
+    const backdrop = document.getElementById('adminSubModalBackdrop');
+    const dialog = document.getElementById('adminSubModalDialog');
     if (backdrop) {
       backdrop.classList.remove('is-open');
       backdrop.setAttribute('aria-hidden', 'true');
@@ -629,7 +708,158 @@
     };
   }
 
+  function generateCopyId(baseId, existingIds) {
+    const cleanBase = String(baseId || 'item')
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'item';
+    const taken = new Set((existingIds || []).map((x) => String(x || '').trim().toLowerCase()));
+    let candidate = `${cleanBase}-copy`;
+    let n = 2;
+    while (taken.has(candidate.toLowerCase())) {
+      candidate = `${cleanBase}-copy-${n}`;
+      n += 1;
+    }
+    return candidate;
+  }
+
+  function openDuplicateModal({
+    entityLabel,
+    sourceTitle,
+    sourceId,
+    existingIds,
+    hideIdField,
+    showTargetLessonSelect,
+    lessonOptions,
+    defaultLessonId,
+    helpText,
+    useSubModal,
+    onConfirm
+  }) {
+    const openFn = useSubModal ? openSubModal : openModal;
+    const closeFn = useSubModal ? closeSubModal : closeModal;
+    const defaultTitle = String(sourceTitle || '').trim() ? `${String(sourceTitle).trim()} (Copy)` : `New ${entityLabel} Copy`;
+    const defaultId = hideIdField ? '' : generateCopyId(sourceId || 'copy', existingIds || []);
+    const takenSet = new Set((existingIds || []).map((x) => String(x || '').trim().toLowerCase()));
+
+    openFn(`
+      <div class="admin-panel-head" style="margin-bottom:12px;">
+        <div>
+          <h2>Duplicate ${escapeHTML(entityLabel)}</h2>
+          <p>${escapeHTML(helpText || `Enter a title for the duplicated ${entityLabel.toLowerCase()}. All other details will be copied and remain editable.`)}</p>
+        </div>
+        <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="dupCloseBtn">✕</button>
+      </div>
+      <form id="dupConfirmForm">
+        <div class="admin-field">
+          <label for="dupNewTitle">New ${escapeHTML(entityLabel)} Title *</label>
+          <input type="text" class="admin-input" id="dupNewTitle" value="${escapeHTML(defaultTitle)}" required />
+        </div>
+        ${
+          hideIdField
+            ? ''
+            : `
+          <div class="admin-field" style="margin-top:10px;">
+            <label for="dupNewId">New Unique ID *</label>
+            <input type="text" class="admin-input" id="dupNewId" value="${escapeHTML(defaultId)}" required />
+            <div style="font-size:0.76rem; color:#64748b; margin-top:4px;">Auto-generated unique slug (you can customize it before creating).</div>
+          </div>
+        `
+        }
+        ${
+          showTargetLessonSelect
+            ? `
+          <div class="admin-field" style="margin-top:10px;">
+            <label for="dupTargetLesson">Target Lesson</label>
+            <select class="admin-select" id="dupTargetLesson">
+              ${(lessonOptions || [])
+                .map(
+                  (l) =>
+                    `<option value="${escapeHTML(l.id)}" ${isSameId(l.id, defaultLessonId) ? 'selected' : ''}>${escapeHTML(
+                      l.id
+                    )} — ${escapeHTML(l.title || l.id)}</option>`
+                )
+                .join('')}
+            </select>
+          </div>
+        `
+            : ''
+        }
+        <div id="dupErrorBox" class="admin-backend-status is-error" hidden style="margin-top:10px;"></div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+          <button type="button" class="admin-btn admin-btn-secondary" id="dupCancelBtn">Cancel</button>
+          <button type="submit" class="admin-btn admin-btn-primary" id="dupSubmitBtn">Create Duplicate</button>
+        </div>
+      </form>
+    `);
+
+    const titleInp = document.getElementById('dupNewTitle');
+    if (titleInp) {
+      titleInp.focus();
+      titleInp.select();
+    }
+    document.getElementById('dupCloseBtn').onclick = closeFn;
+    document.getElementById('dupCancelBtn').onclick = closeFn;
+    document.getElementById('dupConfirmForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('dupErrorBox');
+      const submitBtn = document.getElementById('dupSubmitBtn');
+      const newTitle = (document.getElementById('dupNewTitle')?.value || '').trim();
+      const newId = hideIdField ? '' : (document.getElementById('dupNewId')?.value || '').trim();
+      const targetLessonId = showTargetLessonSelect ? (document.getElementById('dupTargetLesson')?.value || '').trim() : '';
+
+      if (!newTitle) {
+        errBox.hidden = false;
+        errBox.textContent = 'Please enter a title for the duplicate.';
+        return;
+      }
+      if (!hideIdField) {
+        if (!newId) {
+          errBox.hidden = false;
+          errBox.textContent = 'Please enter a unique ID.';
+          return;
+        }
+        if (takenSet.has(newId.toLowerCase())) {
+          errBox.hidden = false;
+          errBox.textContent = `ID "${newId}" already exists. Please choose another ID.`;
+          return;
+        }
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Duplicating…';
+      errBox.hidden = true;
+      try {
+        await onConfirm({ newTitle, newId, targetLessonId });
+        closeFn();
+      } catch (err) {
+        errBox.hidden = false;
+        errBox.textContent = err instanceof Error ? err.message : 'Failed to duplicate item.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Duplicate';
+      }
+    };
+  }
+
   // --- Tab 1: Homepage & Contact ---
+  function renderBrandLogoPreviewMarkup(logoUrl, darkSurface) {
+    const clean = String(logoUrl || '').trim();
+    if (clean) {
+      const resolved = assetUrl(clean);
+      return `
+        <span class="logo has-custom-logo" style="${darkSurface ? 'background:rgba(255,255,255,0.96); padding:4px 10px; border-radius:10px;' : ''}">
+          <img src="${escapeHTML(resolved)}" alt="Custom Brand Logo Preview" class="site-brand-logo-img" />
+        </span>
+      `;
+    }
+    return `
+      <span class="logo" style="pointer-events:none;">
+        <span class="logo-chinese">语</span>
+        <span class="logo-text" style="${darkSurface ? 'color:#f8fafc;' : ''}">LinguaPath</span>
+      </span>
+    `;
+  }
+
   function renderHomeTab(viewport) {
     const cfg = state.siteConfig || {};
     const stories = state.storiesData.Lessons || [];
@@ -637,6 +867,7 @@
     const games = state.lessonsData.Games || [];
     const coursesList = getAdminCoursesList();
     const coursePricesMap = cfg.coursePrices && typeof cfg.coursePrices === 'object' ? cfg.coursePrices : {};
+    const currentLogoUrl = String(cfg.siteLogoUrl || '').trim();
 
     const featStories = new Set((cfg.featuredStoryIds || []).map((x) => x.toLowerCase()));
     const featReels = new Set((cfg.featuredReelIds || []).map((x) => x.toLowerCase()));
@@ -644,6 +875,44 @@
 
     viewport.innerHTML = `
       <form id="adminHomeForm">
+        <div class="admin-panel-card">
+          <div class="admin-panel-head">
+            <div>
+              <h2>Site Branding &amp; Custom Logo</h2>
+              <p>Upload a custom logo lockup to replace the <code>语 LinguaPath</code> brand mark in both header and footer sitewide.</p>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnUseSampleLogo">Use Attached Sample</button>
+              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnResetSiteLogo">Reset to Default</button>
+              <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="btnSaveLogoOnly">Save Logo</button>
+            </div>
+          </div>
+
+          ${renderMediaPickerField({
+            id: 'cfgSiteLogoUrl',
+            label: 'Site Brand Logo Image (Upload PNG/SVG/WebP or Paste URL)',
+            value: currentLogoUrl,
+            accept: 'image/*',
+            kind: 'image',
+            placeholder: 'Leave blank for default 语 LinguaPath lockup, or upload custom logo...'
+          })}
+
+          <div class="admin-logo-preview-grid" id="cfgLogoDualPreview">
+            <div class="admin-logo-preview-card">
+              <span class="admin-logo-preview-label">Header Bar Preview (Light)</span>
+              <div class="admin-logo-preview-stage" id="cfgLogoPreviewLight">
+                ${renderBrandLogoPreviewMarkup(currentLogoUrl, false)}
+              </div>
+            </div>
+            <div class="admin-logo-preview-card is-dark">
+              <span class="admin-logo-preview-label">Footer &amp; Dark Header Preview</span>
+              <div class="admin-logo-preview-stage" id="cfgLogoPreviewDark">
+                ${renderBrandLogoPreviewMarkup(currentLogoUrl, true)}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="admin-panel-card">
           <div class="admin-panel-head">
             <div>
@@ -816,14 +1085,16 @@
             <div class="admin-subrow">
               <strong>Course Pass Pricing (Kyat)</strong>
               <p style="font-size:0.82rem; color:#64748b; margin:4px 0 12px;">
-                Set the full-course unlock price in Kyat for each course. Learners paying this fee unlock all lessons inside that course.
+                Set the full-course unlock price in Kyat for each course. Manage courses in the <strong>Lessons &amp; Exercises</strong> tab.
               </p>
               <div style="display:flex; flex-direction:column; gap:10px;">
-                ${coursesList
-                  .map((cName) => {
-                    const fallbackVal = courseSlug(cName) === 'hsk2' ? 120 : 100;
-                    const curPrice = Number(coursePricesMap[cName]) || fallbackVal;
-                    return `
+                ${
+                  coursesList.length
+                    ? coursesList
+                        .map((cName) => {
+                          const fallbackVal = courseSlug(cName) === 'hsk2' ? 120 : 100;
+                          const curPrice = Number(coursePricesMap[cName]) || fallbackVal;
+                          return `
                       <div class="admin-field" style="display:grid; grid-template-columns: 1fr 140px; gap:10px; align-items:center;">
                         <label style="margin:0; font-weight:700;">${escapeHTML(cName)}</label>
                         <div style="display:flex; align-items:center; gap:6px;">
@@ -834,8 +1105,10 @@
                         </div>
                       </div>
                     `;
-                  })
-                  .join('')}
+                        })
+                        .join('')
+                    : `<span style="font-size:0.84rem; color:#64748b;">No courses defined yet. Add a course in the Lessons tab.</span>`
+                }
               </div>
             </div>
           </div>
@@ -945,6 +1218,57 @@
 
     wireMediaPickers(viewport);
 
+    const logoInput = document.getElementById('cfgSiteLogoUrl');
+    const syncLogoDualPreview = () => {
+      const urlVal = (logoInput?.value || '').trim();
+      const lightBox = document.getElementById('cfgLogoPreviewLight');
+      const darkBox = document.getElementById('cfgLogoPreviewDark');
+      if (lightBox) lightBox.innerHTML = renderBrandLogoPreviewMarkup(urlVal, false);
+      if (darkBox) darkBox.innerHTML = renderBrandLogoPreviewMarkup(urlVal, true);
+    };
+    if (logoInput) {
+      logoInput.addEventListener('input', syncLogoDualPreview);
+    }
+
+    const useSampleBtn = document.getElementById('btnUseSampleLogo');
+    if (useSampleBtn && logoInput) {
+      useSampleBtn.onclick = () => {
+        logoInput.value = 'public/assets/aistudio/Screenshot_2026-11-22_at_2.58.21_PM_045e7a40.png';
+        logoInput.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+    }
+
+    const resetLogoBtn = document.getElementById('btnResetSiteLogo');
+    if (resetLogoBtn && logoInput) {
+      resetLogoBtn.onclick = () => {
+        logoInput.value = '';
+        logoInput.dispatchEvent(new Event('input', { bubbles: true }));
+        toast('Logo field cleared — click Save Logo to restore default 语 LinguaPath lockup.');
+      };
+    }
+
+    const saveLogoOnlyBtn = document.getElementById('btnSaveLogoOnly');
+    if (saveLogoOnlyBtn && logoInput) {
+      saveLogoOnlyBtn.onclick = async () => {
+        saveLogoOnlyBtn.disabled = true;
+        saveLogoOnlyBtn.textContent = 'Saving…';
+        try {
+          setSyncStatus('Saving brand logo…');
+          const nextLogoUrl = logoInput.value.trim();
+          const saved = await window.LinguaAuth.saveSiteConfig({ siteLogoUrl: nextLogoUrl });
+          state.siteConfig = saved;
+          setSyncStatus('Logo saved');
+          toast(nextLogoUrl ? 'Custom site logo saved & applied sitewide.' : 'Restored default 语 LinguaPath brand lockup.');
+        } catch (err) {
+          setSyncStatus('Save failed');
+          toast(err instanceof Error ? err.message : 'Failed to save logo.', 'error');
+        } finally {
+          saveLogoOnlyBtn.disabled = false;
+          saveLogoOnlyBtn.textContent = 'Save Logo';
+        }
+      };
+    }
+
     const exportSiteCfgBtn = document.getElementById('btnExportSiteConfig');
     if (exportSiteCfgBtn) {
       exportSiteCfgBtn.onclick = () => {
@@ -978,6 +1302,8 @@
       const featuredGameIds = Array.from(form.querySelectorAll('input[name="featGame"]:checked')).map((c) => c.value);
 
       const nextPayload = {
+        siteLogoUrl: val('cfgSiteLogoUrl'),
+        courses: coursesList,
         heroEyebrow: val('cfgHeroEyebrow'),
         heroTitleLine1: val('cfgHeroTitle1'),
         heroTitleHighlight: val('cfgHeroTitleHi'),
@@ -1017,7 +1343,7 @@
         const saved = await window.LinguaAuth.saveSiteConfig(nextPayload);
         state.siteConfig = saved;
         setSyncStatus('Saved');
-        toast('Homepage settings, Course prices, Contact Us & Featured items saved.');
+        toast('Branding logo, Homepage settings, Course prices, Contact Us & Featured items saved.');
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save homepage settings.', 'error');
@@ -1212,6 +1538,7 @@
                                   ? `<button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-clone-group="${globalIndex}" title="Add another question below that uses the exact same top A–E choices">+ Question in Group</button>`
                                   : ''
                               }
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-dup="${globalIndex}">Duplicate</button>
                               <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-ex-del="${globalIndex}">Delete</button>
                             </div>
                           </div>
@@ -1466,8 +1793,8 @@
             const [gIdxStr, fieldKey] = fileInp.getAttribute('data-ex-upload').split(':');
             const gIdx = Number(gIdxStr);
             try {
-              setSyncStatus(`Attaching ${file.name}…`);
-              const result = await getContentStore().readFileAsInlineMedia(file);
+              setSyncStatus(`Uploading ${file.name}…`);
+              const result = await uploadAdminMediaFile(file);
               if (state.editingExercisesList[gIdx]) {
                 state.editingExercisesList[gIdx][fieldKey] = result.url;
                 // If uploading an image for a shared-image-match group, also propagate empty slots to matching groupId siblings
@@ -1492,8 +1819,8 @@
                 }
               }
               renderEditorBody();
-              setSyncStatus('Media attached');
-              toast(`Attached ${file.name} successfully.`);
+              setSyncStatus(result.uploadedToServer ? 'Media uploaded' : 'Media attached');
+              toast(result.uploadedToServer ? `Uploaded ${file.name} (${result.url}).` : `Attached ${file.name} successfully.`);
             } catch (err) {
               setSyncStatus('Media error');
               toast(err instanceof Error ? err.message : 'Failed to attach media.', 'error');
@@ -1510,6 +1837,97 @@
             if (state.editingExercisesList[gIdx]) {
               state.editingExercisesList[gIdx][fieldKey] = inp.value;
             }
+          };
+        });
+
+        container.querySelectorAll('[data-ex-dup]').forEach((btn) => {
+          btn.onclick = () => {
+            const gIdx = Number(btn.getAttribute('data-ex-dup'));
+            const src = state.editingExercisesList[gIdx];
+            if (!src) return;
+            const currentLsnId = src.lessonId || state.editingExercisesLessonId || (lessonsList[0] ? lessonsList[0].id : '');
+            openDuplicateModal({
+              useSubModal: true,
+              entityLabel: 'Exercise',
+              sourceTitle: src.question || src.pinyin || 'Exercise Question',
+              hideIdField: true,
+              showTargetLessonSelect: lessonsList.length > 0,
+              lessonOptions: lessonsList,
+              defaultLessonId: currentLsnId,
+              helpText: 'Enter the new question/title. Copies type, options A–E, images, audio, pinyin, answer & explanation into the chosen lesson.',
+              onConfirm: async ({ newTitle, targetLessonId }) => {
+                const destLesson = targetLessonId || currentLsnId;
+                const sameLesson = isSameId(destLesson, currentLsnId);
+                const destOrders = (state.editingExercisesList || [])
+                  .filter((x) => isSameId(x.lessonId, destLesson))
+                  .map((x) => Number(x.order) || 0);
+                const nextOrder = (destOrders.length ? Math.max(...destOrders) : 0) + 1;
+                const clone = {
+                  ...src,
+                  lessonId: destLesson,
+                  question: newTitle,
+                  order: nextOrder
+                };
+                if (sameLesson) {
+                  state.editingExercisesList.splice(gIdx + 1, 0, clone);
+                } else {
+                  state.editingExercisesList.push(clone);
+                }
+                const cleaned = (state.editingExercisesList || [])
+                  .map((r, i) => ({
+                    lessonId: String(r.lessonId || '').trim(),
+                    order: Number(r.order) || i + 1,
+                    type: String(r.type || 'multiple-choice').trim(),
+                    groupId: String(r.groupId || '').trim(),
+                    groupTitle: String(r.groupTitle || '').trim(),
+                    pinyin: String(r.pinyin || '').trim(),
+                    question: String(r.question || '').trim(),
+                    audioUrl: String(r.audioUrl || '').trim(),
+                    optionA: String(r.optionA || '').trim(),
+                    optionB: String(r.optionB || '').trim(),
+                    optionC: String(r.optionC || '').trim(),
+                    optionD: String(r.optionD || '').trim(),
+                    optionE: String(r.optionE || '').trim(),
+                    optionAImage: String(r.optionAImage || '').trim(),
+                    optionBImage: String(r.optionBImage || '').trim(),
+                    optionCImage: String(r.optionCImage || '').trim(),
+                    optionDImage: String(r.optionDImage || '').trim(),
+                    optionEImage: String(r.optionEImage || '').trim(),
+                    answer: String(r.answer || '').trim(),
+                    explanation: String(r.explanation || '').trim()
+                  }))
+                  .filter(
+                    (r) =>
+                      r.question ||
+                      r.pinyin ||
+                      r.audioUrl ||
+                      r.optionAImage ||
+                      r.optionBImage ||
+                      r.optionCImage ||
+                      r.optionDImage ||
+                      r.optionEImage
+                  );
+                const res = await getContentStore().importExercisesLocal({
+                  target: target,
+                  mode: 'replace_all',
+                  rows: cleaned
+                });
+                if (target === 'stories') {
+                  state.storiesData.Exercises = res.exercises || cleaned;
+                } else {
+                  state.lessonsData.Exercises = res.exercises || cleaned;
+                }
+                state.editingExercisesList = cloneArray(res.exercises || cleaned);
+                renderEditorBody();
+                updateNavCounts();
+                renderActiveTab();
+                applySyncFeedback(
+                  res,
+                  `Duplicated exercise into "${destLesson}" & synced.`,
+                  `Duplicated exercise into "${destLesson}" locally.`
+                );
+              }
+            });
           };
         });
 
@@ -1791,6 +2209,9 @@
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-edit-story="${escapeHTML(
                                 s.id
                               )}">Edit</button>
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-dup-story="${escapeHTML(
+                                s.id
+                              )}">Duplicate</button>
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-story="${escapeHTML(
                                 s.id
                               )}">Exercises</button>
@@ -1826,6 +2247,46 @@
       btn.onclick = () => {
         const s = stories.find((x) => isSameId(x.id, btn.getAttribute('data-edit-story')));
         openStoryEditorModal(s || null);
+      };
+    });
+    viewport.querySelectorAll('[data-dup-story]').forEach((btn) => {
+      btn.onclick = () => {
+        const src = stories.find((x) => isSameId(x.id, btn.getAttribute('data-dup-story')));
+        if (!src) return;
+        openDuplicateModal({
+          entityLabel: 'Story',
+          sourceTitle: src.title || src.id,
+          sourceId: src.id,
+          existingIds: stories.map((x) => x.id),
+          helpText: 'Copies story metadata, video & poster, all reading scenes, vocabulary rows, and exercises into a new editable story.',
+          onConfirm: async ({ newTitle, newId }) => {
+            const copiedStory = { ...src, id: newId, title: newTitle };
+            const copiedScenes = (state.storiesData.Story || [])
+              .filter((r) => isSameId(r.lessonId, src.id))
+              .map((r) => ({ ...r, lessonId: newId }));
+            const copiedVocab = (state.storiesData.Vocabulary || [])
+              .filter((r) => isSameId(r.lessonId, src.id))
+              .map((r) => ({ ...r, lessonId: newId }));
+            const copiedExercises = (state.storiesData.Exercises || [])
+              .filter((r) => isSameId(r.lessonId, src.id))
+              .map((r) => ({ ...r, lessonId: newId }));
+
+            const res = await getContentStore().saveStoriesSheets({
+              Lessons: [...stories, copiedStory],
+              Story: [...(state.storiesData.Story || []), ...copiedScenes],
+              Vocabulary: [...(state.storiesData.Vocabulary || []), ...copiedVocab],
+              Exercises: [...(state.storiesData.Exercises || []), ...copiedExercises]
+            });
+            state.storiesData = { ...state.storiesData, ...res.sheets };
+            updateNavCounts();
+            applySyncFeedback(
+              res,
+              `Duplicated story "${newTitle}" (${newId}) & synced to Excel & DB.`,
+              `Duplicated story "${newTitle}" (${newId}) locally.`
+            );
+            renderActiveTab();
+          }
+        });
       };
     });
     viewport.querySelectorAll('[data-ex-story]').forEach((btn) => {
@@ -2262,10 +2723,13 @@
                           isActive ? 'Active' : 'Inactive'
                         }</span></td>
                           <td>
-                            <div style="display:flex; gap:6px;">
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-edit-reel="${escapeHTML(
                                 v.id
                               )}">Edit</button>
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-dup-reel="${escapeHTML(
+                                v.id
+                              )}">Duplicate</button>
                               <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-del-reel="${escapeHTML(
                                 v.id
                               )}">Delete</button>
@@ -2301,6 +2765,31 @@
       btn.onclick = () => {
         const r = videos.find((x) => isSameId(x.id, btn.getAttribute('data-edit-reel')));
         openReelEditorModal(r || null);
+      };
+    });
+    viewport.querySelectorAll('[data-dup-reel]').forEach((btn) => {
+      btn.onclick = () => {
+        const src = videos.find((x) => isSameId(x.id, btn.getAttribute('data-dup-reel')));
+        if (!src) return;
+        openDuplicateModal({
+          entityLabel: 'Short Reel',
+          sourceTitle: src.title || src.id,
+          sourceId: src.id,
+          existingIds: videos.map((x) => x.id),
+          helpText: 'Copies video path, thumbnail, duration, status, and all subtitle tracks (CN / Pinyin / EN / Myanmar).',
+          onConfirm: async ({ newTitle, newId }) => {
+            const copiedReel = { ...src, id: newId, title: newTitle };
+            const res = await getContentStore().saveReelsSheets({ Videos: [...videos, copiedReel] });
+            state.reelsData = { ...state.reelsData, ...res.sheets };
+            updateNavCounts();
+            applySyncFeedback(
+              res,
+              `Duplicated reel "${newTitle}" (${newId}) & synced to Excel & DB.`,
+              `Duplicated reel "${newTitle}" (${newId}) locally.`
+            );
+            renderActiveTab();
+          }
+        });
       };
     });
     viewport.querySelectorAll('[data-del-reel]').forEach((btn) => {
@@ -2520,8 +3009,75 @@
       <div class="admin-panel-card">
         <div class="admin-panel-head">
           <div>
-            <h2>Curriculum Lessons &amp; Courses (${lessons.length})</h2>
-            <p>Assign lessons to <strong>HSK 2</strong> or create custom course names. Configure Free/Paid pricing (Kyat), media, Vocabulary/Writing, Pronunciation, and all 5 Exercise types.</p>
+            <h2>Courses &amp; Course Pass Pricing (${coursesList.length})</h2>
+            <p>Create new courses, rename courses (automatically updates linked lessons &amp; learner subscriptions), and manage Course Pass pricing. Courses can only be deleted when 0 lessons belong to them.</p>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnSaveCoursePricesInline">Save Course Prices</button>
+            <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="btnAddCourse">+ New Course</button>
+          </div>
+        </div>
+
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Course Name</th>
+                <th class="num">Lessons</th>
+                <th class="num">Course Pass (Kyat)</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${
+                coursesList.length
+                  ? coursesList
+                      .map((cName) => {
+                        const countInCourse = lessons.filter((l) => courseSlug(getLessonCourse(l)) === courseSlug(cName)).length;
+                        const fallbackPrice = courseSlug(cName) === 'hsk2' ? 120 : 100;
+                        const priceVal = Number(cfgCoursePrices[cName]) || fallbackPrice;
+                        const delDisabledAttr =
+                          countInCourse > 0
+                            ? `disabled title="Cannot delete '${escapeHTML(cName)}' while ${countInCourse} lesson(s) belong to it. Move or delete those lessons first."`
+                            : '';
+                        return `
+                          <tr>
+                            <td><strong>${escapeHTML(cName)}</strong></td>
+                            <td class="num">${countInCourse}</td>
+                            <td class="num">
+                              <div style="display:inline-flex; align-items:center; justify-content:flex-end; gap:6px;">
+                                <input type="number" min="0" max="9999999" class="admin-input" style="width:100px; text-align:right; padding:4px 8px;" data-ls-course-price="${escapeHTML(
+                                  cName
+                                )}" value="${escapeHTML(priceVal)}" />
+                                <span style="color:#64748b; font-size:0.8rem;">Kyat</span>
+                              </div>
+                            </td>
+                            <td>
+                              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-edit-course="${escapeHTML(
+                                  cName
+                                )}">Edit</button>
+                                <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-del-course="${escapeHTML(
+                                  cName
+                                )}" ${delDisabledAttr}>Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        `;
+                      })
+                      .join('')
+                  : `<tr><td colspan="4" style="text-align:center; color:#64748b; padding:20px;">No courses configured yet. Click <strong>+ New Course</strong> above to add one.</td></tr>`
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-panel-card">
+        <div class="admin-panel-head">
+          <div>
+            <h2>Curriculum Lessons (${lessons.length})</h2>
+            <p>Assign lessons to courses, duplicate existing lessons with full child content, configure Free/Paid pricing (Kyat), media, Vocabulary/Writing, Pronunciation, and Exercises.</p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button type="button" class="admin-btn admin-btn-secondary" id="btnUploadLessonExercises">Upload Exercises (.xlsx)</button>
@@ -2529,31 +3085,6 @@
           </div>
         </div>
         ${renderWorkbookSyncToolbar('lessons', 'lessons.xlsx')}
-
-        <div class="admin-subrow" style="margin-bottom:14px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
-            <strong style="font-size:0.86rem;">Course Pass Pricing (Kyat — unlocks all lessons inside each course)</strong>
-            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnSaveCoursePricesInline">Save Course Prices</button>
-          </div>
-          <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
-            ${coursesList
-              .map((cName) => {
-                const countInCourse = lessons.filter((l) => courseSlug(getLessonCourse(l)) === courseSlug(cName)).length;
-                const fallbackPrice = courseSlug(cName) === 'hsk2' ? 120 : 100;
-                const priceVal = Number(cfgCoursePrices[cName]) || fallbackPrice;
-                return `
-                  <label style="display:inline-flex; align-items:center; gap:8px; font-size:0.84rem; font-weight:600; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:6px 10px;">
-                    <span>${escapeHTML(cName)} (${countInCourse}):</span>
-                    <input type="number" min="0" max="9999999" class="admin-input" style="width:92px; padding:4px 8px;" data-ls-course-price="${escapeHTML(
-                      cName
-                    )}" value="${escapeHTML(priceVal)}" />
-                    <span style="color:#64748b;">Kyat</span>
-                  </label>
-                `;
-              })
-              .join('')}
-          </div>
-        </div>
 
         <div class="admin-grid-2" style="margin-bottom:14px; max-width:560px;">
           <input type="search" class="admin-input" id="lessonSearchInput" value="${escapeHTML(
@@ -2621,6 +3152,9 @@
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-edit-lesson="${escapeHTML(
                                 l.id
                               )}">Edit</button>
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-dup-lesson="${escapeHTML(
+                                l.id
+                              )}">Duplicate</button>
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-lesson="${escapeHTML(
                                 l.id
                               )}">Exercises</button>
@@ -2658,7 +3192,7 @@
           if (cname) nextPrices[cname] = Math.max(0, Number(inp.value) || 0);
         });
         try {
-          const saved = await window.LinguaAuth.saveSiteConfig({ coursePrices: nextPrices });
+          const saved = await window.LinguaAuth.saveSiteConfig({ courses: coursesList, coursePrices: nextPrices });
           state.siteConfig = saved;
           toast('Saved course pass prices in Kyat.');
         } catch (err) {
@@ -2666,6 +3200,50 @@
         }
       };
     }
+
+    const addCourseBtn = document.getElementById('btnAddCourse');
+    if (addCourseBtn) {
+      addCourseBtn.onclick = () => openCreateCourseModal();
+    }
+
+    viewport.querySelectorAll('[data-edit-course]').forEach((btn) => {
+      btn.onclick = () => {
+        const cname = btn.getAttribute('data-edit-course');
+        const countInCourse = lessons.filter((l) => courseSlug(getLessonCourse(l)) === courseSlug(cname)).length;
+        const fallbackPrice = courseSlug(cname) === 'hsk2' ? 120 : 100;
+        const curPrice = Number(cfgCoursePrices[cname]) || fallbackPrice;
+        openEditCourseModal(cname, curPrice, countInCourse);
+      };
+    });
+
+    viewport.querySelectorAll('[data-del-course]').forEach((btn) => {
+      btn.onclick = () => {
+        const cname = btn.getAttribute('data-del-course');
+        const countInCourse = lessons.filter((l) => courseSlug(getLessonCourse(l)) === courseSlug(cname)).length;
+        if (countInCourse > 0) {
+          toast(`Cannot delete "${cname}" because ${countInCourse} lesson(s) are under this course. Move or delete those lessons first.`, 'error');
+          return;
+        }
+        openConfirmDialog({
+          title: `Delete course "${cname}"?`,
+          message: `This course has 0 lessons and will be removed from Courses and Course Pass Pricing.`,
+          confirmLabel: 'Delete Course',
+          onConfirm: async () => {
+            try {
+              const out = await window.LinguaAuth.deleteCourseAdmin(cname, state.lessonsData.Lessons || []);
+              state.siteConfig = out.config;
+              if (courseSlug(state.filters.lessonCourse) === courseSlug(cname)) {
+                state.filters.lessonCourse = 'all';
+              }
+              toast(`Deleted empty course "${cname}".`);
+              renderActiveTab();
+            } catch (err) {
+              toast(err instanceof Error ? err.message : 'Failed to delete course.', 'error');
+            }
+          }
+        });
+      };
+    });
 
     document.getElementById('lessonSearchInput').oninput = (e) => {
       state.filters.lessonSearch = e.target.value;
@@ -2682,6 +3260,63 @@
       btn.onclick = () => {
         const l = lessons.find((x) => isSameId(x.id, btn.getAttribute('data-edit-lesson')));
         openLessonEditorModal(l || null);
+      };
+    });
+    viewport.querySelectorAll('[data-dup-lesson]').forEach((btn) => {
+      btn.onclick = () => {
+        const src = lessons.find((x) => isSameId(x.id, btn.getAttribute('data-dup-lesson')));
+        if (!src) return;
+        const pricing = window.LinguaAuth ? window.LinguaAuth.getLessonPricing(src) : { accessType: 'free', price: 0 };
+        openDuplicateModal({
+          entityLabel: 'Lesson',
+          sourceTitle: src.title || src.id,
+          sourceId: src.id,
+          existingIds: lessons.map((x) => x.id),
+          helpText: 'Copies lesson metadata, pricing, video/audio/poster, vocabulary, writing characters, exercises, and pronunciation practice lines.',
+          onConfirm: async ({ newTitle, newId }) => {
+            const copiedLesson = { ...src, id: newId, title: newTitle };
+            const copiedVocab = (state.lessonsData.Vocabulary || [])
+              .filter((r) => isSameId(r.lessonId, src.id))
+              .map((r) => ({ ...r, lessonId: newId }));
+            const copiedWriting = (state.lessonsData.Writing || [])
+              .filter((r) => isSameId(r.lessonId, src.id))
+              .map((r) => ({ ...r, lessonId: newId }));
+            const copiedExercises = (state.lessonsData.Exercises || [])
+              .filter((r) => isSameId(r.lessonId, src.id))
+              .map((r) => ({ ...r, lessonId: newId }));
+            const copiedPron = (state.lessonsData.Pronunciation || [])
+              .filter((r) => isSameId(r.lessonId, src.id))
+              .map((r) => ({ ...r, lessonId: newId }));
+
+            const res = await getContentStore().saveLessonsSheets({
+              Lessons: [...lessons, copiedLesson],
+              Vocabulary: [...(state.lessonsData.Vocabulary || []), ...copiedVocab],
+              Writing: [...(state.lessonsData.Writing || []), ...copiedWriting],
+              Exercises: [...(state.lessonsData.Exercises || []), ...copiedExercises],
+              Pronunciation: [...(state.lessonsData.Pronunciation || []), ...copiedPron]
+            });
+            state.lessonsData = { ...state.lessonsData, ...res.sheets };
+            const cName = getLessonCourse(copiedLesson);
+            if (window.LinguaAuth && typeof window.LinguaAuth.saveLessonCatalogItems === 'function') {
+              await window.LinguaAuth.saveLessonCatalogItems([
+                {
+                  lessonId: newId,
+                  title: newTitle,
+                  course: cName,
+                  accessType: pricing.accessType,
+                  price: pricing.price
+                }
+              ]);
+            }
+            updateNavCounts();
+            applySyncFeedback(
+              res,
+              `Duplicated lesson "${newTitle}" (${newId}) with full content & synced to Excel & DB.`,
+              `Duplicated lesson "${newTitle}" (${newId}) locally.`
+            );
+            renderActiveTab();
+          }
+        });
       };
     });
     viewport.querySelectorAll('[data-ex-lesson]').forEach((btn) => {
@@ -2741,6 +3376,149 @@
         });
       };
     });
+  }
+
+  function openCreateCourseModal() {
+    openModal(`
+      <div class="admin-panel-head" style="margin-bottom:12px;">
+        <div>
+          <h2>Create New Course</h2>
+          <p>Add a new course name and set its full Course Pass price in Kyat.</p>
+        </div>
+        <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="ccCloseBtn">✕</button>
+      </div>
+      <form id="createCourseForm">
+        <div class="admin-grid-2">
+          <div class="admin-field">
+            <label for="ccName">Course Name *</label>
+            <input type="text" class="admin-input" id="ccName" placeholder="e.g. HSK 3 or Business Mandarin" required />
+          </div>
+          <div class="admin-field">
+            <label for="ccPrice">Course Pass Price (Kyat) *</label>
+            <input type="number" class="admin-input" id="ccPrice" min="0" max="9999999" value="120" required />
+          </div>
+        </div>
+        <div id="ccErrorBox" class="admin-backend-status is-error" hidden style="margin-top:10px;"></div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+          <button type="button" class="admin-btn admin-btn-secondary" id="ccCancelBtn">Cancel</button>
+          <button type="submit" class="admin-btn admin-btn-primary" id="ccSubmitBtn">Create Course</button>
+        </div>
+      </form>
+    `);
+    document.getElementById('ccCloseBtn').onclick = closeModal;
+    document.getElementById('ccCancelBtn').onclick = closeModal;
+    document.getElementById('ccName').focus();
+    document.getElementById('createCourseForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('ccErrorBox');
+      const submitBtn = document.getElementById('ccSubmitBtn');
+      const name = (document.getElementById('ccName').value || '').trim();
+      const price = Math.max(0, Number(document.getElementById('ccPrice').value) || 0);
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating…';
+      errBox.hidden = true;
+      try {
+        const out = await window.LinguaAuth.createCourseAdmin(name, price, state.lessonsData.Lessons || []);
+        state.siteConfig = out.config;
+        closeModal();
+        toast(`Created course "${normalizeCourseName(name)}" (${price.toLocaleString()} Kyat).`);
+        renderActiveTab();
+      } catch (err) {
+        errBox.hidden = false;
+        errBox.textContent = err instanceof Error ? err.message : 'Failed to create course.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Course';
+      }
+    };
+  }
+
+  function openEditCourseModal(courseName, curPrice, lessonCount) {
+    openModal(`
+      <div class="admin-panel-head" style="margin-bottom:12px;">
+        <div>
+          <h2>Edit Course: ${escapeHTML(courseName)}</h2>
+          <p>${
+            lessonCount > 0
+              ? `Renaming this course automatically updates ${lessonCount} linked lesson(s), catalog items, and active learner course passes.`
+              : 'Update the course name or Course Pass price in Kyat.'
+          }</p>
+        </div>
+        <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="ecCloseBtn">✕</button>
+      </div>
+      <form id="editCourseForm">
+        <div class="admin-grid-2">
+          <div class="admin-field">
+            <label for="ecName">Course Name *</label>
+            <input type="text" class="admin-input" id="ecName" value="${escapeHTML(courseName)}" required />
+          </div>
+          <div class="admin-field">
+            <label for="ecPrice">Course Pass Price (Kyat) *</label>
+            <input type="number" class="admin-input" id="ecPrice" min="0" max="9999999" value="${escapeHTML(curPrice)}" required />
+          </div>
+        </div>
+        <div id="ecErrorBox" class="admin-backend-status is-error" hidden style="margin-top:10px;"></div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+          <button type="button" class="admin-btn admin-btn-secondary" id="ecCancelBtn">Cancel</button>
+          <button type="submit" class="admin-btn admin-btn-primary" id="ecSubmitBtn">Save Course Changes</button>
+        </div>
+      </form>
+    `);
+    document.getElementById('ecCloseBtn').onclick = closeModal;
+    document.getElementById('ecCancelBtn').onclick = closeModal;
+    document.getElementById('editCourseForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('ecErrorBox');
+      const submitBtn = document.getElementById('ecSubmitBtn');
+      const rawNewName = (document.getElementById('ecName').value || '').trim();
+      const newName = normalizeCourseName(rawNewName);
+      const price = Math.max(0, Number(document.getElementById('ecPrice').value) || 0);
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving…';
+      errBox.hidden = true;
+      try {
+        const oldSlug = courseSlug(courseName);
+        const newSlug = courseSlug(newName);
+        const out = await window.LinguaAuth.renameCourseAdmin(
+          courseName,
+          newName,
+          price,
+          state.lessonsData.Lessons || []
+        );
+        state.siteConfig = out.config;
+        if (out.lessonsSheets && Array.isArray(out.lessonsSheets.Lessons)) {
+          state.lessonsData = { ...state.lessonsData, ...out.lessonsSheets };
+        } else if (newSlug !== oldSlug || newName !== courseName) {
+          // Local fallback: cascade course rename into Lessons sheet & persist
+          const nextLessons = (state.lessonsData.Lessons || []).map((l) => {
+            if (courseSlug(getLessonCourse(l)) !== oldSlug) return l;
+            const upd = {
+              ...l,
+              course: newName,
+              category: newName,
+              categoryKey: newSlug || 'course',
+              categoryNum: newName
+            };
+            if (!l.level || courseSlug(l.level) === oldSlug) {
+              upd.level = newName;
+            }
+            return upd;
+          });
+          const res = await getContentStore().saveLessonsSheets({ Lessons: nextLessons });
+          state.lessonsData = { ...state.lessonsData, ...res.sheets };
+        }
+        if (courseSlug(state.filters.lessonCourse) === oldSlug) {
+          state.filters.lessonCourse = newName;
+        }
+        closeModal();
+        toast(`Updated course "${newName}" (${price.toLocaleString()} Kyat)${newSlug !== oldSlug ? ' & cascaded to lessons and subscriptions' : ''}.`);
+        renderActiveTab();
+      } catch (err) {
+        errBox.hidden = false;
+        errBox.textContent = err instanceof Error ? err.message : 'Failed to update course.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Course Changes';
+      }
+    };
   }
 
   function openLessonEditorModal(lesson) {
@@ -3085,6 +3863,14 @@
           Writing: [...keptWriting, ...cleanWriting]
         });
         state.lessonsData = { ...state.lessonsData, ...res.sheets };
+        // Ensure any custom course typed in the Lesson Editor is registered in Courses Manager
+        const knownCourses = getAdminCoursesList();
+        if (!knownCourses.some((c) => courseSlug(c) === courseSlug(courseName))) {
+          try {
+            const cOut = await window.LinguaAuth.createCourseAdmin(courseName, 120, state.lessonsData.Lessons || []);
+            if (cOut && cOut.config) state.siteConfig = cOut.config;
+          } catch (_) {}
+        }
         if (window.LinguaAuth && typeof window.LinguaAuth.saveLessonCatalogItems === 'function') {
           await window.LinguaAuth.saveLessonCatalogItems([
             { lessonId: id, title: rec.title, course: courseName, accessType, price }
@@ -3655,10 +4441,13 @@
                             </label>
                           </td>
                           <td>
-                            <div style="display:flex; gap:6px;">
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-edit-game="${escapeHTML(
                                 g.id
                               )}">Edit</button>
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-dup-game="${escapeHTML(
+                                g.id
+                              )}">Duplicate</button>
                               <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-del-game="${escapeHTML(
                                 g.id
                               )}">Delete</button>
@@ -3728,6 +4517,24 @@
       btn.onclick = () => {
         const g = games.find((x) => isSameId(x.id, btn.getAttribute('data-edit-game')));
         openGameEditorModal(g || null, persistGames);
+      };
+    });
+
+    viewport.querySelectorAll('[data-dup-game]').forEach((btn) => {
+      btn.onclick = () => {
+        const src = games.find((x) => isSameId(x.id, btn.getAttribute('data-dup-game')));
+        if (!src) return;
+        openDuplicateModal({
+          entityLabel: 'Wordwall Game',
+          sourceTitle: src.title || src.id,
+          sourceId: src.id,
+          existingIds: games.map((x) => x.id),
+          helpText: 'Copies category, badge, Wordwall embed URL, iframe code, dimensions, description & active status.',
+          onConfirm: async ({ newTitle, newId }) => {
+            const copiedGame = { ...src, id: newId, title: newTitle, order: games.length + 1 };
+            await persistGames([...games, copiedGame], `Duplicated game "${newTitle}" (${newId}).`);
+          }
+        });
       };
     });
 
@@ -4638,6 +5445,18 @@
         if (e.target === modalBackdrop) closeModal();
       };
     }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const subBackdrop = document.getElementById('adminSubModalBackdrop');
+      if (subBackdrop && subBackdrop.classList.contains('is-open')) {
+        closeSubModal();
+        return;
+      }
+      if (modalBackdrop && modalBackdrop.classList.contains('is-open')) {
+        closeModal();
+      }
+    });
 
     if (window.LinguaAuth && typeof window.LinguaAuth.subscribe === 'function') {
       window.LinguaAuth.subscribe((s) => updateAuthGateUI(s));

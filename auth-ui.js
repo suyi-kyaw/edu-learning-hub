@@ -222,19 +222,25 @@
 
   function getAvailableCoursesList() {
     const api = getAuthApi();
-    const set = new Set(['HSK 2']);
+    const set = new Set();
     if (window.LinguaLessons && typeof window.LinguaLessons.getAllCourses === 'function') {
       (window.LinguaLessons.getAllCourses() || []).forEach((c) => {
         if (c && String(c).trim()) set.add(String(c).trim());
       });
     } else {
       const cfg = api && typeof api.getSiteConfig === 'function' ? api.getSiteConfig() : null;
+      if (cfg && Array.isArray(cfg.courses)) {
+        cfg.courses.forEach((c) => {
+          if (c && String(c).trim()) set.add(String(c).trim());
+        });
+      }
       if (cfg && cfg.coursePrices && typeof cfg.coursePrices === 'object') {
         Object.keys(cfg.coursePrices).forEach((k) => {
           if (k && String(k).trim()) set.add(String(k).trim());
         });
       }
     }
+    if (set.size === 0) set.add('HSK 2');
     return Array.from(set);
   }
 

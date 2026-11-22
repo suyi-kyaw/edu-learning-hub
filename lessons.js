@@ -450,15 +450,27 @@
     const result = [];
     const seen = new Set();
     const pushCourse = (name) => {
-      const norm = normalizeCourseName(name);
+      const raw = String(name || '').trim();
+      if (!raw) return;
+      const norm = normalizeCourseName(raw);
       const slug = courseKeySlug(norm);
       if (slug && !seen.has(slug)) {
         seen.add(slug);
         result.push(norm);
       }
     };
-    BASE_COURSES.forEach(pushCourse);
+    const siteCfg = window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === 'function'
+      ? window.LinguaAuth.getSiteConfig()
+      : null;
+    if (siteCfg && Array.isArray(siteCfg.courses) && siteCfg.courses.length) {
+      siteCfg.courses.forEach(pushCourse);
+    } else if (!allLessons || !allLessons.length) {
+      BASE_COURSES.forEach(pushCourse);
+    }
     (allLessons || []).forEach((l) => pushCourse(getLessonCourse(l)));
+    if (!result.length) {
+      BASE_COURSES.forEach(pushCourse);
+    }
     return result;
   }
 

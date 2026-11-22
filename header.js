@@ -493,8 +493,65 @@
       window.LinguaAuthUI.updateHeaderAccountUI();
     }
 
+    // Hydrate custom logo lockup if configured
+    resolveAndHydrateHeaderLogo();
+
     // Update scroll elevation
     handleHeaderScroll();
+  }
+
+  function resolveLogoAssetUrl(url) {
+    const clean = String(url || '').trim();
+    if (!clean) return '';
+    if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function') {
+      return window.LinguaBackend.assetUrl(clean);
+    }
+    return clean;
+  }
+
+  const DEFAULT_HEADER_LOGO_HTML = '<span class="logo-chinese">语</span><span class="logo-text">LinguaPath</span>';
+
+  function hydrateHeaderLogo(cfg) {
+    const logoLink = document.querySelector('.site-header .logo');
+    if (!logoLink) return;
+    const rawUrl = cfg && typeof cfg.siteLogoUrl === 'string' ? cfg.siteLogoUrl.trim() : '';
+    if (!rawUrl) {
+      logoLink.classList.remove('has-custom-logo');
+      logoLink.innerHTML = DEFAULT_HEADER_LOGO_HTML;
+      return;
+    }
+    const resolved = resolveLogoAssetUrl(rawUrl);
+    logoLink.classList.add('has-custom-logo');
+    logoLink.innerHTML = '';
+    const img = document.createElement('img');
+    img.className = 'site-brand-logo-img';
+    img.src = resolved;
+    img.alt = 'LinguaPath';
+    img.decoding = 'async';
+    img.onerror = function () {
+      logoLink.classList.remove('has-custom-logo');
+      logoLink.innerHTML = DEFAULT_HEADER_LOGO_HTML;
+    };
+    logoLink.appendChild(img);
+  }
+
+  async function resolveAndHydrateHeaderLogo() {
+    if (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === 'function') {
+      hydrateHeaderLogo(window.LinguaAuth.getSiteConfig());
+      return;
+    }
+    if (window.LinguaBackend && !window.LinguaBackend.hasBackend()) {
+      return;
+    }
+    try {
+      const apiPath = '/api/site-config?t=' + Date.now();
+      const url = window.LinguaBackend ? window.LinguaBackend.apiUrl(apiPath) : apiPath;
+      const r = await fetch(url);
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.config) hydrateHeaderLogo(j.config);
+      }
+    } catch (e) {}
   }
 
   function syncMemberMenuVisibility(stateOverride) {
@@ -523,6 +580,13 @@
 
   window.addEventListener('lingua-auth-change', function (e) {
     syncMemberMenuVisibility(e.detail);
+    if (e.detail && e.detail.siteConfig) {
+      hydrateHeaderLogo(e.detail.siteConfig);
+    }
+  });
+
+  window.addEventListener('lingua-site-config-change', function (e) {
+    hydrateHeaderLogo(e.detail);
   });
 
   function ensureAuthScriptsLoaded() {
