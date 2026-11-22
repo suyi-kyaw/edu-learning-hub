@@ -1258,7 +1258,7 @@
     const useSampleBtn = document.getElementById('btnUseSampleLogo');
     if (useSampleBtn && logoInput) {
       useSampleBtn.onclick = () => {
-        logoInput.value = 'public/assets/aistudio/Screenshot_2026-11-22_at_2.58.21_PM_045e7a40.png';
+        logoInput.value = 'public/assets/aistudio/Logo-01_264a2645.jpg';
         logoInput.dispatchEvent(new Event('input', { bubbles: true }));
       };
     }

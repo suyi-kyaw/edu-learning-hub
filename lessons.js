@@ -2691,12 +2691,17 @@
     if (!currentChar) return [];
     let char = '';
     let count = 4;
+    let parsedSteps = [];
 
     if (typeof currentChar === 'string') {
       char = currentChar.trim();
     } else if (typeof currentChar === 'object' && currentChar !== null) {
       char = (currentChar.character || currentChar.char || currentChar.word || currentChar.title || '').trim();
       count = parseInt(currentChar.strokeCount, 10) || 4;
+      const stepsStr = currentChar.strokeOrderSteps || currentChar.stroke_order_steps || '';
+      if (stepsStr) {
+        parsedSteps = stepsStr.split(/,\s*(?=\d+\.)/).map(s => s.trim());
+      }
     }
 
     const cleanChar = (String(char).match(/[\u4e00-\u9fa5]/) || ['早'])[0];
@@ -2833,50 +2838,42 @@
           const len = Math.round(Math.hypot(dx, dy));
 
           const pre = charMap[cleanChar] && charMap[cleanChar][idx];
-          if (pre) {
-            return {
-              ...pre,
-              x1: pStart.x,
-              y1: pStart.y,
-              x2: pEnd.x,
-              y2: pEnd.y,
-              pts,
-              len
-            };
-          }
+          const authoritativeLabel = parsedSteps[idx] || (pre && pre.label);
 
-          let type = 'stroke';
-          let label = `第${idx + 1}笔`;
+          let type = pre ? pre.type : 'stroke';
+          let label = authoritativeLabel || `第${idx + 1}笔`;
           let direction = 'Follow stroke flow';
 
-          if (len < 38) {
-            type = 'dot';
-            label = `第${idx + 1}笔 丶 点 (Diǎn, Dot)`;
-            direction = 'Top to bottom-right';
-          } else if (Math.abs(dx) > Math.abs(dy) * 1.4 && dx > 0) {
-            type = 'horizontal';
-            label = `第${idx + 1}笔 一 横 (Héng, Left to Right)`;
-            direction = 'Left to right (从左到右)';
-          } else if (Math.abs(dy) > Math.abs(dx) * 1.4 && dy > 0) {
-            type = 'vertical';
-            label = `第${idx + 1}笔 丨 竖 (Shù, Top to Bottom)`;
-            direction = 'Top to bottom (从上到下)';
-          } else if (dx < 0 && dy > 0) {
-            type = 'left_fall';
-            label = `第${idx + 1}笔 丿 撇 (Piě, Left Falling)`;
-            direction = 'Top-right to bottom-left (从右上到左下)';
-          } else if (dx > 0 && dy > 0) {
-            type = 'right_fall';
-            label = `第${idx + 1}笔 ㇏ 捺 (Nà, Right Falling)`;
-            direction = 'Top-left to bottom-right (从左上到右下)';
-          } else if (dx > 0 && dy < 0) {
-            type = 'rising';
-            label = `第${idx + 1}笔 提 (Tí, Rising)`;
-            direction = 'Lower-left to upper-right (从左下到右上)';
-          } else {
-            type = 'corner';
-            label = `第${idx + 1}笔 折/钩 (Zhé / Gōu)`;
-            direction = 'Follow stroke trajectory';
+          if (!authoritativeLabel && !pre) {
+            if (len < 38) {
+              type = 'dot';
+              label = parsedSteps[idx] || `第${idx + 1}笔 丶 点 (Diǎn, Dot)`;
+              direction = 'Top to bottom-right';
+            } else if (Math.abs(dx) > Math.abs(dy) * 1.4 && dx > 0) {
+              type = 'horizontal';
+              label = parsedSteps[idx] || `第${idx + 1}笔 一 横 (Héng, Left to Right)`;
+              direction = 'Left to right (从左到右)';
+            } else if (Math.abs(dy) > Math.abs(dx) * 1.4 && dy > 0) {
+              type = 'vertical';
+              label = parsedSteps[idx] || `第${idx + 1}笔 丨 竖 (Shù, Top to Bottom)`;
+              direction = 'Top to bottom (从上到下)';
+            } else if (dx < 0 && dy > 0) {
+              type = 'left_fall';
+              label = parsedSteps[idx] || `第${idx + 1}笔 丿 撇 (Piě, Left Falling)`;
+              direction = 'Top-right to bottom-left (从右上到左下)';
+            } else if (dx > 0 && dy > 0) {
+              type = 'right_fall';
+              label = parsedSteps[idx] || `第${idx + 1}笔 ㇏ 捺 (Nà, Right Falling)`;
+              direction = 'Top-left to bottom-right (从左上到右下)';
+            } else if (dx > 0 && dy < 0) {
+              type = 'rising';
+              label = parsedSteps[idx] || `第${idx + 1}笔 提 (Tí, Rising)`;
+              direction = 'Lower-left to upper-right (从左下到右上)';
+            } else {
+              type = 'corner';
+              label = parsedSteps[idx] || `第${idx + 1}笔 折/钩 (Zhé / Gōu)`;
+              direction = 'Follow stroke trajectory';
+            }
           }
 
           return {
@@ -2897,18 +2894,22 @@
     }
 
     if (charMap[cleanChar]) {
-      return charMap[cleanChar];
+      return charMap[cleanChar].map((st, idx) => ({
+        ...st,
+        label: parsedSteps[idx] || st.label
+      }));
     }
 
     const strokes = [];
     for (let i = 0; i < count; i++) {
       const t = i / Math.max(1, count - 1);
       const y = 65 + t * 170;
+      const stepLabel = parsedSteps[i];
       if (i % 2 === 0) {
         strokes.push({
           type: "horizontal",
           x1: 60, y1: y, x2: 260, y2: y,
-          label: `第${i + 1}笔 一 横 (Left to Right)`,
+          label: stepLabel || `第${i + 1}笔 一 横 (Left to Right)`,
           direction: "Left to right (从左到右)"
         });
       } else {
@@ -2916,7 +2917,7 @@
           type: "vertical",
           x1: 60 + ((i * 45) % 180), y1: Math.max(40, y - 50),
           x2: 60 + ((i * 45) % 180), y2: Math.min(280, y + 60),
-          label: `第${i + 1}笔 丨 竖 (Top to Bottom)`,
+          label: stepLabel || `第${i + 1}笔 丨 竖 (Top to Bottom)`,
           direction: "Top to bottom (从上到下)"
         });
       }

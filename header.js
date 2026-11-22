@@ -221,9 +221,8 @@
   const FALLBACK_HEADER_HTML = `
   <header class="site-header">
     <div class="container nav-container">
-      <a href="index.html" class="logo">
-        <span class="logo-chinese">语</span>
-        <span class="logo-text">JiedeEdu</span>
+      <a href="index.html" class="logo has-custom-logo">
+        <img src="public/assets/aistudio/Logo-01_264a2645.jpg" alt="JiedeEdu" class="site-brand-logo-img" />
       </a>
 
       <nav class="desktop-nav" aria-label="Main Navigation">
@@ -509,7 +508,7 @@
     return clean;
   }
 
-  const DEFAULT_HEADER_LOGO_HTML = '<span class="logo-chinese">语</span><span class="logo-text">JiedeEdu</span>';
+  const DEFAULT_HEADER_LOGO_HTML = '<img src="public/assets/aistudio/Logo-01_264a2645.jpg" alt="JiedeEdu" class="site-brand-logo-img" />';
 
   function hydrateHeaderLogo(cfg) {
     const logoLink = document.querySelector('.site-header .logo');

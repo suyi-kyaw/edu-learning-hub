@@ -17,7 +17,7 @@
     heroPrimaryCta: 'Explore Lessons',
     heroSecondaryCta: 'Explore Stories & Reels',
     heroBannerUrl: 'assets/hero-banner.png',
-    siteLogoUrl: '',
+    siteLogoUrl: 'public/assets/aistudio/Logo-01_264a2645.jpg',
     storiesLabel: 'Interactive Reading',
     storiesTitle: 'Chinese Stories',
     storiesSubtitle: 'Read illustrated Mandarin stories with pinyin, native audio, vocabulary, and comprehension exercises.',
@@ -63,8 +63,8 @@
     per_lesson: {
       id: 'per_lesson',
       name: 'Lesson Pass',
-      price: 9,
-      amountLabel: '9 Kyat / lesson',
+      price: 75000,
+      amountLabel: '75,000 Kyat / lesson',
       description: 'Lifetime unlock for one selected paid lesson (Video, Exercises, Writing & Pronunciation).'
     },
     practice_lesson: {
@@ -889,7 +889,7 @@
       heroPrimaryCta: pick(raw && raw.heroPrimaryCta, 60, DEFAULT_SITE_CONFIG.heroPrimaryCta),
       heroSecondaryCta: pick(raw && raw.heroSecondaryCta, 60, DEFAULT_SITE_CONFIG.heroSecondaryCta),
       heroBannerUrl: pickOpt(raw && raw.heroBannerUrl, 500, DEFAULT_SITE_CONFIG.heroBannerUrl) || DEFAULT_SITE_CONFIG.heroBannerUrl,
-      siteLogoUrl: (raw && Object.prototype.hasOwnProperty.call(raw, 'siteLogoUrl')) ? sanitizeLogoUrl(raw.siteLogoUrl) : DEFAULT_SITE_CONFIG.siteLogoUrl,
+      siteLogoUrl: (raw && typeof raw.siteLogoUrl === 'string' && raw.siteLogoUrl.trim()) ? sanitizeLogoUrl(raw.siteLogoUrl) : DEFAULT_SITE_CONFIG.siteLogoUrl,
       storiesLabel: pick(raw && raw.storiesLabel, 100, DEFAULT_SITE_CONFIG.storiesLabel),
       storiesTitle: pick(raw && raw.storiesTitle, 120, DEFAULT_SITE_CONFIG.storiesTitle),
       storiesSubtitle: pick(raw && raw.storiesSubtitle, 400, DEFAULT_SITE_CONFIG.storiesSubtitle),
@@ -1259,7 +1259,7 @@
     var practiceAmt = getPracticePrice().toLocaleString('en-US') + ' Kyat';
     var defaultAmt = isPracticePlan
       ? practiceAmt
-      : (planType === 'per_lesson' ? '9 Kyat' : (getCoursePrice(courseName) + ' Kyat'));
+      : (planType === 'per_lesson' ? '75,000 Kyat' : (getCoursePrice(courseName) + ' Kyat'));
     var defaultTitle = isPracticePlan
       ? (isLessonPlan ? ((opts.lessonTitle || 'Lesson') + ' (Practice Only)') : (courseName + ' Course (Practice Only)'))
       : (isCoursePlan ? (courseName + ' Full Course') : 'Lesson Pass');
@@ -2072,7 +2072,7 @@
     if (catItem) {
       return {
         accessType: catItem.accessType === 'paid' ? 'paid' : 'free',
-        price: Number(catItem.price) || (catItem.accessType === 'paid' ? 9 : 0)
+        price: Number(catItem.price) || (catItem.accessType === 'paid' ? 75000 : 0)
       };
     }
     var rawAccess = String((lesson && (lesson.accessType || lesson.access)) || '').trim().toLowerCase();
@@ -2081,7 +2081,7 @@
     }
     if (rawAccess === 'paid' || rawAccess === 'premium' || (lesson && (lesson.isFree === false || String(lesson.isFree).toLowerCase() === 'false'))) {
       var p1 = Number(lesson && lesson.price);
-      return { accessType: 'paid', price: Number.isFinite(p1) && p1 > 0 ? p1 : 9 };
+      return { accessType: 'paid', price: Number.isFinite(p1) && p1 > 0 ? p1 : 75000 };
     }
     var p2 = Number(lesson && lesson.price);
     if (Number.isFinite(p2) && p2 > 0) return { accessType: 'paid', price: p2 };

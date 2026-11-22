@@ -416,7 +416,7 @@ const DEFAULT_SITE_CONFIG = {
   heroPrimaryCta: 'Explore Stories',
   heroSecondaryCta: 'Explore Lessons',
   heroBannerUrl: 'assets/hero-banner.png',
-  siteLogoUrl: '',
+  siteLogoUrl: 'public/assets/aistudio/Logo-01_264a2645.jpg',
   storiesLabel: 'Interactive Reading',
   storiesTitle: 'Featured Stories',
   storiesSubtitle:
@@ -1537,7 +1537,7 @@ app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
         ? Number(siteCfg.coursePrices[courseName])
         : 120;
     const planMeta = {
-      per_lesson: { name: 'Lesson Pass', amountLabel: '9 Kyat / lesson' },
+      per_lesson: { name: 'Lesson Pass', amountLabel: '75,000 Kyat / lesson' },
       practice_lesson: {
         name: `${String(body.lessonTitle || 'Lesson').trim()} (Practice Only)`,
         amountLabel: `${practicePriceFormatted} Kyat / lesson`

@@ -14,7 +14,7 @@
     per_lesson: {
       id: 'per_lesson',
       title: 'Single Lesson · Full Access',
-      defaultAmount: '9 Kyat',
+      defaultAmount: '75,000 Kyat',
       subtitle: 'Video, Exercises, Writing & Pronunciation for one lesson'
     },
     practice_lesson: {
@@ -280,14 +280,14 @@
         contactChannel: subscribeContext.contactChannel || 'viber'
       };
     } else if (lessonOrOpts && (lessonOrOpts.id || lessonOrOpts.lessonId)) {
-      const pricing = api ? api.getLessonPricing(lessonOrOpts) : { accessType: 'paid', price: 9 };
+      const pricing = api ? api.getLessonPricing(lessonOrOpts) : { accessType: 'paid', price: 75000 };
       const lessonId = String(lessonOrOpts.id || lessonOrOpts.lessonId);
       const baseTitle = String(lessonOrOpts.title || lessonId);
       const isPracticeLesson = lessonOrOpts.planType === 'practice_lesson';
       const cName = api && api.getLessonCourseName
         ? api.getLessonCourseName(lessonOrOpts)
         : (lessonOrOpts.course || lessonOrOpts.category || 'HSK 2');
-      const amtNum = isPracticeLesson ? resolvePracticePriceKyat() : (pricing.price || 9);
+      const amtNum = isPracticeLesson ? resolvePracticePriceKyat() : (pricing.price || 75000);
       subscribeContext = {
         planType: isPracticeLesson ? 'practice_lesson' : 'per_lesson',
         lessonId,
@@ -531,8 +531,8 @@
         : null;
     const perLessonPriceNum =
       subscribeContext.planType === 'per_lesson'
-        ? (Number(String(subscribeContext.amountLabel || '').replace(/[^\d.]/g, '')) || (matchedLessonPricing ? matchedLessonPricing.price : 9) || 9)
-        : ((matchedLessonPricing && matchedLessonPricing.price) || 9);
+        ? (Number(String(subscribeContext.amountLabel || '').replace(/[^\d.]/g, '')) || (matchedLessonPricing ? matchedLessonPricing.price : 75000) || 75000)
+        : ((matchedLessonPricing && matchedLessonPricing.price) || 75000);
     const perLessonPrice = `${Number(perLessonPriceNum).toLocaleString('en-US')} Kyat`;
 
     const practicePriceKyat = resolvePracticePriceKyat();

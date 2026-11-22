@@ -13,7 +13,9 @@
   <footer class="site-footer">
     <div class="container footer-content">
       <div class="footer-brand">
-        <div class="footer-logo"><span>语</span> JiedeEdu</div>
+        <div class="footer-logo has-custom-logo">
+          <img src="public/assets/aistudio/Logo-01_264a2645.jpg" alt="JiedeEdu" class="footer-brand-logo-img" />
+        </div>
         <p>A practical path to learning Chinese.</p>
       </div>
 
@@ -81,7 +83,7 @@
     return clean;
   }
 
-  const DEFAULT_FOOTER_LOGO_HTML = '<span>语</span> JiedeEdu';
+  const DEFAULT_FOOTER_LOGO_HTML = '<img src="public/assets/aistudio/Logo-01_264a2645.jpg" alt="JiedeEdu" class="footer-brand-logo-img" />';
 
   function hydrateFooterContact(cfg) {
     if (!cfg) return;
