@@ -2839,12 +2839,38 @@
 
           const pre = charMap[cleanChar] && charMap[cleanChar][idx];
           const authoritativeLabel = parsedSteps[idx] || (pre && pre.label);
+          const stepText = (authoritativeLabel || '').toLowerCase();
 
           let type = pre ? pre.type : 'stroke';
           let label = authoritativeLabel || `第${idx + 1}笔`;
           let direction = 'Follow stroke flow';
+          let x2 = pEnd.x;
+          let y2 = pEnd.y;
 
-          if (!authoritativeLabel && !pre) {
+          if (stepText.includes('horizontal') || stepText.includes('横')) {
+            type = 'horizontal';
+            direction = 'Left to right (从左到右)';
+            if (Math.abs(pEnd.x - pStart.x) < Math.abs(pEnd.y - pStart.y)) {
+              x2 = pStart.x + 120;
+              y2 = pStart.y;
+            }
+          } else if (stepText.includes('vertical') || stepText.includes('竖')) {
+            type = 'vertical';
+            direction = 'Top to bottom (从上到下)';
+            if (Math.abs(pEnd.y - pStart.y) < Math.abs(pEnd.x - pStart.x)) {
+              x2 = pStart.x;
+              y2 = pStart.y + 120;
+            }
+          } else if (stepText.includes('dot') || stepText.includes('点')) {
+            type = 'dot';
+            direction = 'Top to bottom-right';
+          } else if (stepText.includes('slant') || stepText.includes('fall') || stepText.includes('撇')) {
+            type = 'left_fall';
+            direction = 'Top-right to bottom-left';
+          } else if (stepText.includes('right') && stepText.includes('fall') || stepText.includes('捺')) {
+            type = 'right_fall';
+            direction = 'Top-left to bottom-right';
+          } else if (!pre) {
             if (len < 38) {
               type = 'dot';
               label = parsedSteps[idx] || `第${idx + 1}笔 丶 点 (Diǎn, Dot)`;
@@ -2876,14 +2902,16 @@
             }
           }
 
+          const finalLen = Math.round(Math.hypot(x2 - pStart.x, y2 - pStart.y));
+
           return {
             type,
             x1: pStart.x,
             y1: pStart.y,
-            x2: pEnd.x,
-            y2: pEnd.y,
+            x2,
+            y2,
             pts,
-            len,
+            len: finalLen,
             label,
             direction
           };
