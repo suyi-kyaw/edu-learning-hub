@@ -13,15 +13,27 @@
   const PLAN_CATALOG = {
     per_lesson: {
       id: 'per_lesson',
-      title: 'By-Lesson Pass',
+      title: 'Single Lesson · Full Access',
       defaultAmount: '9 Kyat',
-      subtitle: 'Unlock one paid lesson permanently'
+      subtitle: 'Video, Exercises, Writing & Pronunciation for one lesson'
+    },
+    practice_lesson: {
+      id: 'practice_lesson',
+      title: 'Single Lesson · Practice Only',
+      defaultAmount: '55,000 Kyat',
+      subtitle: 'Exercises, Writing & Pronunciation for one lesson (No Video)'
     },
     course: {
       id: 'course',
       title: 'Full Course Pass',
       defaultAmount: '120 Kyat',
-      subtitle: 'Unlock every lesson inside a selected course (e.g., HSK 2)'
+      subtitle: 'Video & Practice for every lesson inside a selected course (e.g., HSK 1, HSK 2)'
+    },
+    practice_course: {
+      id: 'practice_course',
+      title: 'Course · Practice Only',
+      defaultAmount: '55,000 Kyat',
+      subtitle: 'Exercises, Writing & Pronunciation for every lesson in a course (No Video)'
     }
   };
 
@@ -78,10 +90,14 @@
     if (state.isAdmin) return 'Admin';
     if (!profile) return 'Free';
     const hasCourses = (profile.subscribedCourses || []).length > 0;
+    const hasPracticeCourses = (profile.practiceCourses || []).length > 0;
     const hasLessons = (profile.subscribedLessonIds || []).length > 0;
-    if (profile.membershipStatus === 'active' || hasCourses || hasLessons) {
-      if (hasCourses || profile.membershipPlan === 'course') return 'Course Active';
-      if (hasLessons || profile.membershipPlan === 'per_lesson') return 'Lesson Pass';
+    const hasPracticeLessons = (profile.practiceLessonIds || []).length > 0;
+    if (profile.membershipStatus === 'active' || hasCourses || hasLessons || hasPracticeCourses || hasPracticeLessons) {
+      if ((hasCourses && profile.membershipPlan !== 'practice_course') || profile.membershipPlan === 'course') return 'Course Active';
+      if (hasPracticeCourses || profile.membershipPlan === 'practice_course') return 'Practice Course';
+      if ((hasLessons && profile.membershipPlan !== 'practice_lesson') || profile.membershipPlan === 'per_lesson') return 'Lesson Pass';
+      if (hasPracticeLessons || profile.membershipPlan === 'practice_lesson') return 'Practice Pass';
       return 'Active';
     }
     if ((state.myRequests || []).some((r) => r.status === 'pending')) {
@@ -230,6 +246,14 @@
     return 120;
   }
 
+  function resolvePracticePriceKyat() {
+    const api = getAuthApi();
+    if (api && typeof api.getPracticePrice === 'function') {
+      return api.getPracticePrice();
+    }
+    return 55000;
+  }
+
   function openSubscribeModal(lessonOrOpts) {
     const api = getAuthApi();
     const state = api ? api.getState() : null;
@@ -239,28 +263,31 @@
       const cName = api && api.normalizeCourseName
         ? api.normalizeCourseName(lessonOrOpts.courseName || 'HSK 2')
         : (lessonOrOpts.courseName || 'HSK 2');
-      const cPrice = resolveCoursePriceKyat(cName);
+      const isPracticeCourse = lessonOrOpts.planType === 'practice_course';
+      const cPrice = isPracticeCourse ? resolvePracticePriceKyat() : resolveCoursePriceKyat(cName);
       subscribeContext = {
-        planType: 'course',
+        planType: isPracticeCourse ? 'practice_course' : 'course',
         lessonId: '',
-        lessonTitle: `${cName} Full Course`,
+        lessonTitle: isPracticeCourse ? `${cName} Course (Practice Only)` : `${cName} Full Course`,
         courseName: cName,
-        amountLabel: `${cPrice} Kyat`,
+        amountLabel: `${Number(cPrice).toLocaleString('en-US')} Kyat`,
         contactChannel: subscribeContext.contactChannel || 'viber'
       };
     } else if (lessonOrOpts && (lessonOrOpts.id || lessonOrOpts.lessonId)) {
       const pricing = api ? api.getLessonPricing(lessonOrOpts) : { accessType: 'paid', price: 9 };
       const lessonId = String(lessonOrOpts.id || lessonOrOpts.lessonId);
-      const lessonTitle = String(lessonOrOpts.title || lessonId);
+      const baseTitle = String(lessonOrOpts.title || lessonId);
+      const isPracticeLesson = lessonOrOpts.planType === 'practice_lesson';
       const cName = api && api.getLessonCourseName
         ? api.getLessonCourseName(lessonOrOpts)
         : (lessonOrOpts.course || lessonOrOpts.category || 'HSK 2');
+      const amtNum = isPracticeLesson ? resolvePracticePriceKyat() : (pricing.price || 9);
       subscribeContext = {
-        planType: 'per_lesson',
+        planType: isPracticeLesson ? 'practice_lesson' : 'per_lesson',
         lessonId,
-        lessonTitle,
+        lessonTitle: baseTitle,
         courseName: cName,
-        amountLabel: `${pricing.price || 9} Kyat`,
+        amountLabel: `${Number(amtNum).toLocaleString('en-US')} Kyat`,
         contactChannel: subscribeContext.contactChannel || 'viber'
       };
     } else {
@@ -283,8 +310,8 @@
     renderModal();
   }
 
-  function openSubscribeCourseModal(courseName) {
-    openSubscribeModal({ mode: 'course', courseName: courseName || 'HSK 2' });
+  function openSubscribeCourseModal(courseName, planType) {
+    openSubscribeModal({ mode: 'course', courseName: courseName || 'HSK 2', planType: planType || 'course' });
   }
 
   function showToast(message, type = 'success') {
@@ -490,26 +517,49 @@
       : coursesList[0] || 'HSK 2';
     subscribeContext.courseName = activeCourse;
 
-    const perLessonTitle = subscribeContext.lessonTitle || 'Selected Paid Lesson';
-    const perLessonPriceNum = Number(String(subscribeContext.amountLabel || '9').replace(/[^\d.]/g, '')) || 9;
-    const perLessonPrice = isLessonContext && subscribeContext.planType === 'per_lesson'
-      ? (subscribeContext.amountLabel || '9 Kyat')
-      : `${perLessonPriceNum} Kyat`;
+    const perLessonBaseTitle = String(subscribeContext.lessonTitle || 'Selected Paid Lesson').replace(/\s*\(Practice Only\)$/i, '');
+    const api = getAuthApi();
+    const matchedLessonPricing =
+      isLessonContext && api && typeof api.getLessonPricing === 'function'
+        ? api.getLessonPricing({ id: subscribeContext.lessonId, course: activeCourse })
+        : null;
+    const perLessonPriceNum =
+      subscribeContext.planType === 'per_lesson'
+        ? (Number(String(subscribeContext.amountLabel || '').replace(/[^\d.]/g, '')) || (matchedLessonPricing ? matchedLessonPricing.price : 9) || 9)
+        : ((matchedLessonPricing && matchedLessonPricing.price) || 9);
+    const perLessonPrice = `${Number(perLessonPriceNum).toLocaleString('en-US')} Kyat`;
+
+    const practicePriceKyat = resolvePracticePriceKyat();
+    const practicePriceLabel = `${Number(practicePriceKyat).toLocaleString('en-US')} Kyat`;
 
     const coursePriceKyat = resolveCoursePriceKyat(activeCourse);
-    const coursePriceLabel = `${coursePriceKyat} Kyat`;
+    const coursePriceLabel = `${Number(coursePriceKyat).toLocaleString('en-US')} Kyat`;
 
-    const selectedPlan = subscribeContext.planType === 'per_lesson' && isLessonContext ? 'per_lesson' : 'course';
+    const allowedPlans = isLessonContext
+      ? ['per_lesson', 'practice_lesson', 'course', 'practice_course']
+      : ['course', 'practice_course'];
+    const selectedPlan = allowedPlans.includes(subscribeContext.planType) ? subscribeContext.planType : 'course';
     subscribeContext.planType = selectedPlan;
-    subscribeContext.amountLabel = selectedPlan === 'per_lesson' ? perLessonPrice : coursePriceLabel;
-    if (selectedPlan === 'course') {
-      subscribeContext.lessonTitle = `${activeCourse} Full Course`;
+
+    let selectedRequestTitle = `${activeCourse} Full Course`;
+    let selectedAmount = coursePriceLabel;
+    let selectedLabel = `${activeCourse} Full Course (${coursePriceLabel})`;
+
+    if (selectedPlan === 'per_lesson') {
+      selectedRequestTitle = perLessonBaseTitle;
+      selectedAmount = perLessonPrice;
+      selectedLabel = `${perLessonBaseTitle} — Full Access (${perLessonPrice})`;
+    } else if (selectedPlan === 'practice_lesson') {
+      selectedRequestTitle = `${perLessonBaseTitle} (Practice Only)`;
+      selectedAmount = practicePriceLabel;
+      selectedLabel = `${perLessonBaseTitle} — Practice Only: Exercises, Writing & Pronunciation (${practicePriceLabel})`;
+    } else if (selectedPlan === 'practice_course') {
+      selectedRequestTitle = `${activeCourse} Course (Practice Only)`;
+      selectedAmount = practicePriceLabel;
+      selectedLabel = `${activeCourse} Course — Practice Only: Exercises, Writing & Pronunciation (${practicePriceLabel})`;
     }
 
-    const selectedLabel =
-      selectedPlan === 'per_lesson'
-        ? `${perLessonTitle} (${perLessonPrice})`
-        : `${activeCourse} Full Course (${coursePriceLabel})`;
+    subscribeContext.amountLabel = selectedAmount;
 
     const { contactEmail, contactViber, viberHref } = getSiteContact();
     const channel = subscribeContext.contactChannel === 'email' ? 'email' : 'viber';
@@ -534,11 +584,11 @@
       ${
         isLessonContext
           ? `<div class="lp-context-callout">
-               <strong>Locked Lesson:</strong> ${escapeHTML(perLessonTitle)} (${escapeHTML(activeCourse)})
-               <span>· Unlock just this lesson or subscribe to the full ${escapeHTML(activeCourse)} course.</span>
+               <strong>Lesson Access Options:</strong> ${escapeHTML(perLessonBaseTitle)} (${escapeHTML(activeCourse)})
+               <span>· Choose Full Access (with Video) or the 55,000 Kyat Practice-Only tier (Exercises, Writing &amp; Pronunciation) for this lesson or the full ${escapeHTML(activeCourse)} course.</span>
              </div>`
           : `<div class="lp-context-callout">
-               <strong>Course &amp; Lesson Access:</strong> Unlock all lessons inside a full course (e.g. ${escapeHTML(activeCourse)}) or individual lessons from the Lessons page.
+               <strong>Course &amp; Practice-Only Access:</strong> Choose Full Course Access (Video + Practice) or the <strong>55,000 Kyat Practice-Only</strong> tier (Exercises, Writing &amp; Pronunciation without Video) for any course (${escapeHTML(coursesList.join(', '))}).
              </div>`
       }
 
@@ -548,10 +598,18 @@
             ? `
           <button type="button" class="lp-plan-card ${selectedPlan === 'per_lesson' ? 'is-selected' : ''}" data-select-plan="per_lesson">
             <div class="lp-plan-top">
-              <strong>Lesson (This Lesson Only)</strong>
+              <strong>Single Lesson · Full Access</strong>
               <span class="lp-plan-price">${escapeHTML(perLessonPrice)}</span>
             </div>
-            <p>${escapeHTML(perLessonTitle)} · Unlock this single paid lesson permanently.</p>
+            <p>${escapeHTML(perLessonBaseTitle)} · Video Lesson, Exercises, Writing &amp; Pronunciation.</p>
+          </button>
+
+          <button type="button" class="lp-plan-card ${selectedPlan === 'practice_lesson' ? 'is-selected' : ''}" data-select-plan="practice_lesson">
+            <div class="lp-plan-top">
+              <strong>Single Lesson · Practice Only</strong>
+              <span class="lp-plan-price">${escapeHTML(practicePriceLabel)}</span>
+            </div>
+            <p>${escapeHTML(perLessonBaseTitle)} · <strong>Exercises, Writing &amp; Pronunciation only</strong> (No Video).</p>
           </button>
         `
             : ''
@@ -559,18 +617,34 @@
 
         <div class="lp-plan-card ${selectedPlan === 'course' ? 'is-selected' : ''}" data-select-plan="course" role="button" tabindex="0">
           <div class="lp-plan-top">
-            <strong>Course (${escapeHTML(activeCourse)})</strong>
+            <strong>Full Course (${escapeHTML(activeCourse)})</strong>
             <span class="lp-plan-price">${escapeHTML(coursePriceLabel)}</span>
           </div>
-          <p>Unlock every lesson in <strong>${escapeHTML(activeCourse)}</strong> (including all current &amp; future lessons added to this course).</p>
-          <div style="margin-top: 10px;">
+          <p>Video + Exercises + Writing + Pronunciation for all lessons in <strong>${escapeHTML(activeCourse)}</strong>.</p>
+          <div style="margin-top: 8px;">
             <label for="lpSubCourseSelect" style="display:block; font-size:0.78rem; font-weight:700; margin-bottom:4px;">Select Course</label>
-            <select id="lpSubCourseSelect" class="lp-inline-select" style="width:100%;">
+            <select id="lpSubCourseSelect" data-sub-course-select="course" class="lp-inline-select" style="width:100%;">
               ${coursesList
                 .map((c) => {
                   const cp = resolveCoursePriceKyat(c);
-                  return `<option value="${escapeHTML(c)}" ${c === activeCourse ? 'selected' : ''}>${escapeHTML(c)} — ${cp} Kyat</option>`;
+                  return `<option value="${escapeHTML(c)}" ${c === activeCourse ? 'selected' : ''}>${escapeHTML(c)} — ${Number(cp).toLocaleString('en-US')} Kyat</option>`;
                 })
+                .join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="lp-plan-card ${selectedPlan === 'practice_course' ? 'is-selected' : ''}" data-select-plan="practice_course" role="button" tabindex="0">
+          <div class="lp-plan-top">
+            <strong>Course · Practice Only (${escapeHTML(activeCourse)})</strong>
+            <span class="lp-plan-price">${escapeHTML(practicePriceLabel)}</span>
+          </div>
+          <p><strong>Exercises, Writing &amp; Pronunciation only</strong> (No Video) for all lessons in <strong>${escapeHTML(activeCourse)}</strong>.</p>
+          <div style="margin-top: 8px;">
+            <label for="lpSubPracticeCourseSelect" style="display:block; font-size:0.78rem; font-weight:700; margin-bottom:4px;">Select Practice Course</label>
+            <select id="lpSubPracticeCourseSelect" data-sub-course-select="practice_course" class="lp-inline-select" style="width:100%;">
+              ${coursesList
+                .map((c) => `<option value="${escapeHTML(c)}" ${c === activeCourse ? 'selected' : ''}>${escapeHTML(c)} — ${escapeHTML(practicePriceLabel)}</option>`)
                 .join('')}
             </select>
           </div>
@@ -669,24 +743,36 @@
     const pendingReq = myRequests.find((r) => r.status === 'pending');
 
     const unlockedCourses = profile?.subscribedCourses || [];
+    const practiceCourses = profile?.practiceCourses || [];
     const unlockedLessons = profile?.subscribedLessonIds || [];
+    const practiceLessons = profile?.practiceLessonIds || [];
 
     let membershipHeadline = 'Free Learner Plan';
-    let membershipSub = 'Access free starter lessons. Subscribe to individual lessons or full courses anytime.';
+    let membershipSub = 'Access free starter lessons. Subscribe to individual lessons, courses, or the 55,000 Kyat Practice-Only tier anytime.';
     let membershipTone = 'free';
 
     if (state.isAdmin) {
       membershipHeadline = 'Administrator · Full Access';
       membershipSub = 'You have full access to all courses, lessons, pricing settings, and member approvals.';
       membershipTone = 'active';
-    } else if (unlockedCourses.length > 0) {
+    } else if (unlockedCourses.length > 0 && profile?.membershipPlan !== 'practice_course') {
       membershipTone = 'active';
       membershipHeadline = `Active Course Access · ${unlockedCourses.join(', ')}`;
-      membershipSub = `All lessons inside ${unlockedCourses.join(', ')} are unlocked on your account.`;
-    } else if (unlockedLessons.length > 0) {
+      membershipSub = `All lessons inside ${unlockedCourses.join(', ')} are unlocked (Video + Practice).`;
+    } else if (practiceCourses.length > 0 || (unlockedCourses.length > 0 && profile?.membershipPlan === 'practice_course')) {
+      const pList = practiceCourses.length > 0 ? practiceCourses : unlockedCourses;
+      membershipTone = 'active';
+      membershipHeadline = `Practice-Only Course · ${pList.join(', ')}`;
+      membershipSub = `Exercises, Writing & Pronunciation unlocked for ${pList.join(', ')} (No Video). Upgrade anytime for Video Lessons.`;
+    } else if (unlockedLessons.length > 0 && profile?.membershipPlan !== 'practice_lesson') {
       membershipTone = 'active';
       membershipHeadline = `Active · ${unlockedLessons.length} Lesson${unlockedLessons.length > 1 ? 's' : ''} Unlocked`;
       membershipSub = `Unlocked Lesson IDs: ${unlockedLessons.join(', ')}`;
+    } else if (practiceLessons.length > 0 || (unlockedLessons.length > 0 && profile?.membershipPlan === 'practice_lesson')) {
+      const plList = practiceLessons.length > 0 ? practiceLessons : unlockedLessons;
+      membershipTone = 'active';
+      membershipHeadline = `Practice-Only · ${plList.length} Lesson${plList.length > 1 ? 's' : ''} Unlocked`;
+      membershipSub = `Exercises, Writing & Pronunciation unlocked (No Video) for: ${plList.join(', ')}`;
     } else if (pendingReq) {
       membershipTone = 'pending';
       membershipHeadline = `Pending QR Verification · ${pendingReq.lessonTitle}`;
@@ -694,8 +780,17 @@
     } else if (profile?.membershipStatus === 'expired') {
       membershipTone = 'expired';
       membershipHeadline = 'Access Expired';
-      membershipSub = 'Subscribe to a Lesson or Course in Kyat to unlock paid lessons.';
+      membershipSub = 'Subscribe to a Lesson, Practice-Only tier, or Full Course in Kyat to unlock paid lessons.';
     }
+
+    const canUpgradeMore =
+      !state.isAdmin &&
+      (membershipTone !== 'active' ||
+        profile?.membershipPlan === 'per_lesson' ||
+        profile?.membershipPlan === 'practice_lesson' ||
+        profile?.membershipPlan === 'practice_course' ||
+        practiceCourses.length > 0 ||
+        practiceLessons.length > 0);
 
     return `
       ${
@@ -716,17 +811,25 @@
             ${
               state.isAdmin
                 ? `<a href="admin.html" class="lp-btn lp-btn-primary lp-btn-sm">Open Admin CMS Portal →</a>`
-                : membershipTone !== 'active' || profile?.membershipPlan === 'per_lesson'
+                : canUpgradeMore
                 ? `<button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lpOpenPlansFromProfileBtn">Upgrade / Subscribe</button>`
                 : ''
             }
           </div>
         </div>
         ${
-          (profile?.subscribedLessonIds || []).length > 0 && profile?.membershipPlan !== 'per_lesson'
-            ? `<div class="lp-membership-extra">Individual Unlocked Lessons: ${escapeHTML(
-                profile.subscribedLessonIds.join(', ')
-              )}</div>`
+          unlockedLessons.length > 0 && unlockedCourses.length > 0
+            ? `<div class="lp-membership-extra">Full Lesson Passes: ${escapeHTML(unlockedLessons.join(', '))}</div>`
+            : ''
+        }
+        ${
+          practiceCourses.length > 0 && unlockedCourses.length > 0
+            ? `<div class="lp-membership-extra">Practice-Only Courses (No Video): ${escapeHTML(practiceCourses.join(', '))}</div>`
+            : ''
+        }
+        ${
+          practiceLessons.length > 0 && (unlockedLessons.length > 0 || unlockedCourses.length > 0 || practiceCourses.length > 0)
+            ? `<div class="lp-membership-extra">Practice-Only Lessons (No Video): ${escapeHTML(practiceLessons.join(', '))}</div>`
             : ''
         }
       </div>
@@ -923,7 +1026,9 @@
                         <select class="lp-inline-select" data-user-plan="${escapeHTML(u.uid)}" aria-label="Membership plan">
                           <option value="none" ${u.membershipPlan === 'none' ? 'selected' : ''}>none</option>
                           <option value="per_lesson" ${u.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson</option>
+                          <option value="practice_lesson" ${u.membershipPlan === 'practice_lesson' ? 'selected' : ''}>practice_lesson (55,000)</option>
                           <option value="course" ${u.membershipPlan === 'course' || u.membershipPlan === 'monthly' || u.membershipPlan === 'annual' ? 'selected' : ''}>course</option>
+                          <option value="practice_course" ${u.membershipPlan === 'practice_course' ? 'selected' : ''}>practice_course (55,000)</option>
                         </select>
                         <input type="date" class="lp-inline-date" data-user-expiry="${escapeHTML(u.uid)}" value="${escapeHTML(
                       u.membershipExpiresAt || ''
@@ -1389,29 +1494,36 @@
     // Subscribe plan cards & QR workflow
     document.querySelectorAll('[data-select-plan]').forEach((card) => {
       card.onclick = (e) => {
-        if (e.target && e.target.closest('#lpSubCourseSelect')) return;
+        if (e.target && e.target.closest('select[data-sub-course-select]')) return;
         const planId = card.dataset.selectPlan;
-        subscribeContext.planType = planId === 'per_lesson' ? 'per_lesson' : 'course';
+        const validPlans = ['per_lesson', 'practice_lesson', 'course', 'practice_course'];
+        subscribeContext.planType = validPlans.includes(planId) ? planId : 'course';
+        const cName = subscribeContext.courseName || 'HSK 2';
+        const pracAmt = `${Number(resolvePracticePriceKyat()).toLocaleString('en-US')} Kyat`;
         if (subscribeContext.planType === 'course') {
-          const cName = subscribeContext.courseName || 'HSK 2';
-          subscribeContext.amountLabel = `${resolveCoursePriceKyat(cName)} Kyat`;
+          subscribeContext.amountLabel = `${Number(resolveCoursePriceKyat(cName)).toLocaleString('en-US')} Kyat`;
+        } else if (subscribeContext.planType === 'practice_course' || subscribeContext.planType === 'practice_lesson') {
+          subscribeContext.amountLabel = pracAmt;
         }
         renderModal();
       };
     });
 
-    const subCourseSelect = document.getElementById('lpSubCourseSelect');
-    if (subCourseSelect) {
-      subCourseSelect.onchange = (e) => {
+    document.querySelectorAll('select[data-sub-course-select]').forEach((sel) => {
+      sel.onchange = (e) => {
         e.stopPropagation();
-        const chosen = subCourseSelect.value || 'HSK 2';
-        subscribeContext.planType = 'course';
+        const chosen = sel.value || 'HSK 2';
+        const targetPlan = sel.dataset.subCourseSelect === 'practice_course' ? 'practice_course' : 'course';
+        subscribeContext.planType = targetPlan;
         subscribeContext.courseName = chosen;
-        subscribeContext.lessonTitle = `${chosen} Full Course`;
-        subscribeContext.amountLabel = `${resolveCoursePriceKyat(chosen)} Kyat`;
+        if (targetPlan === 'practice_course') {
+          subscribeContext.amountLabel = `${Number(resolvePracticePriceKyat()).toLocaleString('en-US')} Kyat`;
+        } else {
+          subscribeContext.amountLabel = `${Number(resolveCoursePriceKyat(chosen)).toLocaleString('en-US')} Kyat`;
+        }
         renderModal();
       };
-    }
+    });
 
     const subGoSignIn = document.getElementById('lpSubGoSignInBtn');
     if (subGoSignIn) {
@@ -1464,11 +1576,23 @@
           submitBtn.textContent = 'Submitting Request…';
         }
         try {
+          const baseLessonTitle = String(subscribeContext.lessonTitle || '').replace(/\s*\(Practice Only\)$/i, '').trim();
+          const cName = subscribeContext.courseName || 'HSK 2';
+          let reqTitle = subscribeContext.lessonTitle;
+          if (subscribeContext.planType === 'course') {
+            reqTitle = `${cName} Full Course`;
+          } else if (subscribeContext.planType === 'practice_course') {
+            reqTitle = `${cName} Course (Practice Only)`;
+          } else if (subscribeContext.planType === 'practice_lesson') {
+            reqTitle = `${baseLessonTitle || 'Lesson'} (Practice Only)`;
+          } else {
+            reqTitle = baseLessonTitle || 'Lesson Pass';
+          }
           await api.submitSubscriptionRequest({
             planType: subscribeContext.planType,
             lessonId: subscribeContext.lessonId,
             courseName: subscribeContext.courseName,
-            lessonTitle: subscribeContext.lessonTitle,
+            lessonTitle: reqTitle,
             amountLabel: subscribeContext.amountLabel,
             contactChannel,
             contactHandle,

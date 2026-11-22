@@ -3911,8 +3911,10 @@
             <label for="udPlan">Membership Plan</label>
             <select class="admin-select" id="udPlan">
               <option value="none" ${user.membershipPlan === 'none' ? 'selected' : ''}>none</option>
-              <option value="per_lesson" ${user.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson (Lesson Pass)</option>
-              <option value="course" ${user.membershipPlan === 'course' ? 'selected' : ''}>course (Course Pass)</option>
+              <option value="per_lesson" ${user.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson (Full Lesson Pass)</option>
+              <option value="practice_lesson" ${user.membershipPlan === 'practice_lesson' ? 'selected' : ''}>practice_lesson (55,000 Kyat · Practice Only)</option>
+              <option value="course" ${user.membershipPlan === 'course' ? 'selected' : ''}>course (Full Course Pass)</option>
+              <option value="practice_course" ${user.membershipPlan === 'practice_course' ? 'selected' : ''}>practice_course (55,000 Kyat · Practice Only)</option>
             </select>
           </div>
           <div class="admin-field">
@@ -4103,6 +4105,8 @@
                       .map((u) => {
                         const unlockedCount = Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds.length : 0;
                         const unlockedCoursesCount = Array.isArray(u.subscribedCourses) ? u.subscribedCourses.length : 0;
+                        const pracCount = Array.isArray(u.practiceLessonIds) ? u.practiceLessonIds.length : 0;
+                        const pracCoursesCount = Array.isArray(u.practiceCourses) ? u.practiceCourses.length : 0;
                         const roleTag = u.role === 'admin' ? ' · Admin' : '';
                         const tempTag = u.mustChangePassword ? ' · Temp PW active' : '';
                         return `
@@ -4125,7 +4129,9 @@
                             <select class="admin-select" data-u-plan="${escapeHTML(u.uid)}">
                               <option value="none" ${u.membershipPlan === 'none' ? 'selected' : ''}>none</option>
                               <option value="per_lesson" ${u.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson</option>
+                              <option value="practice_lesson" ${u.membershipPlan === 'practice_lesson' ? 'selected' : ''}>practice_lesson (55,000)</option>
                               <option value="course" ${u.membershipPlan === 'course' ? 'selected' : ''}>course</option>
+                              <option value="practice_course" ${u.membershipPlan === 'practice_course' ? 'selected' : ''}>practice_course (55,000)</option>
                             </select>
                           </td>
                           <td>
@@ -4136,7 +4142,7 @@
                           <td>
                             <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-u-lessons="${escapeHTML(
                               u.uid
-                            )}">Courses (${unlockedCoursesCount}) · Lessons (${unlockedCount})</button>
+                            )}">Full: C(${unlockedCoursesCount}) L(${unlockedCount}) · Practice: C(${pracCoursesCount}) L(${pracCount})</button>
                           </td>
                           <td>
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
@@ -4268,6 +4274,8 @@
         if (!user) return;
         const unlocked = new Set(user.subscribedLessonIds || []);
         const unlockedCourses = new Set((user.subscribedCourses || []).map((c) => courseSlug(c)));
+        const practiceLessons = new Set(user.practiceLessonIds || []);
+        const practiceCourses = new Set((user.practiceCourses || []).map((c) => courseSlug(c)));
         const allLessons = state.lessonsData.Lessons || [];
         const coursesList = getAdminCoursesList();
 
@@ -4275,13 +4283,13 @@
           <div class="admin-panel-head" style="margin-bottom:12px;">
             <div>
               <h2>Unlocked Courses &amp; Lessons · ${escapeHTML(user.username || user.email)}</h2>
-              <p>Grant full Course Pass access (all lessons inside a course) or individual Lesson Pass unlocks.</p>
+              <p>Grant Full Access (Video + Exercises, Writing, Pronunciation) or 55,000 Kyat Practice-Only Access (No Video) per course or per lesson.</p>
             </div>
             <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="ulCloseBtn">✕</button>
           </div>
 
-          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Unlocked Courses (Full Course Pass)</strong>
-          <div class="admin-featured-checklist" style="margin-bottom:14px;">
+          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Full Course Pass (Video + Practice)</strong>
+          <div class="admin-featured-checklist" style="margin-bottom:12px;">
             ${coursesList
               .map(
                 (cName) => `
@@ -4296,13 +4304,45 @@
               .join('')}
           </div>
 
-          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Individual Unlocked Lessons</strong>
-          <div class="admin-featured-checklist" style="max-height:280px; overflow-y:auto;">
+          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Practice-Only Courses · 55,000 Kyat (Exercises, Writing &amp; Pronunciation · No Video)</strong>
+          <div class="admin-featured-checklist" style="margin-bottom:14px;">
+            ${coursesList
+              .map(
+                (cName) => `
+              <label class="admin-featured-item">
+                <input type="checkbox" name="ulPracticeCourse" value="${escapeHTML(cName)}" ${
+                  practiceCourses.has(courseSlug(cName)) ? 'checked' : ''
+                } />
+                <span>${escapeHTML(cName)} (Practice Only)</span>
+              </label>
+            `
+              )
+              .join('')}
+          </div>
+
+          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Individual Unlocked Lessons · Full Access (Video + Practice)</strong>
+          <div class="admin-featured-checklist" style="max-height:180px; overflow-y:auto; margin-bottom:14px;">
             ${allLessons
               .map(
                 (l) => `
               <label class="admin-featured-item">
                 <input type="checkbox" name="ulLesson" value="${escapeHTML(l.id)}" ${unlocked.has(l.id) ? 'checked' : ''} />
+                <span>${escapeHTML(l.title || l.id)} (${escapeHTML(getLessonCourse(l))})</span>
+              </label>
+            `
+              )
+              .join('')}
+          </div>
+
+          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Individual Unlocked Lessons · Practice Only · 55,000 Kyat (No Video)</strong>
+          <div class="admin-featured-checklist" style="max-height:180px; overflow-y:auto;">
+            ${allLessons
+              .map(
+                (l) => `
+              <label class="admin-featured-item">
+                <input type="checkbox" name="ulPracticeLesson" value="${escapeHTML(l.id)}" ${
+                  practiceLessons.has(l.id) ? 'checked' : ''
+                } />
                 <span>${escapeHTML(l.title || l.id)} (${escapeHTML(getLessonCourse(l))})</span>
               </label>
             `
@@ -4320,18 +4360,30 @@
         document.getElementById('ulSaveBtn').onclick = async () => {
           const checkedIds = Array.from(document.querySelectorAll('input[name="ulLesson"]:checked')).map((c) => c.value);
           const checkedCourses = Array.from(document.querySelectorAll('input[name="ulCourse"]:checked')).map((c) => c.value);
-          const hasAny = checkedIds.length > 0 || checkedCourses.length > 0;
-          const nextPlan = checkedCourses.length ? 'course' : checkedIds.length ? 'per_lesson' : 'none';
+          const checkedPracticeIds = Array.from(document.querySelectorAll('input[name="ulPracticeLesson"]:checked')).map((c) => c.value);
+          const checkedPracticeCourses = Array.from(document.querySelectorAll('input[name="ulPracticeCourse"]:checked')).map((c) => c.value);
+          const hasAny = checkedIds.length > 0 || checkedCourses.length > 0 || checkedPracticeIds.length > 0 || checkedPracticeCourses.length > 0;
+          const nextPlan = checkedCourses.length
+            ? 'course'
+            : checkedPracticeCourses.length
+            ? 'practice_course'
+            : checkedIds.length
+            ? 'per_lesson'
+            : checkedPracticeIds.length
+            ? 'practice_lesson'
+            : 'none';
           try {
             await window.LinguaAuth.updateUserMembershipAdmin(uid, {
               membershipStatus: user.membershipStatus && user.membershipStatus !== 'free' ? user.membershipStatus : hasAny ? 'active' : 'free',
               membershipPlan: user.membershipPlan && user.membershipPlan !== 'none' ? user.membershipPlan : nextPlan,
               membershipExpiresAt: user.membershipExpiresAt || '',
               subscribedLessonIds: checkedIds,
-              subscribedCourses: checkedCourses
+              subscribedCourses: checkedCourses,
+              practiceLessonIds: checkedPracticeIds,
+              practiceCourses: checkedPracticeCourses
             });
             closeModal();
-            toast(`Saved ${checkedCourses.length} course(s) and ${checkedIds.length} lesson(s).`);
+            toast(`Saved access (${checkedCourses.length} full courses, ${checkedPracticeCourses.length} practice courses, ${checkedIds.length} full lessons, ${checkedPracticeIds.length} practice lessons).`);
           } catch (err) {
             toast(err instanceof Error ? err.message : 'Failed to save access.', 'error');
           }

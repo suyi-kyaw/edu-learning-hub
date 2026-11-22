@@ -42,6 +42,7 @@
     coursePrices: {
       'HSK 2': 120
     },
+    practicePrice: 55000,
     contactEmail: 'syndkyaw@gmail.com',
     contactPhone: '+95 9 798 123 456',
     contactViber: '+95 9 798 123 456',
@@ -62,14 +63,28 @@
       name: 'Lesson Pass',
       price: 9,
       amountLabel: '9 Kyat / lesson',
-      description: 'Lifetime unlock for one selected paid lesson.'
+      description: 'Lifetime unlock for one selected paid lesson (Video, Exercises, Writing & Pronunciation).'
+    },
+    practice_lesson: {
+      id: 'practice_lesson',
+      name: 'Single Lesson · Practice Only',
+      price: 55000,
+      amountLabel: '55,000 Kyat / lesson',
+      description: 'Exercises, Writing & Pronunciation for one selected lesson (No Video).'
     },
     course: {
       id: 'course',
       name: 'Course Pass',
       price: 120,
       amountLabel: '120 Kyat / course',
-      description: 'Unlock every lesson in the selected course (e.g. HSK 2).'
+      description: 'Unlock every lesson in the selected course including Video Lessons (e.g. HSK 2).'
+    },
+    practice_course: {
+      id: 'practice_course',
+      name: 'Course · Practice Only',
+      price: 55000,
+      amountLabel: '55,000 Kyat / course',
+      description: 'Exercises, Writing & Pronunciation for all lessons in a course (No Video).'
     }
   };
 
@@ -441,10 +456,12 @@
 
   function normalizePlanValue(val, allowNone) {
     var p = String(val || '').trim().toLowerCase();
+    if (p === 'practice_lesson' || p === 'practice-lesson') return 'practice_lesson';
+    if (p === 'practice_course' || p === 'practice-course') return 'practice_course';
     if (p === 'per_lesson' || p === 'lesson') return 'per_lesson';
     if (p === 'course' || p === 'hsk' || p === 'annual' || p === 'monthly') {
-      // Preserve course or legacy active plans gracefully; UI uses 'course' and 'per_lesson'
-      return (p === 'annual' || p === 'monthly') ? 'course' : 'course';
+      // Preserve course or legacy active plans gracefully; UI supports full and practice tiers
+      return 'course';
     }
     return allowNone ? 'none' : 'course';
   }
@@ -468,10 +485,9 @@
         var st = String(o.membershipStatus || 'free').trim().toLowerCase();
         var status = (st === 'active' || st === 'pending' || st === 'expired') ? st : 'free';
         var rawPlan = String(o.membershipPlan || 'none').trim().toLowerCase();
-        var plan = (rawPlan === 'per_lesson' || rawPlan === 'course')
-          ? rawPlan
-          : (rawPlan === 'monthly' || rawPlan === 'annual' ? 'course' : 'none');
+        var plan = normalizePlanValue(rawPlan, true);
         var subCourses = parseList(o.subscribedCourses || o.SubscribedCourses || '', normalizeCourseName);
+        var pracCourses = parseList(o.practiceCourses || o.PracticeCourses || '', normalizeCourseName);
         if ((rawPlan === 'monthly' || rawPlan === 'annual') && status === 'active' && subCourses.length === 0) {
           subCourses = ['HSK 2'];
         }
@@ -488,6 +504,8 @@
             membershipExpiresAt: normalizeDate(o.membershipExpiresAt),
             subscribedLessonIds: parseList(o.subscribedLessonIds),
             subscribedCourses: subCourses,
+            practiceLessonIds: parseList(o.practiceLessonIds || o.PracticeLessonIds || ''),
+            practiceCourses: pracCourses,
             linkedProviders: ['password'],
             mustChangePassword: parseBool(o.mustChangePassword, false),
             createdAt: String(o.createdAt || '').trim(),
@@ -621,9 +639,14 @@
       });
       var targetKey = byUid ? uid : (byEmailKey || uid);
       var existing = merged.users[targetKey];
-      var normalizedProfile = Object.assign({ subscribedCourses: [], subscribedLessonIds: [] }, rec.profile);
+      var normalizedProfile = Object.assign(
+        { subscribedCourses: [], subscribedLessonIds: [], practiceCourses: [], practiceLessonIds: [] },
+        rec.profile
+      );
       normalizedProfile.subscribedCourses = parseList(normalizedProfile.subscribedCourses || [], normalizeCourseName);
       normalizedProfile.subscribedLessonIds = parseList(normalizedProfile.subscribedLessonIds || []);
+      normalizedProfile.practiceCourses = parseList(normalizedProfile.practiceCourses || [], normalizeCourseName);
+      normalizedProfile.practiceLessonIds = parseList(normalizedProfile.practiceLessonIds || []);
       if (!existing) {
         merged.users[targetKey] = { profile: normalizedProfile, passwordHash: rec.passwordHash };
       } else {
@@ -710,7 +733,10 @@
   function buildSessionPayload(store, uid) {
     var rec = store.users[uid];
     if (!rec || !rec.profile) return null;
-    var profile = Object.assign({ subscribedLessonIds: [], subscribedCourses: [] }, rec.profile);
+    var profile = Object.assign(
+      { subscribedLessonIds: [], subscribedCourses: [], practiceLessonIds: [], practiceCourses: [] },
+      rec.profile
+    );
     var admin = profile.role === 'admin';
     var reqs = sortedRequests(store);
     return {
@@ -829,6 +855,7 @@
       lessonsBullets: cleanStringArray(raw && raw.lessonsBullets, 6, 140, DEFAULT_SITE_CONFIG.lessonsBullets),
       lessonsCta: pick(raw && raw.lessonsCta, 80, DEFAULT_SITE_CONFIG.lessonsCta),
       coursePrices: normalizeCoursePrices(raw && raw.coursePrices),
+      practicePrice: (raw && Number.isFinite(Number(raw.practicePrice)) && Number(raw.practicePrice) >= 0) ? Math.round(Number(raw.practicePrice)) : DEFAULT_SITE_CONFIG.practicePrice,
       contactEmail: pick(raw && raw.contactEmail, 160, DEFAULT_SITE_CONFIG.contactEmail),
       contactPhone: pick(raw && raw.contactPhone, 40, DEFAULT_SITE_CONFIG.contactPhone),
       contactViber: pick(raw && raw.contactViber, 40, DEFAULT_SITE_CONFIG.contactViber),
@@ -964,6 +991,8 @@
       membershipExpiresAt: '',
       subscribedLessonIds: [],
       subscribedCourses: claimAdmin ? ['HSK 2'] : [],
+      practiceLessonIds: [],
+      practiceCourses: [],
       linkedProviders: ['password'],
       mustChangePassword: false,
       createdAt: nowIso,
@@ -1142,9 +1171,21 @@
   async function submitSubscriptionRequest(opts) {
     if (!state.user || !state.profile) throw new Error('Please sign in first.');
     var nowIso = new Date().toISOString();
-    var planType = opts.planType === 'per_lesson' ? 'per_lesson' : 'course';
+    var rawPt = String(opts.planType || 'course').trim().toLowerCase();
+    var planType = (rawPt === 'per_lesson' || rawPt === 'practice_lesson' || rawPt === 'practice_course' || rawPt === 'course')
+      ? rawPt
+      : 'course';
+    var isLessonPlan = planType === 'per_lesson' || planType === 'practice_lesson';
+    var isCoursePlan = planType === 'course' || planType === 'practice_course';
+    var isPracticePlan = planType === 'practice_lesson' || planType === 'practice_course';
     var courseName = opts.courseName ? normalizeCourseName(opts.courseName) : (opts.lessonTitle ? normalizeCourseName(opts.lessonTitle) : 'HSK 2');
-    var defaultAmt = planType === 'per_lesson' ? '9 Kyat' : (getCoursePrice(courseName) + ' Kyat');
+    var practiceAmt = getPracticePrice().toLocaleString('en-US') + ' Kyat';
+    var defaultAmt = isPracticePlan
+      ? practiceAmt
+      : (planType === 'per_lesson' ? '9 Kyat' : (getCoursePrice(courseName) + ' Kyat'));
+    var defaultTitle = isPracticePlan
+      ? (isLessonPlan ? ((opts.lessonTitle || 'Lesson') + ' (Practice Only)') : (courseName + ' Course (Practice Only)'))
+      : (isCoursePlan ? (courseName + ' Full Course') : 'Lesson Pass');
     var req = {
       requestId: 'req_' + Date.now().toString(36) + '_' + randomHex(3),
       userId: state.user.uid,
@@ -1152,9 +1193,9 @@
       userEmail: state.profile.email || state.user.email,
       userPhone: state.profile.phoneNumber || '',
       planType: planType,
-      lessonId: (planType === 'per_lesson' && opts.lessonId) ? cleanId(opts.lessonId) : '',
-      courseName: planType === 'course' ? courseName : '',
-      lessonTitle: String(opts.lessonTitle || '').trim() || (planType === 'course' ? (courseName + ' Full Course') : 'Lesson Pass'),
+      lessonId: (isLessonPlan && opts.lessonId) ? cleanId(opts.lessonId) : '',
+      courseName: isCoursePlan ? courseName : (opts.courseName ? normalizeCourseName(opts.courseName) : ''),
+      lessonTitle: String(opts.lessonTitle || '').trim() || defaultTitle,
       amountLabel: String(opts.amountLabel || '').trim() || defaultAmt,
       contactChannel: opts.contactChannel === 'email' ? 'email' : 'viber',
       contactHandle: String(opts.contactHandle || '').trim(),
@@ -1164,6 +1205,33 @@
       createdAt: nowIso,
       updatedAt: nowIso
     };
+
+    var token = getStoredApiToken();
+    if (token) {
+      try {
+        var srvRes = await fetch('/api/requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({
+            planType: req.planType,
+            lessonId: req.lessonId,
+            courseName: req.courseName,
+            lessonTitle: req.lessonTitle,
+            amountLabel: req.amountLabel,
+            contactChannel: req.contactChannel,
+            contactHandle: req.contactHandle,
+            note: req.note
+          })
+        });
+        if (srvRes.ok) {
+          var srvJson = await srvRes.json();
+          if (srvJson && srvJson.request && srvJson.request.requestId) {
+            req = Object.assign({}, req, srvJson.request);
+          }
+        }
+      } catch (e) {}
+    }
+
     var overlay = readOverlay();
     overlay.requests[req.requestId] = req;
     writeOverlay(overlay);
@@ -1202,15 +1270,31 @@
     });
     var userRec = store.users[req.userId];
     if (userRec) {
+      var pt = normalizePlanValue(req.planType, false);
+      var curPlan = normalizePlanValue(userRec.profile.membershipPlan || 'none', true);
+      var nextPlan = pt;
+      if (pt === 'per_lesson' && curPlan === 'course') nextPlan = 'course';
+      if (pt === 'practice_lesson' && (curPlan === 'course' || curPlan === 'per_lesson' || curPlan === 'practice_course')) nextPlan = curPlan;
+      if (pt === 'practice_course' && curPlan === 'course') nextPlan = 'course';
+
       var nextProfile = Object.assign({}, userRec.profile, {
         membershipStatus: 'active',
-        membershipPlan: req.planType === 'per_lesson' ? 'per_lesson' : 'course',
+        membershipPlan: nextPlan,
         updatedAt: nowIso
       });
-      if (req.planType === 'per_lesson' && req.lessonId) {
+      if (pt === 'per_lesson' && req.lessonId) {
         var lessonSet = new Set(nextProfile.subscribedLessonIds || []);
         lessonSet.add(cleanId(req.lessonId));
         nextProfile.subscribedLessonIds = Array.from(lessonSet);
+      } else if (pt === 'practice_lesson' && req.lessonId) {
+        var pracLessonSet = new Set(nextProfile.practiceLessonIds || []);
+        pracLessonSet.add(cleanId(req.lessonId));
+        nextProfile.practiceLessonIds = Array.from(pracLessonSet);
+      } else if (pt === 'practice_course') {
+        var pcName = normalizeCourseName(req.courseName || req.lessonTitle || 'HSK 2');
+        var pracCourseSet = new Set((nextProfile.practiceCourses || []).map(normalizeCourseName));
+        pracCourseSet.add(pcName);
+        nextProfile.practiceCourses = Array.from(pracCourseSet);
       } else {
         var cName = normalizeCourseName(req.courseName || req.lessonTitle || 'HSK 2');
         var courseSet = new Set((nextProfile.subscribedCourses || []).map(normalizeCourseName));
@@ -1219,6 +1303,18 @@
       }
       overlay.users[req.userId] = { profile: nextProfile, passwordHash: userRec.passwordHash };
     }
+
+    var token = getStoredApiToken();
+    if (token) {
+      try {
+        await fetch('/api/admin/requests/' + encodeURIComponent(reqDoc.requestId) + '/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ adminNote: note })
+        });
+      } catch (e) {}
+    }
+
     writeOverlay(overlay);
     hydrateSession(mergeStore(), state.user.uid);
     notify();
@@ -1254,8 +1350,34 @@
       subscribedCourses: Array.isArray(updates.subscribedCourses)
         ? parseList(updates.subscribedCourses, normalizeCourseName)
         : (rec.profile.subscribedCourses || []),
+      practiceLessonIds: Array.isArray(updates.practiceLessonIds)
+        ? updates.practiceLessonIds.map(cleanId)
+        : (rec.profile.practiceLessonIds || []),
+      practiceCourses: Array.isArray(updates.practiceCourses)
+        ? parseList(updates.practiceCourses, normalizeCourseName)
+        : (rec.profile.practiceCourses || []),
       updatedAt: new Date().toISOString()
     });
+
+    var token = getStoredApiToken();
+    if (token) {
+      try {
+        await fetch('/api/admin/users/' + encodeURIComponent(uid) + '/membership', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({
+            membershipStatus: nextProfile.membershipStatus,
+            membershipPlan: nextProfile.membershipPlan,
+            membershipExpiresAt: nextProfile.membershipExpiresAt,
+            subscribedLessonIds: nextProfile.subscribedLessonIds,
+            subscribedCourses: nextProfile.subscribedCourses,
+            practiceLessonIds: nextProfile.practiceLessonIds,
+            practiceCourses: nextProfile.practiceCourses
+          })
+        });
+      } catch (e) {}
+    }
+
     var overlay = readOverlay();
     overlay.users[uid] = { profile: nextProfile, passwordHash: rec.passwordHash };
     writeOverlay(overlay);
@@ -1415,6 +1537,12 @@
     return 120;
   }
 
+  function getPracticePrice() {
+    var cfg = getSiteConfig();
+    var p = Number(cfg.practicePrice);
+    return Number.isFinite(p) && p > 0 ? Math.round(p) : 55000;
+  }
+
   async function saveSiteConfig(partial) {
     if (!state.user || !isAdminUser()) throw new Error('Administrator access required.');
     var normalized = normalizeSiteConfig(Object.assign({}, state.siteConfig, partial || {}));
@@ -1488,6 +1616,8 @@
         membershipExpiresAt: a.membershipExpiresAt || '',
         subscribedLessonIds: (a.subscribedLessonIds || []).join(','),
         subscribedCourses: (a.subscribedCourses || []).join(','),
+        practiceLessonIds: (a.practiceLessonIds || []).join(','),
+        practiceCourses: (a.practiceCourses || []).join(','),
         mustChangePassword: a.mustChangePassword ? 'true' : 'false',
         createdAt: String(a.createdAt || ''),
         updatedAt: String(a.updatedAt || '')
@@ -1543,7 +1673,7 @@
     var wb = xlsxLib.utils.book_new();
     xlsxLib.utils.book_append_sheet(
       wb,
-      userRows.length ? xlsxLib.utils.json_to_sheet(userRows) : xlsxLib.utils.aoa_to_sheet([['uid', 'username', 'email', 'phoneNumber', 'dob', 'passwordHash', 'role', 'membershipStatus', 'membershipPlan', 'membershipExpiresAt', 'subscribedLessonIds', 'subscribedCourses', 'mustChangePassword', 'createdAt', 'updatedAt']]),
+      userRows.length ? xlsxLib.utils.json_to_sheet(userRows) : xlsxLib.utils.aoa_to_sheet([['uid', 'username', 'email', 'phoneNumber', 'dob', 'passwordHash', 'role', 'membershipStatus', 'membershipPlan', 'membershipExpiresAt', 'subscribedLessonIds', 'subscribedCourses', 'practiceLessonIds', 'practiceCourses', 'mustChangePassword', 'createdAt', 'updatedAt']]),
       'Users'
     );
     xlsxLib.utils.book_append_sheet(
@@ -1632,38 +1762,78 @@
     return { accessType: 'free', price: 0 };
   }
 
+  function isMembershipExpired(prof) {
+    if (!prof || prof.membershipStatus === 'expired') return true;
+    if (prof.membershipExpiresAt) {
+      var exp = Date.parse(prof.membershipExpiresAt + 'T23:59:59Z');
+      if (!Number.isNaN(exp) && exp < Date.now()) return true;
+    }
+    return false;
+  }
+
   function hasActiveMembership() {
     var prof = state.profile;
     if (!prof) return false;
     if (isAdminUser()) return true;
     if (prof.membershipStatus !== 'active') return false;
-    if (prof.membershipExpiresAt) {
-      var exp = Date.parse(prof.membershipExpiresAt + 'T23:59:59Z');
-      if (!Number.isNaN(exp) && exp < Date.now()) return false;
-    }
-    return Boolean((prof.subscribedCourses || []).length || (prof.subscribedLessonIds || []).length);
+    if (isMembershipExpired(prof)) return false;
+    return Boolean(
+      (prof.subscribedCourses || []).length ||
+      (prof.subscribedLessonIds || []).length ||
+      (prof.practiceCourses || []).length ||
+      (prof.practiceLessonIds || []).length
+    );
+  }
+
+  function getCourseAccessMode(courseName) {
+    if (isAdminUser()) return 'full';
+    var prof = state.profile;
+    if (!prof || isMembershipExpired(prof)) return 'none';
+    var targetKey = courseKey(normalizeCourseName(courseName));
+    if (!targetKey) return 'none';
+    var fullCourses = prof.subscribedCourses || [];
+    var pracCourses = prof.practiceCourses || [];
+    var hasFullEntry = fullCourses.some(function (c) { return courseKey(c) === targetKey; });
+    var hasPracEntry = pracCourses.some(function (c) { return courseKey(c) === targetKey; });
+    if (hasFullEntry && (prof.membershipPlan !== 'practice_course' || pracCourses.length > 0)) return 'full';
+    if (hasPracEntry) return 'practice';
+    if (hasFullEntry && prof.membershipPlan === 'practice_course' && pracCourses.length === 0) return 'practice';
+    return 'none';
   }
 
   function hasCourseAccess(courseName) {
-    if (isAdminUser()) return true;
-    var prof = state.profile;
-    if (!prof) return false;
-    var targetKey = courseKey(normalizeCourseName(courseName));
-    var courses = prof.subscribedCourses || [];
-    return courses.some(function (c) { return courseKey(c) === targetKey; });
+    return getCourseAccessMode(courseName) !== 'none';
   }
 
   function hasPendingRequest() {
     return state.myRequests.some(function (r) { return r.status === 'pending'; });
   }
 
-  function canAccessLesson(lesson) {
-    if (getLessonPricing(lesson).accessType === 'free' || isAdminUser()) return true;
+  function getLessonAccessMode(lesson) {
+    if (getLessonPricing(lesson).accessType === 'free' || isAdminUser()) return 'full';
+    var prof = state.profile;
+    if (!prof || isMembershipExpired(prof)) return 'none';
     var lid = cleanId((lesson && (lesson.id || lesson.lessonId)) || '');
-    if ((state.profile && state.profile.subscribedLessonIds || []).map(cleanId).includes(lid)) return true;
+    var fullLessons = (prof.subscribedLessonIds || []).map(cleanId);
+    var pracLessons = (prof.practiceLessonIds || []).map(cleanId);
+    var hasFullLesson = lid && fullLessons.includes(lid);
+    var hasPracLesson = lid && pracLessons.includes(lid);
+
     var cname = getLessonCourseName(lesson);
-    if (hasCourseAccess(cname)) return true;
-    return false;
+    var courseMode = getCourseAccessMode(cname);
+
+    if ((hasFullLesson && (prof.membershipPlan !== 'practice_lesson' || pracLessons.length > 0)) || courseMode === 'full') return 'full';
+    if (hasPracLesson || courseMode === 'practice') return 'practice';
+    if (hasFullLesson && prof.membershipPlan === 'practice_lesson' && pracLessons.length === 0) return 'practice';
+    return 'none';
+  }
+
+  function canAccessLesson(lesson) {
+    return getLessonAccessMode(lesson) !== 'none';
+  }
+
+  function canAccessLessonVideo(lesson) {
+    return getLessonAccessMode(lesson) === 'full';
   }
 
   function todayYmd(d) {
@@ -1830,6 +2000,7 @@
     normalizeCourseName: normalizeCourseName,
     getLessonCourseName: getLessonCourseName,
     getCoursePrice: getCoursePrice,
+    getPracticePrice: getPracticePrice,
     getState: getState,
     subscribe: subscribe,
     getIdToken: getIdToken,
@@ -1860,9 +2031,12 @@
     getExcelSyncSummary: getExcelSyncSummary,
     getLessonPricing: getLessonPricing,
     hasActiveMembership: hasActiveMembership,
+    getCourseAccessMode: getCourseAccessMode,
     hasCourseAccess: hasCourseAccess,
     hasPendingRequest: hasPendingRequest,
+    getLessonAccessMode: getLessonAccessMode,
     canAccessLesson: canAccessLesson,
+    canAccessLessonVideo: canAccessLessonVideo,
     getUserProgress: getUserProgress,
     recordLessonCompletedProgress: recordLessonCompletedProgress,
     saveReminderPreferences: saveReminderPreferences

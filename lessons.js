@@ -467,10 +467,20 @@
     const price = window.LinguaAuth && typeof window.LinguaAuth.getCoursePrice === 'function'
       ? window.LinguaAuth.getCoursePrice(norm)
       : 120;
-    const unlocked = window.LinguaAuth && typeof window.LinguaAuth.hasCourseAccess === 'function'
-      ? window.LinguaAuth.hasCourseAccess(norm)
-      : false;
-    return { courseName: norm, price, unlocked };
+    const practicePrice = window.LinguaAuth && typeof window.LinguaAuth.getPracticePrice === 'function'
+      ? window.LinguaAuth.getPracticePrice()
+      : 55000;
+    const accessMode = window.LinguaAuth && typeof window.LinguaAuth.getCourseAccessMode === 'function'
+      ? window.LinguaAuth.getCourseAccessMode(norm)
+      : (window.LinguaAuth && typeof window.LinguaAuth.hasCourseAccess === 'function' && window.LinguaAuth.hasCourseAccess(norm) ? 'full' : 'none');
+    return {
+      courseName: norm,
+      price,
+      practicePrice,
+      accessMode,
+      unlocked: accessMode === 'full',
+      isPracticeOnly: accessMode === 'practice'
+    };
   }
 
   // Speak Chinese speech synthesis
@@ -665,18 +675,31 @@
     return { accessType: 'paid', price: Number(lesson?.price) || 75000 };
   }
 
-  function canUserAccessLesson(lesson) {
+  function getLessonAccessTier(lesson) {
     const pricing = resolveLessonPricing(lesson);
-    if (pricing.accessType === 'free') return true;
-    if (window.LinguaAuth && typeof window.LinguaAuth.canAccessLesson === 'function') {
-      return window.LinguaAuth.canAccessLesson({
+    if (pricing.accessType === 'free') return 'full';
+    if (window.LinguaAuth && typeof window.LinguaAuth.getLessonAccessMode === 'function') {
+      return window.LinguaAuth.getLessonAccessMode({
         ...lesson,
         course: getLessonCourse(lesson),
         accessType: pricing.accessType,
         price: pricing.price
       });
     }
-    return false;
+    if (window.LinguaAuth && typeof window.LinguaAuth.canAccessLesson === 'function') {
+      const ok = window.LinguaAuth.canAccessLesson({
+        ...lesson,
+        course: getLessonCourse(lesson),
+        accessType: pricing.accessType,
+        price: pricing.price
+      });
+      return ok ? 'full' : 'none';
+    }
+    return 'none';
+  }
+
+  function canUserAccessLesson(lesson) {
+    return getLessonAccessTier(lesson) !== 'none';
   }
 
   // --- Render Left Sidebar Course Menu ---
@@ -711,7 +734,7 @@
               >
                 <span class="course-nav-main">
                   <span class="course-nav-name">${escapeHTML(courseName)}</span>
-                  <span class="course-nav-meta">${cInfo.unlocked ? 'Unlocked' : `${cInfo.price} Kyat`}</span>
+                  <span class="course-nav-meta">${cInfo.unlocked ? 'Unlocked' : cInfo.isPracticeOnly ? 'Practice Only' : `${cInfo.price} Kyat`}</span>
                 </span>
                 <span class="course-nav-count">${count}</span>
               </button>
@@ -735,20 +758,26 @@
     const info = getCoursePricingInfo(activeCourseName);
     const authState = window.LinguaAuth ? window.LinguaAuth.getState() : { isAdmin: false };
     const isUnlocked = info.unlocked || Boolean(authState.isAdmin);
+    const isPractice = !isUnlocked && info.isPracticeOnly;
+    const practicePriceFmt = Number(info.practicePrice || 55000).toLocaleString('en-US');
 
     header.innerHTML = `
       <div class="course-banner-info">
         <div class="course-banner-kicker">Active Course</div>
         <h2 class="course-banner-title">${escapeHTML(info.courseName)}</h2>
         <p class="course-banner-desc">
-          <span class="tabular-nums">${courseLessonCount}</span> lesson${courseLessonCount === 1 ? '' : 's'} available · Unlock individual paid lessons (Kyat) or get all lessons in <strong>${escapeHTML(info.courseName)}</strong> with a Course Pass.
+          <span class="tabular-nums">${courseLessonCount}</span> lesson${courseLessonCount === 1 ? '' : 's'} available · Unlock full lessons (with Video) or choose <strong>Practice Only (${practicePriceFmt} Kyat)</strong> for Exercises, Writing &amp; Pronunciation.
         </p>
       </div>
       <div class="course-banner-actions">
         ${
           isUnlocked
             ? `<span class="course-unlocked-badge">✓ Full Course Unlocked</span>`
-            : `<button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Unlock Full Course (${escapeHTML(info.price)} Kyat)</button>`
+            : isPractice
+            ? `<span class="course-practice-badge">✓ Practice Only Active (No Video)</span>
+               <button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Upgrade for Video (${escapeHTML(info.price)} Kyat)</button>`
+            : `<button type="button" class="btn btn-secondary" id="btnUnlockPracticeCourse">Practice Only (${practicePriceFmt} Kyat)</button>
+               <button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Unlock Full Course (${escapeHTML(info.price)} Kyat)</button>`
         }
       </div>
     `;
@@ -757,9 +786,20 @@
     if (unlockBtn) {
       unlockBtn.onclick = () => {
         if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openSubscribeCourseModal === 'function') {
-          window.LinguaAuthUI.openSubscribeCourseModal(info.courseName);
+          window.LinguaAuthUI.openSubscribeCourseModal(info.courseName, 'course');
         } else if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openSubscribeModal === 'function') {
-          window.LinguaAuthUI.openSubscribeModal({ course: info.courseName, accessType: 'paid', price: info.price });
+          window.LinguaAuthUI.openSubscribeModal({ mode: 'course', courseName: info.courseName, planType: 'course' });
+        }
+      };
+    }
+
+    const practiceBtn = document.getElementById('btnUnlockPracticeCourse');
+    if (practiceBtn) {
+      practiceBtn.onclick = () => {
+        if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openSubscribeCourseModal === 'function') {
+          window.LinguaAuthUI.openSubscribeCourseModal(info.courseName, 'practice_course');
+        } else if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openSubscribeModal === 'function') {
+          window.LinguaAuthUI.openSubscribeModal({ mode: 'course', courseName: info.courseName, planType: 'practice_course' });
         }
       };
     }
@@ -797,13 +837,15 @@
     const authState = window.LinguaAuth ? window.LinguaAuth.getState() : { user: null, isAdmin: false, profile: null };
     const courseInfo = getCoursePricingInfo(activeCourseName);
 
-    let accessSummary = 'Free starter lessons open · Paid lessons or full courses in Kyat';
+    let accessSummary = 'Free starter lessons open · Choose Full Access or 55,000 Kyat Practice-Only (No Video)';
     if (authState.isAdmin) {
       accessSummary = 'Admin signed in · Manage courses, pricing & Excel curriculum';
     } else if (courseInfo.unlocked) {
       accessSummary = `${courseInfo.courseName} Course Pass Active · All Lessons Unlocked`;
+    } else if (courseInfo.isPracticeOnly) {
+      accessSummary = `${courseInfo.courseName} Practice-Only Active · Exercises, Writing & Pronunciation (No Video)`;
     } else if (authState.user) {
-      accessSummary = 'Choose per-lesson unlock or unlock an entire course';
+      accessSummary = 'Choose Full Access (with Video) or Practice-Only (55,000 Kyat · No Video)';
     }
 
     bar.innerHTML = `
@@ -811,7 +853,7 @@
       <div class="curriculum-manage-actions">
         ${
           !courseInfo.unlocked && !authState.isAdmin
-            ? `<button type="button" class="btn-manage-inline btn-manage-upgrade" id="btnGridViewPlans">Unlock Lesson / Course</button>`
+            ? `<button type="button" class="btn-manage-inline btn-manage-upgrade" id="btnGridViewPlans">${courseInfo.isPracticeOnly ? 'Upgrade for Video' : 'Unlock Lesson / Course'}</button>`
             : ''
         }
         ${
@@ -872,15 +914,28 @@
       const poster = backendAssetUrl(lesson.posterUrl || lesson.poster || `assets/images/story-0${(idx % 5) + 1}.jpg`);
       const pricing = resolveLessonPricing(lesson);
       const isPaid = pricing.accessType === 'paid';
-      const isUnlocked = canUserAccessLesson(lesson);
+      const accessTier = getLessonAccessTier(lesson);
+      const isUnlocked = accessTier !== 'none';
+      const isPracticeOnly = accessTier === 'practice';
       const isLocked = isPaid && !isUnlocked;
 
       const formattedPrice = Number(pricing.price || 0).toLocaleString();
       const accessMetaText = !isPaid
         ? 'Free Lesson'
-        : isUnlocked
+        : accessTier === 'full'
         ? `Unlocked · ${formattedPrice} Kyat`
+        : isPracticeOnly
+        ? 'Practice Only (No Video)'
         : `${formattedPrice} Kyat`;
+      const accessTagClass = !isPaid ? 'is-free' : isPracticeOnly ? 'is-practice' : isUnlocked ? 'is-unlocked' : 'is-paid';
+      const featuresLine = isPracticeOnly
+        ? '✏️ Exercises · 🖌️ Stroke Writing · 🎤 Pronunciation (Video Excluded)'
+        : '📺 Video · ✏️ Exercises · 🖌️ Stroke Writing · 🎤 Pronunciation';
+      const btnText = isLocked
+        ? `🔒 Unlock (${escapeHTML(formattedPrice)} Kyat) →`
+        : isPracticeOnly
+        ? '✏️ Start Practice (3 Pages) →'
+        : '🚀 Start Lesson →';
 
       return `
         <article class="lesson-card ${isLocked ? 'lesson-card-locked' : ''}" id="card-${escapeHTML(lessonId)}">
@@ -890,7 +945,7 @@
           <div class="lesson-card-content">
             <div class="lesson-meta-line">
               <span class="lesson-category-tag">${escapeHTML(courseName)}</span>
-              <span class="lesson-access-tag ${!isPaid ? 'is-free' : isUnlocked ? 'is-unlocked' : 'is-paid'}">${escapeHTML(accessMetaText)}</span>
+              <span class="lesson-access-tag ${accessTagClass}">${escapeHTML(accessMetaText)}</span>
             </div>
             <span class="lesson-level">${escapeHTML(level)}</span>
             <h3>${escapeHTML(title)}</h3>
@@ -899,11 +954,11 @@
             ${meaning ? `<div class="lesson-meaning">${escapeHTML(meaning)}</div>` : ''}
             <p class="lesson-description">${escapeHTML(desc)}</p>
 
-            <div class="lesson-features-line">📺 Video · ✏️ Exercises · 🖌️ Stroke Writing</div>
+            <div class="lesson-features-line">${escapeHTML(featuresLine)}</div>
 
             <div class="lesson-card-actions" style="margin-top: auto;">
               <button type="button" class="btn ${isLocked ? 'lesson-button-locked' : 'btn-primary'} lesson-button" style="width: 100%; text-align: center;" data-lesson-id="${escapeHTML(lessonId)}">
-                ${isLocked ? `🔒 Unlock (${escapeHTML(formattedPrice)} Kyat) →` : '🚀 Start Lesson →'}
+                ${btnText}
               </button>
             </div>
           </div>
@@ -921,13 +976,40 @@
 
   let pendingDeepLinkLessonId = null;
 
-  // --- Open Lesson Workspace (4 Core Sections) ---
+  function applyWorkspaceVideoTabVisibility(lesson) {
+    const allowVideo = getLessonAccessTier(lesson) === 'full';
+    const videoTabBtn = document.querySelector('.workspace-tab-btn[data-tab="video"]');
+    const videoPanel = document.getElementById('panel-video');
+    if (videoTabBtn) {
+      videoTabBtn.hidden = !allowVideo;
+      videoTabBtn.disabled = !allowVideo;
+      videoTabBtn.style.display = allowVideo ? '' : 'none';
+      if (!allowVideo) {
+        videoTabBtn.classList.remove('active');
+        videoTabBtn.setAttribute('aria-selected', 'false');
+      }
+    }
+    if (videoPanel && !allowVideo) {
+      const vid = videoPanel.querySelector('#workspaceVideoPlayer');
+      if (vid && typeof vid.pause === 'function') vid.pause();
+      videoPanel.innerHTML = '';
+      videoPanel.classList.remove('active');
+      videoPanel.style.display = 'none';
+    } else if (videoPanel) {
+      videoPanel.style.display = '';
+    }
+    return allowVideo;
+  }
+
+  // --- Open Lesson Workspace (4 Core Sections; 3 Practice Sections for Practice-Only Tier) ---
   function openLessonWorkspace(lessonId, updateUrl = true) {
     const lesson = allLessons.find(l => isSameLessonId(l.id, lessonId)) || allLessons[0];
     if (!lesson) return;
 
-    // Gate Paid Lessons unless user has course access / per-lesson unlock / admin
-    if (!canUserAccessLesson(lesson)) {
+    const accessTier = getLessonAccessTier(lesson);
+
+    // Gate Paid Lessons unless user has course access / per-lesson unlock / practice-only / admin
+    if (accessTier === 'none') {
       const authState = window.LinguaAuth ? window.LinguaAuth.getState() : null;
       if (authState && !authState.ready && !updateUrl) {
         pendingDeepLinkLessonId = lesson.id;
@@ -948,7 +1030,9 @@
     pendingDeepLinkLessonId = null;
     activeLesson = lesson;
     activeCourseName = getLessonCourse(lesson);
-    activeWorkspaceTab = 'video';
+    const allowVideo = applyWorkspaceVideoTabVisibility(lesson);
+    const initialTab = allowVideo ? 'video' : 'exercises';
+    activeWorkspaceTab = initialTab;
     activeWritingCharIndex = 0;
     exerciseAnswersState = {};
 
@@ -975,11 +1059,13 @@
       workspace.style.display = 'block';
 
       renderWorkspaceHeader(lesson);
-      renderVideoSection(lesson);
+      if (allowVideo) {
+        renderVideoSection(lesson);
+      }
       renderExercisesSection(lesson);
       renderWritingSection(lesson);
       renderPronunciationSection(lesson);
-      switchWorkspaceTab('video');
+      switchWorkspaceTab(initialTab);
 
       workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
@@ -1027,6 +1113,7 @@
 
     const courseName = getLessonCourse(lesson);
     const catName = lesson.category || courseName || 'HSK 2';
+    const isPracticeOnly = getLessonAccessTier(lesson) === 'practice';
 
     hero.innerHTML = `
       <div class="workspace-top-bar">
@@ -1064,6 +1151,17 @@
       ` : ''}
 
       <p class="workspace-description">${escapeHTML(lesson.description || '')}</p>
+
+      ${
+        isPracticeOnly
+          ? `<div class="practice-only-workspace-banner" role="status">
+               <div>
+                 <strong>Practice-Only Plan (55,000 Kyat):</strong> You have access to <strong>Exercises, Writing &amp; Pronunciation</strong>. Video lessons are excluded on this plan.
+               </div>
+               <button type="button" class="btn-upgrade-video" id="btnUpgradeFromWorkspaceBanner">Unlock Full Video</button>
+             </div>`
+          : ''
+      }
     `;
 
     document.getElementById('btnBackToCurriculum').onclick = () => closeLessonWorkspace();
@@ -1074,6 +1172,20 @@
     const speakBtn = document.getElementById('btnSpeakLessonTitle');
     if (speakBtn && lesson.chineseTitle) {
       speakBtn.onclick = () => speakChinese(lesson.chineseTitle);
+    }
+    const upgradeBannerBtn = document.getElementById('btnUpgradeFromWorkspaceBanner');
+    if (upgradeBannerBtn) {
+      upgradeBannerBtn.onclick = () => {
+        if (window.LinguaAuthUI && typeof window.LinguaAuthUI.openSubscribeModal === 'function') {
+          const pricing = resolveLessonPricing(lesson);
+          window.LinguaAuthUI.openSubscribeModal({
+            ...lesson,
+            course: courseName,
+            accessType: pricing.accessType,
+            price: pricing.price
+          });
+        }
+      };
     }
   }
 
@@ -1089,6 +1201,9 @@
   }
 
   function switchWorkspaceTab(tabName) {
+    if (tabName === 'video' && activeLesson && getLessonAccessTier(activeLesson) !== 'full') {
+      tabName = 'exercises';
+    }
     activeWorkspaceTab = tabName;
 
     // Stop active speech recognition recording if user leaves pronunciation tab
@@ -1097,7 +1212,7 @@
     }
 
     document.querySelectorAll('.workspace-tab-btn').forEach(b => {
-      const isActive = b.dataset.tab === tabName;
+      const isActive = b.dataset.tab === tabName && !b.disabled;
       b.classList.toggle('active', isActive);
       b.setAttribute('aria-selected', isActive ? 'true' : 'false');
       if (isActive) {
@@ -1108,7 +1223,8 @@
     });
 
     document.querySelectorAll('.workspace-panel').forEach(p => {
-      p.classList.toggle('active', p.id === `panel-${tabName}`);
+      const shouldShow = p.id === `panel-${tabName}` && !(p.id === 'panel-video' && activeLesson && getLessonAccessTier(activeLesson) !== 'full');
+      p.classList.toggle('active', shouldShow);
     });
 
     // Smooth scroll to the workspace tabs bar (practice exercise menu header) with sticky offset
@@ -1135,6 +1251,16 @@
   function renderVideoSection(lesson) {
     const panel = document.getElementById('panel-video');
     if (!panel) return;
+
+    if (getLessonAccessTier(lesson) !== 'full') {
+      const vid = panel.querySelector('#workspaceVideoPlayer');
+      if (vid && typeof vid.pause === 'function') vid.pause();
+      panel.innerHTML = '';
+      panel.classList.remove('active');
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = '';
 
     const videoUrl = backendAssetUrl(lesson.videoUrl || lesson.video_url || lesson.video || 'assets/video/lesson-02.mp4');
     const poster = backendAssetUrl(lesson.posterUrl || lesson.poster_url || lesson.poster || 'assets/images/story-02.jpg');
@@ -5275,11 +5401,15 @@
         if (activeLesson) {
           const fresh = allLessons.find(l => isSameLessonId(l.id, activeLesson.id));
           if (fresh) activeLesson = fresh;
+          const allowVideo = applyWorkspaceVideoTabVisibility(activeLesson);
           renderWorkspaceHeader(activeLesson);
           renderVideoSection(activeLesson);
           renderExercisesSection(activeLesson);
           renderWritingSection(activeLesson);
           renderPronunciationSection(activeLesson);
+          if (!allowVideo && activeWorkspaceTab === 'video') {
+            switchWorkspaceTab('exercises');
+          }
         }
       }
     });

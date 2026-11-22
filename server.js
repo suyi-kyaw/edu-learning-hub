@@ -118,6 +118,8 @@ function normalizeCourseNameServer(val) {
 
 function normalizeServerPlan(plan) {
   const p = String(plan || 'none').trim().toLowerCase();
+  if (p === 'practice_lesson' || p === 'practice-lesson') return 'practice_lesson';
+  if (p === 'practice_course' || p === 'practice-course') return 'practice_course';
   if (p === 'per_lesson' || p === 'lesson') return 'per_lesson';
   if (p === 'course' || p === 'monthly' || p === 'annual' || p === 'hsk') return 'course';
   return 'none';
@@ -138,6 +140,10 @@ function sanitizeUserPublic(u) {
     subscribedLessonIds: Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds.slice(0, 100) : [],
     subscribedCourses: Array.isArray(u.subscribedCourses)
       ? Array.from(new Set(u.subscribedCourses.map(normalizeCourseNameServer).filter(Boolean))).slice(0, 50)
+      : [],
+    practiceLessonIds: Array.isArray(u.practiceLessonIds) ? u.practiceLessonIds.slice(0, 100) : [],
+    practiceCourses: Array.isArray(u.practiceCourses)
+      ? Array.from(new Set(u.practiceCourses.map(normalizeCourseNameServer).filter(Boolean))).slice(0, 50)
       : [],
     linkedProviders: ['password'],
     mustChangePassword: Boolean(u.mustChangePassword),
@@ -216,6 +222,15 @@ function findAndSyncExcelUser(store, email, password) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
+    const rawPracticeCourses = String(row.practiceCourses || row.PracticeCourses || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map(normalizeCourseNameServer);
+    const rawPracticeLessons = String(row.practiceLessonIds || row.PracticeLessonIds || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     const isAdminRow =
       String(row.role || '').trim().toLowerCase() === 'admin' ||
       targetEmail === ADMIN_EMAIL.toLowerCase();
@@ -240,6 +255,8 @@ function findAndSyncExcelUser(store, email, password) {
       membershipExpiresAt: String(row.membershipExpiresAt || '').trim().slice(0, 40),
       subscribedLessonIds: rawLessons,
       subscribedCourses: rawCourses,
+      practiceLessonIds: rawPracticeLessons,
+      practiceCourses: rawPracticeCourses,
       linkedProviders: ['password'],
       mustChangePassword: String(row.mustChangePassword || '').toLowerCase() === 'true',
       passwordSalt: salt,
@@ -416,6 +433,7 @@ const DEFAULT_SITE_CONFIG = {
   coursePrices: {
     'HSK 2': 120
   },
+  practicePrice: 55000,
   contactEmail: 'syndkyaw@gmail.com',
   contactPhone: '+95 9 798 123 456',
   contactViber: '+95 9 798 123 456',
@@ -724,6 +742,7 @@ function sanitizeSiteConfigInput(raw) {
     lessonsBullets: strList('lessonsBullets', 6, 140, true),
     lessonsCta: str('lessonsCta', 80),
     coursePrices: normalizeCoursePricesServer(input.coursePrices),
+    practicePrice: Number.isFinite(Number(input.practicePrice)) && Number(input.practicePrice) >= 0 ? Math.round(Number(input.practicePrice)) : DEFAULT_SITE_CONFIG.practicePrice,
     contactEmail: str('contactEmail', 160),
     contactPhone: str('contactPhone', 40),
     contactViber: str('contactViber', 40),
@@ -1204,6 +1223,8 @@ app.post('/api/auth/register', jsonParser, (req, res) => {
       membershipExpiresAt: '',
       subscribedLessonIds: [],
       subscribedCourses: [],
+      practiceLessonIds: [],
+      practiceCourses: [],
       linkedProviders: ['password'],
       mustChangePassword: false,
       passwordSalt: salt,
@@ -1422,29 +1443,49 @@ app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
       return res.status(404).json({ success: false, error: 'User profile not found.' });
     }
 
-    const planType = body.planType === 'per_lesson' ? 'per_lesson' : 'course';
-    const siteCfg = readSiteConfig();
-    const courseName =
-      planType === 'course'
-        ? normalizeCourseNameServer(body.courseName || body.lessonTitle || 'HSK 2')
-        : '';
+    const rawPlanType = String(body.planType || 'course').trim().toLowerCase();
+    const planType = ['per_lesson', 'practice_lesson', 'practice_course', 'course'].includes(rawPlanType)
+      ? rawPlanType
+      : 'course';
+    const isLessonPlan = planType === 'per_lesson' || planType === 'practice_lesson';
+    const isCoursePlan = planType === 'course' || planType === 'practice_course';
+    const isPracticePlan = planType === 'practice_lesson' || planType === 'practice_course';
+    const siteCfg = readSiteConfigFile();
+    const practicePrice = Number(siteCfg.practicePrice) > 0 ? Number(siteCfg.practicePrice) : 55000;
+    const practicePriceFormatted = practicePrice.toLocaleString('en-US');
+    const courseName = isCoursePlan
+      ? normalizeCourseNameServer(body.courseName || body.lessonTitle || 'HSK 2')
+      : body.courseName
+      ? normalizeCourseNameServer(body.courseName)
+      : '';
     const defaultCoursePrice =
       (siteCfg.coursePrices && siteCfg.coursePrices[courseName]) != null
         ? Number(siteCfg.coursePrices[courseName])
         : 120;
     const planMeta = {
       per_lesson: { name: 'Lesson Pass', amountLabel: '9 Kyat / lesson' },
-      course: { name: `${courseName || 'HSK 2'} Course Pass`, amountLabel: `${defaultCoursePrice} Kyat / course` }
+      practice_lesson: {
+        name: `${String(body.lessonTitle || 'Lesson').trim()} (Practice Only)`,
+        amountLabel: `${practicePriceFormatted} Kyat / lesson`
+      },
+      course: { name: `${courseName || 'HSK 2'} Course Pass`, amountLabel: `${defaultCoursePrice} Kyat / course` },
+      practice_course: {
+        name: `${courseName || 'HSK 2'} Course (Practice Only)`,
+        amountLabel: `${practicePriceFormatted} Kyat / course`
+      }
     }[planType];
 
-    const lessonId =
-      planType === 'per_lesson'
-        ? String(body.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').slice(0, 128)
-        : '';
-    const lessonTitle =
-      planType === 'per_lesson'
-        ? String(body.lessonTitle || 'Paid Lesson Unlock').trim().slice(0, 160)
-        : String(body.lessonTitle || planMeta.name).trim().slice(0, 160);
+    const lessonId = isLessonPlan
+      ? String(body.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').slice(0, 128)
+      : '';
+    const lessonTitle = isLessonPlan
+      ? String(
+          body.lessonTitle ||
+            (isPracticePlan ? 'Practice Only Lesson' : 'Paid Lesson Unlock')
+        )
+          .trim()
+          .slice(0, 160)
+      : String(body.lessonTitle || planMeta.name).trim().slice(0, 160);
     const amountLabel = String(body.amountLabel || planMeta.amountLabel).trim().slice(0, 40);
     const contactChannel = body.contactChannel === 'email' ? 'email' : 'viber';
     const contactHandle = String(body.contactHandle || user.phoneNumber || user.email || '').trim().slice(0, 80);
@@ -1958,6 +1999,10 @@ app.post('/api/admin/requests/:requestId/approve', requireAdminToken, jsonParser
     const nextCourses = Array.isArray(targetUser.subscribedCourses)
       ? targetUser.subscribedCourses.map(normalizeCourseNameServer)
       : [];
+    const nextPracticeLessons = Array.isArray(targetUser.practiceLessonIds) ? [...targetUser.practiceLessonIds] : [];
+    const nextPracticeCourses = Array.isArray(targetUser.practiceCourses)
+      ? targetUser.practiceCourses.map(normalizeCourseNameServer)
+      : [];
 
     if (reqDoc.planType === 'per_lesson') {
       if (reqDoc.lessonId && !nextLessons.includes(reqDoc.lessonId) && nextLessons.length < 100) {
@@ -1965,6 +2010,21 @@ app.post('/api/admin/requests/:requestId/approve', requireAdminToken, jsonParser
       }
       if (nextPlan !== 'course') {
         nextPlan = 'per_lesson';
+      }
+    } else if (reqDoc.planType === 'practice_lesson') {
+      if (reqDoc.lessonId && !nextPracticeLessons.includes(reqDoc.lessonId) && nextPracticeLessons.length < 100) {
+        nextPracticeLessons.push(reqDoc.lessonId);
+      }
+      if (nextPlan !== 'course' && nextPlan !== 'per_lesson' && nextPlan !== 'practice_course') {
+        nextPlan = 'practice_lesson';
+      }
+    } else if (reqDoc.planType === 'practice_course') {
+      const targetCourse = normalizeCourseNameServer(reqDoc.courseName || reqDoc.lessonTitle || 'HSK 2');
+      if (targetCourse && !nextPracticeCourses.includes(targetCourse) && nextPracticeCourses.length < 50) {
+        nextPracticeCourses.push(targetCourse);
+      }
+      if (nextPlan !== 'course') {
+        nextPlan = 'practice_course';
       }
     } else {
       const targetCourse = normalizeCourseNameServer(reqDoc.courseName || reqDoc.lessonTitle || 'HSK 2');
@@ -1984,6 +2044,8 @@ app.post('/api/admin/requests/:requestId/approve', requireAdminToken, jsonParser
     targetUser.membershipExpiresAt = nextExpires;
     targetUser.subscribedLessonIds = nextLessons;
     targetUser.subscribedCourses = nextCourses;
+    targetUser.practiceLessonIds = nextPracticeLessons;
+    targetUser.practiceCourses = nextPracticeCourses;
     targetUser.updatedAt = nowIso;
 
     writeAuthStore(store);
@@ -2031,7 +2093,7 @@ app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, (req,
     if (['free', 'pending', 'active', 'expired'].includes(body.membershipStatus)) {
       targetUser.membershipStatus = body.membershipStatus;
     }
-    if (['none', 'per_lesson', 'course', 'monthly', 'annual'].includes(body.membershipPlan)) {
+    if (['none', 'per_lesson', 'course', 'practice_lesson', 'practice_course', 'monthly', 'annual'].includes(body.membershipPlan)) {
       targetUser.membershipPlan = normalizeServerPlan(body.membershipPlan);
     }
     if (typeof body.membershipExpiresAt === 'string') {
@@ -2046,6 +2108,17 @@ app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, (req,
     if (Array.isArray(body.subscribedCourses)) {
       targetUser.subscribedCourses = Array.from(
         new Set(body.subscribedCourses.map(normalizeCourseNameServer).filter(Boolean))
+      ).slice(0, 50);
+    }
+    if (Array.isArray(body.practiceLessonIds)) {
+      targetUser.practiceLessonIds = body.practiceLessonIds
+        .map((id) => String(id || '').trim().slice(0, 128))
+        .filter(Boolean)
+        .slice(0, 100);
+    }
+    if (Array.isArray(body.practiceCourses)) {
+      targetUser.practiceCourses = Array.from(
+        new Set(body.practiceCourses.map(normalizeCourseNameServer).filter(Boolean))
       ).slice(0, 50);
     }
     targetUser.updatedAt = new Date().toISOString();
