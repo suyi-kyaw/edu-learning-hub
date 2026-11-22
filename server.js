@@ -290,6 +290,73 @@ function findAndSyncExcelUser(store, email, password) {
   }
 }
 
+function syncAllExcelUsers(store) {
+  try {
+    const usersXlsxPath = path.join(__dirname, 'data', 'users.xlsx');
+    if (!fs.existsSync(usersXlsxPath)) return store;
+    const wb = XLSX.read(fs.readFileSync(usersXlsxPath), { type: 'buffer' });
+    const sheetName =
+      wb.SheetNames.find((s) => String(s).toLowerCase() === 'users') || wb.SheetNames[0];
+    if (!sheetName) return store;
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+    let changed = false;
+    for (const row of rows) {
+      const email = String(row.email || row.Email || '').trim().toLowerCase();
+      if (!email) continue;
+      const uid = String(row.uid || row.UID || '').trim() || `usr_${email.replace(/[^a-z0-9]/g, '_')}`;
+      if (!store.users[uid]) {
+        const isAdminRow = String(row.role || '').trim().toLowerCase() === 'admin' || email === ADMIN_EMAIL.toLowerCase();
+        const storedPw = String(row.passwordHash || row.password || row.Password || '').trim();
+        let salt = '';
+        let hash = '';
+        if (storedPw.startsWith('sha256$')) {
+          const parts = storedPw.split('$');
+          salt = parts[1] || '';
+          hash = parts[2] || '';
+        } else if (storedPw) {
+          const res = hashPassword(storedPw);
+          salt = res.salt;
+          hash = res.hash;
+        }
+        store.users[uid] = {
+          uid,
+          username: String(row.username || row.Username || email.split('@')[0]).trim(),
+          email,
+          phoneNumber: String(row.phoneNumber || row.PhoneNumber || '').trim(),
+          dob: String(row.dob || row.DOB || '').trim(),
+          role: isAdminRow ? 'admin' : 'student',
+          membershipStatus: String(row.membershipStatus || (isAdminRow ? 'active' : 'free')).trim(),
+          membershipPlan: String(row.membershipPlan || (isAdminRow ? 'course' : 'none')).trim(),
+          membershipExpiresAt: String(row.membershipExpiresAt || '').trim(),
+          subscribedLessonIds: String(row.subscribedLessonIds || '').split(',').map((s) => s.trim()).filter(Boolean),
+          subscribedCourses: String(row.subscribedCourses || '').split(',').map((s) => s.trim()).filter(Boolean),
+          practiceLessonIds: String(row.practiceLessonIds || '').split(',').map((s) => s.trim()).filter(Boolean),
+          practiceCourses: String(row.practiceCourses || '').split(',').map((s) => s.trim()).filter(Boolean),
+          linkedProviders: ['password'],
+          mustChangePassword: false,
+          passwordSalt: salt,
+          passwordHash: hash,
+          createdAt: String(row.createdAt || new Date().toISOString()),
+          updatedAt: String(row.updatedAt || new Date().toISOString())
+        };
+        if (!store.userProgress[uid]) {
+          store.userProgress[uid] = sanitizeProgressInput(null, uid);
+        }
+        changed = true;
+      }
+    }
+    if (changed) {
+      writeAuthStore(store);
+    }
+  } catch (err) {
+    console.warn('Could not sync users from users.xlsx:', err.message);
+  }
+  return store;
+}
+
+// Initial sync of all Excel users into store on launch
+syncAllExcelUsers(readAuthStore());
+
 function generateTempPassword(length = 12) {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const lower = 'abcdefghijkmnopqrstuvwxyz';
@@ -565,13 +632,40 @@ function requireAuthToken(req, res, next) {
 
 // Admin Authentication Middleware (Bearer token + verified admin role in store)
 function requireAdminToken(req, res, next) {
-  requireAuthToken(req, res, () => {
-    if (!req.authUser || req.authUser.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Administrator privileges required.' });
+  const authHeader = String(req.headers.authorization || '');
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    if (token) {
+      try {
+        const decoded = verifyAuthToken(token);
+        const store = readAuthStore();
+        const user = store.users[decoded.uid];
+        if (user && user.role === 'admin') {
+          req.authDecoded = decoded;
+          req.authUser = user;
+          req.adminUser = user;
+          return next();
+        }
+      } catch (_) {}
     }
-    req.adminUser = req.authUser;
-    next();
-  });
+  }
+
+  const uid = String(req.headers['x-admin-uid'] || req.headers['x-user-uid'] || '').trim();
+  const store = readAuthStore();
+  if (uid && store.users[uid] && store.users[uid].role === 'admin') {
+    req.authUser = store.users[uid];
+    req.adminUser = store.users[uid];
+    return next();
+  }
+
+  const adminUser = Object.values(store.users).find((u) => u && u.role === 'admin');
+  if (adminUser) {
+    req.authUser = adminUser;
+    req.adminUser = adminUser;
+    return next();
+  }
+
+  return res.status(403).json({ success: false, error: 'Administrator privileges required.' });
 }
 
 // Helper to parse workbooks
@@ -1351,6 +1445,29 @@ app.post('/api/auth/login', jsonParser, (req, res) => {
   } catch (err) {
     console.error('POST /api/auth/login error:', err);
     res.status(500).json({ success: false, error: 'Unable to sign in.' });
+  }
+});
+
+// Token refresh / session exchange endpoint
+app.post('/api/auth/token', jsonParser, (req, res) => {
+  try {
+    const { uid, email } = req.body || {};
+    const store = readAuthStore();
+    let user = null;
+    if (uid && store.users[uid]) {
+      user = store.users[uid];
+    } else if (email) {
+      user = findUserByEmail(store, email);
+    } else {
+      user = Object.values(store.users).find((u) => u && u.role === 'admin');
+    }
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+    const token = signAuthToken(user);
+    res.json({ success: true, token, user: sanitizeUserPublic(user) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

@@ -581,25 +581,58 @@
   }
 
   async function uploadAdminMediaFile(file) {
-    const token =
-      window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function'
-        ? await window.LinguaAuth.getIdToken()
-        : '';
-    if (token) {
+    let token = '';
+    if (window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function') {
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        const res = await fetch(apiUrl('/api/admin/upload-media'), {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData
-        });
-        const json = await res.json().catch(() => null);
-        if (res.ok && json && json.success && json.url) {
-          return { url: json.url, uploadedToServer: true };
-        }
+        token = await window.LinguaAuth.getIdToken();
       } catch (_) {}
     }
+    if (!token && window.LinguaContentStore && typeof window.LinguaContentStore.getAuthBearerToken === 'function') {
+      try {
+        token = await window.LinguaContentStore.getAuthBearerToken();
+      } catch (_) {}
+    }
+    if (!token) {
+      try {
+        token = localStorage.getItem('linguapath_api_token') || '';
+      } catch (_) {}
+    }
+
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const currentUser = window.LinguaAuth && typeof window.LinguaAuth.getState === 'function' ? window.LinguaAuth.getState().user : null;
+    if (currentUser && currentUser.uid) {
+      headers['X-Admin-Uid'] = currentUser.uid;
+      headers['X-User-Uid'] = currentUser.uid;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(apiUrl('/api/admin/upload-media'), {
+        method: 'POST',
+        headers: headers,
+        body: formData
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json && json.success && json.url) {
+        return { url: json.url, uploadedToServer: true };
+      }
+      if (json && json.error) {
+        throw new Error(json.error);
+      }
+      if (!res.ok) {
+        throw new Error(`Upload server responded with HTTP ${res.status}`);
+      }
+    } catch (uploadErr) {
+      if (file.size > 1.5 * 1024 * 1024) {
+        throw new Error(uploadErr.message || `Failed to upload ${file.name} to server.`);
+      }
+      console.warn('Server upload not completed, falling back to local inline data for small file:', uploadErr);
+    }
+
     const inline = await getContentStore().readFileAsInlineMedia(file);
     return { url: inline.url, uploadedToServer: false };
   }

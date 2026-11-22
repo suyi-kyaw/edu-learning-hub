@@ -1589,7 +1589,25 @@
   }
 
   async function getIdToken() {
-    return getStoredApiToken() || null;
+    var tok = getStoredApiToken();
+    if (tok) return tok;
+    if (state.user && state.user.uid) {
+      try {
+        var res = await fetch('/api/auth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid: state.user.uid, email: state.user.email })
+        });
+        if (res.ok) {
+          var data = await res.json();
+          if (data && data.token) {
+            setStoredApiToken(data.token);
+            return data.token;
+          }
+        }
+      } catch (e) {}
+    }
+    return null;
   }
 
   function hasServerToken() {

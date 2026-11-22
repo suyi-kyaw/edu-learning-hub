@@ -2812,8 +2812,47 @@
         { type: "corner", x1: 90, y1: 190, x2: 230, y2: 190, x3: 210, y3: 230, label: "7.乛 Heart Hook", direction: "Left to right, then hook" },
         { type: "left_fall", x1: 150, y1: 200, x2: 80, y2: 280, label: "8.ノ Lower Left", direction: "Top-right to bottom-left" },
         { type: "right_fall", x1: 150, y1: 210, x2: 270, y2: 280, label: "9.㇏ Lower Right", direction: "Top-left to bottom-right" }
+      ],
+      "请": [
+        { type: "dot", x1: 95, y1: 70, x2: 110, y2: 95, label: "1. Dot (丶)", direction: "Top to bottom-right" },
+        { type: "corner", x1: 65, y1: 130, x2: 120, y2: 115, x3: 95, y3: 155, label: "2. Horizontal-turn-lift (㇊)", direction: "Left to right, then down-left" },
+        { type: "horizontal", x1: 150, y1: 75, x2: 245, y2: 75, label: "3. Horizontal (一)", direction: "Left to right" },
+        { type: "horizontal", x1: 165, y1: 120, x2: 230, y2: 120, label: "4. Horizontal (一)", direction: "Left to right" },
+        { type: "vertical", x1: 195, y1: 50, x2: 195, y2: 160, label: "5. Vertical (丨)", direction: "Top to bottom" },
+        { type: "horizontal", x1: 140, y1: 160, x2: 260, y2: 160, label: "6. Horizontal (一)", direction: "Left to right" },
+        { type: "vertical", x1: 160, y1: 180, x2: 160, y2: 275, label: "7. Vertical (丨)", direction: "Top to bottom" },
+        { type: "corner", x1: 160, y1: 180, x2: 235, y2: 180, x3: 235, y3: 275, label: "8. Horizontal-turn-hook (𠃌)", direction: "Left to right, then down-hook" },
+        { type: "horizontal", x1: 175, y1: 210, x2: 220, y2: 210, label: "9. Horizontal (一)", direction: "Left to right" },
+        { type: "horizontal", x1: 175, y1: 240, x2: 220, y2: 240, label: "10. Horizontal (一)", direction: "Left to right" }
+      ],
+      "鸭": [
+        { type: "vertical", x1: 110, y1: 50, x2: 110, y2: 150, label: "1. Vertical (丨)", direction: "Top to bottom" },
+        { type: "corner", x1: 110, y1: 50, x2: 190, y2: 50, x3: 190, y3: 130, label: "2. Horizontal-turn (𠃍)", direction: "Left to right, then down" },
+        { type: "horizontal", x1: 125, y1: 90, x2: 175, y2: 90, label: "3. Horizontal (一)", direction: "Left to right" },
+        { type: "horizontal", x1: 125, y1: 125, x2: 175, y2: 125, label: "4. Horizontal (一)", direction: "Left to right" },
+        { type: "vertical", x1: 150, y1: 50, x2: 150, y2: 165, label: "5. Vertical (丨)", direction: "Top to bottom" },
+        { type: "left_fall", x1: 210, y1: 50, x2: 180, y2: 100, label: "6. Slant (丿)", direction: "Top-right to bottom-left" },
+        { type: "corner", x1: 180, y1: 100, x2: 245, y2: 100, x3: 245, y3: 260, label: "7. Horizontal-turn-hook (㇆)", direction: "Left to right, then down-hook" },
+        { type: "dot", x1: 195, y1: 130, x2: 210, y2: 150, label: "8. Dot (丶)", direction: "Top to bottom-right" },
+        { type: "corner", x1: 195, y1: 165, x2: 215, y2: 165, x3: 215, y3: 220, label: "9. Vertical-turn-hook (㇉)", direction: "Down, then hook" },
+        { type: "horizontal", x1: 135, y1: 275, x2: 255, y2: 275, label: "10. Horizontal (一)", direction: "Left to right" }
+      ],
+      "吃": [
+        { type: "vertical", x1: 90, y1: 75, x2: 90, y2: 185, label: "1. Vertical (丨)", direction: "Top to bottom" },
+        { type: "corner", x1: 90, y1: 75, x2: 165, y2: 75, x3: 165, y3: 185, label: "2. Horizontal-turn (𠃍)", direction: "Left to right, then down" },
+        { type: "horizontal", x1: 90, y1: 185, x2: 165, y2: 185, label: "3. Horizontal (一)", direction: "Left to right" },
+        { type: "left_fall", x1: 235, y1: 65, x2: 185, y2: 120, label: "4. Top slant (丿)", direction: "Top-right to bottom-left" },
+        { type: "horizontal", x1: 180, y1: 135, x2: 265, y2: 135, label: "5. Horizontal (一)", direction: "Left to right" },
+        { type: "corner", x1: 190, y1: 135, x2: 220, y2: 265, x3: 260, y3: 245, label: "6. Curved hook (乙)", direction: "Down, then hook up-right" }
       ]
     };
+
+    if (charMap[cleanChar]) {
+      return charMap[cleanChar].map((st, idx) => ({
+        ...st,
+        label: parsedSteps[idx] || st.label
+      }));
+    }
 
     // Extract authoritative strokes from embedded hanzi-data medians if available
     if (window.EMBEDDED_HANZI_DATA && window.EMBEDDED_HANZI_DATA[cleanChar]) {
