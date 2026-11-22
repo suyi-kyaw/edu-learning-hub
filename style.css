@@ -13666,6 +13666,8 @@ body.admin-page {
   border-radius: 10px;
   border: 1px solid #e2e8f0;
   background: #f8fafc;
+  min-width: 0;
+  overflow: hidden;
 }
 
 [data-theme="dark"] .admin-media-preview {
@@ -13676,15 +13678,37 @@ body.admin-page {
 .admin-media-preview img {
   width: 64px;
   height: 44px;
-  object-fit: cover;
+  flex-shrink: 0;
+  object-fit: contain;
   border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="dark"] .admin-media-preview img {
+  border-color: #334155;
 }
 
 .admin-media-preview video {
   width: 88px;
   height: 50px;
+  flex-shrink: 0;
   border-radius: 6px;
   background: #000000;
+}
+
+.admin-media-preview-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+[data-theme="dark"] .admin-media-preview-label {
+  color: #94a3b8;
 }
 
 .admin-check-row {

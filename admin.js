@@ -531,27 +531,52 @@
     `;
   }
 
+  function formatMediaPreviewLabel(url, kind) {
+    const clean = String(url || '').trim();
+    if (!clean) return '';
+    if (/^data:/i.test(clean)) {
+      const mimeMatch = clean.match(/^data:([^;,]+)/i);
+      const mime = (mimeMatch && mimeMatch[1] ? mimeMatch[1] : `${kind || 'media'}`).toLowerCase();
+      const subtypeRaw = mime.includes('/') ? mime.split('/')[1] : mime;
+      const subtype = subtypeRaw.replace(/\+.*$/, '').toUpperCase() || 'MEDIA';
+      const commaIdx = clean.indexOf(',');
+      const payloadLen = commaIdx >= 0 ? Math.max(0, clean.length - commaIdx - 1) : clean.length;
+      const approxBytes = clean.includes(';base64,') ? Math.round((payloadLen * 3) / 4) : payloadLen;
+      const sizeLabel =
+        approxBytes >= 1024 * 1024
+          ? `${(approxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : approxBytes >= 1024
+          ? `${Math.max(1, Math.round(approxBytes / 1024))} KB`
+          : `${approxBytes} B`;
+      const kindLabel = kind === 'video' ? 'video' : kind === 'audio' ? 'audio' : 'image';
+      return `Inline ${subtype} ${kindLabel} (~${sizeLabel})`;
+    }
+    return clean;
+  }
+
   function renderMediaPreviewInner(url, kind) {
     const clean = String(url || '').trim();
     if (!clean) {
-      return `<span style="font-size:0.78rem; color:#64748b;">No ${escapeHTML(kind)} selected</span>`;
+      return `<span class="admin-media-preview-label">No ${escapeHTML(kind)} selected</span>`;
     }
     const resolved = assetUrl(clean);
+    const labelText = formatMediaPreviewLabel(clean, kind);
+    const titleText = /^data:/i.test(clean) ? labelText : clean;
     if (kind === 'video') {
       return `
         <video src="${escapeHTML(resolved)}" muted playsinline controls preload="metadata"></video>
-        <span style="font-size:0.78rem; color:#64748b; word-break:break-all;">${escapeHTML(clean)}</span>
+        <span class="admin-media-preview-label" title="${escapeHTML(titleText)}">${escapeHTML(labelText)}</span>
       `;
     }
     if (kind === 'audio') {
       return `
-        <audio src="${escapeHTML(resolved)}" controls preload="none" style="height:32px; max-width:220px;"></audio>
-        <span style="font-size:0.78rem; color:#64748b; word-break:break-all;">${escapeHTML(clean)}</span>
+        <audio src="${escapeHTML(resolved)}" controls preload="none" style="height:32px; max-width:220px; flex-shrink:0;"></audio>
+        <span class="admin-media-preview-label" title="${escapeHTML(titleText)}">${escapeHTML(labelText)}</span>
       `;
     }
     return `
       <img src="${escapeHTML(resolved)}" alt="Preview" onerror="this.style.opacity='0.3'" />
-      <span style="font-size:0.78rem; color:#64748b; word-break:break-all;">${escapeHTML(clean)}</span>
+      <span class="admin-media-preview-label" title="${escapeHTML(titleText)}">${escapeHTML(labelText)}</span>
     `;
   }
 
@@ -560,7 +585,7 @@
       window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function'
         ? await window.LinguaAuth.getIdToken()
         : '';
-    if (token && hasBackend()) {
+    if (token) {
       try {
         const formData = new FormData();
         formData.append('file', file);
