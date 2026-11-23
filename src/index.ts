@@ -1098,6 +1098,37 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (path === '/api/database/sync') {
       return handleDatabaseSync(request, env);
     }
+    if (path === '/api/admin/upload-media') {
+      try {
+        const formData = await request.formData();
+        const file = formData.get('file') as File | null;
+        if (!file) {
+          return fail('No media file attached.', 400);
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+        const mimeType = file.type || 'application/octet-stream';
+        const dataUrl = `data:${mimeType};base64,${base64}`;
+        const ext = file.name ? file.name.substring(file.name.lastIndexOf('.')).toLowerCase() : '';
+        const mediaType = ext === '.mp4' || ext === '.webm' || ext === '.mov' || ext === '.m4v' ? 'videos' : ext === '.mp3' || ext === '.wav' || ext === '.ogg' || ext === '.m4a' ? 'audio' : 'images';
+        return json({
+          success: true,
+          url: dataUrl,
+          mediaType,
+          filename: file.name || 'media',
+          size: file.size
+        });
+      } catch (err: any) {
+        return fail(err?.message || 'Media upload failed.', 400);
+      }
+    }
+
     const adminWorkbookMatch = path.match(/^\/api\/admin\/workbook\/([^/]+)$/);
     if (adminWorkbookMatch) {
       try {
