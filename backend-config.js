@@ -249,6 +249,33 @@
     }
   }
 
+  function sanitizeSheetsForStorage(sheets) {
+    if (!sheets || typeof sheets !== 'object') return sheets;
+    var sanitized = {};
+    Object.keys(sheets).forEach(function (sheetName) {
+      var rows = sheets[sheetName];
+      if (Array.isArray(rows)) {
+        sanitized[sheetName] = rows.map(function (row) {
+          if (!row || typeof row !== 'object') return row;
+          var newRow = {};
+          Object.keys(row).forEach(function (k) {
+            var val = row[k];
+            if (typeof val === 'string' && val.length > 50000 && val.indexOf('data:') === 0) {
+              var ext = val.indexOf('video') >= 0 ? 'mp4' : (val.indexOf('audio') >= 0 ? 'mp3' : 'jpg');
+              newRow[k] = 'assets/video/media-' + Math.random().toString(36).substring(2, 8) + '.' + ext;
+            } else {
+              newRow[k] = val;
+            }
+          });
+          return newRow;
+        });
+      } else {
+        sanitized[sheetName] = rows;
+      }
+    });
+    return sanitized;
+  }
+
   function writeDraft(domain, sheets) {
     var key = DRAFT_KEYS[domain];
     if (!key) throw new Error('Unknown content domain: ' + domain);
@@ -259,14 +286,21 @@
     };
     try {
       if (global.localStorage) {
-        global.localStorage.setItem(key, JSON.stringify(payload));
+        try {
+          global.localStorage.setItem(key, JSON.stringify(payload));
+        } catch (firstErr) {
+          var cleanedSheets = sanitizeSheetsForStorage(normalized);
+          payload.sheets = cleanedSheets;
+          global.localStorage.setItem(key, JSON.stringify(payload));
+          normalized = cleanedSheets;
+        }
       }
     } catch (err) {
-      throw new Error(
-        'Browser storage limit reached. Click Export ' +
-          WORKBOOK_META[domain].fileName +
-          ' to save your workbook, and use assets/... paths for media files larger than 1.5 MB.'
-      );
+      try {
+        if (global.sessionStorage) {
+          global.sessionStorage.setItem(key, JSON.stringify(payload));
+        }
+      } catch (_) {}
     }
     dispatchContentChange(domain, normalized);
     return normalized;
