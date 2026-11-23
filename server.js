@@ -2132,6 +2132,45 @@ app.post('/api/admin/upload-media', requireAdminToken, (req, res) => {
   });
 });
 
+app.get('/api/admin/media-library', (req, res) => {
+  try {
+    const items = [];
+    const scanDir = (dirPath, urlPrefix, kindOverride) => {
+      if (!fs.existsSync(dirPath)) return;
+      for (const entry of fs.readdirSync(dirPath)) {
+        const full = path.join(dirPath, entry);
+        let stat;
+        try {
+          stat = fs.statSync(full);
+        } catch (_) {
+          continue;
+        }
+        if (!stat.isFile()) continue;
+        const ext = path.extname(entry).toLowerCase();
+        const mediaBucket = ALLOWED_MEDIA[ext];
+        if (!mediaBucket) continue;
+        const kind = kindOverride || (mediaBucket === 'videos' ? 'video' : mediaBucket === 'audio' ? 'audio' : 'image');
+        items.push({
+          url: `${urlPrefix}/${entry}`,
+          name: entry,
+          kind,
+          size: stat.size,
+          source: urlPrefix.includes('uploads') ? 'uploaded' : 'repository'
+        });
+      }
+    };
+    scanDir(path.join(__dirname, 'assets', 'video'), 'assets/video', 'video');
+    scanDir(path.join(__dirname, 'assets', 'images'), 'assets/images', 'image');
+    scanDir(path.join(__dirname, 'assets', 'audio'), 'assets/audio', 'audio');
+    scanDir(UPLOAD_SUBDIRS.videos, 'assets/uploads/videos', 'video');
+    scanDir(UPLOAD_SUBDIRS.images, 'assets/uploads/images', 'image');
+    scanDir(UPLOAD_SUBDIRS.audio, 'assets/uploads/audio', 'audio');
+    res.json({ success: true, items });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 function syncCatalogFromLessonsRows(lessonRows, adminUid) {
   const store = readAuthStore();
   const nowIso = new Date().toISOString();

@@ -12,8 +12,9 @@ export interface Env {
 
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
-  'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'access-control-allow-headers': 'Content-Type, Authorization',
+  'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+  'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Admin-Uid, X-User-Uid',
+  'access-control-expose-headers': 'Content-Range, Content-Length, Accept-Ranges, Content-Type',
   'access-control-max-age': '86400',
 };
 
@@ -390,10 +391,271 @@ async function ensureD1Tables(db: D1Database): Promise<void> {
         text_en TEXT,
         text_my TEXT
       );
+      CREATE TABLE IF NOT EXISTS media_files (
+        id TEXT PRIMARY KEY,
+        filename TEXT,
+        mime_type TEXT,
+        media_type TEXT,
+        size_bytes INTEGER,
+        chunk_size INTEGER,
+        chunk_count INTEGER,
+        created_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS media_chunks (
+        media_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        data_b64 TEXT NOT NULL,
+        PRIMARY KEY (media_id, chunk_index)
+      );
     `);
   } catch (err) {
     console.warn('ensureD1Tables warning:', err);
   }
+}
+
+const WORKER_MEDIA_CHUNK_BYTES = 512 * 1024;
+const MAX_WORKER_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  const parts: string[] = [];
+  const step = 0x2000;
+  for (let i = 0; i < bytes.length; i += step) {
+    const slice = bytes.subarray(i, Math.min(i + step, bytes.length));
+    parts.push(String.fromCharCode.apply(null, Array.from(slice)));
+  }
+  return btoa(parts.join(''));
+}
+
+function base64ToUint8(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    out[i] = bin.charCodeAt(i);
+  }
+  return out;
+}
+
+function inferMimeFromFilename(filename: string, fallbackType: string): string {
+  if (fallbackType && fallbackType !== 'application/octet-stream') return fallbackType;
+  const lower = String(filename || '').toLowerCase();
+  if (lower.endsWith('.mp4') || lower.endsWith('.m4v')) return 'video/mp4';
+  if (lower.endsWith('.webm')) return 'video/webm';
+  if (lower.endsWith('.mov')) return 'video/quicktime';
+  if (lower.endsWith('.mp3')) return 'audio/mpeg';
+  if (lower.endsWith('.m4a')) return 'audio/mp4';
+  if (lower.endsWith('.wav')) return 'audio/wav';
+  if (lower.endsWith('.ogg')) return 'audio/ogg';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.svg')) return 'image/svg+xml';
+  return 'application/octet-stream';
+}
+
+async function handleWorkerMediaUpload(request: Request, env: Env): Promise<Response> {
+  const formData = await request.formData();
+  const file = formData.get('file') as File | null;
+  if (!file) {
+    return fail('No media file attached.', 400);
+  }
+  if (file.size > MAX_WORKER_UPLOAD_BYTES) {
+    const mb = (file.size / (1024 * 1024)).toFixed(2);
+    return fail(
+      `File "${file.name}" (${mb} MB) exceeds the 25 MB Cloudflare D1 upload limit. Compress the video under 25 MB, commit it to assets/video/, or paste a hosted https:// video URL.`,
+      413
+    );
+  }
+
+  await ensureD1Tables(env.DB);
+  const rawName = String(file.name || 'media').trim();
+  const dotIdx = rawName.lastIndexOf('.');
+  const ext = dotIdx >= 0 ? rawName.slice(dotIdx).toLowerCase().replace(/[^a-z0-9.]/g, '') : '';
+  const baseSlug = (dotIdx >= 0 ? rawName.slice(0, dotIdx) : rawName)
+    .toLowerCase()
+    .replace(/[^a-z0-9_\-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'media';
+  const safeFilename = `${baseSlug}${ext}`;
+  const mediaType =
+    ext === '.mp4' || ext === '.webm' || ext === '.mov' || ext === '.m4v'
+      ? 'videos'
+      : ext === '.mp3' || ext === '.wav' || ext === '.ogg' || ext === '.m4a'
+      ? 'audio'
+      : 'images';
+  const mimeType = inferMimeFromFilename(safeFilename, file.type || '');
+  const rand = Math.random().toString(36).slice(2, 6);
+  const mediaId = `${baseSlug}-${Date.now().toString(36)}-${rand}`;
+
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = WORKER_MEDIA_CHUNK_BYTES;
+  const chunkCount = Math.max(1, Math.ceil(bytes.byteLength / chunkSize));
+  const nowIso = new Date().toISOString();
+
+  await env.DB.prepare(
+    `INSERT INTO media_files (id, filename, mime_type, media_type, size_bytes, chunk_size, chunk_count, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(mediaId, safeFilename, mimeType, mediaType, bytes.byteLength, chunkSize, chunkCount, nowIso)
+    .run();
+
+  try {
+    const chunkStmts: D1PreparedStatement[] = [];
+    for (let idx = 0; idx < chunkCount; idx++) {
+      const start = idx * chunkSize;
+      const end = Math.min(bytes.byteLength, start + chunkSize);
+      const b64 = uint8ToBase64(bytes.subarray(start, end));
+      chunkStmts.push(
+        env.DB.prepare(`INSERT INTO media_chunks (media_id, chunk_index, data_b64) VALUES (?, ?, ?)`).bind(
+          mediaId,
+          idx,
+          b64
+        )
+      );
+      if (chunkStmts.length >= 8 || idx === chunkCount - 1) {
+        await env.DB.batch(chunkStmts.splice(0, chunkStmts.length));
+      }
+    }
+  } catch (err) {
+    await env.DB.prepare(`DELETE FROM media_chunks WHERE media_id = ?`).bind(mediaId).run().catch(() => {});
+    await env.DB.prepare(`DELETE FROM media_files WHERE id = ?`).bind(mediaId).run().catch(() => {});
+    throw err;
+  }
+
+  const publicUrl = `/api/media/${encodeURIComponent(mediaId)}/${encodeURIComponent(safeFilename)}`;
+  return json({
+    success: true,
+    url: publicUrl,
+    mediaType,
+    filename: safeFilename,
+    size: bytes.byteLength,
+    storage: 'cloudflare-d1'
+  });
+}
+
+async function serveWorkerMedia(request: Request, env: Env, mediaId: string): Promise<Response> {
+  await ensureD1Tables(env.DB);
+  const meta = await one<{
+    id: string;
+    filename: string;
+    mime_type: string;
+    size_bytes: number;
+    chunk_size: number;
+    chunk_count: number;
+  }>(
+    env.DB,
+    `SELECT id, filename, mime_type, size_bytes, chunk_size, chunk_count FROM media_files WHERE id = ?`,
+    mediaId
+  );
+
+  if (!meta) {
+    return fail('Media file not found.', 404);
+  }
+
+  const totalSize = Number(meta.size_bytes) || 0;
+  const chunkSize = Number(meta.chunk_size) || WORKER_MEDIA_CHUNK_BYTES;
+  const chunkCount = Number(meta.chunk_count) || 0;
+  const baseHeaders: Record<string, string> = {
+    'content-type': meta.mime_type || 'application/octet-stream',
+    'accept-ranges': 'bytes',
+    'cache-control': 'public, max-age=31536000, immutable',
+    ...CORS_HEADERS,
+  };
+
+  if (request.method === 'HEAD') {
+    return new Response(null, {
+      status: 200,
+      headers: { ...baseHeaders, 'content-length': String(totalSize) },
+    });
+  }
+
+  const rangeHeader = request.headers.get('range');
+  if (rangeHeader && totalSize > 0) {
+    const match = rangeHeader.match(/bytes=(\d*)-(\d*)/i);
+    if (!match) {
+      return new Response(null, {
+        status: 416,
+        headers: { ...CORS_HEADERS, 'content-range': `bytes */${totalSize}` },
+      });
+    }
+    let start = match[1] ? parseInt(match[1], 10) : 0;
+    let end = match[2] ? parseInt(match[2], 10) : Math.min(totalSize - 1, start + 2 * 1024 * 1024 - 1);
+    if (!match[1] && match[2]) {
+      const suffixLen = parseInt(match[2], 10);
+      start = Math.max(0, totalSize - suffixLen);
+      end = totalSize - 1;
+    }
+    end = Math.min(end, totalSize - 1);
+    if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || start > end || start >= totalSize) {
+      return new Response(null, {
+        status: 416,
+        headers: { ...CORS_HEADERS, 'content-range': `bytes */${totalSize}` },
+      });
+    }
+
+    const startChunk = Math.floor(start / chunkSize);
+    const endChunk = Math.floor(end / chunkSize);
+    const rows = await all<{ chunk_index: number; data_b64: string }>(
+      env.DB,
+      `SELECT chunk_index, data_b64 FROM media_chunks WHERE media_id = ? AND chunk_index >= ? AND chunk_index <= ? ORDER BY chunk_index ASC`,
+      mediaId,
+      startChunk,
+      endChunk
+    );
+
+    const sliceLen = end - start + 1;
+    const out = new Uint8Array(sliceLen);
+    let writePos = 0;
+    for (const row of rows) {
+      const chunkBytes = base64ToUint8(row.data_b64);
+      const chunkGlobalStart = Number(row.chunk_index) * chunkSize;
+      const localStart = Math.max(0, start - chunkGlobalStart);
+      const localEnd = Math.min(chunkBytes.byteLength, end - chunkGlobalStart + 1);
+      if (localEnd > localStart) {
+        const piece = chunkBytes.subarray(localStart, localEnd);
+        out.set(piece, writePos);
+        writePos += piece.byteLength;
+      }
+    }
+
+    return new Response(out.subarray(0, writePos), {
+      status: 206,
+      headers: {
+        ...baseHeaders,
+        'content-length': String(writePos),
+        'content-range': `bytes ${start}-${start + writePos - 1}/${totalSize}`,
+      },
+    });
+  }
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for (let idx = 0; idx < chunkCount; idx++) {
+          const row = await one<{ data_b64: string }>(
+            env.DB,
+            `SELECT data_b64 FROM media_chunks WHERE media_id = ? AND chunk_index = ?`,
+            mediaId,
+            idx
+          );
+          if (row?.data_b64) {
+            controller.enqueue(base64ToUint8(row.data_b64));
+          }
+        }
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      ...baseHeaders,
+      'content-length': String(totalSize),
+    },
+  });
 }
 
 async function syncLessonsSheetsToD1(db: D1Database, sheets: Record<string, any[]>): Promise<void> {
@@ -1117,38 +1379,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
     if (path === '/api/admin/upload-media') {
       try {
-        const formData = await request.formData();
-        const file = formData.get('file') as File | null;
-        if (!file) {
-          return fail('No media file attached.', 400);
-        }
-        const MAX_WORKER_INLINE_BYTES = Math.round(1.5 * 1024 * 1024);
-        if (file.size > MAX_WORKER_INLINE_BYTES) {
-          const mb = (file.size / (1024 * 1024)).toFixed(2);
-          return fail(
-            `File "${file.name}" (${mb} MB) exceeds the 1.5 MB serverless limit on Cloudflare. Upload large videos using the local preview server (saves to assets/uploads/videos/), commit them under assets/video/, or enter a hosted https:// video URL.`,
-            413
-          );
-        }
-        const arrayBuffer = await file.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const base64 = btoa(binary);
-        const mimeType = file.type || 'application/octet-stream';
-        const dataUrl = `data:${mimeType};base64,${base64}`;
-        const ext = file.name ? file.name.substring(file.name.lastIndexOf('.')).toLowerCase() : '';
-        const mediaType = ext === '.mp4' || ext === '.webm' || ext === '.mov' || ext === '.m4v' ? 'videos' : ext === '.mp3' || ext === '.wav' || ext === '.ogg' || ext === '.m4a' ? 'audio' : 'images';
-        return json({
-          success: true,
-          url: dataUrl,
-          mediaType,
-          filename: file.name || 'media',
-          size: file.size
-        });
+        return await handleWorkerMediaUpload(request, env);
       } catch (err: any) {
         return fail(err?.message || 'Media upload failed.', 400);
       }
@@ -1181,6 +1412,27 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   // Read routes
+  const mediaMatch = path.match(/^\/api\/media\/([^/]+)(?:\/[^/]+)?$/);
+  if (mediaMatch && (method === 'GET' || method === 'HEAD')) {
+    return serveWorkerMedia(request, env, decodeURIComponent(mediaMatch[1]));
+  }
+
+  if (path === '/api/admin/media-library') {
+    await ensureD1Tables(env.DB);
+    const rows = await all<{ id: string; filename: string; media_type: string; size_bytes: number; created_at: string }>(
+      env.DB,
+      `SELECT id, filename, media_type, size_bytes, created_at FROM media_files ORDER BY created_at DESC LIMIT 100`
+    );
+    const items = rows.map((r) => ({
+      url: `/api/media/${encodeURIComponent(r.id)}/${encodeURIComponent(r.filename)}`,
+      name: r.filename,
+      kind: r.media_type === 'videos' ? 'video' : r.media_type === 'audio' ? 'audio' : 'image',
+      size: Number(r.size_bytes) || 0,
+      source: 'cloudflare-d1'
+    }));
+    return json({ success: true, items });
+  }
+
   if (path === '/api' || path === '/api/health') {
     const row = await one<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM lessons`);
     return json({ ok: true, status: 'healthy', database: 'edu-hub-db', lessons: row?.c ?? 0 });

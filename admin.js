@@ -556,7 +556,11 @@
                 kind
               )}" hidden />
             </label>
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-media-browse-for="${escapeHTML(
+              id
+            )}" data-media-kind="${escapeHTML(kind)}">Browse</button>
           </div>
+          <div class="admin-media-library" id="${escapeHTML(id)}Library" hidden></div>
           <div class="admin-media-preview" id="${escapeHTML(id)}Preview">
             ${renderMediaPreviewInner(val, kind)}
           </div>
@@ -598,7 +602,7 @@
     const titleText = /^data:/i.test(clean) ? labelText : clean;
     if (kind === 'video') {
       return `
-        <video src="${escapeHTML(resolved)}" muted playsinline controls preload="metadata"></video>
+        <video src="${escapeHTML(resolved)}" muted playsinline controls preload="metadata" onerror="this.style.opacity='0.35'; this.nextElementSibling && (this.nextElementSibling.textContent='Video not found at this path yet — commit file to assets/video/ or check URL');"></video>
         <span class="admin-media-preview-label" title="${escapeHTML(titleText)}">${escapeHTML(labelText)}</span>
       `;
     }
@@ -614,7 +618,91 @@
     `;
   }
 
-  async function uploadAdminMediaFile(file) {
+  function getSuggestedRepoPath(fileName, kind) {
+    const cleanName = String(fileName || 'media').trim().split(/[\\/]/).pop() || 'media';
+    if (kind === 'video') return `assets/video/${cleanName}`;
+    if (kind === 'audio') return `assets/audio/${cleanName}`;
+    return `assets/images/${cleanName}`;
+  }
+
+  async function probeExistingRepoMedia(file, kind) {
+    const rawName = String(file && file.name ? file.name : '').trim().split(/[\\/]/).pop();
+    if (!rawName) return '';
+    const dotIdx = rawName.lastIndexOf('.');
+    const ext = dotIdx >= 0 ? rawName.slice(dotIdx).toLowerCase() : '';
+    const slug = (dotIdx >= 0 ? rawName.slice(0, dotIdx) : rawName)
+      .toLowerCase()
+      .replace(/[^a-z0-9_\-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const names = Array.from(new Set([rawName, slug ? `${slug}${ext}` : ''].filter(Boolean)));
+    const prefixes =
+      kind === 'video'
+        ? ['assets/video', 'assets/uploads/videos']
+        : kind === 'audio'
+        ? ['assets/audio', 'assets/uploads/audio']
+        : ['assets/images', 'assets/uploads/images', 'assets'];
+
+    for (const prefix of prefixes) {
+      for (const nm of names) {
+        const candidate = `${prefix}/${nm}`;
+        try {
+          const res = await fetch(assetUrl(candidate), { method: 'HEAD', cache: 'no-store' });
+          const ctype = String(res.headers.get('content-type') || '').toLowerCase();
+          if (res.ok && !ctype.includes('text/html')) {
+            return candidate;
+          }
+        } catch (_) {}
+      }
+    }
+    return '';
+  }
+
+  async function loadMediaLibraryChoices(kind) {
+    const seen = new Set();
+    const out = [];
+    const add = (url, label) => {
+      const clean = String(url || '').trim();
+      if (!clean || /^data:/i.test(clean) || seen.has(clean)) return;
+      seen.add(clean);
+      out.push({ url: clean, label: label || clean.split('/').pop() || clean });
+    };
+
+    try {
+      const res = await fetch(apiUrl('/api/admin/media-library'), { cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && Array.isArray(data.items)) {
+        data.items.forEach((it) => {
+          if (!kind || !it.kind || it.kind === kind) add(it.url, it.name);
+        });
+      }
+    } catch (_) {}
+
+    if (kind === 'video') {
+      [
+        'assets/video/lesson-01.mp4',
+        'assets/video/CNY01.mp4',
+        'assets/video/Qixi01.mp4',
+        'assets/video/culture01.mp4',
+        'assets/video/midautumn01.mp4',
+        'assets/video/Reels Red Envelope.mp4'
+      ].forEach((p) => add(p));
+      (state.storiesData?.Lessons || []).forEach((s) => add(s.video || s.videoUrl || s.video_url));
+      (state.reelsData?.Videos || []).forEach((r) => add(r.video_path));
+      (state.lessonsData?.Lessons || []).forEach((l) => add(l.videoUrl));
+    } else if (kind === 'audio') {
+      (state.storiesData?.Story || []).forEach((s) => add(s.audio));
+      (state.storiesData?.Vocabulary || []).forEach((v) => add(v.audio));
+      (state.lessonsData?.Lessons || []).forEach((l) => add(l.fullAudio));
+    } else {
+      (state.storiesData?.Lessons || []).forEach((s) => add(s.poster || s.posterUrl));
+      (state.storiesData?.Story || []).forEach((s) => add(s.image));
+      (state.lessonsData?.Lessons || []).forEach((l) => add(l.posterUrl));
+    }
+
+    return out;
+  }
+
+  async function uploadAdminMediaFile(file, kindHint) {
     const store = getContentStore();
     const isStaticHost =
       window.LinguaBackend &&
@@ -622,6 +710,12 @@
       window.LinguaBackend.isStaticGithubHost();
 
     if (isStaticHost) {
+      if (file.size > (store.MAX_INLINE_MEDIA_BYTES || Math.round(1.5 * 1024 * 1024))) {
+        const existingRepoPath = await probeExistingRepoMedia(file, kindHint);
+        if (existingRepoPath) {
+          return { url: existingRepoPath, uploadedToServer: false, matchedRepoFile: true };
+        }
+      }
       const inline = await store.readFileAsInlineMedia(file);
       return { url: inline.url, uploadedToServer: false };
     }
@@ -695,11 +789,21 @@
       return { url: inline.url, uploadedToServer: false };
     }
 
+    const existingRepoPath = await probeExistingRepoMedia(file, kindHint);
+    if (existingRepoPath) {
+      return { url: existingRepoPath, uploadedToServer: false, matchedRepoFile: true };
+    }
+
     const mb = (file.size / (1024 * 1024)).toFixed(2);
-    throw new Error(
+    const err = new Error(
       (lastError && lastError.message) ||
-        `File "${file.name}" (${mb} MB) exceeds the 1.5 MB browser storage limit and no disk upload server is active. Copy it to assets/video/ in your repository or enter a hosted https:// URL.`
+        `File "${file.name}" (${mb} MB) exceeds the 1.5 MB browser storage limit and no disk upload server is active. Copy it to ${getSuggestedRepoPath(file.name, kindHint)} in your repository or enter a hosted https:// URL.`
     );
+    err.code = 'STATIC_LARGE_MEDIA';
+    err.fileName = file.name;
+    err.fileSizeMb = mb;
+    err.suggestedRepoPath = getSuggestedRepoPath(file.name, kindHint);
+    throw err;
   }
 
   function wireMediaPickers(container) {
@@ -708,8 +812,10 @@
       const targetId = root.getAttribute('data-picker-root');
       const textInput = root.querySelector(`#${CSS.escape(targetId)}`);
       const fileInput = root.querySelector(`[data-media-upload-for="${CSS.escape(targetId)}"]`);
+      const browseBtn = root.querySelector(`[data-media-browse-for="${CSS.escape(targetId)}"]`);
+      const libraryEl = root.querySelector(`#${CSS.escape(targetId)}Library`);
       const previewEl = root.querySelector(`#${CSS.escape(targetId)}Preview`);
-      const kind = fileInput ? fileInput.getAttribute('data-media-kind') : 'image';
+      const kind = (fileInput || browseBtn)?.getAttribute('data-media-kind') || 'image';
 
       if (textInput && previewEl) {
         textInput.addEventListener('input', (e) => {
@@ -720,13 +826,47 @@
         });
       }
 
+      if (browseBtn && libraryEl) {
+        browseBtn.addEventListener('click', async () => {
+          if (!libraryEl.hidden) {
+            libraryEl.hidden = true;
+            return;
+          }
+          libraryEl.hidden = false;
+          libraryEl.innerHTML = '<span class="admin-media-preview-label">Loading media library…</span>';
+          const choices = await loadMediaLibraryChoices(kind);
+          if (!choices.length) {
+            libraryEl.innerHTML = `<span class="admin-media-preview-label">No existing ${escapeHTML(kind)} files found yet.</span>`;
+            return;
+          }
+          libraryEl.innerHTML = choices
+            .map(
+              (c) =>
+                `<button type="button" class="admin-media-chip" data-pick-media-url="${escapeHTML(c.url)}" title="${escapeHTML(
+                  c.url
+                )}">${escapeHTML(c.label)}</button>`
+            )
+            .join('');
+          libraryEl.querySelectorAll('[data-pick-media-url]').forEach((chip) => {
+            chip.addEventListener('click', () => {
+              const picked = chip.getAttribute('data-pick-media-url') || '';
+              if (textInput) {
+                applyMediaInputValue(textInput, picked, kind);
+                textInput.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+              libraryEl.hidden = true;
+            });
+          });
+        });
+      }
+
       if (fileInput) {
         fileInput.addEventListener('change', async () => {
           const file = fileInput.files && fileInput.files[0];
           if (!file) return;
           setSyncStatus(`Uploading ${file.name}…`);
           try {
-            const result = await uploadAdminMediaFile(file);
+            const result = await uploadAdminMediaFile(file, kind);
             if (textInput) {
               applyMediaInputValue(textInput, result.url, kind, file.name);
               textInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -734,7 +874,10 @@
             if (previewEl) {
               previewEl.innerHTML = renderMediaPreviewInner(result.url, kind);
             }
-            if (result.uploadedToServer) {
+            if (result.matchedRepoFile) {
+              setSyncStatus('Matched repository media');
+              toast(`Matched existing repository file (${result.url}). Click Save to keep.`);
+            } else if (result.uploadedToServer) {
               setSyncStatus('Media uploaded');
               toast(`Uploaded ${file.name} to server (${result.url}).`);
             } else {
@@ -743,7 +886,41 @@
             }
           } catch (err) {
             setSyncStatus('Upload error');
-            toast(err instanceof Error ? err.message : 'Could not attach media file.', 'error');
+            const errMsg = err instanceof Error ? err.message : 'Could not attach media file.';
+            toast(errMsg, 'error');
+            if (previewEl && err && (err.code === 'STATIC_LARGE_MEDIA' || err.suggestedRepoPath)) {
+              const suggested = err.suggestedRepoPath || getSuggestedRepoPath(file.name, kind);
+              previewEl.innerHTML = `
+                <div class="admin-media-recovery">
+                  <div>
+                    <strong>${escapeHTML(file.name)} (${escapeHTML(err.fileSizeMb || '')} MB)</strong> cannot be saved inside GitHub Pages browser storage (1.5 MB max).
+                    <br/>Option 1: Click <strong>Use Repo Path</strong>, save &amp; export <code>stories.xlsx</code>, then commit <code>${escapeHTML(
+                      suggested
+                    )}</code> to your repository (works on both GitHub &amp; Cloudflare).
+                    <br/>Option 2: Upload directly using the Cloudflare Worker or AI Studio/Node server, or paste a hosted <code>https://</code> URL above.
+                  </div>
+                  <div class="admin-media-recovery-actions">
+                    <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" data-use-repo-path="${escapeHTML(
+                      suggested
+                    )}">Use Repo Path: ${escapeHTML(suggested)}</button>
+                    <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-open-browse>Browse Existing Media</button>
+                  </div>
+                </div>
+              `;
+              const useRepoBtn = previewEl.querySelector('[data-use-repo-path]');
+              if (useRepoBtn && textInput) {
+                useRepoBtn.addEventListener('click', () => {
+                  const chosenPath = useRepoBtn.getAttribute('data-use-repo-path') || suggested;
+                  applyMediaInputValue(textInput, chosenPath, kind);
+                  textInput.dispatchEvent(new Event('input', { bubbles: true }));
+                  toast(`Set path to ${chosenPath}. Save & commit this file under ${chosenPath} to publish.`);
+                });
+              }
+              const openBrowseBtn = previewEl.querySelector('[data-open-browse]');
+              if (openBrowseBtn && browseBtn) {
+                openBrowseBtn.addEventListener('click', () => browseBtn.click());
+              }
+            }
           } finally {
             fileInput.value = '';
           }

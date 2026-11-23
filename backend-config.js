@@ -932,15 +932,27 @@
       }
       if (file.size > MAX_INLINE_MEDIA_BYTES) {
         var mb = (file.size / (1024 * 1024)).toFixed(2);
-        reject(
-          new Error(
-            'File "' +
-              file.name +
-              '" (' +
-              mb +
-              ' MB) exceeds the 1.5 MB browser storage limit. Upload large media via the local server (saves to assets/uploads/...) or enter a repository path (e.g. assets/video/...) or hosted https:// URL.'
-          )
+        var extLower = (String(file.name || '').split('.').pop() || '').toLowerCase();
+        var subFolder =
+          /^(mp4|webm|mov|m4v)$/.test(extLower)
+            ? 'assets/video/'
+            : /^(mp3|wav|ogg|m4a)$/.test(extLower)
+            ? 'assets/audio/'
+            : 'assets/images/';
+        var limitErr = new Error(
+          'File "' +
+            file.name +
+            '" (' +
+            mb +
+            ' MB) exceeds the 1.5 MB browser storage limit on static GitHub Pages. Click "Use Repo Path" (then commit the file to ' +
+            subFolder +
+            '), upload on Cloudflare / local server, or paste a hosted https:// URL.'
         );
+        limitErr.code = 'STATIC_LARGE_MEDIA';
+        limitErr.fileName = file.name;
+        limitErr.fileSizeMb = mb;
+        limitErr.suggestedRepoPath = subFolder + file.name;
+        reject(limitErr);
         return;
       }
       var reader = new FileReader();
