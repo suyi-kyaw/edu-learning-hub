@@ -167,7 +167,7 @@
     }
   };
 
-  var MAX_INLINE_MEDIA_BYTES = Math.round(1.5 * 1024 * 1024);
+  var MAX_INLINE_MEDIA_BYTES = Math.round(30 * 1024 * 1024);
 
   function cloneArray(arr) {
     if (!Array.isArray(arr)) return [];

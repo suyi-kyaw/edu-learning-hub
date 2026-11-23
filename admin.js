@@ -627,10 +627,10 @@
         throw new Error(`Upload server responded with HTTP ${res.status}`);
       }
     } catch (uploadErr) {
-      if (file.size > 1.5 * 1024 * 1024) {
+      if (file.size > 30 * 1024 * 1024) {
         throw new Error(uploadErr.message || `Failed to upload ${file.name} to server.`);
       }
-      console.warn('Server upload not completed, falling back to local inline data for small file:', uploadErr);
+      console.warn('Server upload not completed (e.g. HTTP 405 or route unavailable), falling back to local inline media storage:', uploadErr);
     }
 
     const inline = await getContentStore().readFileAsInlineMedia(file);
