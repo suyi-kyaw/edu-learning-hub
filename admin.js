@@ -89,13 +89,21 @@
         error: res && res.syncError
       };
       const needsAuth = res && res.syncReason === 'auth-required';
-      setSyncStatus(needsAuth ? 'Sign in again to sync' : 'Saved locally (pending sync)');
-      toast(
+      const isStaticHost = res && res.syncReason === 'static-host';
+      setSyncStatus(
         needsAuth
-          ? `${localMsg} (Sign out & sign back in once to auto-sync to Excel & DB.)`
-          : localMsg,
-        needsAuth ? 'info' : 'success'
+          ? 'Sign in again to sync'
+          : isStaticHost
+          ? 'Saved locally (Export Excel to publish)'
+          : 'Saved locally (pending sync)'
       );
+      let msg = localMsg;
+      if (needsAuth) {
+        msg = `${localMsg} (Sign out & sign back in once to auto-sync to Excel & DB.)`;
+      } else if (res && res.syncError) {
+        msg = `${localMsg} (${res.syncError})`;
+      }
+      toast(msg, needsAuth || isStaticHost ? 'info' : res && res.syncReason === 'server-error' ? 'error' : 'success');
     }
   }
 
@@ -505,15 +513,41 @@
   }
 
   // --- Reusable Media Picker Helper (File Upload + URL Input + Preview) ---
+  function getMediaInputValue(inputEl) {
+    if (!inputEl) return '';
+    if (inputEl.dataset && inputEl.dataset.inlineValue) {
+      return String(inputEl.dataset.inlineValue).trim();
+    }
+    return String(inputEl.value || '').trim();
+  }
+
+  function applyMediaInputValue(inputEl, rawVal, kind, fileNameHint) {
+    if (!inputEl) return;
+    const clean = String(rawVal || '').trim();
+    if (/^data:/i.test(clean)) {
+      inputEl.dataset.inlineValue = clean;
+      inputEl.value = fileNameHint
+        ? `Inline file: ${fileNameHint}`
+        : formatMediaPreviewLabel(clean, kind);
+    } else {
+      if (inputEl.dataset) delete inputEl.dataset.inlineValue;
+      inputEl.value = clean;
+    }
+  }
+
   function renderMediaPickerField(opts) {
     const { id, label, value, accept, kind, placeholder } = opts;
-    const val = String(value || '');
+    const val = String(value || '').trim();
+    const isData = /^data:/i.test(val);
+    const displayVal = isData ? formatMediaPreviewLabel(val, kind) : val;
     return `
       <div class="admin-field">
         <label for="${escapeHTML(id)}">${escapeHTML(label)}</label>
         <div class="admin-media-picker" data-picker-root="${escapeHTML(id)}">
           <div class="admin-media-row">
-            <input type="text" class="admin-input" id="${escapeHTML(id)}" value="${escapeHTML(val)}" placeholder="${escapeHTML(
+            <input type="text" class="admin-input" id="${escapeHTML(id)}" value="${escapeHTML(displayVal)}" ${
+              isData ? `data-inline-value="${escapeHTML(val)}"` : ''
+            } placeholder="${escapeHTML(
               placeholder || 'assets/... or https://...'
             )}" />
             <label class="admin-btn admin-btn-secondary admin-btn-sm" style="margin:0; cursor:pointer;">
@@ -581,6 +615,17 @@
   }
 
   async function uploadAdminMediaFile(file) {
+    const store = getContentStore();
+    const isStaticHost =
+      window.LinguaBackend &&
+      typeof window.LinguaBackend.isStaticGithubHost === 'function' &&
+      window.LinguaBackend.isStaticGithubHost();
+
+    if (isStaticHost) {
+      const inline = await store.readFileAsInlineMedia(file);
+      return { url: inline.url, uploadedToServer: false };
+    }
+
     let token = '';
     if (window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function') {
       try {
@@ -608,6 +653,8 @@
       headers['X-User-Uid'] = currentUser.uid;
     }
 
+    let fallbackAllowed = false;
+    let lastError = null;
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -618,7 +665,17 @@
       });
       const json = await res.json().catch(() => null);
       if (res.ok && json && json.success && json.url) {
-        return { url: json.url, uploadedToServer: true };
+        const returnedUrl = String(json.url);
+        const isInline = /^data:/i.test(returnedUrl);
+        if (isInline && returnedUrl.length > 2000000) {
+          throw new Error(
+            `File "${file.name}" exceeds the safe browser/database size limit. Commit the video under assets/video/ or paste a hosted https:// URL.`
+          );
+        }
+        return { url: returnedUrl, uploadedToServer: !isInline };
+      }
+      if (res.status === 404 || res.status === 405) {
+        fallbackAllowed = true;
       }
       if (json && json.error) {
         throw new Error(json.error);
@@ -627,14 +684,22 @@
         throw new Error(`Upload server responded with HTTP ${res.status}`);
       }
     } catch (uploadErr) {
-      if (file.size > 30 * 1024 * 1024) {
-        throw new Error(uploadErr.message || `Failed to upload ${file.name} to server.`);
+      lastError = uploadErr;
+      if (!fallbackAllowed && uploadErr && uploadErr.name !== 'TypeError') {
+        throw uploadErr;
       }
-      console.warn('Server upload not completed (e.g. HTTP 405 or route unavailable), falling back to local inline media storage:', uploadErr);
     }
 
-    const inline = await getContentStore().readFileAsInlineMedia(file);
-    return { url: inline.url, uploadedToServer: false };
+    if (file.size <= (store.MAX_INLINE_MEDIA_BYTES || Math.round(1.5 * 1024 * 1024))) {
+      const inline = await store.readFileAsInlineMedia(file);
+      return { url: inline.url, uploadedToServer: false };
+    }
+
+    const mb = (file.size / (1024 * 1024)).toFixed(2);
+    throw new Error(
+      (lastError && lastError.message) ||
+        `File "${file.name}" (${mb} MB) exceeds the 1.5 MB browser storage limit and no disk upload server is active. Copy it to assets/video/ in your repository or enter a hosted https:// URL.`
+    );
   }
 
   function wireMediaPickers(container) {
@@ -647,8 +712,11 @@
       const kind = fileInput ? fileInput.getAttribute('data-media-kind') : 'image';
 
       if (textInput && previewEl) {
-        textInput.addEventListener('input', () => {
-          previewEl.innerHTML = renderMediaPreviewInner(textInput.value, kind);
+        textInput.addEventListener('input', (e) => {
+          if (e && e.isTrusted && textInput.dataset && textInput.dataset.inlineValue) {
+            delete textInput.dataset.inlineValue;
+          }
+          previewEl.innerHTML = renderMediaPreviewInner(getMediaInputValue(textInput), kind);
         });
       }
 
@@ -660,7 +728,7 @@
           try {
             const result = await uploadAdminMediaFile(file);
             if (textInput) {
-              textInput.value = result.url;
+              applyMediaInputValue(textInput, result.url, kind, file.name);
               textInput.dispatchEvent(new Event('input', { bubbles: true }));
             }
             if (previewEl) {
@@ -670,11 +738,11 @@
               setSyncStatus('Media uploaded');
               toast(`Uploaded ${file.name} to server (${result.url}).`);
             } else {
-              setSyncStatus('Media attached locally');
-              toast(`Attached ${file.name} locally. For large files, commit to assets/ and paste path.`);
+              setSyncStatus('Media attached inline');
+              toast(`Attached ${file.name} inline. Click Save Story to store.`);
             }
           } catch (err) {
-            setSyncStatus('Media note');
+            setSyncStatus('Upload error');
             toast(err instanceof Error ? err.message : 'Could not attach media file.', 'error');
           } finally {
             fileInput.value = '';
@@ -1278,7 +1346,7 @@
 
     const logoInput = document.getElementById('cfgSiteLogoUrl');
     const syncLogoDualPreview = () => {
-      const urlVal = (logoInput?.value || '').trim();
+      const urlVal = getMediaInputValue(logoInput);
       const lightBox = document.getElementById('cfgLogoPreviewLight');
       const darkBox = document.getElementById('cfgLogoPreviewDark');
       if (lightBox) lightBox.innerHTML = renderBrandLogoPreviewMarkup(urlVal, false);
@@ -1291,7 +1359,7 @@
     const useSampleBtn = document.getElementById('btnUseSampleLogo');
     if (useSampleBtn && logoInput) {
       useSampleBtn.onclick = () => {
-        logoInput.value = 'public/assets/aistudio/Logo-01_264a2645.jpg';
+        applyMediaInputValue(logoInput, 'public/assets/aistudio/Logo-01_264a2645.jpg', 'image');
         logoInput.dispatchEvent(new Event('input', { bubbles: true }));
       };
     }
@@ -1299,7 +1367,7 @@
     const resetLogoBtn = document.getElementById('btnResetSiteLogo');
     if (resetLogoBtn && logoInput) {
       resetLogoBtn.onclick = () => {
-        logoInput.value = '';
+        applyMediaInputValue(logoInput, '', 'image');
         logoInput.dispatchEvent(new Event('input', { bubbles: true }));
         toast('Logo field cleared — click Save Logo to restore default 语 JiedeEdu lockup.');
       };
@@ -1312,7 +1380,7 @@
         saveLogoOnlyBtn.textContent = 'Saving…';
         try {
           setSyncStatus('Saving brand logo…');
-          const nextLogoUrl = logoInput.value.trim();
+          const nextLogoUrl = getMediaInputValue(logoInput);
           const saved = await window.LinguaAuth.saveSiteConfig({ siteLogoUrl: nextLogoUrl });
           state.siteConfig = saved;
           setSyncStatus('Logo saved');
@@ -1360,7 +1428,7 @@
       const featuredGameIds = Array.from(form.querySelectorAll('input[name="featGame"]:checked')).map((c) => c.value);
 
       const nextPayload = {
-        siteLogoUrl: val('cfgSiteLogoUrl'),
+        siteLogoUrl: getMediaInputValue(document.getElementById('cfgSiteLogoUrl')),
         courses: coursesList,
         heroEyebrow: val('cfgHeroEyebrow'),
         heroTitleLine1: val('cfgHeroTitle1'),
@@ -1368,7 +1436,7 @@
         heroSubtitle: val('cfgHeroSubtitle'),
         heroPrimaryCta: val('cfgHeroCta1'),
         heroSecondaryCta: val('cfgHeroCta2'),
-        heroBannerUrl: val('cfgHeroBannerUrl'),
+        heroBannerUrl: getMediaInputValue(document.getElementById('cfgHeroBannerUrl')),
         storiesLabel: val('cfgStoriesLabel'),
         storiesTitle: val('cfgStoriesTitle'),
         storiesSubtitle: val('cfgStoriesSub'),
@@ -2264,6 +2332,9 @@
                           <td class="num">${sEx}</td>
                           <td>
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                              <a class="admin-btn admin-btn-secondary admin-btn-sm" href="story.html?id=${encodeURIComponent(
+                                s.id
+                              )}" target="_blank" rel="noopener">View ↗</a>
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-edit-story="${escapeHTML(
                                 s.id
                               )}">Edit</button>
@@ -2388,17 +2459,23 @@
 
   function openStoryEditorModal(story) {
     const isNew = !story;
-    const base = story || {
-      id: `lesson-${String(state.storiesData.Lessons.length + 1).padStart(2, '0')}`,
-      title: '',
-      chineseTitle: '',
-      pinyin: '',
-      meaning: '',
-      level: 'Beginner',
-      description: '',
-      video: 'assets/video/lesson-01.mp4',
-      poster: 'assets/images/story-poster.jpg'
-    };
+    const base = story
+      ? {
+          ...story,
+          video: story.video || story.videoUrl || story.video_url || '',
+          poster: story.poster || story.posterUrl || story.poster_url || ''
+        }
+      : {
+          id: `lesson-${String(state.storiesData.Lessons.length + 1).padStart(2, '0')}`,
+          title: '',
+          chineseTitle: '',
+          pinyin: '',
+          meaning: '',
+          level: 'Beginner',
+          description: '',
+          video: '',
+          poster: 'assets/images/story-poster.jpg'
+        };
 
     state.editingStoryScenes = story
       ? state.storiesData.Story.filter((r) => isSameId(r.lessonId, story.id)).map((r) => ({ ...r }))
@@ -2468,7 +2545,7 @@
             const [prefix, idx] = inp.id.split('_');
             const key = prefix === 'scImg' ? 'image' : 'audio';
             if (state.editingStoryScenes[Number(idx)]) {
-              state.editingStoryScenes[Number(idx)][key] = inp.value;
+              state.editingStoryScenes[Number(idx)][key] = getMediaInputValue(inp);
             }
           });
         });
@@ -2526,7 +2603,7 @@
         vocabBox.querySelectorAll('[id^="svAud_"]').forEach((inp) => {
           inp.addEventListener('input', () => {
             const idx = Number(inp.id.split('_')[1]);
-            if (state.editingStoryVocab[idx]) state.editingStoryVocab[idx].audio = inp.value;
+            if (state.editingStoryVocab[idx]) state.editingStoryVocab[idx].audio = getMediaInputValue(inp);
           });
         });
         vocabBox.querySelectorAll('[data-rm-sv]').forEach((b) => {
@@ -2663,8 +2740,8 @@
         meaning: document.getElementById('stMeaning').value.trim(),
         level: document.getElementById('stLevel').value.trim() || 'Beginner',
         description: document.getElementById('stDesc').value.trim(),
-        video: document.getElementById('stVideo').value.trim(),
-        poster: document.getElementById('stPoster').value.trim()
+        video: getMediaInputValue(document.getElementById('stVideo')),
+        poster: getMediaInputValue(document.getElementById('stPoster'))
       };
 
       const existingLessons = [...state.storiesData.Lessons];
@@ -3006,8 +3083,8 @@
         type: document.getElementById('rlType').value,
         holiday_id: document.getElementById('rlHoliday').value.trim() || 'daily',
         title: document.getElementById('rlTitle').value.trim(),
-        video_path: document.getElementById('rlVideo').value.trim(),
-        thumbnail_path: document.getElementById('rlThumb').value.trim(),
+        video_path: getMediaInputValue(document.getElementById('rlVideo')),
+        thumbnail_path: getMediaInputValue(document.getElementById('rlThumb')),
         duration_sec: Number(document.getElementById('rlDuration').value) || 15,
         status: document.getElementById('rlStatus').value,
         text_cn: document.getElementById('rlCn').value.trim(),
@@ -3659,7 +3736,7 @@
         vocabBox.querySelectorAll('[id^="lvAud_"]').forEach((inp) => {
           inp.addEventListener('input', () => {
             const idx = Number(inp.id.split('_')[1]);
-            if (state.editingLessonVocab[idx]) state.editingLessonVocab[idx].audio = inp.value;
+            if (state.editingLessonVocab[idx]) state.editingLessonVocab[idx].audio = getMediaInputValue(inp);
           });
         });
         vocabBox.querySelectorAll('[data-rm-lv]').forEach((b) => {
@@ -3890,9 +3967,9 @@
         meaning: document.getElementById('lsMeaning').value.trim(),
         level: document.getElementById('lsLevel').value.trim() || courseName,
         description: document.getElementById('lsDesc').value.trim(),
-        videoUrl: document.getElementById('lsVideo').value.trim(),
-        posterUrl: document.getElementById('lsPoster').value.trim(),
-        fullAudio: document.getElementById('lsAudio').value.trim(),
+        videoUrl: getMediaInputValue(document.getElementById('lsVideo')),
+        posterUrl: getMediaInputValue(document.getElementById('lsPoster')),
+        fullAudio: getMediaInputValue(document.getElementById('lsAudio')),
         keywords: document.getElementById('lsKeywords').value.trim(),
         accessType,
         price

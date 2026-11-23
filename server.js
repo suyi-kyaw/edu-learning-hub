@@ -725,6 +725,23 @@ const DEFAULT_SHEET_HEADERS = {
 
 // Preserve untouched sheets while atomically updating specified sheets in a workbook
 function writeUpdatedWorkbook(excelPath, updatedSheetsMap, orderedSheetHints = []) {
+  for (const [sheetName, rows] of Object.entries(updatedSheetsMap || {})) {
+    if (!Array.isArray(rows)) continue;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || typeof row !== 'object') continue;
+      for (const [col, val] of Object.entries(row)) {
+        if (typeof val === 'string' && val.startsWith('data:') && val.length > 32000) {
+          const validationErr = new Error(
+            `Embedded media in ${sheetName} row #${i + 1} (${col}) is too large for an Excel cell. Upload media via the Upload button (saves to assets/uploads/...) or enter an assets/... or https:// URL.`
+          );
+          validationErr.status = 400;
+          throw validationErr;
+        }
+      }
+    }
+  }
+
   const existing = fs.existsSync(excelPath)
     ? parseWorkbookFile(excelPath, 'Workbook missing')
     : { sheetNames: [], sheets: {} };
@@ -1161,7 +1178,7 @@ app.post('/api/database/sync', jsonParser, (req, res) => {
     return res.status(400).json({ success: false, error: 'Unknown domain: ' + domain });
   } catch (err) {
     console.error('POST /api/database/sync error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -2206,7 +2223,7 @@ app.put('/api/admin/workbook/:domain', requireAdminToken, jsonParser, (req, res)
     return res.status(400).json({ success: false, error: `Unknown workbook domain: ${domain}` });
   } catch (err) {
     console.error('PUT /api/admin/workbook/:domain error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -2237,7 +2254,7 @@ app.put('/api/admin/content/lessons', requireAdminToken, jsonParser, (req, res) 
     res.json({ success: true, syncedToServer: true, ...result, lessonCatalog });
   } catch (err) {
     console.error('PUT /api/admin/content/lessons error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -2258,7 +2275,7 @@ app.put('/api/admin/content/stories', requireAdminToken, jsonParser, (req, res) 
     res.json({ success: true, syncedToServer: true, ...result });
   } catch (err) {
     console.error('PUT /api/admin/content/stories error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -2275,7 +2292,7 @@ app.put('/api/admin/content/reels', requireAdminToken, jsonParser, (req, res) =>
     res.json({ success: true, syncedToServer: true, ...result });
   } catch (err) {
     console.error('PUT /api/admin/content/reels error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 

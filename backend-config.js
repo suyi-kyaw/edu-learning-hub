@@ -69,7 +69,11 @@
   function assetUrl(path) {
     var trimmed = String(path || '').trim();
     if (!trimmed || /^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
-    return trimmed;
+    var cleaned = trimmed.replace(/^\.\//, '');
+    if (cleaned.charAt(0) === '/' && /^\/(assets|public)\//i.test(cleaned)) {
+      cleaned = cleaned.slice(1);
+    }
+    return cleaned;
   }
 
   async function testConnection() {
@@ -167,7 +171,7 @@
     }
   };
 
-  var MAX_INLINE_MEDIA_BYTES = Math.round(30 * 1024 * 1024);
+  var MAX_INLINE_MEDIA_BYTES = Math.round(1.5 * 1024 * 1024);
 
   function cloneArray(arr) {
     if (!Array.isArray(arr)) return [];
@@ -198,15 +202,17 @@
       out.chineseTitle = ct;
       out.chinese_title = ct;
     }
-    var vUrl = String(row.videoUrl || row.video_url || row.video || '').trim();
+    var vUrl = String(row.videoUrl || row.video_url || row.VideoUrl || row.video || row.Video || row.video_path || '').trim();
     if (vUrl) {
       out.videoUrl = vUrl;
       out.video_url = vUrl;
+      if (!out.video) out.video = vUrl;
     }
-    var pUrl = String(row.posterUrl || row.poster_url || row.poster || '').trim();
+    var pUrl = String(row.posterUrl || row.poster_url || row.PosterUrl || row.poster || row.Poster || row.thumbnail_path || '').trim();
     if (pUrl) {
       out.posterUrl = pUrl;
       out.poster_url = pUrl;
+      if (!out.poster) out.poster = pUrl;
     }
     var aUrl = String(row.audioUrl || row.audio_url || row.audio || '').trim();
     if (aUrl) {
@@ -249,58 +255,48 @@
     }
   }
 
-  function sanitizeSheetsForStorage(sheets) {
-    if (!sheets || typeof sheets !== 'object') return sheets;
-    var sanitized = {};
-    Object.keys(sheets).forEach(function (sheetName) {
+  function findOversizedInlineMedia(sheets) {
+    var offending = [];
+    Object.keys(sheets || {}).forEach(function (sheetName) {
       var rows = sheets[sheetName];
-      if (Array.isArray(rows)) {
-        sanitized[sheetName] = rows.map(function (row) {
-          if (!row || typeof row !== 'object') return row;
-          var newRow = {};
-          Object.keys(row).forEach(function (k) {
-            var val = row[k];
-            if (typeof val === 'string' && val.length > 50000 && val.indexOf('data:') === 0) {
-              var ext = val.indexOf('video') >= 0 ? 'mp4' : (val.indexOf('audio') >= 0 ? 'mp3' : 'jpg');
-              newRow[k] = 'assets/video/media-' + Math.random().toString(36).substring(2, 8) + '.' + ext;
-            } else {
-              newRow[k] = val;
-            }
-          });
-          return newRow;
+      if (!Array.isArray(rows)) return;
+      rows.forEach(function (row, idx) {
+        if (!row || typeof row !== 'object') return;
+        Object.keys(row).forEach(function (k) {
+          var val = row[k];
+          if (typeof val === 'string' && val.indexOf('data:') === 0 && val.length > 2000000) {
+            offending.push(sheetName + ' #' + (idx + 1) + ' (' + k + ')');
+          }
         });
-      } else {
-        sanitized[sheetName] = rows;
-      }
+      });
     });
-    return sanitized;
+    return offending;
   }
 
   function writeDraft(domain, sheets) {
     var key = DRAFT_KEYS[domain];
     if (!key) throw new Error('Unknown content domain: ' + domain);
     var normalized = normalizeSheetsForDomain(domain, sheets);
+    var oversized = findOversizedInlineMedia(normalized);
+    if (oversized.length > 0) {
+      throw new Error(
+        'Media in ' +
+          oversized[0] +
+          ' exceeds the 1.5 MB inline browser limit. Upload via the local server (saves to assets/uploads/...) or enter an assets/... or https:// URL.'
+      );
+    }
     var payload = {
       sheets: normalized,
       updatedAt: new Date().toISOString()
     };
     try {
       if (global.localStorage) {
-        try {
-          global.localStorage.setItem(key, JSON.stringify(payload));
-        } catch (firstErr) {
-          var cleanedSheets = sanitizeSheetsForStorage(normalized);
-          payload.sheets = cleanedSheets;
-          global.localStorage.setItem(key, JSON.stringify(payload));
-          normalized = cleanedSheets;
-        }
+        global.localStorage.setItem(key, JSON.stringify(payload));
       }
     } catch (err) {
-      try {
-        if (global.sessionStorage) {
-          global.sessionStorage.setItem(key, JSON.stringify(payload));
-        }
-      } catch (_) {}
+      throw new Error(
+        'Browser storage limit reached. Replace large embedded media with an assets/... repository path or hosted https:// URL, then save again.'
+      );
     }
     dispatchContentChange(domain, normalized);
     return normalized;
@@ -445,7 +441,20 @@
     var meta = WORKBOOK_META[domain];
     if (!meta) throw new Error('Unknown content domain: ' + domain);
     var normalized = normalizeSheetsForDomain(domain, sheets);
+
+    if (isStaticGithubHost()) {
+      return {
+        syncedToServer: false,
+        syncReason: 'static-host',
+        error:
+          'Saved to your browser draft on GitHub Pages. Click "Export ' +
+          meta.fileName +
+          '" and commit the file (plus any new assets/) to publish for all visitors on GitHub & Cloudflare.'
+      };
+    }
+
     var token = await getAuthBearerToken();
+    var lastServerError = '';
 
     // 1. Try Admin API endpoint with auth token
     if (token) {
@@ -494,6 +503,9 @@
             lessonCatalog: data.lessonCatalog || null
           };
         }
+        if (data && data.error) {
+          lastServerError = String(data.error);
+        }
       } catch (_) {}
     }
 
@@ -524,14 +536,19 @@
           counts: syncData.counts || {}
         };
       }
+      if (syncData && syncData.error) {
+        lastServerError = String(syncData.error);
+      }
     } catch (_) {}
 
     return {
       syncedToServer: false,
-      syncReason: token ? 'server-error' : 'auth-required',
-      error: token
-        ? 'Could not sync with database.'
-        : 'Sign in as Admin to sync live edits to database & Excel.'
+      syncReason: lastServerError ? 'server-error' : (token ? 'server-error' : 'auth-required'),
+      error:
+        lastServerError ||
+        (token
+          ? 'Could not sync with database.'
+          : 'Sign in as Admin to sync live edits to database & Excel.')
     };
   }
 
@@ -921,7 +938,7 @@
               file.name +
               '" (' +
               mb +
-              ' MB) exceeds the 1.5 MB inline limit. Copy large media into your repository assets/ folder and paste the path (e.g. assets/video/...).'
+              ' MB) exceeds the 1.5 MB browser storage limit. Upload large media via the local server (saves to assets/uploads/...) or enter a repository path (e.g. assets/video/...) or hosted https:// URL.'
           )
         );
         return;

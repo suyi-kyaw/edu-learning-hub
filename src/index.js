@@ -508,18 +508,47 @@ async function syncLessonsSheetsToD1(db, sheets) {
     }
   }
   if (stmts.length > 0) {
-    try {
-      await db.batch(stmts);
-    } catch (e) {
-      console.warn("Batch execution error in D1:", e);
+    await db.batch(stmts);
+  }
+}
+function assertSafeD1WorkbookSheets(sheets) {
+  const MAX_D1_MEDIA_CHARS = 750000;
+  for (const [sheetName, rows] of Object.entries(sheets || {})) {
+    if (!Array.isArray(rows)) continue;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || typeof row !== "object") continue;
+      for (const [key, val] of Object.entries(row)) {
+        if (typeof val === "string" && val.startsWith("data:") && val.length > MAX_D1_MEDIA_CHARS) {
+          throw new Error(
+            `Embedded media in ${sheetName} row #${i + 1} (${key}) is too large for Cloudflare D1. Use an assets/... path or hosted https:// URL instead.`
+          );
+        }
+      }
     }
   }
+}
+function normalizeStoryLessonRow(l) {
+  if (!l || typeof l !== "object") return l;
+  const video = String(l.video || l.videoUrl || l.video_url || l.VideoUrl || l.video_path || "").trim();
+  const poster = String(l.poster || l.posterUrl || l.poster_url || l.PosterUrl || l.thumbnail_path || "").trim();
+  return {
+    ...l,
+    video,
+    videoUrl: video,
+    video_url: video,
+    poster,
+    posterUrl: poster,
+    poster_url: poster
+  };
 }
 async function syncStoriesSheetsToD1(db, sheets) {
   if (!db || !sheets) return;
   await ensureD1Tables(db);
+  assertSafeD1WorkbookSheets(sheets);
   const stmts = [];
-  if (Array.isArray(sheets.Lessons) && sheets.Lessons.length > 0) {
+  if (Array.isArray(sheets.Lessons)) {
+    stmts.push(db.prepare(`DELETE FROM stories_lessons`));
     for (const l of sheets.Lessons) {
       const id = String(l.id || l.lessonId || "").trim();
       if (!id) continue;
@@ -527,25 +556,21 @@ async function syncStoriesSheetsToD1(db, sheets) {
         db.prepare(`
           INSERT INTO stories_lessons (id, title, chineseTitle, pinyin, meaning, level, description, video, poster)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            title=excluded.title, chineseTitle=excluded.chineseTitle, pinyin=excluded.pinyin,
-            meaning=excluded.meaning, level=excluded.level, description=excluded.description,
-            video=excluded.video, poster=excluded.poster
         `).bind(
           id,
           l.title || id,
           l.chineseTitle || l.chinese_title || "",
           l.pinyin || "",
           l.meaning || "",
-          l.level || "HSK 1-2",
+          l.level || "Beginner",
           l.description || "",
-          l.video || l.videoUrl || "",
-          l.poster || l.posterUrl || ""
+          String(l.video || l.videoUrl || l.video_url || "").trim(),
+          String(l.poster || l.posterUrl || l.poster_url || "").trim()
         )
       );
     }
   }
-  if (Array.isArray(sheets.Story) && sheets.Story.length > 0) {
+  if (Array.isArray(sheets.Story)) {
     stmts.push(db.prepare(`DELETE FROM story_scenes`));
     for (let i = 0; i < sheets.Story.length; i++) {
       const s = sheets.Story[i];
@@ -565,7 +590,7 @@ async function syncStoriesSheetsToD1(db, sheets) {
       );
     }
   }
-  if (Array.isArray(sheets.Vocabulary) && sheets.Vocabulary.length > 0) {
+  if (Array.isArray(sheets.Vocabulary)) {
     stmts.push(db.prepare(`DELETE FROM stories_vocabulary`));
     for (let i = 0; i < sheets.Vocabulary.length; i++) {
       const v = sheets.Vocabulary[i];
@@ -584,7 +609,7 @@ async function syncStoriesSheetsToD1(db, sheets) {
       );
     }
   }
-  if (Array.isArray(sheets.Exercises) && sheets.Exercises.length > 0) {
+  if (Array.isArray(sheets.Exercises)) {
     stmts.push(db.prepare(`DELETE FROM stories_exercises`));
     for (let i = 0; i < sheets.Exercises.length; i++) {
       const ex = sheets.Exercises[i];
@@ -618,19 +643,17 @@ async function syncStoriesSheetsToD1(db, sheets) {
     }
   }
   if (stmts.length > 0) {
-    try {
-      await db.batch(stmts);
-    } catch (e) {
-      console.warn("Batch execution error in D1 (stories):", e);
-    }
+    await db.batch(stmts);
   }
 }
 async function syncReelsSheetsToD1(db, sheets) {
   if (!db || !sheets) return;
   await ensureD1Tables(db);
+  assertSafeD1WorkbookSheets(sheets);
   const stmts = [];
-  const videos = Array.isArray(sheets.Videos) ? sheets.Videos : [];
-  if (videos.length > 0) {
+  const videos = Array.isArray(sheets.Videos) ? sheets.Videos : null;
+  if (videos) {
+    stmts.push(db.prepare(`DELETE FROM reels_videos`));
     for (const v of videos) {
       const id = String(v.id || "").trim();
       if (!id) continue;
@@ -638,12 +661,6 @@ async function syncReelsSheetsToD1(db, sheets) {
         db.prepare(`
           INSERT INTO reels_videos (id, type, holiday_id, title, video_path, thumbnail_path, duration_sec, status, text_cn, text_pinyin, text_en, text_my)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            type=excluded.type, holiday_id=excluded.holiday_id, title=excluded.title,
-            video_path=excluded.video_path, thumbnail_path=excluded.thumbnail_path,
-            duration_sec=excluded.duration_sec, status=excluded.status,
-            text_cn=excluded.text_cn, text_pinyin=excluded.text_pinyin,
-            text_en=excluded.text_en, text_my=excluded.text_my
         `).bind(
           id,
           v.type || "daily",
@@ -662,11 +679,7 @@ async function syncReelsSheetsToD1(db, sheets) {
     }
   }
   if (stmts.length > 0) {
-    try {
-      await db.batch(stmts);
-    } catch (e) {
-      console.warn("Batch execution error in D1 (reels):", e);
-    }
+    await db.batch(stmts);
   }
 }
 async function getLessons(env, url) {
@@ -862,7 +875,7 @@ async function getDatabaseBundle(env, url) {
     const staticSheets = staticData?.sheets || {};
     const d1RowCount = rawLessons.length + rawStory.length + rawVocab.length + rawExercises.length;
     const staticRowCount = (staticSheets.Lessons?.length || 0) + (staticSheets.Story?.length || 0) + (staticSheets.Vocabulary?.length || 0) + (staticSheets.Exercises?.length || 0);
-    if (staticRowCount > 0 && (d1RowCount === 0 || staticRowCount > d1RowCount)) {
+    if (rawLessons.length === 0 && staticRowCount > 0) {
       if (staticSheets.Lessons?.length) rawLessons = staticSheets.Lessons;
       if (staticSheets.Story?.length) rawStory = staticSheets.Story;
       if (staticSheets.Vocabulary?.length) rawVocab = staticSheets.Vocabulary;
@@ -875,19 +888,20 @@ async function getDatabaseBundle(env, url) {
       }).catch(() => {
       });
     }
+    const normalizedStoryLessons = rawLessons.map(normalizeStoryLessonRow);
     return json({
       success: true,
       database: "edu-hub-db",
       source: "cloudflare-d1",
       domain: "stories",
       counts: {
-        lessons: rawLessons.length,
+        lessons: normalizedStoryLessons.length,
         story: rawStory.length,
         vocabulary: rawVocab.length,
         exercises: rawExercises.length
       },
       sheets: {
-        Lessons: rawLessons,
+        Lessons: normalizedStoryLessons,
         Story: rawStory,
         Vocabulary: rawVocab,
         Exercises: rawExercises.map(normalizeExerciseRow)
@@ -905,7 +919,7 @@ async function getDatabaseBundle(env, url) {
     } catch (_) {
     }
     const staticVideos = staticData?.sheets?.Videos || [];
-    if (staticVideos.length > 0 && (rawVideos.length === 0 || staticVideos.length > rawVideos.length)) {
+    if (rawVideos.length === 0 && staticVideos.length > 0) {
       rawVideos = staticVideos;
       syncReelsSheetsToD1(env.DB, { Videos: staticVideos }).catch(() => {
       });
@@ -997,6 +1011,14 @@ async function handleApi(request, env, url) {
         const file = formData.get("file");
         if (!file) {
           return fail("No media file attached.", 400);
+        }
+        const MAX_WORKER_INLINE_BYTES = Math.round(1.5 * 1024 * 1024);
+        if (file.size > MAX_WORKER_INLINE_BYTES) {
+          const mb = (file.size / (1024 * 1024)).toFixed(2);
+          return fail(
+            `File "${file.name}" (${mb} MB) exceeds the 1.5 MB serverless limit on Cloudflare. Upload large videos using the local preview server (saves to assets/uploads/videos/), commit them under assets/video/, or enter a hosted https:// video URL.`,
+            413
+          );
         }
         const arrayBuffer = await file.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);

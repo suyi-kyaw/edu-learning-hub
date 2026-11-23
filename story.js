@@ -592,11 +592,19 @@ function renderVideo(
     );
 
 
+  const videoCard =
+    videoElement ? videoElement.closest(".video-card") : null;
+
+
   const video =
     getValue(
       lesson,
       "video",
-      "Video"
+      "Video",
+      "videoUrl",
+      "video_url",
+      "VideoUrl",
+      "video_path"
     );
 
 
@@ -604,7 +612,11 @@ function renderVideo(
     getValue(
       lesson,
       "poster",
-      "Poster"
+      "Poster",
+      "posterUrl",
+      "poster_url",
+      "PosterUrl",
+      "thumbnail_path"
     );
 
 
@@ -616,25 +628,56 @@ function renderVideo(
     );
 
 
-  if (videoElement) {
+  if (videoCard) {
+    const existingBanner = videoCard.querySelector("#lessonVideoStatusBanner");
+    if (existingBanner) existingBanner.remove();
+  }
 
-    if (video) {
 
-      videoElement.src =
-        backendAssetUrl(video);
-
+  const showVideoStatus = (message, isError) => {
+    if (!videoCard) return;
+    let banner = videoCard.querySelector("#lessonVideoStatusBanner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "lessonVideoStatusBanner";
+      const captionEl = videoCard.querySelector(".video-caption");
+      if (captionEl && captionEl.parentNode) {
+        captionEl.parentNode.insertBefore(banner, captionEl);
+      } else {
+        videoCard.appendChild(banner);
+      }
     }
+    banner.className = isError ? "video-status-banner is-error" : "video-status-banner";
+    banner.textContent = message;
+  };
 
+
+  if (videoElement) {
+    videoElement.onerror = null;
 
     if (poster) {
       videoElement.poster = backendAssetUrl(poster);
+    } else {
+      videoElement.removeAttribute("poster");
+    }
+
+    if (video) {
+      videoElement.src = backendAssetUrl(video);
       videoElement.onerror = () => {
-        if (videoElement.poster.endsWith(".jpg")) {
-          videoElement.poster = videoElement.poster.replace(/\.jpg$/, ".svg");
-        } else if (videoElement.poster.endsWith(".svg")) {
-          videoElement.poster = videoElement.poster.replace(/\.svg$/, ".png");
-        }
+        showVideoStatus(
+          `Video file could not be loaded (${video}). Confirm the file is committed under assets/ or the hosted URL is accessible.`,
+          true
+        );
       };
+      try {
+        videoElement.load();
+      } catch (e) {}
+    } else {
+      videoElement.removeAttribute("src");
+      try {
+        videoElement.load();
+      } catch (e) {}
+      showVideoStatus("No video is configured for this story yet.", false);
     }
 
   }
