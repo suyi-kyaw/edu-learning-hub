@@ -2160,6 +2160,7 @@ app.get('/api/admin/media-library', (req, res) => {
       }
     };
     scanDir(path.join(__dirname, 'assets', 'video'), 'assets/video', 'video');
+    scanDir(path.join(__dirname, 'public', 'assets', 'aistudio'), 'public/assets/aistudio', null);
     scanDir(path.join(__dirname, 'assets', 'images'), 'assets/images', 'image');
     scanDir(path.join(__dirname, 'assets', 'audio'), 'assets/audio', 'audio');
     scanDir(UPLOAD_SUBDIRS.videos, 'assets/uploads/videos', 'video');

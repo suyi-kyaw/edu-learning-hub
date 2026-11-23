@@ -1745,7 +1745,7 @@ async function loadStoryLesson() {
           meaning: "Xiaoming's Day",
           level: "Beginner",
           description: "Learn Chinese through a simple story.",
-          video: "assets/video/lesson-01.mp4",
+          video: "public/assets/aistudio/story-01_c14ae216.mp4",
           poster: "assets/images/story-poster.jpg"
         },
         {
@@ -1756,7 +1756,7 @@ async function loadStoryLesson() {
           meaning: "Xiaoming Buys Fruit",
           level: "Beginner",
           description: "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
-          video: "assets/video/lesson-02.mp4",
+          video: "public/assets/aistudio/story-02_070a5a3e.mp4",
           poster: "assets/images/story2-poster.jpg"
         }
       ];
@@ -3286,7 +3286,7 @@ const FALLBACK_REELS_DATA = [
     type: "story",
     holiday_id: "daily",
     title: "小明的一天 - Xiaoming's Day",
-    video_path: "assets/video/lesson-01.mp4",
+    video_path: "public/assets/aistudio/story-01_c14ae216.mp4",
     thumbnail_path: "assets/images/story-poster.jpg",
     duration_sec: 45,
     status: "active",
@@ -3300,7 +3300,7 @@ const FALLBACK_REELS_DATA = [
     type: "story",
     holiday_id: "daily",
     title: "小明买水果 - Xiaoming Buys Fruit",
-    video_path: "assets/video/lesson-01.mp4",
+    video_path: "public/assets/aistudio/story-02_070a5a3e.mp4",
     thumbnail_path: "assets/images/story2-poster.jpg",
     duration_sec: 50,
     status: "active",

@@ -679,6 +679,8 @@
 
     if (kind === 'video') {
       [
+        'public/assets/aistudio/story-01_c14ae216.mp4',
+        'public/assets/aistudio/story-02_070a5a3e.mp4',
         'assets/video/lesson-01.mp4',
         'assets/video/CNY01.mp4',
         'assets/video/Qixi01.mp4',
