@@ -11,7 +11,7 @@ const lessonsData = [
     meaning: "Xiaoming's Day",
     level: "Beginner",
     description: "Learn Chinese through a simple story about Xiaoming's daily routine.",
-    video: "public/assets/aistudio/story-01_c14ae216.mp4",
+    video: "assets/video/story-01.mp4",
     poster: "assets/images/story-poster.jpg"
   },
   {
@@ -22,7 +22,7 @@ const lessonsData = [
     meaning: "Xiaoming Buys Fruit",
     level: "Beginner",
     description: "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
-    video: "public/assets/aistudio/story-02_070a5a3e.mp4",
+    video: "assets/video/story-02.mp4",
     poster: "assets/images/story2-poster.jpg"
   }
 ];

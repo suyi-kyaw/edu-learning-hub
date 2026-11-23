@@ -596,7 +596,7 @@ function renderVideo(
     videoElement ? videoElement.closest(".video-card") : null;
 
 
-  const video =
+  const rawVideo =
     getValue(
       lesson,
       "video",
@@ -604,9 +604,28 @@ function renderVideo(
       "videoUrl",
       "video_url",
       "VideoUrl",
-      "video_path"
+      "video_path",
+      "videoPath",
+      "VideoPath"
     );
 
+  const rawId = String(getValue(lesson, "id", "ID", "lessonId") || "").trim().toLowerCase();
+  const normalizedVideo = (() => {
+    let clean = String(rawVideo || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    if (!clean) return "";
+    if (/^\/?public\/assets\/aistudio\//i.test(clean)) {
+      if (/story[-_]?0?1/i.test(clean)) return "assets/video/story-01.mp4";
+      if (/story[-_]?0?2/i.test(clean)) return "assets/video/story-02.mp4";
+    }
+    if (/^\/?assets\/video\/media-[a-z0-9]+/i.test(clean)) {
+      if (rawId === "lesson-01" || rawId === "story_01" || rawId === "story-01") return "assets/video/story-01.mp4";
+      if (rawId === "lesson-02" || rawId === "story_02" || rawId === "story-02") return "assets/video/story-02.mp4";
+    }
+    if (!/[/:]/.test(clean) && /\.(mp4|webm|mov|m4v)$/i.test(clean)) {
+      return `assets/video/${clean}`;
+    }
+    return clean;
+  })();
 
   const poster =
     getValue(
@@ -616,7 +635,8 @@ function renderVideo(
       "posterUrl",
       "poster_url",
       "PosterUrl",
-      "thumbnail_path"
+      "thumbnail_path",
+      "thumbnailPath"
     );
 
 
@@ -654,6 +674,8 @@ function renderVideo(
 
   if (videoElement) {
     videoElement.onerror = null;
+    videoElement.onloadedmetadata = null;
+    videoElement.setAttribute("playsinline", "");
 
     if (poster) {
       videoElement.poster = backendAssetUrl(poster);
@@ -661,11 +683,18 @@ function renderVideo(
       videoElement.removeAttribute("poster");
     }
 
-    if (video) {
-      videoElement.src = backendAssetUrl(video);
+    if (normalizedVideo) {
+      const resolvedSrc = backendAssetUrl(normalizedVideo);
+      videoElement.src = resolvedSrc;
+      videoElement.onloadedmetadata = () => {
+        if (videoCard) {
+          const banner = videoCard.querySelector("#lessonVideoStatusBanner");
+          if (banner) banner.remove();
+        }
+      };
       videoElement.onerror = () => {
         showVideoStatus(
-          `Video file could not be loaded (${video}). Confirm the file is committed under assets/ or the hosted URL is accessible.`,
+          `Video file could not be loaded (${normalizedVideo}). Confirm the file is committed under assets/ or the hosted URL is accessible.`,
           true
         );
       };
@@ -1745,7 +1774,7 @@ async function loadStoryLesson() {
           meaning: "Xiaoming's Day",
           level: "Beginner",
           description: "Learn Chinese through a simple story.",
-          video: "public/assets/aistudio/story-01_c14ae216.mp4",
+          video: "assets/video/story-01.mp4",
           poster: "assets/images/story-poster.jpg"
         },
         {
@@ -1756,7 +1785,7 @@ async function loadStoryLesson() {
           meaning: "Xiaoming Buys Fruit",
           level: "Beginner",
           description: "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
-          video: "public/assets/aistudio/story-02_070a5a3e.mp4",
+          video: "assets/video/story-02.mp4",
           poster: "assets/images/story2-poster.jpg"
         }
       ];
@@ -3286,7 +3315,7 @@ const FALLBACK_REELS_DATA = [
     type: "story",
     holiday_id: "daily",
     title: "小明的一天 - Xiaoming's Day",
-    video_path: "public/assets/aistudio/story-01_c14ae216.mp4",
+    video_path: "assets/video/story-01.mp4",
     thumbnail_path: "assets/images/story-poster.jpg",
     duration_sec: 45,
     status: "active",
@@ -3300,7 +3329,7 @@ const FALLBACK_REELS_DATA = [
     type: "story",
     holiday_id: "daily",
     title: "小明买水果 - Xiaoming Buys Fruit",
-    video_path: "public/assets/aistudio/story-02_070a5a3e.mp4",
+    video_path: "assets/video/story-02.mp4",
     thumbnail_path: "assets/images/story2-poster.jpg",
     duration_sec: 50,
     status: "active",

@@ -407,10 +407,60 @@ async function ensureD1Tables(db: D1Database): Promise<void> {
         data_b64 TEXT NOT NULL,
         PRIMARY KEY (media_id, chunk_index)
       );
+      CREATE TABLE IF NOT EXISTS d1_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TEXT
+      );
     `);
   } catch (err) {
     console.warn('ensureD1Tables warning:', err);
   }
+}
+
+function isDeprecatedD1MediaPath(val: unknown): boolean {
+  if (typeof val !== 'string') return false;
+  const clean = val.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+  if (!clean) return false;
+  return /^\/?public\/assets\/aistudio\//i.test(clean) || /^\/?assets\/video\/media-[a-z0-9]+/i.test(clean);
+}
+
+function canonicalizeD1MediaPath(val: unknown, rowId?: string): string {
+  const clean = String(val || '').trim().replace(/\\/g, '/').replace(/^\.\//, '');
+  if (!clean) return '';
+  if (/^\/?public\/assets\/aistudio\//i.test(clean)) {
+    if (/logo/i.test(clean)) return 'assets/images/logo.svg';
+    if (/story[-_]?0?1/i.test(clean)) return 'assets/video/story-01.mp4';
+    if (/story[-_]?0?2/i.test(clean)) return 'assets/video/story-02.mp4';
+  }
+  if (/^\/?assets\/video\/media-[a-z0-9]+/i.test(clean)) {
+    const idLower = String(rowId || '').trim().toLowerCase();
+    if (idLower === 'lesson-01' || idLower === 'story_01' || idLower === 'story-01') {
+      return 'assets/video/story-01.mp4';
+    }
+    if (idLower === 'lesson-02' || idLower === 'story_02' || idLower === 'story-02') {
+      return 'assets/video/story-02.mp4';
+    }
+  }
+  return clean;
+}
+
+async function getD1Meta(db: D1Database, key: string): Promise<string | null> {
+  const row = await one<{ value: string }>(db, `SELECT value FROM d1_meta WHERE key = ?`, key);
+  return row ? String(row.value || '') : null;
+}
+
+async function setD1Meta(db: D1Database, key: string, value: string): Promise<void> {
+  if (!db) return;
+  try {
+    await db
+      .prepare(
+        `INSERT INTO d1_meta (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`
+      )
+      .bind(key, value, new Date().toISOString())
+      .run();
+  } catch (_) {}
 }
 
 const WORKER_MEDIA_CHUNK_BYTES = 512 * 1024;
@@ -825,8 +875,11 @@ function assertSafeD1WorkbookSheets(sheets: Record<string, any[]>): void {
 
 function normalizeStoryLessonRow(l: any) {
   if (!l || typeof l !== 'object') return l;
-  const video = String(l.video || l.videoUrl || l.video_url || l.VideoUrl || l.video_path || '').trim();
-  const poster = String(l.poster || l.posterUrl || l.poster_url || l.PosterUrl || l.thumbnail_path || '').trim();
+  const id = String(l.id || l.lessonId || l.lesson_id || '').trim();
+  const rawVideo = String(l.video || l.videoUrl || l.video_url || l.Video || l.VideoUrl || l.video_path || l.videoPath || l.VideoPath || '').trim();
+  const rawPoster = String(l.poster || l.posterUrl || l.poster_url || l.Poster || l.PosterUrl || l.thumbnail_path || l.thumbnailPath || '').trim();
+  const video = canonicalizeD1MediaPath(rawVideo, id);
+  const poster = canonicalizeD1MediaPath(rawPoster, id);
   return {
     ...l,
     video,
@@ -862,8 +915,8 @@ async function syncStoriesSheetsToD1(db: D1Database, sheets: Record<string, any[
           l.meaning || '',
           l.level || 'Beginner',
           l.description || '',
-          String(l.video || l.videoUrl || l.video_url || '').trim(),
-          String(l.poster || l.posterUrl || l.poster_url || '').trim()
+          String(l.video || l.videoUrl || l.video_url || l.Video || l.VideoUrl || l.video_path || l.videoPath || l.VideoPath || '').trim(),
+          String(l.poster || l.posterUrl || l.poster_url || l.Poster || l.PosterUrl || l.thumbnail_path || '').trim()
         )
       );
     }
@@ -1210,12 +1263,19 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
   }
 
   if (domain === 'stories') {
-    let [rawLessons, rawStory, rawVocab, rawExercises] = await Promise.all([
+    const STORIES_MIGRATION_KEY = 'migration_stories_assets_v2';
+    const [migrationApplied, rawLessonsInit, rawStoryInit, rawVocabInit, rawExercisesInit] = await Promise.all([
+      getD1Meta(env.DB, STORIES_MIGRATION_KEY),
       all<Record<string, unknown>>(env.DB, `SELECT * FROM stories_lessons ORDER BY rowid ASC`),
       all<Record<string, unknown>>(env.DB, `SELECT * FROM story_scenes ORDER BY "order" ASC`),
       all<Record<string, unknown>>(env.DB, `SELECT * FROM stories_vocabulary ORDER BY "order" ASC`),
       all<Record<string, unknown>>(env.DB, `SELECT * FROM stories_exercises ORDER BY "order" ASC`)
     ]);
+
+    let rawLessons = rawLessonsInit;
+    let rawStory = rawStoryInit;
+    let rawVocab = rawVocabInit;
+    let rawExercises = rawExercisesInit;
 
     let staticData: any = null;
     try {
@@ -1226,25 +1286,63 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
     } catch (_) {}
 
     const staticSheets = staticData?.sheets || {};
-    const d1RowCount = rawLessons.length + rawStory.length + rawVocab.length + rawExercises.length;
-    const staticRowCount =
-      (staticSheets.Lessons?.length || 0) +
-      (staticSheets.Story?.length || 0) +
-      (staticSheets.Vocabulary?.length || 0) +
-      (staticSheets.Exercises?.length || 0);
+    const hasDeprecatedInD1 =
+      rawLessons.some((r) => isDeprecatedD1MediaPath(r.video) || isDeprecatedD1MediaPath(r.poster)) ||
+      rawStory.some((r) => isDeprecatedD1MediaPath(r.image));
 
-    if (rawLessons.length === 0 && staticRowCount > 0) {
+    let migrated = false;
+
+    if (!migrationApplied && (staticSheets.Lessons?.length || staticSheets.Story?.length)) {
       if (staticSheets.Lessons?.length) rawLessons = staticSheets.Lessons;
       if (staticSheets.Story?.length) rawStory = staticSheets.Story;
       if (staticSheets.Vocabulary?.length) rawVocab = staticSheets.Vocabulary;
       if (staticSheets.Exercises?.length) rawExercises = staticSheets.Exercises;
-
-      syncStoriesSheetsToD1(env.DB, {
+      await syncStoriesSheetsToD1(env.DB, {
         Lessons: rawLessons,
         Story: rawStory,
         Vocabulary: rawVocab,
         Exercises: rawExercises
-      }).catch(() => {});
+      });
+      await setD1Meta(env.DB, STORIES_MIGRATION_KEY, 'applied');
+      migrated = true;
+    } else {
+      const backfill: Record<string, any[]> = {};
+
+      if (rawLessons.length === 0 && staticSheets.Lessons?.length) {
+        rawLessons = staticSheets.Lessons;
+        backfill.Lessons = rawLessons;
+      } else if (hasDeprecatedInD1) {
+        const staticById = new Map<string, any>(
+          (staticSheets.Lessons || []).map((sl: any) => [String(sl.id || '').trim().toLowerCase(), sl])
+        );
+        rawLessons = rawLessons.map((r: any) => {
+          const rid = String(r.id || '').trim().toLowerCase();
+          if (isDeprecatedD1MediaPath(r.video) || isDeprecatedD1MediaPath(r.poster)) {
+            if (staticById.has(rid)) return { ...r, ...staticById.get(rid) };
+            return normalizeStoryLessonRow(r);
+          }
+          return r;
+        });
+        backfill.Lessons = rawLessons;
+      }
+
+      if (rawStory.length === 0 && staticSheets.Story?.length) {
+        rawStory = staticSheets.Story;
+        backfill.Story = rawStory;
+      }
+      if (rawVocab.length === 0 && staticSheets.Vocabulary?.length) {
+        rawVocab = staticSheets.Vocabulary;
+        backfill.Vocabulary = rawVocab;
+      }
+      if (rawExercises.length === 0 && staticSheets.Exercises?.length) {
+        rawExercises = staticSheets.Exercises;
+        backfill.Exercises = rawExercises;
+      }
+
+      if (Object.keys(backfill).length > 0) {
+        await syncStoriesSheetsToD1(env.DB, backfill).catch(() => {});
+        migrated = true;
+      }
     }
 
     const normalizedStoryLessons = rawLessons.map(normalizeStoryLessonRow);
@@ -1254,6 +1352,7 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
       database: 'edu-hub-db',
       source: 'cloudflare-d1',
       domain: 'stories',
+      migrated,
       counts: {
         lessons: normalizedStoryLessons.length,
         story: rawStory.length,
@@ -1270,7 +1369,12 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
   }
 
   if (domain === 'reels') {
-    let rawVideos = await all<Record<string, unknown>>(env.DB, `SELECT * FROM reels_videos ORDER BY rowid ASC`);
+    const REELS_MIGRATION_KEY = 'migration_reels_assets_v2';
+    const [migrationApplied, rawVideosInit] = await Promise.all([
+      getD1Meta(env.DB, REELS_MIGRATION_KEY),
+      all<Record<string, unknown>>(env.DB, `SELECT * FROM reels_videos ORDER BY rowid ASC`)
+    ]);
+    let rawVideos = rawVideosInit;
     let staticData: any = null;
     try {
       const assetRes = await env.ASSETS.fetch(new Request(new URL('/data/reels_stories.json', url.origin)));
@@ -1280,9 +1384,34 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
     } catch (_) {}
 
     const staticVideos = staticData?.sheets?.Videos || [];
-    if (rawVideos.length === 0 && staticVideos.length > 0) {
+    const hasDeprecatedReels = rawVideos.some(
+      (r) => isDeprecatedD1MediaPath(r.video_path) || isDeprecatedD1MediaPath(r.thumbnail_path)
+    );
+
+    if (!migrationApplied && staticVideos.length > 0) {
       rawVideos = staticVideos;
-      syncReelsSheetsToD1(env.DB, { Videos: staticVideos }).catch(() => {});
+      await syncReelsSheetsToD1(env.DB, { Videos: staticVideos });
+      await setD1Meta(env.DB, REELS_MIGRATION_KEY, 'applied');
+    } else if (rawVideos.length === 0 && staticVideos.length > 0) {
+      rawVideos = staticVideos;
+      await syncReelsSheetsToD1(env.DB, { Videos: staticVideos }).catch(() => {});
+    } else if (hasDeprecatedReels) {
+      const staticById = new Map<string, any>(
+        staticVideos.map((v: any) => [String(v.id || '').trim().toLowerCase(), v])
+      );
+      rawVideos = rawVideos.map((v: any) => {
+        const vid = String(v.id || '').trim().toLowerCase();
+        if (isDeprecatedD1MediaPath(v.video_path) || isDeprecatedD1MediaPath(v.thumbnail_path)) {
+          if (staticById.has(vid)) return { ...v, ...staticById.get(vid) };
+          return {
+            ...v,
+            video_path: canonicalizeD1MediaPath(v.video_path, vid),
+            thumbnail_path: canonicalizeD1MediaPath(v.thumbnail_path, vid)
+          };
+        }
+        return v;
+      });
+      await syncReelsSheetsToD1(env.DB, { Videos: rawVideos }).catch(() => {});
     }
 
     return json({
@@ -1331,6 +1460,7 @@ async function handleDatabaseSync(request: Request, env: Env): Promise<Response>
 
     if (domain === 'stories') {
       await syncStoriesSheetsToD1(env.DB, sheets);
+      await setD1Meta(env.DB, 'migration_stories_assets_v2', 'applied');
       return json({
         success: true,
         syncedToServer: true,
@@ -1341,12 +1471,17 @@ async function handleDatabaseSync(request: Request, env: Env): Promise<Response>
           story: sheets.Story?.length || 0,
           vocabulary: sheets.Vocabulary?.length || 0,
           exercises: sheets.Exercises?.length || 0
+        },
+        sheets: {
+          ...sheets,
+          Lessons: Array.isArray(sheets.Lessons) ? sheets.Lessons.map(normalizeStoryLessonRow) : sheets.Lessons
         }
       });
     }
 
     if (domain === 'reels') {
       await syncReelsSheetsToD1(env.DB, sheets);
+      await setD1Meta(env.DB, 'migration_reels_assets_v2', 'applied');
       return json({
         success: true,
         syncedToServer: true,
@@ -1354,13 +1489,85 @@ async function handleDatabaseSync(request: Request, env: Env): Promise<Response>
         domain: 'reels',
         counts: {
           videos: sheets.Videos?.length || 0
-        }
+        },
+        sheets
       });
     }
 
     return json({ success: true, syncedToServer: true, database: 'edu-hub-db', domain });
   } catch (err: any) {
     return fail(err?.message || 'Sync failed', 500);
+  }
+}
+
+async function handleForceDatabaseSync(request: Request, env: Env, url: URL): Promise<Response> {
+  await ensureD1Tables(env.DB);
+  try {
+    const body = (await request.json().catch(() => ({}))) as any;
+    const domain = String(body?.domain || url.searchParams.get('domain') || 'stories').toLowerCase();
+    let sheets = body?.sheets;
+
+    if (!sheets || typeof sheets !== 'object') {
+      const jsonPath =
+        domain === 'stories'
+          ? '/data/stories.json'
+          : domain === 'reels'
+          ? '/data/reels_stories.json'
+          : '/data/lessons.json';
+      const assetRes = await env.ASSETS.fetch(new Request(new URL(jsonPath, url.origin)));
+      if (!assetRes.ok) {
+        return fail(`Could not load ${jsonPath} to force-sync.`, 500);
+      }
+      const staticData = (await assetRes.json()) as any;
+      sheets = staticData?.sheets;
+    }
+
+    if (!sheets || typeof sheets !== 'object') {
+      return fail('Invalid or empty workbook sheets for force-sync.', 400);
+    }
+
+    if (domain === 'stories') {
+      await syncStoriesSheetsToD1(env.DB, sheets);
+      await setD1Meta(env.DB, 'migration_stories_assets_v2', 'applied');
+      const normalizedLessons = Array.isArray(sheets.Lessons) ? sheets.Lessons.map(normalizeStoryLessonRow) : [];
+      return json({
+        success: true,
+        syncedToServer: true,
+        forced: true,
+        database: 'edu-hub-db',
+        domain: 'stories',
+        sheets: { ...sheets, Lessons: normalizedLessons }
+      });
+    }
+
+    if (domain === 'reels') {
+      await syncReelsSheetsToD1(env.DB, sheets);
+      await setD1Meta(env.DB, 'migration_reels_assets_v2', 'applied');
+      return json({
+        success: true,
+        syncedToServer: true,
+        forced: true,
+        database: 'edu-hub-db',
+        domain: 'reels',
+        sheets
+      });
+    }
+
+    if (domain === 'lessons') {
+      await syncLessonsSheetsToD1(env.DB, sheets);
+      return json({
+        success: true,
+        syncedToServer: true,
+        forced: true,
+        database: 'edu-hub-db',
+        domain: 'lessons',
+        sheets
+      });
+    }
+
+    return fail('Unknown domain: ' + domain, 400);
+  } catch (err: any) {
+    return fail(err?.message || 'Force sync failed', 500);
   }
 }
 
@@ -1374,6 +1581,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
   // Live write and sync routes
   if (method === 'POST' || method === 'PUT') {
+    if (path === '/api/database/force-sync') {
+      return handleForceDatabaseSync(request, env, url);
+    }
     if (path === '/api/database/sync') {
       return handleDatabaseSync(request, env);
     }
@@ -1394,8 +1604,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           await syncLessonsSheetsToD1(env.DB, body.sheets);
         } else if (domain === 'stories' && body?.sheets) {
           await syncStoriesSheetsToD1(env.DB, body.sheets);
+          await setD1Meta(env.DB, 'migration_stories_assets_v2', 'applied');
         } else if (domain === 'reels' && body?.sheets) {
           await syncReelsSheetsToD1(env.DB, body.sheets);
+          await setD1Meta(env.DB, 'migration_reels_assets_v2', 'applied');
         }
         return json({
           success: true,

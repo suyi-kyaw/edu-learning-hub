@@ -244,7 +244,7 @@ function getFallbackLessonData() {
       meaning: "Xiaoming's Day",
       level: "Beginner",
       description: "Learn Chinese through a simple story.",
-      video: "public/assets/aistudio/story-01_c14ae216.mp4",
+      video: "assets/video/story-01.mp4",
       poster: "assets/images/story-poster.jpg",
       keywords: "morning, routine, breakfast, school, happy, day, get up, early, 早上, 起床, 学校, 早饭, 开心"
     },
@@ -256,7 +256,7 @@ function getFallbackLessonData() {
       meaning: "Xiaoming Buys Fruit",
       level: "Beginner",
       description: "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
-      video: "public/assets/aistudio/story-02_070a5a3e.mp4",
+      video: "assets/video/story-02.mp4",
       poster: "assets/images/story2-poster.jpg",
       keywords: "fruit, market, apple, shopping, fresh, sweet, delicious, red, buy, 水果, 市场, 苹果, 买, 甜, 好吃"
     }

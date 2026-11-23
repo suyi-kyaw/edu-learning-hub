@@ -14,7 +14,7 @@
     <div class="container footer-content">
       <div class="footer-brand">
         <div class="footer-logo has-custom-logo">
-          <img src="public/assets/aistudio/Logo-01_264a2645.jpg" alt="JiedeEdu" class="footer-brand-logo-img" />
+          <img src="assets/images/logo.svg" alt="JiedeEdu" class="footer-brand-logo-img" />
         </div>
         <p>A practical path to learning Chinese.</p>
       </div>
@@ -75,15 +75,18 @@
   }
 
   function resolveFooterLogoUrl(url) {
-    const clean = String(url || '').trim();
+    let clean = String(url || '').trim();
     if (!clean) return '';
+    if (/^\/?public\/assets\/aistudio\//i.test(clean)) {
+      clean = 'assets/images/logo.svg';
+    }
     if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function') {
       return window.LinguaBackend.assetUrl(clean);
     }
     return clean;
   }
 
-  const DEFAULT_FOOTER_LOGO_HTML = '<img src="public/assets/aistudio/Logo-01_264a2645.jpg" alt="JiedeEdu" class="footer-brand-logo-img" />';
+  const DEFAULT_FOOTER_LOGO_HTML = '<img src="assets/images/logo.svg" alt="JiedeEdu" class="footer-brand-logo-img" />';
 
   function hydrateFooterContact(cfg) {
     if (!cfg) return;

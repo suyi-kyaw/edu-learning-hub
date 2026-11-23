@@ -222,7 +222,7 @@
   <header class="site-header">
     <div class="container nav-container">
       <a href="index.html" class="logo has-custom-logo">
-        <img src="public/assets/aistudio/Logo-01_264a2645.jpg" alt="JiedeEdu" class="site-brand-logo-img" />
+        <img src="assets/images/logo.svg" alt="JiedeEdu" class="site-brand-logo-img" />
       </a>
 
       <nav class="desktop-nav" aria-label="Main Navigation">
@@ -500,15 +500,18 @@
   }
 
   function resolveLogoAssetUrl(url) {
-    const clean = String(url || '').trim();
+    let clean = String(url || '').trim();
     if (!clean) return '';
+    if (/^\/?public\/assets\/aistudio\//i.test(clean)) {
+      clean = 'assets/images/logo.svg';
+    }
     if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function') {
       return window.LinguaBackend.assetUrl(clean);
     }
     return clean;
   }
 
-  const DEFAULT_HEADER_LOGO_HTML = '<img src="public/assets/aistudio/Logo-01_264a2645.jpg" alt="JiedeEdu" class="site-brand-logo-img" />';
+  const DEFAULT_HEADER_LOGO_HTML = '<img src="assets/images/logo.svg" alt="JiedeEdu" class="site-brand-logo-img" />';
 
   function hydrateHeaderLogo(cfg) {
     const logoLink = document.querySelector('.site-header .logo');
@@ -588,12 +591,12 @@
   function ensureAuthScriptsLoaded() {
     if (!window.LinguaAuth && !document.querySelector('script[src*="vendor/firebase-app.js"]')) {
       const s1 = document.createElement('script');
-      s1.src = 'vendor/firebase-app.js?v=excel2';
+      s1.src = 'vendor/firebase-app.js?v=excel6';
       s1.defer = true;
       s1.onload = () => {
         if (!window.LinguaAuthUI && !document.querySelector('script[src*="auth-ui.js"]')) {
           const s2 = document.createElement('script');
-          s2.src = 'auth-ui.js?v=excel2';
+          s2.src = 'auth-ui.js?v=excel6';
           s2.defer = true;
           document.body.appendChild(s2);
         }
@@ -601,7 +604,7 @@
       document.body.appendChild(s1);
     } else if (!window.LinguaAuthUI && !document.querySelector('script[src*="auth-ui.js"]')) {
       const s2 = document.createElement('script');
-      s2.src = 'auth-ui.js?v=excel2';
+      s2.src = 'auth-ui.js?v=excel6';
       s2.defer = true;
       document.body.appendChild(s2);
     }

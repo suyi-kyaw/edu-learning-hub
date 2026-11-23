@@ -68,8 +68,9 @@
 
   function assetUrl(path) {
     var trimmed = String(path || '').trim();
-    if (!trimmed || /^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
-    var cleaned = trimmed.replace(/^\.\//, '');
+    if (!trimmed) return trimmed;
+    if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
+    var cleaned = trimmed.replace(/\\/g, '/').replace(/^\.\//, '');
     if (cleaned.charAt(0) === '/' && /^\/(assets|public)\//i.test(cleaned)) {
       cleaned = cleaned.slice(1);
     }
@@ -105,10 +106,25 @@
   // =========================================================
 
   var DRAFT_KEYS = {
-    lessons: 'linguapath_cms_lessons_v1',
-    stories: 'linguapath_cms_stories_v1',
-    reels: 'linguapath_cms_reels_v1'
+    lessons: 'linguapath_cms_lessons_v2',
+    stories: 'linguapath_cms_stories_v2',
+    reels: 'linguapath_cms_reels_v2'
   };
+
+  var LEGACY_DRAFT_KEYS = [
+    'linguapath_cms_lessons_v1',
+    'linguapath_cms_stories_v1',
+    'linguapath_cms_reels_v1'
+  ];
+
+  (function purgeLegacyDraftCaches() {
+    try {
+      if (!global.localStorage) return;
+      LEGACY_DRAFT_KEYS.forEach(function (oldKey) {
+        global.localStorage.removeItem(oldKey);
+      });
+    } catch (_) {}
+  })();
 
   var WORKBOOK_META = {
     lessons: {
@@ -189,6 +205,56 @@
     return out;
   }
 
+  function isDeprecatedMediaPath(val) {
+    if (typeof val !== 'string') return false;
+    var clean = val.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+    if (!clean) return false;
+    return /^\/?public\/assets\/aistudio\//i.test(clean) || /^\/?assets\/video\/media-[a-z0-9]+/i.test(clean);
+  }
+
+  function canonicalizeMediaPath(val, rowId) {
+    if (typeof val !== 'string') return val;
+    var clean = val.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+    if (!clean) return '';
+    if (/^\/?public\/assets\/aistudio\//i.test(clean)) {
+      if (/logo/i.test(clean)) return 'assets/images/logo.svg';
+      if (/story[-_]?0?1/i.test(clean)) return 'assets/video/story-01.mp4';
+      if (/story[-_]?0?2/i.test(clean)) return 'assets/video/story-02.mp4';
+    }
+    if (/^\/?assets\/video\/media-[a-z0-9]+/i.test(clean)) {
+      var idLower = String(rowId || '').toLowerCase();
+      if (idLower === 'lesson-01' || idLower === 'story_01' || idLower === 'story-01') {
+        return 'assets/video/story-01.mp4';
+      }
+      if (idLower === 'lesson-02' || idLower === 'story_02' || idLower === 'story-02') {
+        return 'assets/video/story-02.mp4';
+      }
+    }
+    return clean;
+  }
+
+  function rowHasDeprecatedMedia(row) {
+    if (!row || typeof row !== 'object') return false;
+    var mediaFields = ['video', 'videoUrl', 'video_url', 'video_path', 'poster', 'posterUrl', 'poster_url', 'thumbnail_path', 'image'];
+    for (var i = 0; i < mediaFields.length; i++) {
+      if (isDeprecatedMediaPath(row[mediaFields[i]])) return true;
+    }
+    return false;
+  }
+
+  function sheetsHaveDeprecatedMedia(sheets) {
+    if (!sheets || typeof sheets !== 'object') return false;
+    var keys = Object.keys(sheets);
+    for (var i = 0; i < keys.length; i++) {
+      var rows = sheets[keys[i]];
+      if (!Array.isArray(rows)) continue;
+      for (var j = 0; j < rows.length; j++) {
+        if (rowHasDeprecatedMedia(rows[j])) return true;
+      }
+    }
+    return false;
+  }
+
   function normalizeRecordRow(row) {
     if (!row || typeof row !== 'object') return row;
     var out = Object.assign({}, row);
@@ -202,17 +268,26 @@
       out.chineseTitle = ct;
       out.chinese_title = ct;
     }
-    var vUrl = String(row.videoUrl || row.video_url || row.VideoUrl || row.video || row.Video || row.video_path || '').trim();
+    var vUrl = canonicalizeMediaPath(
+      String(row.videoUrl || row.video_url || row.VideoUrl || row.video || row.Video || row.video_path || row.videoPath || row.VideoPath || '').trim(),
+      lid
+    );
     if (vUrl) {
       out.videoUrl = vUrl;
       out.video_url = vUrl;
+      if (out.video || row.video !== undefined) out.video = vUrl;
       if (!out.video) out.video = vUrl;
+      if (out.video_path) out.video_path = vUrl;
     }
-    var pUrl = String(row.posterUrl || row.poster_url || row.PosterUrl || row.poster || row.Poster || row.thumbnail_path || '').trim();
+    var pUrl = canonicalizeMediaPath(
+      String(row.posterUrl || row.poster_url || row.PosterUrl || row.poster || row.Poster || row.thumbnail_path || row.thumbnailPath || '').trim(),
+      lid
+    );
     if (pUrl) {
       out.posterUrl = pUrl;
       out.poster_url = pUrl;
-      if (!out.poster) out.poster = pUrl;
+      if (!out.poster || isDeprecatedMediaPath(out.poster)) out.poster = pUrl;
+      if (out.thumbnail_path) out.thumbnail_path = pUrl;
     }
     var aUrl = String(row.audioUrl || row.audio_url || row.audio || '').trim();
     if (aUrl) {
@@ -246,9 +321,15 @@
       if (!raw) return null;
       var parsed = JSON.parse(raw);
       if (!parsed || !parsed.sheets) return null;
+      // Quarantine stale drafts that still reference removed legacy uploads or broken auto-generated media paths
+      if (sheetsHaveDeprecatedMedia(parsed.sheets)) {
+        global.localStorage.removeItem(key);
+        return null;
+      }
       return {
         sheets: normalizeSheetsForDomain(domain, parsed.sheets),
-        updatedAt: String(parsed.updatedAt || '')
+        updatedAt: String(parsed.updatedAt || ''),
+        pendingSync: Boolean(parsed.pendingSync)
       };
     } catch (_) {
       return null;
@@ -273,7 +354,7 @@
     return offending;
   }
 
-  function writeDraft(domain, sheets) {
+  function writeDraft(domain, sheets, options) {
     var key = DRAFT_KEYS[domain];
     if (!key) throw new Error('Unknown content domain: ' + domain);
     var normalized = normalizeSheetsForDomain(domain, sheets);
@@ -287,7 +368,8 @@
     }
     var payload = {
       sheets: normalized,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      pendingSync: Boolean(options && options.pendingSync)
     };
     try {
       if (global.localStorage) {
@@ -405,34 +487,73 @@
     return totalRows + filledSheets * 10;
   }
 
-  function mergeRicherWorkbookSheets(domain, primary, secondary) {
+  function reconcileD1AndRepoSheets(domain, d1Sheets, fileSheets) {
     var meta = WORKBOOK_META[domain];
     var out = {};
+    var backfill = {};
+    var hasBackfill = false;
+    var primarySheets = { Lessons: true, Videos: true, Games: true };
+
     meta.sheets.forEach(function (name) {
-      var a = Array.isArray(primary && primary[name]) ? primary[name] : [];
-      var b = Array.isArray(secondary && secondary[name]) ? secondary[name] : [];
-      if (a.length > 0 && b.length === 0) {
-        out[name] = cloneArray(a);
-      } else if (b.length > 0 && a.length === 0) {
-        out[name] = cloneArray(b);
-      } else if (b.length > a.length) {
-        out[name] = cloneArray(b);
+      var d1Arr = Array.isArray(d1Sheets && d1Sheets[name]) ? d1Sheets[name] : [];
+      var fileArr = Array.isArray(fileSheets && fileSheets[name]) ? fileSheets[name] : [];
+
+      if (d1Arr.length > 0) {
+        if (primarySheets[name] || d1Arr.length >= fileArr.length) {
+          var repaired = false;
+          var fileById = {};
+          fileArr.forEach(function (fr) {
+            var fid = String((fr && (fr.id || fr.lessonId)) || '').trim().toLowerCase();
+            if (fid) fileById[fid] = fr;
+          });
+          var mergedArr = cloneArray(d1Arr).map(function (row) {
+            if (!row || typeof row !== 'object') return row;
+            if (rowHasDeprecatedMedia(row)) {
+              repaired = true;
+              var rid = String(row.id || row.lessonId || '').trim().toLowerCase();
+              if (rid && fileById[rid]) {
+                return Object.assign({}, row, fileById[rid]);
+              }
+              return normalizeRecordRow(row);
+            }
+            return row;
+          });
+          out[name] = mergedArr;
+          if (repaired) {
+            backfill[name] = mergedArr;
+            hasBackfill = true;
+          }
+        } else {
+          out[name] = cloneArray(fileArr);
+          backfill[name] = cloneArray(fileArr);
+          hasBackfill = true;
+        }
+      } else if (fileArr.length > 0) {
+        out[name] = cloneArray(fileArr);
+        backfill[name] = cloneArray(fileArr);
+        hasBackfill = true;
       } else {
-        out[name] = cloneArray(a);
+        out[name] = [];
       }
     });
-    return normalizeSheetsForDomain(domain, out);
+
+    return {
+      sheets: normalizeSheetsForDomain(domain, out),
+      backfillSheets: normalizeSheetsForDomain(domain, backfill),
+      hasBackfill: hasBackfill
+    };
   }
 
-  async function autoSyncToServerIfPossible(domain, sheets) {
+  async function autoSyncToServerIfPossible(domain, sheets, forceFlag) {
     try {
       var token = await getAuthBearerToken();
       var headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = 'Bearer ' + token;
-      await fetch('/api/database/sync', {
+      var syncEndpoint = forceFlag ? '/api/database/sync?force=1' : '/api/database/sync';
+      await fetch(syncEndpoint, {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({ domain: domain, sheets: sheets })
+        body: JSON.stringify({ domain: domain, sheets: sheets, force: Boolean(forceFlag) })
       }).catch(function () {});
     } catch (_) {}
   }
@@ -608,32 +729,19 @@
     var d1Result = results[0];
     var fileResult = results[1];
 
-    // Case 1: Both D1 and Excel loaded -> Auto check and reconcile
+    // Case 1: Both D1 and Excel loaded -> Preserve D1 rows, heal deprecated media paths & backfill missing sheets
     if (d1Result && fileResult) {
-      var d1Score = evaluateDomainCompleteness(domain, d1Result.sheets);
-      var fileScore = evaluateDomainCompleteness(domain, fileResult.sheets);
-
-      // If Excel in repo has more rows or missing sheets that D1 lacks:
-      if (fileScore > d1Score) {
-        var mergedExcelDominant = mergeRicherWorkbookSheets(domain, fileResult.sheets, d1Result.sheets);
-        setDataSourceStatus(domain, 'auto-synced', d1Result.database || 'edu-hub-db');
-        autoSyncToServerIfPossible(domain, mergedExcelDominant);
-        return {
-          sheets: mergedExcelDominant,
-          source: 'auto-synced',
-          database: d1Result.database || 'edu-hub-db'
-        };
-      } else {
-        // D1 has equal or richer data
-        var mergedD1Dominant = mergeRicherWorkbookSheets(domain, d1Result.sheets, fileResult.sheets);
-        var sourceLabel = d1Score > fileScore ? 'cloudflare-d1-ahead' : 'cloudflare-d1';
-        setDataSourceStatus(domain, sourceLabel, d1Result.database || 'edu-hub-db');
-        return {
-          sheets: mergedD1Dominant,
-          source: sourceLabel,
-          database: d1Result.database || 'edu-hub-db'
-        };
+      var reconciled = reconcileD1AndRepoSheets(domain, d1Result.sheets, fileResult.sheets);
+      var sourceLabel = reconciled.hasBackfill ? 'cloudflare-d1-reconciled' : 'cloudflare-d1';
+      setDataSourceStatus(domain, sourceLabel, d1Result.database || 'edu-hub-db');
+      if (reconciled.hasBackfill) {
+        autoSyncToServerIfPossible(domain, reconciled.backfillSheets, true);
       }
+      return {
+        sheets: reconciled.sheets,
+        source: sourceLabel,
+        database: d1Result.database || 'edu-hub-db'
+      };
     }
 
     // Case 2: Only D1 succeeded
@@ -662,18 +770,45 @@
 
   async function loadWorkbook(domain, options) {
     var skipDraft = Boolean(options && options.skipDraft);
-    if (!skipDraft) {
-      var draft = readDraft(domain);
-      if (draft && draft.sheets) {
-        return {
-          sheets: draft.sheets,
-          source: 'local-draft',
-          hasDraft: true,
-          updatedAt: draft.updatedAt
-        };
-      }
+    var preferDraft = Boolean(options && options.preferDraft);
+    var draft = !skipDraft ? readDraft(domain) : null;
+
+    if (isStaticGithubHost() && draft && draft.sheets) {
+      return {
+        sheets: draft.sheets,
+        source: 'local-draft',
+        hasDraft: true,
+        updatedAt: draft.updatedAt
+      };
     }
+
     var repo = await loadRepositoryWorkbook(domain);
+    var hasLiveServer = Boolean(repo && repo.source && (repo.source.indexOf('cloudflare-d1') === 0 || repo.source === 'auto-synced'));
+
+    // On Cloudflare/Node with live DB, direct DB edits should take effect immediately unless caller explicitly requested pending draft
+    if (hasLiveServer && countRowsInSheets(repo.sheets) > 0 && !(preferDraft && draft && draft.pendingSync)) {
+      if (draft && !draft.pendingSync) {
+        try {
+          if (global.localStorage) global.localStorage.removeItem(DRAFT_KEYS[domain]);
+        } catch (_) {}
+      }
+      return {
+        sheets: repo.sheets,
+        source: repo.source,
+        hasDraft: Boolean(draft && draft.pendingSync),
+        updatedAt: ''
+      };
+    }
+
+    if (draft && draft.sheets) {
+      return {
+        sheets: draft.sheets,
+        source: 'local-draft',
+        hasDraft: true,
+        updatedAt: draft.updatedAt
+      };
+    }
+
     return {
       sheets: repo.sheets,
       source: repo.source,
@@ -683,14 +818,14 @@
   }
 
   async function saveDomainSheets(domain, partialSheets) {
-    var current = await loadWorkbook(domain);
+    var current = await loadWorkbook(domain, { preferDraft: true });
     var merged = normalizeSheetsForDomain(domain, current.sheets);
     Object.keys(partialSheets || {}).forEach(function (sheetName) {
       if (Object.prototype.hasOwnProperty.call(merged, sheetName)) {
         merged[sheetName] = cloneArray(partialSheets[sheetName]);
       }
     });
-    var saved = writeDraft(domain, merged);
+    var saved = writeDraft(domain, merged, { pendingSync: true });
     var syncRes = await syncDomainToServer(domain, saved);
     if (syncRes.syncedToServer) {
       return {
@@ -851,6 +986,9 @@
     try {
       if (global.localStorage) {
         global.localStorage.removeItem(key);
+        LEGACY_DRAFT_KEYS.forEach(function (oldKey) {
+          global.localStorage.removeItem(oldKey);
+        });
       }
     } catch (_) {}
     var repo = await loadRepositoryWorkbook(domain);
@@ -860,6 +998,92 @@
       sheets: repo.sheets,
       source: repo.source,
       hasDraft: false
+    };
+  }
+
+  async function fetchStaticRepoSheets(domain) {
+    var meta = WORKBOOK_META[domain];
+    if (!meta) throw new Error('Unknown content domain: ' + domain);
+    if (getXlsx()) {
+      try {
+        var xlsxRes = await fetch(meta.xlsxPath + '?t=' + Date.now(), { cache: 'no-store' });
+        if (xlsxRes.ok) {
+          var buf = await xlsxRes.arrayBuffer();
+          var parsed = parseXlsxBuffer(domain, buf);
+          if (countRowsInSheets(parsed) > 0) {
+            return normalizeSheetsForDomain(domain, parsed);
+          }
+        }
+      } catch (_) {}
+    }
+    var jsonRes = await fetch(meta.jsonPath + '?t=' + Date.now(), { cache: 'no-store' });
+    if (jsonRes.ok) {
+      var jsonData = await jsonRes.json();
+      if (jsonData && jsonData.sheets && countRowsInSheets(jsonData.sheets) > 0) {
+        return normalizeSheetsForDomain(domain, jsonData.sheets);
+      }
+    }
+    throw new Error('Could not load ' + meta.fileName + ' or JSON mirror.');
+  }
+
+  async function forceSyncRepoToD1(domain) {
+    var meta = WORKBOOK_META[domain];
+    if (!meta) throw new Error('Unknown content domain: ' + domain);
+
+    // Purge any stale drafts (v1 and v2) before pushing repo workbook
+    try {
+      if (global.localStorage) {
+        if (DRAFT_KEYS[domain]) global.localStorage.removeItem(DRAFT_KEYS[domain]);
+        LEGACY_DRAFT_KEYS.forEach(function (oldKey) {
+          global.localStorage.removeItem(oldKey);
+        });
+      }
+    } catch (_) {}
+
+    var repoSheets = await fetchStaticRepoSheets(domain);
+
+    if (isStaticGithubHost()) {
+      dispatchContentChange(domain, repoSheets);
+      return {
+        success: true,
+        syncedToServer: false,
+        sheets: repoSheets,
+        error: 'Cleared local drafts on GitHub Pages and reloaded directly from ' + meta.xlsxPath + '.'
+      };
+    }
+
+    var token = await getAuthBearerToken();
+    var headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    var forceRes = await fetch('/api/database/force-sync', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ domain: domain, sheets: repoSheets, force: true })
+    });
+    var forceData = await forceRes.json().catch(function () {
+      return {};
+    });
+
+    if (forceRes.ok && forceData && forceData.success) {
+      var finalSheets = forceData.sheets ? normalizeSheetsForDomain(domain, forceData.sheets) : repoSheets;
+      setDataSourceStatus(domain, 'cloudflare-d1', forceData.database || 'edu-hub-db');
+      dispatchContentChange(domain, finalSheets);
+      return {
+        success: true,
+        syncedToServer: true,
+        sheets: finalSheets,
+        database: forceData.database || 'edu-hub-db'
+      };
+    }
+
+    // Fallback to standard /api/database/sync?force=1
+    var syncRes = await syncDomainToServer(domain, repoSheets);
+    return {
+      success: Boolean(syncRes && (syncRes.syncedToServer || syncRes.sheets)),
+      syncedToServer: Boolean(syncRes && syncRes.syncedToServer),
+      sheets: (syncRes && syncRes.sheets) || repoSheets,
+      error: (forceData && forceData.error) || (syncRes && syncRes.error) || ''
     };
   }
 
@@ -1001,6 +1225,7 @@
     exportWorkbook: exportWorkbook,
     importWorkbookFile: importWorkbookFile,
     syncDomainToServer: syncDomainToServer,
+    forceSyncRepoToD1: forceSyncRepoToD1,
     clearDraft: clearDraft,
     readFileAsInlineMedia: readFileAsInlineMedia,
     cloneArray: cloneArray

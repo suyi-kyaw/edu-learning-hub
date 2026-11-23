@@ -285,6 +285,9 @@
                 )}">Sync to Excel &amp; DB</button>`
               : ''
           }
+          <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-cms-force-sync="${escapeHTML(
+            domain
+          )}" title="Force-sync repository Excel (${escapeHTML(fileName)}) into Cloudflare D1 &amp; clear cached drafts">Force Sync Excel → DB</button>
           <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-cms-test-db="true" title="Verify connection to Cloudflare D1 edu-hub-db">Test D1 DB</button>
           <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-cms-export="${escapeHTML(
             domain
@@ -348,6 +351,44 @@
         } finally {
           btn.disabled = false;
           btn.textContent = 'Sync to Excel & DB';
+        }
+      };
+    });
+
+    viewport.querySelectorAll('[data-cms-force-sync]').forEach((btn) => {
+      btn.onclick = async () => {
+        const domain = btn.getAttribute('data-cms-force-sync');
+        const store = getContentStore();
+        if (!store || typeof store.forceSyncRepoToD1 !== 'function') {
+          toast('Force sync helper unavailable. Reload page and try again.', 'error');
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Force Syncing…';
+        try {
+          const res = await store.forceSyncRepoToD1(domain);
+          if (domain === 'stories' && res.sheets) state.storiesData = res.sheets;
+          else if (domain === 'reels' && res.sheets) state.reelsData = res.sheets;
+          else if (domain === 'lessons' && res.sheets) state.lessonsData = res.sheets;
+          state.lastSyncNotice = null;
+          updateNavCounts();
+          renderActiveTab();
+          if (res.syncedToServer) {
+            setSyncStatus('Force-synced to DB');
+            toast(`Force-synced ${domain} repository workbook into database and cleared stale drafts!`);
+          } else {
+            setSyncStatus('Cache cleared');
+            toast(
+              res.error ||
+                `Cleared local browser drafts and reloaded ${domain} directly from repository workbook.`
+            );
+          }
+        } catch (err) {
+          setSyncStatus('Force sync failed');
+          toast(err instanceof Error ? err.message : 'Force sync failed.', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Force Sync Excel → DB';
         }
       };
     });
@@ -679,8 +720,8 @@
 
     if (kind === 'video') {
       [
-        'public/assets/aistudio/story-01_c14ae216.mp4',
-        'public/assets/aistudio/story-02_070a5a3e.mp4',
+        'assets/video/story-01.mp4',
+        'assets/video/story-02.mp4',
         'assets/video/lesson-01.mp4',
         'assets/video/CNY01.mp4',
         'assets/video/Qixi01.mp4',
@@ -1187,7 +1228,7 @@
               <p>Upload a custom logo lockup to replace the <code>语 JiedeEdu</code> brand mark in both header and footer sitewide.</p>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnUseSampleLogo">Use Attached Sample</button>
+              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnUseSampleLogo">Use Default Brand SVG</button>
               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnResetSiteLogo">Reset to Default</button>
               <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="btnSaveLogoOnly">Save Logo</button>
             </div>
@@ -1538,7 +1579,7 @@
     const useSampleBtn = document.getElementById('btnUseSampleLogo');
     if (useSampleBtn && logoInput) {
       useSampleBtn.onclick = () => {
-        applyMediaInputValue(logoInput, 'public/assets/aistudio/Logo-01_264a2645.jpg', 'image');
+        applyMediaInputValue(logoInput, 'assets/images/logo.svg', 'image');
         logoInput.dispatchEvent(new Event('input', { bubbles: true }));
       };
     }

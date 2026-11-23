@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 216 48" width="216" height="48" role="img" aria-label="JiedeEdu">
+  <defs>
+    <linearGradient id="jiedeSealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7849"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+    <filter id="jiedeSoftShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#ea580c" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect x="1" y="1" width="214" height="46" rx="11" fill="#ffffff" stroke="#fed7aa" stroke-width="1.2"/>
+  <rect x="6" y="6" width="36" height="36" rx="9" fill="url(#jiedeSealGrad)" filter="url(#jiedeSoftShadow)"/>
+  <text x="24" y="31.5" font-family="'Noto Serif SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" font-weight="700" fill="#ffffff" text-anchor="middle">语</text>
+  <text x="52" y="29" font-family="'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif" font-size="21" font-weight="800" letter-spacing="-0.02em">
+    <tspan fill="#0f172a">Jiede</tspan><tspan fill="#ea580c">Edu</tspan>
+  </text>
+  <text x="53" y="40.5" font-family="'Inter', 'Roboto', sans-serif" font-size="8.2" font-weight="600" letter-spacing="0.09em" fill="#64748b">CHINESE LEARNING HUB</text>
+</svg>

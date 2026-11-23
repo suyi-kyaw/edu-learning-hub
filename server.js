@@ -483,7 +483,7 @@ const DEFAULT_SITE_CONFIG = {
   heroPrimaryCta: 'Explore Stories',
   heroSecondaryCta: 'Explore Lessons',
   heroBannerUrl: 'assets/hero-banner.png',
-  siteLogoUrl: 'public/assets/aistudio/Logo-01_264a2645.jpg',
+  siteLogoUrl: 'assets/images/logo.svg',
   storiesLabel: 'Interactive Reading',
   storiesTitle: 'Featured Stories',
   storiesSubtitle:
@@ -863,8 +863,11 @@ function normalizeCoursePricesServer(rawPrices, coursesList) {
 
 function sanitizeLogoUrlServer(val) {
   if (typeof val !== 'string') return '';
-  const clean = val.trim();
+  let clean = val.trim();
   if (!clean) return '';
+  if (/^\/?public\/assets\/aistudio\//i.test(clean)) {
+    clean = 'assets/images/logo.svg';
+  }
   if (clean.startsWith('data:image/')) {
     return clean.length <= 2500000 ? clean : '';
   }
@@ -1178,6 +1181,79 @@ app.post('/api/database/sync', jsonParser, (req, res) => {
     return res.status(400).json({ success: false, error: 'Unknown domain: ' + domain });
   } catch (err) {
     console.error('POST /api/database/sync error:', err);
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/database/force-sync', jsonParser, (req, res) => {
+  try {
+    const domain = String(req.body?.domain || 'stories').toLowerCase();
+    const sheets = req.body?.sheets;
+    if (domain === 'stories') {
+      const excelPath = path.join(__dirname, 'data', 'stories.xlsx');
+      const allowed = ['Lessons', 'Story', 'Vocabulary', 'Exercises'];
+      if (sheets && typeof sheets === 'object') {
+        const updates = {};
+        for (const sName of allowed) {
+          if (Array.isArray(sheets[sName])) updates[sName] = sheets[sName];
+        }
+        if (Object.keys(updates).length) {
+          writeUpdatedWorkbook(excelPath, updates, allowed);
+        }
+      }
+      syncStoriesJson();
+      const loaded = parseStoriesWorkbook().sheets;
+      return res.json({
+        success: true,
+        syncedToServer: true,
+        forced: true,
+        database: 'edu-hub-db',
+        domain: 'stories',
+        sheets: loaded
+      });
+    }
+    if (domain === 'reels') {
+      const excelPath = path.join(__dirname, 'data', 'reels_stories.xlsx');
+      if (sheets && Array.isArray(sheets.Videos)) {
+        writeUpdatedWorkbook(excelPath, { Videos: sheets.Videos }, ['Videos']);
+      }
+      syncReelsStoriesJson();
+      const loaded = parseReelsStoriesWorkbook().sheets;
+      return res.json({
+        success: true,
+        syncedToServer: true,
+        forced: true,
+        database: 'edu-hub-db',
+        domain: 'reels',
+        sheets: loaded
+      });
+    }
+    if (domain === 'lessons') {
+      const excelPath = path.join(__dirname, 'data', 'lessons.xlsx');
+      const allowed = ['Lessons', 'Exercises', 'Writing', 'Vocabulary', 'Games', 'Pronunciation'];
+      if (sheets && typeof sheets === 'object') {
+        const updates = {};
+        for (const sName of allowed) {
+          if (Array.isArray(sheets[sName])) updates[sName] = sheets[sName];
+        }
+        if (Object.keys(updates).length) {
+          writeUpdatedWorkbook(excelPath, updates, allowed);
+        }
+      }
+      syncLessonsJson();
+      const loaded = parseLessonsWorkbook().sheets;
+      return res.json({
+        success: true,
+        syncedToServer: true,
+        forced: true,
+        database: 'edu-hub-db',
+        domain: 'lessons',
+        sheets: loaded
+      });
+    }
+    return res.status(400).json({ success: false, error: 'Unknown domain: ' + domain });
+  } catch (err) {
+    console.error('POST /api/database/force-sync error:', err);
     res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
@@ -2160,7 +2236,6 @@ app.get('/api/admin/media-library', (req, res) => {
       }
     };
     scanDir(path.join(__dirname, 'assets', 'video'), 'assets/video', 'video');
-    scanDir(path.join(__dirname, 'public', 'assets', 'aistudio'), 'public/assets/aistudio', null);
     scanDir(path.join(__dirname, 'assets', 'images'), 'assets/images', 'image');
     scanDir(path.join(__dirname, 'assets', 'audio'), 'assets/audio', 'audio');
     scanDir(UPLOAD_SUBDIRS.videos, 'assets/uploads/videos', 'video');

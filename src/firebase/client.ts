@@ -134,7 +134,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   heroPrimaryCta: 'Explore Stories & Reels',
   heroSecondaryCta: 'Learning Hub',
   heroBannerUrl: 'assets/hero-banner.png',
-  siteLogoUrl: 'public/assets/aistudio/Logo-01_264a2645.jpg',
+  siteLogoUrl: 'assets/images/logo.svg',
   storiesLabel: 'Featured Stories & Reels',
   storiesTitle: 'Stories & Reels',
   storiesSubtitle:
@@ -1005,7 +1005,10 @@ function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteC
     heroPrimaryCta: s(raw?.heroPrimaryCta, 60, DEFAULT_SITE_CONFIG.heroPrimaryCta),
     heroSecondaryCta: s(raw?.heroSecondaryCta, 60, DEFAULT_SITE_CONFIG.heroSecondaryCta),
     heroBannerUrl: opt(raw?.heroBannerUrl, 500, DEFAULT_SITE_CONFIG.heroBannerUrl) || DEFAULT_SITE_CONFIG.heroBannerUrl,
-    siteLogoUrl: opt(raw?.siteLogoUrl, 500, DEFAULT_SITE_CONFIG.siteLogoUrl) || DEFAULT_SITE_CONFIG.siteLogoUrl,
+    siteLogoUrl: (() => {
+      const rawLogo = opt(raw?.siteLogoUrl, 500, DEFAULT_SITE_CONFIG.siteLogoUrl) || DEFAULT_SITE_CONFIG.siteLogoUrl;
+      return /^\/?public\/assets\/aistudio\//i.test(rawLogo) ? DEFAULT_SITE_CONFIG.siteLogoUrl : rawLogo;
+    })(),
     storiesLabel: s(raw?.storiesLabel, 100, DEFAULT_SITE_CONFIG.storiesLabel),
     storiesTitle: s(raw?.storiesTitle, 120, DEFAULT_SITE_CONFIG.storiesTitle),
     storiesSubtitle: s(raw?.storiesSubtitle, 400, DEFAULT_SITE_CONFIG.storiesSubtitle),
