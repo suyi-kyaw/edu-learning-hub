@@ -2700,7 +2700,10 @@
       count = parseInt(currentChar.strokeCount, 10) || 4;
       const stepsStr = currentChar.strokeOrderSteps || currentChar.stroke_order_steps || '';
       if (stepsStr) {
-        parsedSteps = stepsStr.split(/,\s*(?=\d+\.)/).map(s => s.trim());
+        parsedSteps = stepsStr.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+        if (parsedSteps.length <= 1) {
+          parsedSteps = stepsStr.split(/(?=\d+\s*[\.\：\-])/).map(s => s.trim()).filter(Boolean);
+        }
       }
     }
 
@@ -2992,7 +2995,7 @@
     return strokes;
   }
 
-  // Multi-Factor Strict Stroke Step & Format Evaluator
+  // Multi-Factor Strict Stroke Step & Format Evaluator with generous tolerances
   function evaluateSingleStroke(points, strokeIdx, currentChar) {
     if (!points || points.length < 2) {
       return {
@@ -3024,8 +3027,8 @@
     const dy = endP.y - startP.y;
     const len = Math.hypot(dx, dy);
 
-    // Reject tiny taps under 10px unless expected is a dot
-    if (len < 10 && expected.type !== 'dot') {
+    // Reject tiny taps under 8px unless expected is a dot
+    if (len < 8 && expected.type !== 'dot') {
       return {
         pass: false,
         score: 0,
@@ -3058,83 +3061,37 @@
     const expMidY = ((expected.y1 || 0) + (expected.y2 || 0)) / 2;
     const midDist = Math.hypot(drawnMidX - expMidX, drawnMidY - expMidY);
 
-    // 1. OUT OF ORDER CHECK: Did the user draw a subsequent stroke instead of current step?
-    // Only check if current drawn stroke deviates from current expected stroke
-    if (angleDiff > 0.65 || startDist > 65) {
-      for (let k = strokeIdx + 1; k < strokeVectors.length; k++) {
-        const other = strokeVectors[k];
-        const oDx = other.x2 - other.x1;
-        const oDy = other.y2 - other.y1;
-        const oAngle = Math.atan2(oDy, oDx);
-        let oAngleDiff = Math.abs(userAngle - oAngle);
-        if (oAngleDiff > Math.PI) oAngleDiff = 2 * Math.PI - oAngleDiff;
-        const oStartDist = Math.hypot(startP.x - other.x1, startP.y - other.y1);
-
-        if (oAngleDiff < 0.48 && oStartDist < 48) {
-          return {
-            pass: false,
-            score: 15,
-            reason: 'out_of_order',
-            hint: `⚠️ Out of order! That looks like Stroke ${k + 1}, but you must draw <strong>Stroke ${strokeIdx + 1}</strong> first.`,
-            valueOf() { return 15; }
-          };
-        }
-      }
-    }
-
-    // 2. DIRECTION CHECK: Must not be written backwards (tolerance max 72 degrees / 1.26 radians)
-    if (angleDiff > 1.26) {
+    // Generous direction tolerance (up to 2.1 radians / ~120 degrees)
+    if (angleDiff > 2.1 && expected.type !== 'dot') {
       let dirTip = expected.direction || 'Follow stroke direction';
-      if (Math.abs(expDx) > Math.abs(expDy) * 1.3 && expDx > 0) {
-        dirTip = 'Draw from left to right (从左到右)';
-      } else if (Math.abs(expDy) > Math.abs(expDx) * 1.3 && expDy > 0) {
-        dirTip = 'Draw from top to bottom (从上到下)';
-      } else if (expDx < 0 && expDy > 0) {
-        dirTip = 'Draw from top-right to bottom-left (从右上到左下)';
-      } else if (expDx > 0 && expDy > 0) {
-        dirTip = 'Draw from top-left to bottom-right (从左上到右下)';
-      }
-
       return {
         pass: false,
-        score: 20,
+        score: 40,
         reason: 'wrong_direction',
-        hint: `⚠️ Wrong direction for ${escapeHTML(expected.label || `Stroke ${strokeIdx + 1}`)}! ${dirTip}.`,
-        valueOf() { return 20; }
+        hint: `⚠️ Wrong direction for <strong>${escapeHTML(expected.label || `Stroke ${strokeIdx + 1}`)}</strong>! Please follow: ${dirTip}.`,
+        valueOf() { return 40; }
       };
     }
 
-    // 3. START POSITION & LOCATION CHECK: Must start in reasonable neighborhood
-    if (startDist > 115 || midDist > 125) {
+    // Generous position tolerance (up to 170px start/mid distance on 320x320 canvas)
+    if (startDist > 170 || midDist > 180) {
       return {
         pass: false,
-        score: 25,
+        score: 40,
         reason: 'wrong_position',
         hint: `⚠️ Wrong position! Draw <strong>${escapeHTML(expected.label || `Stroke ${strokeIdx + 1}`)}</strong> in the correct section.`,
-        valueOf() { return 25; }
+        valueOf() { return 40; }
       };
     }
 
-    // 4. SCORE CALCULATION
-    const dirFactor = Math.max(0, 1 - angleDiff / (Math.PI / 2));
-    const posFactor = Math.max(0, 1 - (startDist * 0.55 + midDist * 0.45) / 125);
-    const expLen = Math.hypot(expDx, expDy);
-    const lenRatio = Math.min(len, expLen) / Math.max(len, expLen, 1);
-    const rawScore = Math.round((dirFactor * 0.45 + posFactor * 0.40 + lenRatio * 0.15) * 100);
-
-    if (rawScore < 42) {
-      return {
-        pass: false,
-        score: rawScore,
-        reason: 'low_score',
-        hint: `⚠️ Inaccurate stroke format. Follow the line of <strong>${escapeHTML(expected.label || `Stroke ${strokeIdx + 1}`)}</strong>.`,
-        valueOf() { return rawScore; }
-      };
-    }
+    // Score calculation
+    const dirFactor = Math.max(0, 1 - angleDiff / Math.PI);
+    const posFactor = Math.max(0, 1 - (startDist * 0.4 + midDist * 0.6) / 180);
+    const rawScore = Math.round((dirFactor * 0.5 + posFactor * 0.5) * 100);
 
     return {
       pass: true,
-      score: Math.min(99, Math.max(50, rawScore)),
+      score: Math.min(100, Math.max(60, rawScore)),
       reason: 'ok',
       hint: `✅ Correct stroke!`,
       valueOf() { return this.score; }
