@@ -982,6 +982,8 @@ app.get(['/api/database/status', '/api/status'], (req, res) => {
     success: true,
     database: 'edu-hub-db',
     status: 'connected',
+    maxUploadBytes: 50 * 1024 * 1024,
+    storage: { d1: true, r2: false, local: true },
     tables: [
       'lessons',
       'exercises',
@@ -2188,6 +2190,146 @@ const uploadMediaMiddleware = multer({
     }
     cb(null, true);
   }
+});
+
+const MAX_EXPRESS_CHUNKED_BYTES = 50 * 1024 * 1024;
+const EXPRESS_CHUNK_BYTES = 256 * 1024;
+const EXPRESS_UPLOAD_STAGING_DIR = path.join(__dirname, 'assets', 'uploads', '.staging');
+const expressChunkSessions = new Map();
+
+app.post('/api/admin/upload-media/init', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const filename = String(req.body?.filename || '').trim();
+    const size = Number(req.body?.size) || 0;
+    const ext = path.extname(filename).toLowerCase();
+    const mediaType = ALLOWED_MEDIA[ext];
+    if (!filename || size <= 0) {
+      return res.status(400).json({ success: false, error: 'Valid filename and file size are required.' });
+    }
+    if (!mediaType) {
+      return res.status(400).json({ success: false, error: `File type ${ext || 'unknown'} is not permitted.` });
+    }
+    if (size > MAX_EXPRESS_CHUNKED_BYTES) {
+      const mb = (size / (1024 * 1024)).toFixed(2);
+      return res.status(413).json({ success: false, error: `File "${filename}" (${mb} MB) exceeds the 50 MB upload limit.` });
+    }
+    const base =
+      path
+        .basename(filename, ext)
+        .toLowerCase()
+        .replace(/[^a-z0-9_\-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 48) || 'media';
+    const mediaId = `${base}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const finalFilename = `${base}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}${ext}`;
+    const chunkCount = Math.max(1, Math.ceil(size / EXPRESS_CHUNK_BYTES));
+    const stageDir = path.join(EXPRESS_UPLOAD_STAGING_DIR, mediaId);
+    fs.mkdirSync(stageDir, { recursive: true });
+    expressChunkSessions.set(mediaId, {
+      mediaId,
+      filename: finalFilename,
+      mediaType,
+      size,
+      chunkSize: EXPRESS_CHUNK_BYTES,
+      chunkCount,
+      stageDir,
+      received: new Set()
+    });
+    return res.json({
+      success: true,
+      mediaId,
+      filename: finalFilename,
+      mediaType,
+      chunkSize: EXPRESS_CHUNK_BYTES,
+      chunkCount,
+      maxUploadBytes: MAX_EXPRESS_CHUNKED_BYTES,
+      storage: 'local-disk'
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err?.message || 'Chunk init failed.' });
+  }
+});
+
+app.put(
+  '/api/admin/upload-media/chunk',
+  requireAdminToken,
+  express.raw({ type: () => true, limit: '8mb' }),
+  (req, res) => {
+    try {
+      const mediaId = String(req.query.mediaId || '').trim();
+      const idx = Number(req.query.index);
+      const session = expressChunkSessions.get(mediaId);
+      if (!session) {
+        return res.status(404).json({ success: false, error: 'Upload session not found.' });
+      }
+      if (!Number.isInteger(idx) || idx < 0 || idx >= session.chunkCount) {
+        return res.status(400).json({ success: false, error: `Chunk index ${req.query.index} is out of range.` });
+      }
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+      if (!buf.length) {
+        return res.status(400).json({ success: false, error: 'Empty chunk payload.' });
+      }
+      fs.writeFileSync(path.join(session.stageDir, `${idx}.part`), buf);
+      session.received.add(idx);
+      return res.json({ success: true, mediaId, index: idx, receivedBytes: buf.length });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || 'Chunk upload failed.' });
+    }
+  }
+);
+
+app.post('/api/admin/upload-media/complete', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const mediaId = String(req.body?.mediaId || '').trim();
+    const session = expressChunkSessions.get(mediaId);
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Upload session not found.' });
+    }
+    for (let i = 0; i < session.chunkCount; i++) {
+      if (!session.received.has(i)) {
+        return res.status(400).json({ success: false, error: `Upload incomplete: missing chunk #${i}.` });
+      }
+    }
+    const targetDir = UPLOAD_SUBDIRS[session.mediaType] || UPLOAD_SUBDIRS.images;
+    fs.mkdirSync(targetDir, { recursive: true });
+    const destPath = path.join(targetDir, session.filename);
+    const outStream = fs.createWriteStream(destPath);
+    for (let i = 0; i < session.chunkCount; i++) {
+      const chunkBuf = fs.readFileSync(path.join(session.stageDir, `${i}.part`));
+      outStream.write(chunkBuf);
+    }
+    outStream.end();
+    outStream.on('finish', () => {
+      fs.rmSync(session.stageDir, { recursive: true, force: true });
+      expressChunkSessions.delete(mediaId);
+      const relativeUrl = `assets/uploads/${session.mediaType}/${session.filename}`;
+      res.json({
+        success: true,
+        url: relativeUrl,
+        mediaType: session.mediaType,
+        filename: session.filename,
+        size: session.size,
+        storage: 'local-disk'
+      });
+    });
+    outStream.on('error', (writeErr) => {
+      res.status(500).json({ success: false, error: writeErr?.message || 'Failed writing final media file.' });
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err?.message || 'Upload completion failed.' });
+  }
+});
+
+app.all('/api/admin/upload-media/abort', requireAdminToken, jsonParser, (req, res) => {
+  const mediaId = String(req.body?.mediaId || req.query.mediaId || '').trim();
+  const session = expressChunkSessions.get(mediaId);
+  if (session) {
+    try {
+      fs.rmSync(session.stageDir, { recursive: true, force: true });
+    } catch (_) {}
+    expressChunkSessions.delete(mediaId);
+  }
+  return res.json({ success: true });
 });
 
 app.post('/api/admin/upload-media', requireAdminToken, (req, res) => {

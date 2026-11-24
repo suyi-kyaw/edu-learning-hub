@@ -175,6 +175,10 @@ CREATE TABLE IF NOT EXISTS media_files (
   size_bytes INTEGER,
   chunk_size INTEGER,
   chunk_count INTEGER,
+  storage_mode TEXT DEFAULT 'd1',
+  object_key TEXT DEFAULT '',
+  upload_id TEXT DEFAULT '',
+  status TEXT DEFAULT 'ready',
   created_at TEXT
 );
 

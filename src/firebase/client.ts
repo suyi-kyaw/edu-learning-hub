@@ -86,6 +86,7 @@ export interface SiteConfig {
   heroSecondaryCta: string;
   heroBannerUrl: string;
   siteLogoUrl: string;
+  workerApiBaseUrl?: string;
   storiesLabel: string;
   storiesTitle: string;
   storiesSubtitle: string;
@@ -148,6 +149,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   heroSecondaryCta: 'Learning Hub',
   heroBannerUrl: 'assets/hero-banner.png',
   siteLogoUrl: 'assets/images/logo.svg',
+  workerApiBaseUrl: '',
   storiesLabel: 'Featured Stories & Reels',
   storiesTitle: 'Stories & Reels',
   storiesSubtitle:
@@ -1067,6 +1069,9 @@ function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteC
     heroSecondaryCta: s(raw?.heroSecondaryCta, 60, DEFAULT_SITE_CONFIG.heroSecondaryCta),
     heroBannerUrl: sanitizeBannerUrl(raw?.heroBannerUrl),
     siteLogoUrl: raw && 'siteLogoUrl' in raw ? sanitizeLogoUrl(raw.siteLogoUrl) : DEFAULT_SITE_CONFIG.siteLogoUrl,
+    workerApiBaseUrl: typeof raw?.workerApiBaseUrl === 'string' && /^https?:\/\/[^/\s]+/i.test(raw.workerApiBaseUrl.trim())
+      ? raw.workerApiBaseUrl.trim().replace(/\/+$/, '').slice(0, 240)
+      : '',
     storiesLabel: s(raw?.storiesLabel, 100, DEFAULT_SITE_CONFIG.storiesLabel),
     storiesTitle: s(raw?.storiesTitle, 120, DEFAULT_SITE_CONFIG.storiesTitle),
     storiesSubtitle: s(raw?.storiesSubtitle, 400, DEFAULT_SITE_CONFIG.storiesSubtitle),
@@ -1182,26 +1187,9 @@ function syncMemoryFromDataset(dataset: ExcelDataset, uidOverride?: string | nul
 }
 
 async function hydratePublicAndSession(forceExcelReload = false): Promise<void> {
-  // 1. Load static site-config.json and check live server / Cloudflare D1 /api/site-config
+  // 1. Load static site-config.json first so any configured Worker URL activates immediately
   let baseCfg: Partial<SiteConfig> = {};
   let serverCfg: Partial<SiteConfig> | null = null;
-
-  try {
-    const apiPath = '/api/site-config?t=' + Date.now();
-    const apiUrl =
-      typeof window !== 'undefined' && (window as any).LinguaBackend?.apiUrl
-        ? (window as any).LinguaBackend.apiUrl(apiPath)
-        : apiPath;
-    const sRes = await fetch(apiUrl, { cache: 'no-store' });
-    if (sRes.ok) {
-      const sData = (await sRes.json().catch(() => null)) as any;
-      if (sData && sData.success && sData.config && typeof sData.config === 'object') {
-        serverCfg = sData.config as Partial<SiteConfig>;
-      }
-    }
-  } catch (_) {
-    // API unreachable or static host
-  }
 
   try {
     const staticCfg = await fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1215,6 +1203,29 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   // 2. Load data/users.xlsx and merge browser overlay
   await loadBaseWorkbookFromExcel(forceExcelReload);
   const dataset = getMergedDataset();
+
+  const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
+  const candidateWorkerBase = String(dataset.siteConfig?.workerApiBaseUrl || baseCfg?.workerApiBaseUrl || '').trim();
+  if (candidateWorkerBase && lb && typeof lb.setSiteWorkerBase === 'function') {
+    lb.setSiteWorkerBase(candidateWorkerBase);
+  }
+
+  const canReachBackend = !lb || typeof lb.hasBackend !== 'function' || lb.hasBackend();
+  if (canReachBackend) {
+    try {
+      const apiPath = '/api/site-config?t=' + Date.now();
+      const apiUrl = lb?.apiUrl ? lb.apiUrl(apiPath) : apiPath;
+      const sRes = await fetch(apiUrl, { cache: 'no-store' });
+      if (sRes.ok) {
+        const sData = (await sRes.json().catch(() => null)) as any;
+        if (sData && sData.success && sData.config && typeof sData.config === 'object') {
+          serverCfg = sData.config as Partial<SiteConfig>;
+        }
+      }
+    } catch (_) {
+      // API unreachable or static host
+    }
+  }
 
   let effectiveCfg: Partial<SiteConfig>;
   if (serverCfg) {
@@ -1234,6 +1245,9 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   }
 
   state.siteConfig = normalizeSiteConfig(effectiveCfg);
+  if (state.siteConfig.workerApiBaseUrl && lb && typeof lb.setSiteWorkerBase === 'function') {
+    lb.setSiteWorkerBase(state.siteConfig.workerApiBaseUrl);
+  }
   emitSiteConfigChange();
 
   syncMemoryFromDataset(dataset);
@@ -1811,13 +1825,12 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig>
   emitSiteConfigChange();
   emitState();
 
-  // On non-static hosts, push to live backend / Cloudflare D1
-  const isStaticHost =
-    typeof window !== 'undefined' &&
-    (window as any).LinguaBackend?.isStaticGithubHost &&
-    (window as any).LinguaBackend.isStaticGithubHost();
+  // Push to live backend / Cloudflare D1 whenever on server host OR connected to Worker URL
+  const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
+  const isStaticHost = lb?.isStaticGithubHost ? lb.isStaticGithubHost() : false;
+  const hasRemoteBackend = lb?.hasBackend ? lb.hasBackend() : !isStaticHost;
 
-  if (!isStaticHost) {
+  if (!isStaticHost || hasRemoteBackend) {
     try {
       const token = await getIdToken();
       const headers: Record<string, string> = {

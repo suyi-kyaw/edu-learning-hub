@@ -128,20 +128,48 @@
     return true;
   }
 
+  function getActiveWorkbookFileName() {
+    if (state.activeTab === 'reels') return 'reels_stories.xlsx';
+    if (state.activeTab === 'lessons' || state.activeTab === 'games') return 'lessons.xlsx';
+    if (state.activeTab === 'home') return 'site-config.json';
+    return 'stories.xlsx';
+  }
+
   async function updateBackendBadge() {
     const badge = document.getElementById('adminBackendBadge');
     if (!badge) return;
+    const isStatic =
+      window.LinguaBackend &&
+      typeof window.LinguaBackend.isStaticGithubHost === 'function' &&
+      window.LinguaBackend.isStaticGithubHost();
+    const remoteBase =
+      window.LinguaBackend && typeof window.LinguaBackend.getApiBase === 'function'
+        ? window.LinguaBackend.getApiBase()
+        : '';
+
+    if (isStatic && !remoteBase) {
+      badge.classList.remove('is-connected');
+      badge.classList.add('is-warning');
+      badge.textContent = 'Static GitHub Pages (No Worker)';
+      return;
+    }
+
     badge.classList.remove('is-warning');
     badge.classList.add('is-connected');
     try {
-      const res = await fetch(apiUrl('/api/database/status'));
+      const res = await fetch(apiUrl('/api/database/status'), { cache: 'no-store' });
       const json = await res.json().catch(() => null);
       if (json && json.success) {
-        badge.textContent = `Cloudflare D1 & Excel (${json.database || 'edu-hub-db'})`;
+        const hasR2 = Boolean(json.storage && json.storage.r2);
+        const limitMb = Math.round((Number(json.maxUploadBytes) || 50 * 1024 * 1024) / (1024 * 1024));
+        const modeLabel = hasR2 ? 'D1 + R2' : 'D1';
+        badge.textContent = remoteBase
+          ? `Remote Worker ${modeLabel} (${limitMb}MB)`
+          : `Cloudflare ${modeLabel} & Excel (${limitMb}MB)`;
         return;
       }
     } catch (_) {}
-    badge.textContent = 'Cloudflare D1 & Excel (edu-hub-db)';
+    badge.textContent = remoteBase ? 'Remote Worker (Unreachable)' : 'Cloudflare D1 & Excel (edu-hub-db)';
   }
 
   function isSameId(a, b) {
@@ -591,7 +619,7 @@
             } placeholder="${escapeHTML(
               placeholder || 'assets/... or https://...'
             )}" />
-            <label class="admin-btn admin-btn-secondary admin-btn-sm" style="margin:0; cursor:pointer;">
+            <label class="admin-btn admin-btn-secondary admin-btn-sm" data-media-upload-btn-for="${escapeHTML(id)}" style="margin:0; cursor:pointer;">
               <span>Upload</span>
               <input type="file" accept="${escapeHTML(accept)}" data-media-upload-for="${escapeHTML(id)}" data-media-kind="${escapeHTML(
                 kind
@@ -600,6 +628,15 @@
             <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-media-browse-for="${escapeHTML(
               id
             )}" data-media-kind="${escapeHTML(kind)}">Browse</button>
+          </div>
+          <div class="admin-media-progress" id="${escapeHTML(id)}Progress" hidden>
+            <div class="admin-media-progress-head">
+              <span class="admin-media-progress-label">Preparing upload…</span>
+              <span class="admin-media-progress-pct">0%</span>
+            </div>
+            <div class="admin-media-progress-track">
+              <div class="admin-media-progress-fill" style="width:0%;"></div>
+            </div>
           </div>
           <div class="admin-media-library" id="${escapeHTML(id)}Library" hidden></div>
           <div class="admin-media-preview" id="${escapeHTML(id)}Preview">
@@ -855,29 +892,10 @@
     }
   }
 
-  async function uploadAdminMediaFile(file, kindHint) {
-    const store = getContentStore();
-    const maxInlineBytes = store.MAX_INLINE_MEDIA_BYTES || Math.round(1.5 * 1024 * 1024);
-    const isImageUpload =
-      kindHint === 'image' || /^image\//i.test(String(file && file.type ? file.type : ''));
-    const uploadCandidate = isImageUpload ? await optimizeImageFileForUpload(file) : file;
+  const MAX_ADMIN_UPLOAD_BYTES = 50 * 1024 * 1024;
+  const CHUNKED_UPLOAD_THRESHOLD_BYTES = 512 * 1024;
 
-    const isStaticHost =
-      window.LinguaBackend &&
-      typeof window.LinguaBackend.isStaticGithubHost === 'function' &&
-      window.LinguaBackend.isStaticGithubHost();
-
-    if (isStaticHost) {
-      if (uploadCandidate.size > maxInlineBytes) {
-        const existingRepoPath = await probeExistingRepoMedia(file, kindHint);
-        if (existingRepoPath) {
-          return { url: existingRepoPath, uploadedToServer: false, matchedRepoFile: true };
-        }
-      }
-      const inline = await store.readFileAsInlineMedia(uploadCandidate);
-      return { url: inline.url, uploadedToServer: false };
-    }
-
+  async function buildAdminAuthHeaders() {
     let token = '';
     if (window.LinguaAuth && typeof window.LinguaAuth.getIdToken === 'function') {
       try {
@@ -894,15 +912,185 @@
         token = localStorage.getItem('linguapath_api_token') || '';
       } catch (_) {}
     }
-
     const headers = {};
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    const currentUser = window.LinguaAuth && typeof window.LinguaAuth.getState === 'function' ? window.LinguaAuth.getState().user : null;
+    const currentUser =
+      window.LinguaAuth && typeof window.LinguaAuth.getState === 'function' ? window.LinguaAuth.getState().user : null;
     if (currentUser && currentUser.uid) {
       headers['X-Admin-Uid'] = currentUser.uid;
       headers['X-User-Uid'] = currentUser.uid;
+    }
+    return headers;
+  }
+
+  async function uploadAdminMediaChunked(file, headers, onProgress) {
+    const totalMb = (file.size / (1024 * 1024)).toFixed(2);
+    if (typeof onProgress === 'function') {
+      onProgress({ percent: 2, label: `Preparing ${file.name} (${totalMb} MB)…` });
+    }
+
+    const initRes = await fetch(apiUrl('/api/admin/upload-media/init'), {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+      body: JSON.stringify({
+        filename: file.name || 'media',
+        mimeType: file.type || 'application/octet-stream',
+        size: file.size
+      })
+    });
+    const initJson = await initRes.json().catch(() => null);
+    if (!initRes.ok || !initJson || !initJson.success || !initJson.mediaId) {
+      const initErr = new Error((initJson && initJson.error) || `Chunk init failed (HTTP ${initRes.status})`);
+      initErr.httpStatus = initRes.status;
+      throw initErr;
+    }
+
+    const mediaId = String(initJson.mediaId);
+    const chunkSize = Math.max(64 * 1024, Number(initJson.chunkSize) || 256 * 1024);
+    const chunkCount = Math.max(1, Math.ceil(file.size / chunkSize));
+    const storageLabel = initJson.storage === 'cloudflare-r2' ? 'R2' : initJson.storage === 'local-disk' ? 'Server' : 'D1';
+
+    try {
+      for (let idx = 0; idx < chunkCount; idx++) {
+        const start = idx * chunkSize;
+        const end = Math.min(file.size, start + chunkSize);
+        const sliceBlob = file.slice(start, end);
+        const pctBefore = Math.max(3, Math.round((idx / chunkCount) * 94));
+        const sentMb = (start / (1024 * 1024)).toFixed(1);
+        if (typeof onProgress === 'function') {
+          onProgress({
+            percent: pctBefore,
+            label: `Uploading to ${storageLabel}: chunk ${idx + 1} of ${chunkCount} (${sentMb} / ${totalMb} MB)`
+          });
+        }
+
+        let partOk = false;
+        let partError = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const putRes = await fetch(
+              apiUrl(`/api/admin/upload-media/chunk?mediaId=${encodeURIComponent(mediaId)}&index=${idx}`),
+              {
+                method: 'PUT',
+                headers: Object.assign({ 'Content-Type': 'application/octet-stream' }, headers),
+                body: sliceBlob
+              }
+            );
+            const putJson = await putRes.json().catch(() => null);
+            if (putRes.ok && putJson && putJson.success) {
+              partOk = true;
+              break;
+            }
+            const msg = (putJson && putJson.error) || `HTTP ${putRes.status}`;
+            partError = new Error(msg);
+            partError.httpStatus = putRes.status;
+            if (putRes.status >= 400 && putRes.status < 500 && putRes.status !== 408 && putRes.status !== 429) {
+              break;
+            }
+          } catch (err) {
+            partError = err;
+          }
+          await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        }
+        if (!partOk) {
+          throw partError || new Error(`Failed uploading chunk ${idx + 1} of ${chunkCount}.`);
+        }
+
+        const pctAfter = Math.min(96, Math.round(((idx + 1) / chunkCount) * 95));
+        if (typeof onProgress === 'function') {
+          onProgress({
+            percent: pctAfter,
+            label: `Uploaded ${((end) / (1024 * 1024)).toFixed(1)} / ${totalMb} MB (${storageLabel})`
+          });
+        }
+      }
+
+      if (typeof onProgress === 'function') {
+        onProgress({ percent: 98, label: `Finalizing ${file.name}…` });
+      }
+      const completeRes = await fetch(apiUrl('/api/admin/upload-media/complete'), {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+        body: JSON.stringify({ mediaId })
+      });
+      const completeJson = await completeRes.json().catch(() => null);
+      if (!completeRes.ok || !completeJson || !completeJson.success || !completeJson.url) {
+        throw new Error((completeJson && completeJson.error) || `Upload finalization failed (HTTP ${completeRes.status})`);
+      }
+      if (typeof onProgress === 'function') {
+        onProgress({ percent: 100, label: `Completed (${storageLabel})` });
+      }
+      return {
+        url: String(completeJson.url),
+        uploadedToServer: true,
+        storage: completeJson.storage || initJson.storage || 'cloudflare-d1'
+      };
+    } catch (err) {
+      fetch(apiUrl('/api/admin/upload-media/abort'), {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+        body: JSON.stringify({ mediaId })
+      }).catch(() => {});
+      throw err;
+    }
+  }
+
+  async function uploadAdminMediaFile(file, kindHint, onProgress) {
+    const store = getContentStore();
+    const maxInlineBytes = store.MAX_INLINE_MEDIA_BYTES || Math.round(1.5 * 1024 * 1024);
+    const isImageUpload =
+      kindHint === 'image' || /^image\//i.test(String(file && file.type ? file.type : ''));
+    const uploadCandidate = isImageUpload ? await optimizeImageFileForUpload(file) : file;
+
+    if (uploadCandidate.size > MAX_ADMIN_UPLOAD_BYTES) {
+      const mb = (uploadCandidate.size / (1024 * 1024)).toFixed(2);
+      throw new Error(
+        `File "${file.name}" (${mb} MB) exceeds the 50 MB upload limit. Compress the video under 50 MB or paste a hosted https:// URL.`
+      );
+    }
+
+    const canUseBackend = hasBackend();
+    if (!canUseBackend) {
+      if (uploadCandidate.size > maxInlineBytes) {
+        const existingRepoPath = await probeExistingRepoMedia(file, kindHint);
+        if (existingRepoPath) {
+          return { url: existingRepoPath, uploadedToServer: false, matchedRepoFile: true };
+        }
+      }
+      const inline = await store.readFileAsInlineMedia(uploadCandidate);
+      return { url: inline.url, uploadedToServer: false };
+    }
+
+    const headers = await buildAdminAuthHeaders();
+
+    if (uploadCandidate.size > CHUNKED_UPLOAD_THRESHOLD_BYTES) {
+      try {
+        const chunkedResult = await uploadAdminMediaChunked(uploadCandidate, headers, onProgress);
+        chunkedResult.optimized = uploadCandidate !== file;
+        return chunkedResult;
+      } catch (chunkErr) {
+        const status = Number(chunkErr && chunkErr.httpStatus) || 0;
+        const canTrySingleShot = (status === 404 || status === 405) && uploadCandidate.size <= 4 * 1024 * 1024;
+        if (!canTrySingleShot) {
+          if (isImageUpload && uploadCandidate.size <= maxInlineBytes) {
+            const inline = await store.readFileAsInlineMedia(uploadCandidate);
+            return {
+              url: inline.url,
+              uploadedToServer: false,
+              serverFallback: true,
+              optimized: uploadCandidate !== file,
+              fallbackNotice: chunkErr instanceof Error ? chunkErr.message : ''
+            };
+          }
+          throw chunkErr;
+        }
+      }
+    }
+
+    if (typeof onProgress === 'function') {
+      onProgress({ percent: 35, label: `Uploading ${uploadCandidate.name}…` });
     }
 
     let fallbackAllowed = false;
@@ -925,10 +1113,14 @@
               `File "${file.name}" exceeds the safe browser/database size limit. Commit the video under assets/video/ or paste a hosted https:// URL.`
             );
           }
+          if (typeof onProgress === 'function') {
+            onProgress({ percent: 100, label: 'Upload complete' });
+          }
           return {
             url: returnedUrl,
             uploadedToServer: !isInline,
-            optimized: uploadCandidate !== file
+            optimized: uploadCandidate !== file,
+            storage: json.storage || ''
           };
         }
 
@@ -1000,10 +1192,31 @@
       const targetId = root.getAttribute('data-picker-root');
       const textInput = root.querySelector(`#${CSS.escape(targetId)}`);
       const fileInput = root.querySelector(`[data-media-upload-for="${CSS.escape(targetId)}"]`);
+      const uploadLabelBtn = root.querySelector(`[data-media-upload-btn-for="${CSS.escape(targetId)}"]`);
       const browseBtn = root.querySelector(`[data-media-browse-for="${CSS.escape(targetId)}"]`);
+      const progressEl = root.querySelector(`#${CSS.escape(targetId)}Progress`);
+      const progressLabelEl = progressEl ? progressEl.querySelector('.admin-media-progress-label') : null;
+      const progressPctEl = progressEl ? progressEl.querySelector('.admin-media-progress-pct') : null;
+      const progressFillEl = progressEl ? progressEl.querySelector('.admin-media-progress-fill') : null;
       const libraryEl = root.querySelector(`#${CSS.escape(targetId)}Library`);
       const previewEl = root.querySelector(`#${CSS.escape(targetId)}Preview`);
       const kind = (fileInput || browseBtn)?.getAttribute('data-media-kind') || 'image';
+
+      const setProgressUi = (visible, pct, label) => {
+        if (!progressEl) return;
+        progressEl.hidden = !visible;
+        if (visible) {
+          const safePct = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+          if (progressLabelEl && label) progressLabelEl.textContent = label;
+          if (progressPctEl) progressPctEl.textContent = `${safePct}%`;
+          if (progressFillEl) progressFillEl.style.width = `${safePct}%`;
+        }
+      };
+
+      const setUploadBusy = (busy) => {
+        if (fileInput) fileInput.disabled = Boolean(busy);
+        if (uploadLabelBtn) uploadLabelBtn.classList.toggle('is-disabled', Boolean(busy));
+      };
 
       if (textInput && previewEl) {
         textInput.addEventListener('input', (e) => {
@@ -1048,76 +1261,134 @@
         });
       }
 
+      const executeUpload = async (file) => {
+        setUploadBusy(true);
+        setSyncStatus(`Uploading ${file.name}…`);
+        if (file.size > CHUNKED_UPLOAD_THRESHOLD_BYTES && hasBackend()) {
+          setProgressUi(true, 1, `Preparing ${file.name}…`);
+        }
+        try {
+          const result = await uploadAdminMediaFile(file, kind, ({ percent, label }) => {
+            setProgressUi(true, percent, label);
+            if (label) setSyncStatus(label);
+          });
+          setProgressUi(false);
+          if (textInput) {
+            applyMediaInputValue(textInput, result.url, kind, file.name);
+            textInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          if (previewEl) {
+            previewEl.innerHTML = renderMediaPreviewInner(result.url, kind);
+          }
+          if (result.matchedRepoFile) {
+            setSyncStatus('Matched repository media');
+            toast(`Matched existing repository file (${result.url}). Click Save to keep.`);
+          } else if (result.uploadedToServer) {
+            setSyncStatus('Media uploaded');
+            toast(`Uploaded ${file.name} (${result.url}).`);
+          } else if (result.serverFallback) {
+            setSyncStatus('Attached inline (fallback)');
+            toast(
+              `Server storage was unavailable, so ${file.name} was compressed and attached inline. Click Save to keep.`,
+              'info'
+            );
+          } else {
+            setSyncStatus('Media attached inline');
+            toast(`Attached ${file.name} inline. Click Save to keep.`);
+          }
+        } catch (err) {
+          setProgressUi(false);
+          setSyncStatus('Upload error');
+          const errMsg = err instanceof Error ? err.message : 'Could not attach media file.';
+          toast(errMsg, 'error');
+          if (previewEl && err && (err.code === 'STATIC_LARGE_MEDIA' || err.suggestedRepoPath)) {
+            const suggested = err.suggestedRepoPath || getSuggestedRepoPath(file.name, kind);
+            const activeWorkbook = getActiveWorkbookFileName();
+            const currentWorkerBase =
+              window.LinguaBackend && typeof window.LinguaBackend.getApiBase === 'function'
+                ? window.LinguaBackend.getApiBase()
+                : '';
+            previewEl.innerHTML = `
+              <div class="admin-media-recovery">
+                <div>
+                  <strong>${escapeHTML(file.name)} (${escapeHTML(err.fileSizeMb || '')} MB)</strong> cannot be saved inside GitHub Pages browser storage (1.5 MB max).
+                  <br/>Option 1: Click <strong>Use Repo Path</strong>, save &amp; export <code>${escapeHTML(
+                    activeWorkbook
+                  )}</code>, then commit <code>${escapeHTML(suggested)}</code> to your repository (works on both GitHub &amp; Cloudflare).
+                  <br/>Option 2: Connect your Cloudflare Worker URL below to upload up to 50 MB directly from GitHub Pages, or paste a hosted <code>https://</code> URL above.
+                </div>
+                <div class="admin-media-recovery-connect">
+                  <input type="url" class="admin-input admin-input-sm" data-worker-connect-input placeholder="https://your-worker.workers.dev" value="${escapeHTML(
+                    currentWorkerBase
+                  )}" />
+                  <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" data-worker-connect-btn>Connect Worker &amp; Upload</button>
+                </div>
+                <div class="admin-media-recovery-actions">
+                  <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-use-repo-path="${escapeHTML(
+                    suggested
+                  )}">Use Repo Path: ${escapeHTML(suggested)}</button>
+                  <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-open-browse>Browse Existing Media</button>
+                </div>
+              </div>
+            `;
+            const useRepoBtn = previewEl.querySelector('[data-use-repo-path]');
+            if (useRepoBtn && textInput) {
+              useRepoBtn.addEventListener('click', () => {
+                const chosenPath = useRepoBtn.getAttribute('data-use-repo-path') || suggested;
+                applyMediaInputValue(textInput, chosenPath, kind);
+                textInput.dispatchEvent(new Event('input', { bubbles: true }));
+                toast(`Set path to ${chosenPath}. Save & commit this file under ${chosenPath} to publish.`);
+              });
+            }
+            const openBrowseBtn = previewEl.querySelector('[data-open-browse]');
+            if (openBrowseBtn && browseBtn) {
+              openBrowseBtn.addEventListener('click', () => browseBtn.click());
+            }
+            const connectInput = previewEl.querySelector('[data-worker-connect-input]');
+            const connectBtn = previewEl.querySelector('[data-worker-connect-btn]');
+            if (connectInput && connectBtn) {
+              connectBtn.addEventListener('click', async () => {
+                const rawUrl = String(connectInput.value || '').trim();
+                if (!rawUrl) {
+                  toast('Enter your Cloudflare Worker https:// URL first.', 'error');
+                  return;
+                }
+                connectBtn.disabled = true;
+                connectBtn.textContent = 'Connecting…';
+                try {
+                  if (window.LinguaBackend && typeof window.LinguaBackend.testConnection === 'function') {
+                    const check = await window.LinguaBackend.testConnection(rawUrl);
+                    if (!check || !check.ok) {
+                      throw new Error((check && check.error) || 'Could not reach Cloudflare Worker.');
+                    }
+                    window.LinguaBackend.setApiBase(rawUrl);
+                    updateBackendBadge();
+                    toast(`Connected to Worker (${check.storage && check.storage.r2 ? 'D1 + R2' : 'D1'}). Uploading ${file.name}…`);
+                    await executeUpload(file);
+                    return;
+                  }
+                } catch (connErr) {
+                  toast(connErr instanceof Error ? connErr.message : 'Worker connection failed.', 'error');
+                } finally {
+                  if (document.body.contains(connectBtn)) {
+                    connectBtn.disabled = false;
+                    connectBtn.textContent = 'Connect Worker & Upload';
+                  }
+                }
+              });
+            }
+          }
+        } finally {
+          setUploadBusy(false);
+          fileInput.value = '';
+        }
+      };
+
       if (fileInput) {
         fileInput.addEventListener('change', async () => {
           const file = fileInput.files && fileInput.files[0];
           if (!file) return;
-          setSyncStatus(`Optimizing & uploading ${file.name}…`);
-          try {
-            const result = await uploadAdminMediaFile(file, kind);
-            if (textInput) {
-              applyMediaInputValue(textInput, result.url, kind, file.name);
-              textInput.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            if (previewEl) {
-              previewEl.innerHTML = renderMediaPreviewInner(result.url, kind);
-            }
-            if (result.matchedRepoFile) {
-              setSyncStatus('Matched repository media');
-              toast(`Matched existing repository file (${result.url}). Click Save to keep.`);
-            } else if (result.uploadedToServer) {
-              setSyncStatus('Media uploaded');
-              toast(`Uploaded ${file.name} to server (${result.url}).`);
-            } else if (result.serverFallback) {
-              setSyncStatus('Attached inline (fallback)');
-              toast(
-                `Server storage was unavailable, so ${file.name} was compressed and attached inline. Click Save to keep.`,
-                'info'
-              );
-            } else {
-              setSyncStatus('Media attached inline');
-              toast(`Attached ${file.name} inline. Click Save to keep.`);
-            }
-          } catch (err) {
-            setSyncStatus('Upload error');
-            const errMsg = err instanceof Error ? err.message : 'Could not attach media file.';
-            toast(errMsg, 'error');
-            if (previewEl && err && (err.code === 'STATIC_LARGE_MEDIA' || err.suggestedRepoPath)) {
-              const suggested = err.suggestedRepoPath || getSuggestedRepoPath(file.name, kind);
-              previewEl.innerHTML = `
-                <div class="admin-media-recovery">
-                  <div>
-                    <strong>${escapeHTML(file.name)} (${escapeHTML(err.fileSizeMb || '')} MB)</strong> cannot be saved inside GitHub Pages browser storage (1.5 MB max).
-                    <br/>Option 1: Click <strong>Use Repo Path</strong>, save &amp; export <code>stories.xlsx</code>, then commit <code>${escapeHTML(
-                      suggested
-                    )}</code> to your repository (works on both GitHub &amp; Cloudflare).
-                    <br/>Option 2: Upload directly using the Cloudflare Worker or AI Studio/Node server, or paste a hosted <code>https://</code> URL above.
-                  </div>
-                  <div class="admin-media-recovery-actions">
-                    <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" data-use-repo-path="${escapeHTML(
-                      suggested
-                    )}">Use Repo Path: ${escapeHTML(suggested)}</button>
-                    <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-open-browse>Browse Existing Media</button>
-                  </div>
-                </div>
-              `;
-              const useRepoBtn = previewEl.querySelector('[data-use-repo-path]');
-              if (useRepoBtn && textInput) {
-                useRepoBtn.addEventListener('click', () => {
-                  const chosenPath = useRepoBtn.getAttribute('data-use-repo-path') || suggested;
-                  applyMediaInputValue(textInput, chosenPath, kind);
-                  textInput.dispatchEvent(new Event('input', { bubbles: true }));
-                  toast(`Set path to ${chosenPath}. Save & commit this file under ${chosenPath} to publish.`);
-                });
-              }
-              const openBrowseBtn = previewEl.querySelector('[data-open-browse]');
-              if (openBrowseBtn && browseBtn) {
-                openBrowseBtn.addEventListener('click', () => browseBtn.click());
-              }
-            }
-          } finally {
-            fileInput.value = '';
-          }
+          await executeUpload(file);
         });
       }
     });
@@ -1370,8 +1641,40 @@
     const featReels = new Set((cfg.featuredReelIds || []).map((x) => x.toLowerCase()));
     const featGames = new Set((cfg.featuredGameIds || []).map((x) => x.toLowerCase()));
 
+    const currentWorkerUrl =
+      (window.LinguaBackend && typeof window.LinguaBackend.getStoredOverride === 'function' && window.LinguaBackend.getStoredOverride()) ||
+      String(cfg.workerApiBaseUrl || '').trim();
+
     viewport.innerHTML = `
       <form id="adminHomeForm">
+        <div class="admin-panel-card">
+          <div class="admin-panel-head">
+            <div>
+              <h2>Cloudflare Worker Media &amp; DB Connection</h2>
+              <p>Connect GitHub Pages Admin to your live Cloudflare Worker URL to upload videos up to 50 MB directly to Cloudflare D1 / R2.</p>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnTestWorkerConnect">Test &amp; Connect</button>
+              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnClearWorkerConnect">Disconnect</button>
+            </div>
+          </div>
+          <div class="admin-field">
+            <label for="cfgWorkerApiBaseUrl">Cloudflare Worker URL (Optional for GitHub Pages)</label>
+            <input type="url" class="admin-input" id="cfgWorkerApiBaseUrl" value="${escapeHTML(
+              currentWorkerUrl
+            )}" placeholder="https://your-worker-name.your-subdomain.workers.dev" />
+          </div>
+          <div id="cfgWorkerStatusText" style="margin-top:8px; font-size:0.82rem; color:#64748b; font-weight:600;">
+            ${
+              currentWorkerUrl
+                ? `Configured: ${escapeHTML(currentWorkerUrl)}`
+                : hasBackend()
+                ? 'Using same-origin server backend (up to 50 MB chunked uploads enabled).'
+                : 'Not connected — uploads on GitHub Pages are limited to 1.5 MB browser storage.'
+            }
+          </div>
+        </div>
+
         <div class="admin-panel-card">
           <div class="admin-panel-head">
             <div>
@@ -1778,6 +2081,56 @@
       };
     }
 
+    const workerInput = document.getElementById('cfgWorkerApiBaseUrl');
+    const workerStatusEl = document.getElementById('cfgWorkerStatusText');
+    const testWorkerBtn = document.getElementById('btnTestWorkerConnect');
+    const clearWorkerBtn = document.getElementById('btnClearWorkerConnect');
+
+    if (testWorkerBtn && workerInput) {
+      testWorkerBtn.onclick = async () => {
+        const candidate = String(workerInput.value || '').trim();
+        testWorkerBtn.disabled = true;
+        testWorkerBtn.textContent = 'Testing…';
+        try {
+          const check = await window.LinguaBackend.testConnection(candidate);
+          if (!check || !check.ok) {
+            throw new Error((check && check.error) || 'Worker unreachable.');
+          }
+          if (candidate) {
+            window.LinguaBackend.setApiBase(candidate);
+          }
+          updateBackendBadge();
+          const modeTxt = check.storage && check.storage.r2 ? 'D1 + R2' : 'D1';
+          const limitMb = Math.round((Number(check.maxUploadBytes) || 50 * 1024 * 1024) / (1024 * 1024));
+          if (workerStatusEl) {
+            workerStatusEl.textContent = `Connected: ${check.url || 'same-origin'} (${modeTxt}, max ${limitMb} MB)`;
+          }
+          toast(`Connected to Cloudflare Worker (${modeTxt}, up to ${limitMb} MB uploads).`);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Worker connection failed.';
+          if (workerStatusEl) workerStatusEl.textContent = `Connection failed: ${msg}`;
+          toast(msg, 'error');
+        } finally {
+          testWorkerBtn.disabled = false;
+          testWorkerBtn.textContent = 'Test & Connect';
+        }
+      };
+    }
+
+    if (clearWorkerBtn && workerInput) {
+      clearWorkerBtn.onclick = () => {
+        workerInput.value = '';
+        if (window.LinguaBackend && typeof window.LinguaBackend.clearApiBase === 'function') {
+          window.LinguaBackend.clearApiBase();
+        }
+        updateBackendBadge();
+        if (workerStatusEl) {
+          workerStatusEl.textContent = 'Disconnected remote Worker URL.';
+        }
+        toast('Disconnected remote Worker URL.');
+      };
+    }
+
     const form = document.getElementById('adminHomeForm');
     form.onsubmit = async (e) => {
       e.preventDefault();
@@ -1799,8 +2152,24 @@
       const featuredStoryIds = Array.from(form.querySelectorAll('input[name="featStory"]:checked')).map((c) => c.value);
       const featuredReelIds = Array.from(form.querySelectorAll('input[name="featReel"]:checked')).map((c) => c.value);
       const featuredGameIds = Array.from(form.querySelectorAll('input[name="featGame"]:checked')).map((c) => c.value);
+      const workerApiBaseUrl = val('cfgWorkerApiBaseUrl').replace(/\/+$/, '');
+
+      try {
+        if (window.LinguaBackend) {
+          if (workerApiBaseUrl) {
+            window.LinguaBackend.setApiBase(workerApiBaseUrl);
+          } else {
+            window.LinguaBackend.clearApiBase();
+          }
+          updateBackendBadge();
+        }
+      } catch (urlErr) {
+        toast(urlErr instanceof Error ? urlErr.message : 'Invalid Worker URL.', 'error');
+        return;
+      }
 
       const nextPayload = {
+        workerApiBaseUrl,
         siteLogoUrl: getMediaInputValue(document.getElementById('cfgSiteLogoUrl')),
         courses: coursesList,
         heroEyebrow: val('cfgHeroEyebrow'),

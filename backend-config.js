@@ -39,23 +39,66 @@
     return host.endsWith('.github.io') || host === 'github.io' || proto === 'file:';
   }
 
+  var SITE_WORKER_BASE = '';
+
+  function setSiteWorkerBase(rawUrl) {
+    var clean = normalizeBaseUrl(rawUrl);
+    if (clean && isValidHttpUrl(clean) && !isMixedContentUrl(clean)) {
+      SITE_WORKER_BASE = clean;
+    } else if (!clean) {
+      SITE_WORKER_BASE = '';
+    }
+    return SITE_WORKER_BASE;
+  }
+
   function getStoredOverride() {
+    try {
+      if (!global.localStorage) return '';
+      var raw = String(global.localStorage.getItem(STORAGE_KEY) || '').trim();
+      var clean = normalizeBaseUrl(raw);
+      if (clean && isValidHttpUrl(clean) && !isMixedContentUrl(clean)) {
+        return clean;
+      }
+    } catch (_) {}
     return '';
   }
 
   function getApiBase() {
-    return '';
+    return getStoredOverride() || SITE_WORKER_BASE || normalizeBaseUrl(DEFAULT_PRODUCTION_BACKEND_URL) || '';
   }
 
   function hasBackend() {
-    return false;
+    if (!isStaticGithubHost()) return true;
+    return Boolean(getApiBase());
   }
 
-  function setApiBase() {
-    return '';
+  function setApiBase(rawUrl) {
+    var clean = normalizeBaseUrl(rawUrl);
+    if (!clean) {
+      clearApiBase();
+      return false;
+    }
+    if (!isValidHttpUrl(clean)) {
+      throw new Error('Enter a valid Worker URL starting with https:// (or http://localhost:...).');
+    }
+    if (isMixedContentUrl(clean)) {
+      throw new Error('HTTPS GitHub Pages requires an https:// Cloudflare Worker URL.');
+    }
+    try {
+      if (global.localStorage) {
+        global.localStorage.setItem(STORAGE_KEY, clean);
+      }
+    } catch (_) {}
+    return true;
   }
 
   function clearApiBase() {
+    SITE_WORKER_BASE = '';
+    try {
+      if (global.localStorage) {
+        global.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (_) {}
     return '';
   }
 
@@ -63,7 +106,9 @@
     var raw = String(path || '').trim();
     if (!raw) return '';
     if (/^https?:\/\//i.test(raw)) return raw;
-    return raw.charAt(0) === '/' ? raw : '/' + raw;
+    var rel = raw.charAt(0) === '/' ? raw : '/' + raw;
+    var base = getApiBase();
+    return base ? base + rel : rel;
   }
 
   function assetUrl(path) {
@@ -71,17 +116,54 @@
     if (!trimmed) return trimmed;
     if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
     var cleaned = trimmed.replace(/\\/g, '/').replace(/^\.\//, '');
+    if (/^\/?api\/media\//i.test(cleaned)) {
+      return apiUrl('/' + cleaned.replace(/^\/+/, ''));
+    }
     if (cleaned.charAt(0) === '/' && /^\/(assets|public)\//i.test(cleaned)) {
       cleaned = cleaned.slice(1);
     }
     return cleaned;
   }
 
-  async function testConnection() {
-    return {
-      ok: false,
-      error: 'JiedeEdu is configured for 100% static GitHub Pages mode using Excel workbooks.'
-    };
+  async function testConnection(candidateUrl) {
+    var base = candidateUrl ? normalizeBaseUrl(candidateUrl) : getApiBase();
+    if (!base && isStaticGithubHost()) {
+      return {
+        ok: false,
+        error: 'Enter your Cloudflare Worker https:// URL to upload videos directly from GitHub Pages.'
+      };
+    }
+    if (candidateUrl && !isValidHttpUrl(base)) {
+      return { ok: false, error: 'Enter a valid https:// Cloudflare Worker URL.' };
+    }
+    if (candidateUrl && isMixedContentUrl(base)) {
+      return { ok: false, error: 'HTTPS pages require an https:// Worker URL.' };
+    }
+    var endpoint = (base ? base : '') + '/api/database/status?t=' + Date.now();
+    try {
+      var res = await fetch(endpoint, { cache: 'no-store' });
+      var data = await res.json().catch(function () {
+        return null;
+      });
+      if (!res.ok || !data || !data.success) {
+        return {
+          ok: false,
+          error: (data && data.error) || 'Worker health check returned HTTP ' + res.status
+        };
+      }
+      return {
+        ok: true,
+        url: base || '',
+        database: data.database || 'edu-hub-db',
+        maxUploadBytes: Number(data.maxUploadBytes) || 50 * 1024 * 1024,
+        storage: data.storage || { d1: true, r2: false }
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err && err.message ? err.message : 'Could not reach the Cloudflare Worker URL.'
+      };
+    }
   }
 
   global.LinguaBackend = {
@@ -90,6 +172,7 @@
     isStaticGithubHost: isStaticGithubHost,
     isValidHttpUrl: isValidHttpUrl,
     isMixedContentUrl: isMixedContentUrl,
+    setSiteWorkerBase: setSiteWorkerBase,
     getApiBase: getApiBase,
     getStoredOverride: getStoredOverride,
     hasBackend: hasBackend,
@@ -545,11 +628,12 @@
   }
 
   async function autoSyncToServerIfPossible(domain, sheets, forceFlag) {
+    if (!hasBackend()) return;
     try {
       var token = await getAuthBearerToken();
       var headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = 'Bearer ' + token;
-      var syncEndpoint = forceFlag ? '/api/database/sync?force=1' : '/api/database/sync';
+      var syncEndpoint = apiUrl(forceFlag ? '/api/database/sync?force=1' : '/api/database/sync');
       await fetch(syncEndpoint, {
         method: 'POST',
         headers: headers,
@@ -563,14 +647,14 @@
     if (!meta) throw new Error('Unknown content domain: ' + domain);
     var normalized = normalizeSheetsForDomain(domain, sheets);
 
-    if (isStaticGithubHost()) {
+    if (!hasBackend()) {
       return {
         syncedToServer: false,
         syncReason: 'static-host',
         error:
-          'Saved to your browser draft on GitHub Pages. Click "Export ' +
+          'Saved to your browser draft on GitHub Pages. Connect a Cloudflare Worker URL or export ' +
           meta.fileName +
-          '" and commit the file (plus any new assets/) to publish for all visitors on GitHub & Cloudflare.'
+          ' and commit the file (plus any new assets/) to publish for all visitors.'
       };
     }
 
@@ -580,7 +664,7 @@
     // 1. Try Admin API endpoint with auth token
     if (token) {
       try {
-        var res = await fetch('/api/admin/workbook/' + encodeURIComponent(domain), {
+        var res = await fetch(apiUrl('/api/admin/workbook/' + encodeURIComponent(domain)), {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -632,7 +716,7 @@
 
     // 2. Direct database sync endpoint (supported by Cloudflare Worker and Node server)
     try {
-      var syncRes = await fetch('/api/database/sync', {
+      var syncRes = await fetch(apiUrl('/api/database/sync'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -677,10 +761,11 @@
     var meta = WORKBOOK_META[domain];
     if (!meta) throw new Error('Unknown content domain: ' + domain);
 
-    // Fetch D1 Database bundle and static Excel/JSON workbook in parallel
+    // Fetch D1 Database bundle and static Excel/JSON workbook in parallel (only query D1 when backend exists)
     var d1Promise = (async function () {
+      if (!hasBackend()) return null;
       try {
-        var d1Url = '/api/database/bundle?domain=' + encodeURIComponent(domain) + '&t=' + Date.now();
+        var d1Url = apiUrl('/api/database/bundle?domain=' + encodeURIComponent(domain) + '&t=' + Date.now());
         var d1Res = await fetch(d1Url, { cache: 'no-store' });
         if (d1Res.ok) {
           var d1Data = await d1Res.json();
@@ -773,7 +858,7 @@
     var preferDraft = Boolean(options && options.preferDraft);
     var draft = !skipDraft ? readDraft(domain) : null;
 
-    if (isStaticGithubHost() && draft && draft.sheets) {
+    if (!hasBackend() && draft && draft.sheets) {
       return {
         sheets: draft.sheets,
         source: 'local-draft',
@@ -1042,7 +1127,7 @@
 
     var repoSheets = await fetchStaticRepoSheets(domain);
 
-    if (isStaticGithubHost()) {
+    if (!hasBackend()) {
       dispatchContentChange(domain, repoSheets);
       return {
         success: true,
@@ -1056,7 +1141,7 @@
     var headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = 'Bearer ' + token;
 
-    var forceRes = await fetch('/api/database/force-sync', {
+    var forceRes = await fetch(apiUrl('/api/database/force-sync'), {
       method: 'POST',
       headers: headers,
       body: JSON.stringify({ domain: domain, sheets: repoSheets, force: true })

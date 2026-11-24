@@ -242,10 +242,16 @@ var D1_TABLE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS stories_vocabulary (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, audio TEXT)`,
   `CREATE TABLE IF NOT EXISTS stories_exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
   `CREATE TABLE IF NOT EXISTS reels_videos (id TEXT PRIMARY KEY, type TEXT, holiday_id TEXT, title TEXT, video_path TEXT, thumbnail_path TEXT, duration_sec INTEGER, status TEXT, text_cn TEXT, text_pinyin TEXT, text_en TEXT, text_my TEXT)`,
-  `CREATE TABLE IF NOT EXISTS media_files (id TEXT PRIMARY KEY, filename TEXT, mime_type TEXT, media_type TEXT, size_bytes INTEGER, chunk_size INTEGER, chunk_count INTEGER, created_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS media_files (id TEXT PRIMARY KEY, filename TEXT, mime_type TEXT, media_type TEXT, size_bytes INTEGER, chunk_size INTEGER, chunk_count INTEGER, storage_mode TEXT DEFAULT 'd1', object_key TEXT DEFAULT '', upload_id TEXT DEFAULT '', status TEXT DEFAULT 'ready', created_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS media_chunks (media_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, data_b64 TEXT NOT NULL, PRIMARY KEY (media_id, chunk_index))`,
   `CREATE TABLE IF NOT EXISTS site_config (id TEXT PRIMARY KEY, config_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS d1_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`
+];
+var MEDIA_FILES_UPGRADE_COLUMNS = [
+  `ALTER TABLE media_files ADD COLUMN storage_mode TEXT DEFAULT 'd1'`,
+  `ALTER TABLE media_files ADD COLUMN object_key TEXT DEFAULT ''`,
+  `ALTER TABLE media_files ADD COLUMN upload_id TEXT DEFAULT ''`,
+  `ALTER TABLE media_files ADD COLUMN status TEXT DEFAULT 'ready'`
 ];
 var d1SchemaReady = false;
 var d1SchemaPromise = null;
@@ -257,13 +263,18 @@ async function ensureD1Tables(db, force = false) {
     try {
       const stmts = D1_TABLE_STATEMENTS.map((sql) => db.prepare(sql));
       await db.batch(stmts);
-      d1SchemaReady = true;
-    } catch (batchErr) {
+    } catch (_) {
       for (const sql of D1_TABLE_STATEMENTS) {
         await db.prepare(sql).run();
       }
-      d1SchemaReady = true;
     }
+    for (const alterSql of MEDIA_FILES_UPGRADE_COLUMNS) {
+      try {
+        await db.prepare(alterSql).run();
+      } catch (_) {
+      }
+    }
+    d1SchemaReady = true;
   };
   d1SchemaPromise = runInit().catch((err) => {
     d1SchemaReady = false;
@@ -326,13 +337,15 @@ async function setD1Meta(db, key, value) {
   }
 }
 var WORKER_MEDIA_CHUNK_BYTES = 256 * 1024;
-var MAX_WORKER_UPLOAD_BYTES = 25 * 1024 * 1024;
+var R2_MULTIPART_CHUNK_BYTES = 5 * 1024 * 1024;
+var MAX_WORKER_UPLOAD_BYTES = 50 * 1024 * 1024;
+var MAX_SINGLE_SHOT_UPLOAD_BYTES = 4 * 1024 * 1024;
 function uint8ToBase64(bytes) {
   const parts = [];
-  const step = 8192;
+  const step = 32768;
   for (let i = 0; i < bytes.length; i += step) {
     const slice = bytes.subarray(i, Math.min(i + step, bytes.length));
-    parts.push(String.fromCharCode.apply(null, Array.from(slice)));
+    parts.push(String.fromCharCode(...slice));
   }
   return btoa(parts.join(""));
 }
@@ -360,6 +373,219 @@ function inferMimeFromFilename(filename, fallbackType) {
   if (lower.endsWith(".svg")) return "image/svg+xml";
   return "application/octet-stream";
 }
+function sanitizeUploadFileMeta(rawNameInput, fallbackMime) {
+  const rawName = String(rawNameInput || "media").trim();
+  const dotIdx = rawName.lastIndexOf(".");
+  const ext = dotIdx >= 0 ? rawName.slice(dotIdx).toLowerCase().replace(/[^a-z0-9.]/g, "") : "";
+  const baseSlug = (dotIdx >= 0 ? rawName.slice(0, dotIdx) : rawName).toLowerCase().replace(/[^a-z0-9_\-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "media";
+  const safeFilename = `${baseSlug}${ext}`;
+  const mediaType = ext === ".mp4" || ext === ".webm" || ext === ".mov" || ext === ".m4v" ? "videos" : ext === ".mp3" || ext === ".wav" || ext === ".ogg" || ext === ".m4a" ? "audio" : "images";
+  const mimeType = inferMimeFromFilename(safeFilename, fallbackMime);
+  const rand = Math.random().toString(36).slice(2, 6);
+  const mediaId = `${baseSlug}-${Date.now().toString(36)}-${rand}`;
+  return { safeFilename, mediaType, mimeType, mediaId };
+}
+async function handleWorkerChunkUploadInit(request, env) {
+  if (!env.DB) {
+    return fail("Cloudflare D1 database binding (DB) is not configured.", 500);
+  }
+  const body = await request.json().catch(() => ({}));
+  const filename = String(body?.filename || "").trim();
+  const size = Number(body?.size) || 0;
+  const fallbackMime = String(body?.mimeType || "").trim();
+  if (!filename || size <= 0) {
+    return fail("Valid filename and file size are required.", 400);
+  }
+  if (size > MAX_WORKER_UPLOAD_BYTES) {
+    const mb = (size / (1024 * 1024)).toFixed(2);
+    return fail(
+      `File "${filename}" (${mb} MB) exceeds the 50 MB Cloudflare upload limit. Compress the video under 50 MB or paste a hosted https:// URL.`,
+      413
+    );
+  }
+  const { safeFilename, mediaType, mimeType, mediaId } = sanitizeUploadFileMeta(filename, fallbackMime);
+  const useR2 = Boolean(env.MEDIA_BUCKET);
+  const storageMode = useR2 ? "r2" : "d1";
+  const chunkSize = useR2 ? R2_MULTIPART_CHUNK_BYTES : WORKER_MEDIA_CHUNK_BYTES;
+  const chunkCount = Math.max(1, Math.ceil(size / chunkSize));
+  const objectKey = useR2 ? `media/${mediaId}/${safeFilename}` : "";
+  let uploadId = "";
+  if (useR2 && env.MEDIA_BUCKET && chunkCount > 1) {
+    const multipart = await env.MEDIA_BUCKET.createMultipartUpload(objectKey, {
+      httpMetadata: { contentType: mimeType }
+    });
+    uploadId = multipart.uploadId;
+  }
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  await withD1TableRepair(
+    env.DB,
+    () => env.DB.prepare(
+      `INSERT INTO media_files (id, filename, mime_type, media_type, size_bytes, chunk_size, chunk_count, storage_mode, object_key, upload_id, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?)`
+    ).bind(mediaId, safeFilename, mimeType, mediaType, size, chunkSize, chunkCount, storageMode, objectKey, uploadId, nowIso).run()
+  );
+  return json({
+    success: true,
+    mediaId,
+    filename: safeFilename,
+    mediaType,
+    mimeType,
+    chunkSize,
+    chunkCount,
+    maxUploadBytes: MAX_WORKER_UPLOAD_BYTES,
+    storage: storageMode === "r2" ? "cloudflare-r2" : "cloudflare-d1"
+  });
+}
+async function handleWorkerChunkUploadPart(request, env, url) {
+  if (!env.DB) {
+    return fail("Cloudflare D1 database binding (DB) is not configured.", 500);
+  }
+  const mediaId = String(url.searchParams.get("mediaId") || "").trim();
+  const chunkIndex = Number(url.searchParams.get("index"));
+  if (!mediaId || !Number.isInteger(chunkIndex) || chunkIndex < 0) {
+    return fail("Valid mediaId and chunk index are required.", 400);
+  }
+  const meta = await withD1TableRepair(
+    env.DB,
+    () => one(
+      env.DB,
+      `SELECT id, mime_type, chunk_count, storage_mode, object_key, upload_id FROM media_files WHERE id = ?`,
+      mediaId
+    )
+  );
+  if (!meta) {
+    return fail("Upload session not found or expired.", 404);
+  }
+  if (chunkIndex >= (Number(meta.chunk_count) || 0)) {
+    return fail(`Chunk index ${chunkIndex} is out of bounds.`, 400);
+  }
+  if (meta.storage_mode === "r2" && env.MEDIA_BUCKET && meta.object_key) {
+    const ab2 = await request.arrayBuffer();
+    if (!ab2.byteLength) {
+      return fail("Empty chunk payload.", 400);
+    }
+    let partRecord;
+    if ((Number(meta.chunk_count) || 1) <= 1) {
+      const putRes = await env.MEDIA_BUCKET.put(meta.object_key, ab2, {
+        httpMetadata: { contentType: meta.mime_type || "application/octet-stream" }
+      });
+      partRecord = { single: true, etag: putRes?.etag || "single" };
+    } else {
+      const multipart = env.MEDIA_BUCKET.resumeMultipartUpload(meta.object_key, meta.upload_id);
+      const uploadedPart = await multipart.uploadPart(chunkIndex + 1, ab2);
+      partRecord = { partNumber: uploadedPart.partNumber || chunkIndex + 1, etag: uploadedPart.etag };
+    }
+    await withD1TableRepair(
+      env.DB,
+      () => env.DB.prepare(`INSERT OR REPLACE INTO media_chunks (media_id, chunk_index, data_b64) VALUES (?, ?, ?)`).bind(mediaId, chunkIndex, JSON.stringify(partRecord)).run()
+    );
+    return json({ success: true, mediaId, index: chunkIndex, receivedBytes: ab2.byteLength, storage: "cloudflare-r2" });
+  }
+  const ab = await request.arrayBuffer();
+  if (!ab.byteLength) {
+    return fail("Empty chunk payload.", 400);
+  }
+  if (ab.byteLength > 1024 * 1024) {
+    return fail("D1 chunk size exceeds 1 MB limit.", 413);
+  }
+  const b64 = uint8ToBase64(new Uint8Array(ab));
+  await withD1TableRepair(
+    env.DB,
+    () => env.DB.prepare(`INSERT OR REPLACE INTO media_chunks (media_id, chunk_index, data_b64) VALUES (?, ?, ?)`).bind(mediaId, chunkIndex, b64).run()
+  );
+  return json({ success: true, mediaId, index: chunkIndex, receivedBytes: ab.byteLength, storage: "cloudflare-d1" });
+}
+async function handleWorkerChunkUploadComplete(request, env) {
+  if (!env.DB) {
+    return fail("Cloudflare D1 database binding (DB) is not configured.", 500);
+  }
+  const body = await request.json().catch(() => ({}));
+  const mediaId = String(body?.mediaId || "").trim();
+  if (!mediaId) {
+    return fail("mediaId is required.", 400);
+  }
+  const meta = await withD1TableRepair(
+    env.DB,
+    () => one(
+      env.DB,
+      `SELECT id, filename, media_type, size_bytes, chunk_count, storage_mode, object_key, upload_id FROM media_files WHERE id = ?`,
+      mediaId
+    )
+  );
+  if (!meta) {
+    return fail("Upload session not found.", 404);
+  }
+  const expectedCount = Number(meta.chunk_count) || 0;
+  const rows = await withD1TableRepair(
+    env.DB,
+    () => all(
+      env.DB,
+      `SELECT chunk_index, data_b64 FROM media_chunks WHERE media_id = ? ORDER BY chunk_index ASC`,
+      mediaId
+    )
+  );
+  const receivedSet = new Set(rows.map((r) => Number(r.chunk_index)));
+  const missing = [];
+  for (let i = 0; i < expectedCount; i++) {
+    if (!receivedSet.has(i)) missing.push(i);
+  }
+  if (missing.length > 0) {
+    return fail(`Upload incomplete: missing ${missing.length} chunk(s) (starting at #${missing[0]}).`, 400);
+  }
+  if (meta.storage_mode === "r2" && env.MEDIA_BUCKET && meta.object_key) {
+    if (expectedCount > 1) {
+      const parts = rows.map((r) => {
+        const parsed = JSON.parse(r.data_b64 || "{}");
+        return {
+          partNumber: Number(parsed.partNumber || Number(r.chunk_index) + 1),
+          etag: String(parsed.etag || "")
+        };
+      });
+      const multipart = env.MEDIA_BUCKET.resumeMultipartUpload(meta.object_key, meta.upload_id);
+      await multipart.complete(parts);
+    }
+    await env.DB.prepare(`DELETE FROM media_chunks WHERE media_id = ?`).bind(mediaId).run().catch(() => {
+    });
+  }
+  await withD1TableRepair(
+    env.DB,
+    () => env.DB.prepare(`UPDATE media_files SET status = 'ready' WHERE id = ?`).bind(mediaId).run()
+  );
+  const publicUrl = `/api/media/${encodeURIComponent(mediaId)}/${encodeURIComponent(meta.filename)}`;
+  return json({
+    success: true,
+    url: publicUrl,
+    mediaType: meta.media_type,
+    filename: meta.filename,
+    size: Number(meta.size_bytes) || 0,
+    storage: meta.storage_mode === "r2" ? "cloudflare-r2" : "cloudflare-d1"
+  });
+}
+async function handleWorkerChunkUploadAbort(request, env, url) {
+  if (!env.DB) return json({ success: true });
+  const body = await request.json().catch(() => ({}));
+  const mediaId = String(body?.mediaId || url.searchParams.get("mediaId") || "").trim();
+  if (!mediaId) return json({ success: true });
+  const meta = await one(
+    env.DB,
+    `SELECT storage_mode, object_key, upload_id FROM media_files WHERE id = ?`,
+    mediaId
+  );
+  if (meta && meta.storage_mode === "r2" && env.MEDIA_BUCKET && meta.object_key) {
+    if (meta.upload_id) {
+      await env.MEDIA_BUCKET.resumeMultipartUpload(meta.object_key, meta.upload_id).abort().catch(() => {
+      });
+    } else {
+      await env.MEDIA_BUCKET.delete(meta.object_key).catch(() => {
+      });
+    }
+  }
+  await env.DB.prepare(`DELETE FROM media_chunks WHERE media_id = ?`).bind(mediaId).run().catch(() => {
+  });
+  await env.DB.prepare(`DELETE FROM media_files WHERE id = ?`).bind(mediaId).run().catch(() => {
+  });
+  return json({ success: true });
+}
 async function handleWorkerMediaUpload(request, env) {
   if (!env.DB) {
     return fail("Cloudflare D1 database binding (DB) is not configured.", 500);
@@ -369,31 +595,48 @@ async function handleWorkerMediaUpload(request, env) {
   if (!file) {
     return fail("No media file attached.", 400);
   }
-  if (file.size > MAX_WORKER_UPLOAD_BYTES) {
+  if (file.size > MAX_SINGLE_SHOT_UPLOAD_BYTES) {
     const mb = (file.size / (1024 * 1024)).toFixed(2);
     return fail(
-      `File "${file.name}" (${mb} MB) exceeds the 25 MB Cloudflare D1 upload limit. Compress the video under 25 MB, commit it to assets/video/, or paste a hosted https:// video URL.`,
+      `File "${file.name}" (${mb} MB) must use chunked upload (/api/admin/upload-media/init).`,
       413
     );
   }
-  const rawName = String(file.name || "media").trim();
-  const dotIdx = rawName.lastIndexOf(".");
-  const ext = dotIdx >= 0 ? rawName.slice(dotIdx).toLowerCase().replace(/[^a-z0-9.]/g, "") : "";
-  const baseSlug = (dotIdx >= 0 ? rawName.slice(0, dotIdx) : rawName).toLowerCase().replace(/[^a-z0-9_\-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "media";
-  const safeFilename = `${baseSlug}${ext}`;
-  const mediaType = ext === ".mp4" || ext === ".webm" || ext === ".mov" || ext === ".m4v" ? "videos" : ext === ".mp3" || ext === ".wav" || ext === ".ogg" || ext === ".m4a" ? "audio" : "images";
-  const mimeType = inferMimeFromFilename(safeFilename, file.type || "");
-  const rand = Math.random().toString(36).slice(2, 6);
-  const mediaId = `${baseSlug}-${Date.now().toString(36)}-${rand}`;
+  const { safeFilename, mediaType, mimeType, mediaId } = sanitizeUploadFileMeta(
+    file.name || "media",
+    file.type || ""
+  );
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  if (env.MEDIA_BUCKET) {
+    const objectKey = `media/${mediaId}/${safeFilename}`;
+    await env.MEDIA_BUCKET.put(objectKey, bytes, {
+      httpMetadata: { contentType: mimeType }
+    });
+    await withD1TableRepair(
+      env.DB,
+      () => env.DB.prepare(
+        `INSERT INTO media_files (id, filename, mime_type, media_type, size_bytes, chunk_size, chunk_count, storage_mode, object_key, upload_id, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, 'r2', ?, '', 'ready', ?)`
+      ).bind(mediaId, safeFilename, mimeType, mediaType, bytes.byteLength, bytes.byteLength, objectKey, nowIso).run()
+    );
+    const publicUrl2 = `/api/media/${encodeURIComponent(mediaId)}/${encodeURIComponent(safeFilename)}`;
+    return json({
+      success: true,
+      url: publicUrl2,
+      mediaType,
+      filename: safeFilename,
+      size: bytes.byteLength,
+      storage: "cloudflare-r2"
+    });
+  }
   const chunkSize = WORKER_MEDIA_CHUNK_BYTES;
   const chunkCount = Math.max(1, Math.ceil(bytes.byteLength / chunkSize));
-  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   await withD1TableRepair(env.DB, async () => {
     await env.DB.prepare(
-      `INSERT INTO media_files (id, filename, mime_type, media_type, size_bytes, chunk_size, chunk_count, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO media_files (id, filename, mime_type, media_type, size_bytes, chunk_size, chunk_count, storage_mode, object_key, upload_id, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'd1', '', '', 'ready', ?)`
     ).bind(mediaId, safeFilename, mimeType, mediaType, bytes.byteLength, chunkSize, chunkCount, nowIso).run();
     try {
       const chunkStmts = [];
@@ -435,11 +678,11 @@ async function serveWorkerMedia(request, env, mediaId) {
     env.DB,
     () => one(
       env.DB,
-      `SELECT id, filename, mime_type, size_bytes, chunk_size, chunk_count FROM media_files WHERE id = ?`,
+      `SELECT id, filename, mime_type, size_bytes, chunk_size, chunk_count, storage_mode, object_key, status FROM media_files WHERE id = ?`,
       mediaId
     )
   );
-  if (!meta) {
+  if (!meta || meta.status && meta.status !== "ready") {
     return fail("Media file not found.", 404);
   }
   const totalSize = Number(meta.size_bytes) || 0;
@@ -458,6 +701,51 @@ async function serveWorkerMedia(request, env, mediaId) {
     });
   }
   const rangeHeader = request.headers.get("range");
+  if (meta.storage_mode === "r2" && env.MEDIA_BUCKET && meta.object_key) {
+    if (rangeHeader && totalSize > 0) {
+      const match = rangeHeader.match(/bytes=(\d*)-(\d*)/i);
+      if (!match) {
+        return new Response(null, {
+          status: 416,
+          headers: { ...CORS_HEADERS, "content-range": `bytes */${totalSize}` }
+        });
+      }
+      let start = match[1] ? parseInt(match[1], 10) : 0;
+      let end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+      if (!match[1] && match[2]) {
+        const suffixLen = parseInt(match[2], 10);
+        start = Math.max(0, totalSize - suffixLen);
+        end = totalSize - 1;
+      }
+      end = Math.min(end, totalSize - 1);
+      if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || start > end || start >= totalSize) {
+        return new Response(null, {
+          status: 416,
+          headers: { ...CORS_HEADERS, "content-range": `bytes */${totalSize}` }
+        });
+      }
+      const length = end - start + 1;
+      const obj2 = await env.MEDIA_BUCKET.get(meta.object_key, { range: { offset: start, length } });
+      if (!obj2) return fail("Media object not found in R2.", 404);
+      return new Response(obj2.body, {
+        status: 206,
+        headers: {
+          ...baseHeaders,
+          "content-length": String(length),
+          "content-range": `bytes ${start}-${end}/${totalSize}`
+        }
+      });
+    }
+    const obj = await env.MEDIA_BUCKET.get(meta.object_key);
+    if (!obj) return fail("Media object not found in R2.", 404);
+    return new Response(obj.body, {
+      status: 200,
+      headers: {
+        ...baseHeaders,
+        "content-length": String(obj.size || totalSize)
+      }
+    });
+  }
   if (rangeHeader && totalSize > 0) {
     const match = rangeHeader.match(/bytes=(\d*)-(\d*)/i);
     if (!match) {
@@ -1397,7 +1685,38 @@ async function handleApi(request, env, url) {
   if (method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
-  if (method === "POST" || method === "PUT") {
+  if (method === "POST" || method === "PUT" || method === "DELETE") {
+    if (path === "/api/admin/upload-media/chunk") {
+      try {
+        return await handleWorkerChunkUploadPart(request, env, url);
+      } catch (err) {
+        return fail(err?.message || "Chunk upload failed.", 500);
+      }
+    }
+    if (path === "/api/admin/upload-media/abort") {
+      try {
+        return await handleWorkerChunkUploadAbort(request, env, url);
+      } catch (err) {
+        return fail(err?.message || "Abort upload failed.", 500);
+      }
+    }
+    if (method === "DELETE") {
+      return fail("Method not allowed for this route", 405);
+    }
+    if (path === "/api/admin/upload-media/init") {
+      try {
+        return await handleWorkerChunkUploadInit(request, env);
+      } catch (err) {
+        return fail(err?.message || "Chunk upload initialization failed.", 500);
+      }
+    }
+    if (path === "/api/admin/upload-media/complete") {
+      try {
+        return await handleWorkerChunkUploadComplete(request, env);
+      } catch (err) {
+        return fail(err?.message || "Chunk upload finalization failed.", 500);
+      }
+    }
     if (path === "/api/database/force-sync") {
       return handleForceDatabaseSync(request, env, url);
     }
@@ -1453,7 +1772,7 @@ async function handleApi(request, env, url) {
       env.DB,
       () => all(
         env.DB,
-        `SELECT id, filename, media_type, size_bytes, created_at FROM media_files ORDER BY created_at DESC LIMIT 100`
+        `SELECT id, filename, media_type, size_bytes, storage_mode, created_at FROM media_files WHERE (status IS NULL OR status = 'ready') ORDER BY created_at DESC LIMIT 100`
       )
     );
     const items = rows.map((r) => ({
@@ -1461,19 +1780,28 @@ async function handleApi(request, env, url) {
       name: r.filename,
       kind: r.media_type === "videos" ? "video" : r.media_type === "audio" ? "audio" : "image",
       size: Number(r.size_bytes) || 0,
-      source: "cloudflare-d1"
+      source: r.storage_mode === "r2" ? "cloudflare-r2" : "cloudflare-d1"
     }));
     return json({ success: true, items });
   }
   if (path === "/api" || path === "/api/health") {
     const row = await one(env.DB, `SELECT COUNT(*) AS c FROM lessons`);
-    return json({ ok: true, status: "healthy", database: "edu-hub-db", lessons: row?.c ?? 0 });
+    return json({
+      ok: true,
+      status: "healthy",
+      database: "edu-hub-db",
+      lessons: row?.c ?? 0,
+      maxUploadBytes: MAX_WORKER_UPLOAD_BYTES,
+      storage: { d1: true, r2: Boolean(env.MEDIA_BUCKET) }
+    });
   }
   if (path === "/api/database/status" || path === "/api/status") {
     return json({
       success: true,
       database: "edu-hub-db",
       status: "connected",
+      maxUploadBytes: MAX_WORKER_UPLOAD_BYTES,
+      storage: { d1: true, r2: Boolean(env.MEDIA_BUCKET) },
       tables: [
         "lessons",
         "exercises",
