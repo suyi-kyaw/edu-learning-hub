@@ -745,21 +745,136 @@
     return out;
   }
 
+  function canvasToBlobAsync(canvas, mime, quality) {
+    return new Promise((resolve) => {
+      try {
+        if (!canvas || typeof canvas.toBlob !== 'function') {
+          resolve(null);
+          return;
+        }
+        canvas.toBlob((blob) => resolve(blob || null), mime, quality);
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
+
+  async function optimizeImageFileForUpload(file) {
+    try {
+      if (!file || typeof document === 'undefined' || typeof Image === 'undefined' || typeof URL === 'undefined') {
+        return file;
+      }
+      const mime = String(file.type || '').toLowerCase();
+      const nameLower = String(file.name || '').toLowerCase();
+      const isSvgOrGif = mime.includes('svg') || mime.includes('gif') || /\.(svg|gif)$/i.test(nameLower);
+      const isRaster = /^image\/(png|jpeg|jpg|webp|bmp)$/i.test(mime) || /\.(png|jpe?g|webp|bmp)$/i.test(nameLower);
+      if (isSvgOrGif || !isRaster || file.size <= 240 * 1024) {
+        return file;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const el = new Image();
+          el.onload = () => resolve(el);
+          el.onerror = () => reject(new Error('Image decode failed'));
+          el.src = objectUrl;
+        });
+
+        const w = img.naturalWidth || img.width || 0;
+        const h = img.naturalHeight || img.height || 0;
+        if (!w || !h) return file;
+
+        const maxDim = 1200;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        const tw = Math.max(1, Math.round(w * scale));
+        const th = Math.max(1, Math.round(h * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = tw;
+        canvas.height = th;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return file;
+        ctx.drawImage(img, 0, 0, tw, th);
+
+        let hasAlpha = false;
+        if (mime.includes('png') || mime.includes('webp') || /\.(png|webp)$/i.test(nameLower)) {
+          try {
+            const pixels = ctx.getImageData(0, 0, tw, th).data;
+            for (let i = 3; i < pixels.length; i += 16) {
+              if (pixels[i] < 250) {
+                hasAlpha = true;
+                break;
+              }
+            }
+          } catch (_) {
+            hasAlpha = true;
+          }
+        }
+
+        let bestBlob = null;
+        if (hasAlpha) {
+          const webpBlob = await canvasToBlobAsync(canvas, 'image/webp', 0.88);
+          if (webpBlob && webpBlob.type === 'image/webp') {
+            bestBlob = webpBlob;
+          }
+          if (!bestBlob || bestBlob.size >= file.size * 0.92) {
+            const pngBlob = await canvasToBlobAsync(canvas, 'image/png');
+            if (pngBlob && (!bestBlob || pngBlob.size < bestBlob.size)) {
+              bestBlob = pngBlob;
+            }
+          }
+        } else {
+          const outMime = mime.includes('webp') ? 'image/webp' : 'image/jpeg';
+          bestBlob = await canvasToBlobAsync(canvas, outMime, 0.86);
+        }
+
+        const maxInlineBytes = 1.5 * 1024 * 1024;
+        const worthReplacing =
+          bestBlob &&
+          bestBlob.size > 0 &&
+          (bestBlob.size < file.size * 0.92 || (file.size > maxInlineBytes && bestBlob.size <= maxInlineBytes));
+        if (!worthReplacing) {
+          return file;
+        }
+
+        const extMap = {
+          'image/webp': '.webp',
+          'image/png': '.png',
+          'image/jpeg': '.jpg'
+        };
+        const nextExt = extMap[bestBlob.type] || '';
+        const baseName = String(file.name || 'image').replace(/\.[^.]+$/, '') || 'image';
+        const nextName = nextExt ? `${baseName}${nextExt}` : file.name;
+        return new File([bestBlob], nextName, { type: bestBlob.type, lastModified: Date.now() });
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    } catch (_) {
+      return file;
+    }
+  }
+
   async function uploadAdminMediaFile(file, kindHint) {
     const store = getContentStore();
+    const maxInlineBytes = store.MAX_INLINE_MEDIA_BYTES || Math.round(1.5 * 1024 * 1024);
+    const isImageUpload =
+      kindHint === 'image' || /^image\//i.test(String(file && file.type ? file.type : ''));
+    const uploadCandidate = isImageUpload ? await optimizeImageFileForUpload(file) : file;
+
     const isStaticHost =
       window.LinguaBackend &&
       typeof window.LinguaBackend.isStaticGithubHost === 'function' &&
       window.LinguaBackend.isStaticGithubHost();
 
     if (isStaticHost) {
-      if (file.size > (store.MAX_INLINE_MEDIA_BYTES || Math.round(1.5 * 1024 * 1024))) {
+      if (uploadCandidate.size > maxInlineBytes) {
         const existingRepoPath = await probeExistingRepoMedia(file, kindHint);
         if (existingRepoPath) {
           return { url: existingRepoPath, uploadedToServer: false, matchedRepoFile: true };
         }
       }
-      const inline = await store.readFileAsInlineMedia(file);
+      const inline = await store.readFileAsInlineMedia(uploadCandidate);
       return { url: inline.url, uploadedToServer: false };
     }
 
@@ -792,44 +907,74 @@
 
     let fallbackAllowed = false;
     let lastError = null;
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch(apiUrl('/api/admin/upload-media'), {
-        method: 'POST',
-        headers: headers,
-        body: formData
-      });
-      const json = await res.json().catch(() => null);
-      if (res.ok && json && json.success && json.url) {
-        const returnedUrl = String(json.url);
-        const isInline = /^data:/i.test(returnedUrl);
-        if (isInline && returnedUrl.length > 2000000) {
-          throw new Error(
-            `File "${file.name}" exceeds the safe browser/database size limit. Commit the video under assets/video/ or paste a hosted https:// URL.`
-          );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const formData = new FormData();
+        formData.append('file', uploadCandidate);
+        const res = await fetch(apiUrl('/api/admin/upload-media'), {
+          method: 'POST',
+          headers: headers,
+          body: formData
+        });
+        const json = await res.json().catch(() => null);
+        if (res.ok && json && json.success && json.url) {
+          const returnedUrl = String(json.url);
+          const isInline = /^data:/i.test(returnedUrl);
+          if (isInline && returnedUrl.length > 2000000) {
+            throw new Error(
+              `File "${file.name}" exceeds the safe browser/database size limit. Commit the video under assets/video/ or paste a hosted https:// URL.`
+            );
+          }
+          return {
+            url: returnedUrl,
+            uploadedToServer: !isInline,
+            optimized: uploadCandidate !== file
+          };
         }
-        return { url: returnedUrl, uploadedToServer: !isInline };
-      }
-      if (res.status === 404 || res.status === 405) {
-        fallbackAllowed = true;
-      }
-      if (json && json.error) {
-        throw new Error(json.error);
-      }
-      if (!res.ok) {
-        throw new Error(`Upload server responded with HTTP ${res.status}`);
-      }
-    } catch (uploadErr) {
-      lastError = uploadErr;
-      if (!fallbackAllowed && uploadErr && uploadErr.name !== 'TypeError') {
-        throw uploadErr;
+
+        const errMsg =
+          (json && json.error) || `Upload server responded with HTTP ${res.status}`;
+        const isTransientOrSchemaErr =
+          res.status >= 500 ||
+          /no such table|sqlite_error|d1_error|database|timeout/i.test(errMsg);
+        if (attempt === 0 && isTransientOrSchemaErr) {
+          await new Promise((r) => setTimeout(r, 250));
+          continue;
+        }
+        if (res.status === 404 || res.status === 405 || res.status >= 500 || isImageUpload) {
+          fallbackAllowed = true;
+        }
+        throw new Error(errMsg);
+      } catch (uploadErr) {
+        lastError = uploadErr;
+        const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr || '');
+        const isTransient =
+          uploadErr?.name === 'TypeError' ||
+          /no such table|sqlite_error|d1_error|database|timeout|http 5\d\d/i.test(msg);
+        if (attempt === 0 && isTransient) {
+          await new Promise((r) => setTimeout(r, 250));
+          continue;
+        }
+        if (uploadErr && uploadErr.name === 'TypeError') {
+          fallbackAllowed = true;
+        }
+        break;
       }
     }
 
-    if (file.size <= (store.MAX_INLINE_MEDIA_BYTES || Math.round(1.5 * 1024 * 1024))) {
-      const inline = await store.readFileAsInlineMedia(file);
-      return { url: inline.url, uploadedToServer: false };
+    if ((fallbackAllowed || isImageUpload) && uploadCandidate.size <= maxInlineBytes) {
+      const inline = await store.readFileAsInlineMedia(uploadCandidate);
+      return {
+        url: inline.url,
+        uploadedToServer: false,
+        serverFallback: Boolean(lastError),
+        optimized: uploadCandidate !== file,
+        fallbackNotice: lastError ? lastError.message : ''
+      };
+    }
+
+    if (!fallbackAllowed && lastError) {
+      throw lastError;
     }
 
     const existingRepoPath = await probeExistingRepoMedia(file, kindHint);
@@ -907,7 +1052,7 @@
         fileInput.addEventListener('change', async () => {
           const file = fileInput.files && fileInput.files[0];
           if (!file) return;
-          setSyncStatus(`Uploading ${file.name}…`);
+          setSyncStatus(`Optimizing & uploading ${file.name}…`);
           try {
             const result = await uploadAdminMediaFile(file, kind);
             if (textInput) {
@@ -923,9 +1068,15 @@
             } else if (result.uploadedToServer) {
               setSyncStatus('Media uploaded');
               toast(`Uploaded ${file.name} to server (${result.url}).`);
+            } else if (result.serverFallback) {
+              setSyncStatus('Attached inline (fallback)');
+              toast(
+                `Server storage was unavailable, so ${file.name} was compressed and attached inline. Click Save to keep.`,
+                'info'
+              );
             } else {
               setSyncStatus('Media attached inline');
-              toast(`Attached ${file.name} inline. Click Save Story to store.`);
+              toast(`Attached ${file.name} inline. Click Save to keep.`);
             }
           } catch (err) {
             setSyncStatus('Upload error');

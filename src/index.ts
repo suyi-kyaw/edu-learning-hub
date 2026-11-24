@@ -32,11 +32,22 @@ function fail(message: string, status = 400): Response {
   return json({ ok: false, success: false, error: message }, status);
 }
 
+function isMissingTableError(err: unknown): boolean {
+  const msg = String((err as any)?.message || err || '').toLowerCase();
+  return msg.includes('no such table') || msg.includes('no such column');
+}
+
 async function one<T>(db: D1Database, sql: string, ...params: unknown[]): Promise<T | null> {
   if (!db) return null;
   try {
     return await db.prepare(sql).bind(...params).first<T>();
   } catch (err) {
+    if (isMissingTableError(err)) {
+      try {
+        await ensureD1Tables(db, true);
+        return await db.prepare(sql).bind(...params).first<T>();
+      } catch (_) {}
+    }
     return null;
   }
 }
@@ -47,6 +58,13 @@ async function all<T>(db: D1Database, sql: string, ...params: unknown[]): Promis
     const { results } = await db.prepare(sql).bind(...params).all<T>();
     return results ?? [];
   } catch (err) {
+    if (isMissingTableError(err)) {
+      try {
+        await ensureD1Tables(db, true);
+        const { results } = await db.prepare(sql).bind(...params).all<T>();
+        return results ?? [];
+      } catch (_) {}
+    }
     return [];
   }
 }
@@ -233,193 +251,67 @@ function normalizePronunciationRow(p: any, idx = 0) {
   };
 }
 
-async function ensureD1Tables(db: D1Database): Promise<void> {
+const D1_TABLE_STATEMENTS: readonly string[] = [
+  `CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY, course TEXT, category TEXT, categoryKey TEXT, categoryNum TEXT, title TEXT, chineseTitle TEXT, pinyin TEXT, meaning TEXT, level TEXT, description TEXT, videoUrl TEXT, posterUrl TEXT, fullAudio TEXT, keywords TEXT, accessType TEXT, price REAL, updated_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
+  `CREATE TABLE IF NOT EXISTS writing_characters (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, strokeCount INTEGER, radical TEXT, strokeAnimationUrl TEXT, svgPath TEXT, strokeOrderSteps TEXT)`,
+  `CREATE TABLE IF NOT EXISTS vocabulary (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, audio TEXT)`,
+  `CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, "order" INTEGER, title TEXT, category TEXT, badge TEXT, description TEXT, embed_code TEXT, embed_url TEXT, width INTEGER, height INTEGER, active TEXT)`,
+  `CREATE TABLE IF NOT EXISTS pronunciation (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, chinese TEXT, pinyin TEXT, meaning TEXT, focus TEXT)`,
+  `CREATE TABLE IF NOT EXISTS stories_lessons (id TEXT PRIMARY KEY, title TEXT, chineseTitle TEXT, pinyin TEXT, meaning TEXT, level TEXT, description TEXT, video TEXT, poster TEXT)`,
+  `CREATE TABLE IF NOT EXISTS story_scenes (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, chinese TEXT, pinyin TEXT, english TEXT, image TEXT, audio TEXT)`,
+  `CREATE TABLE IF NOT EXISTS stories_vocabulary (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, audio TEXT)`,
+  `CREATE TABLE IF NOT EXISTS stories_exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
+  `CREATE TABLE IF NOT EXISTS reels_videos (id TEXT PRIMARY KEY, type TEXT, holiday_id TEXT, title TEXT, video_path TEXT, thumbnail_path TEXT, duration_sec INTEGER, status TEXT, text_cn TEXT, text_pinyin TEXT, text_en TEXT, text_my TEXT)`,
+  `CREATE TABLE IF NOT EXISTS media_files (id TEXT PRIMARY KEY, filename TEXT, mime_type TEXT, media_type TEXT, size_bytes INTEGER, chunk_size INTEGER, chunk_count INTEGER, created_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS media_chunks (media_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, data_b64 TEXT NOT NULL, PRIMARY KEY (media_id, chunk_index))`,
+  `CREATE TABLE IF NOT EXISTS site_config (id TEXT PRIMARY KEY, config_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS d1_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`
+];
+
+let d1SchemaReady = false;
+let d1SchemaPromise: Promise<void> | null = null;
+
+async function ensureD1Tables(db: D1Database, force = false): Promise<void> {
   if (!db) return;
+  if (d1SchemaReady && !force) return;
+  if (d1SchemaPromise && !force) return d1SchemaPromise;
+
+  const runInit = async () => {
+    try {
+      const stmts = D1_TABLE_STATEMENTS.map((sql) => db.prepare(sql));
+      await db.batch(stmts);
+      d1SchemaReady = true;
+    } catch (batchErr) {
+      // Fallback: execute each CREATE TABLE individually so one edge issue cannot block later tables
+      for (const sql of D1_TABLE_STATEMENTS) {
+        await db.prepare(sql).run();
+      }
+      d1SchemaReady = true;
+    }
+  };
+
+  d1SchemaPromise = runInit().catch((err) => {
+    d1SchemaReady = false;
+    throw err;
+  }).finally(() => {
+    d1SchemaPromise = null;
+  });
+
+  return d1SchemaPromise;
+}
+
+async function withD1TableRepair<T>(db: D1Database, fn: () => Promise<T>): Promise<T> {
+  await ensureD1Tables(db);
   try {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS lessons (
-        id TEXT PRIMARY KEY,
-        course TEXT,
-        category TEXT,
-        categoryKey TEXT,
-        categoryNum TEXT,
-        title TEXT,
-        chineseTitle TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        level TEXT,
-        description TEXT,
-        videoUrl TEXT,
-        posterUrl TEXT,
-        fullAudio TEXT,
-        keywords TEXT,
-        accessType TEXT,
-        price REAL,
-        updated_at TEXT
-      );
-      CREATE TABLE IF NOT EXISTS exercises (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        type TEXT,
-        groupId TEXT,
-        groupTitle TEXT,
-        pinyin TEXT,
-        question TEXT,
-        audioUrl TEXT,
-        optionA TEXT,
-        optionB TEXT,
-        optionC TEXT,
-        optionD TEXT,
-        optionE TEXT,
-        optionAImage TEXT,
-        optionBImage TEXT,
-        optionCImage TEXT,
-        optionDImage TEXT,
-        optionEImage TEXT,
-        answer TEXT,
-        explanation TEXT
-      );
-      CREATE TABLE IF NOT EXISTS writing_characters (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        character TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        strokeCount INTEGER,
-        radical TEXT,
-        strokeAnimationUrl TEXT,
-        svgPath TEXT,
-        strokeOrderSteps TEXT
-      );
-      CREATE TABLE IF NOT EXISTS vocabulary (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        character TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        audio TEXT
-      );
-      CREATE TABLE IF NOT EXISTS games (
-        id TEXT PRIMARY KEY,
-        "order" INTEGER,
-        title TEXT,
-        category TEXT,
-        badge TEXT,
-        description TEXT,
-        embed_code TEXT,
-        embed_url TEXT,
-        width INTEGER,
-        height INTEGER,
-        active TEXT
-      );
-      CREATE TABLE IF NOT EXISTS pronunciation (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        chinese TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        focus TEXT
-      );
-      CREATE TABLE IF NOT EXISTS stories_lessons (
-        id TEXT PRIMARY KEY,
-        title TEXT,
-        chineseTitle TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        level TEXT,
-        description TEXT,
-        video TEXT,
-        poster TEXT
-      );
-      CREATE TABLE IF NOT EXISTS story_scenes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        chinese TEXT,
-        pinyin TEXT,
-        english TEXT,
-        image TEXT,
-        audio TEXT
-      );
-      CREATE TABLE IF NOT EXISTS stories_vocabulary (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        character TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        audio TEXT
-      );
-      CREATE TABLE IF NOT EXISTS stories_exercises (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        type TEXT,
-        groupId TEXT,
-        groupTitle TEXT,
-        pinyin TEXT,
-        question TEXT,
-        audioUrl TEXT,
-        optionA TEXT,
-        optionB TEXT,
-        optionC TEXT,
-        optionD TEXT,
-        optionE TEXT,
-        optionAImage TEXT,
-        optionBImage TEXT,
-        optionCImage TEXT,
-        optionDImage TEXT,
-        optionEImage TEXT,
-        answer TEXT,
-        explanation TEXT
-      );
-      CREATE TABLE IF NOT EXISTS reels_videos (
-        id TEXT PRIMARY KEY,
-        type TEXT,
-        holiday_id TEXT,
-        title TEXT,
-        video_path TEXT,
-        thumbnail_path TEXT,
-        duration_sec INTEGER,
-        status TEXT,
-        text_cn TEXT,
-        text_pinyin TEXT,
-        text_en TEXT,
-        text_my TEXT
-      );
-      CREATE TABLE IF NOT EXISTS media_files (
-        id TEXT PRIMARY KEY,
-        filename TEXT,
-        mime_type TEXT,
-        media_type TEXT,
-        size_bytes INTEGER,
-        chunk_size INTEGER,
-        chunk_count INTEGER,
-        created_at TEXT
-      );
-      CREATE TABLE IF NOT EXISTS media_chunks (
-        media_id TEXT NOT NULL,
-        chunk_index INTEGER NOT NULL,
-        data_b64 TEXT NOT NULL,
-        PRIMARY KEY (media_id, chunk_index)
-      );
-      CREATE TABLE IF NOT EXISTS site_config (
-        id TEXT PRIMARY KEY,
-        config_json TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS d1_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        updated_at TEXT
-      );
-    `);
+    return await fn();
   } catch (err) {
-    console.warn('ensureD1Tables warning:', err);
+    if (isMissingTableError(err)) {
+      d1SchemaReady = false;
+      await ensureD1Tables(db, true);
+      return await fn();
+    }
+    throw err;
   }
 }
 
@@ -468,7 +360,7 @@ async function setD1Meta(db: D1Database, key: string, value: string): Promise<vo
   } catch (_) {}
 }
 
-const WORKER_MEDIA_CHUNK_BYTES = 512 * 1024;
+const WORKER_MEDIA_CHUNK_BYTES = 256 * 1024;
 const MAX_WORKER_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -508,6 +400,9 @@ function inferMimeFromFilename(filename: string, fallbackType: string): string {
 }
 
 async function handleWorkerMediaUpload(request: Request, env: Env): Promise<Response> {
+  if (!env.DB) {
+    return fail('Cloudflare D1 database binding (DB) is not configured.', 500);
+  }
   const formData = await request.formData();
   const file = formData.get('file') as File | null;
   if (!file) {
@@ -521,7 +416,6 @@ async function handleWorkerMediaUpload(request: Request, env: Env): Promise<Resp
     );
   }
 
-  await ensureD1Tables(env.DB);
   const rawName = String(file.name || 'media').trim();
   const dotIdx = rawName.lastIndexOf('.');
   const ext = dotIdx >= 0 ? rawName.slice(dotIdx).toLowerCase().replace(/[^a-z0-9.]/g, '') : '';
@@ -547,35 +441,37 @@ async function handleWorkerMediaUpload(request: Request, env: Env): Promise<Resp
   const chunkCount = Math.max(1, Math.ceil(bytes.byteLength / chunkSize));
   const nowIso = new Date().toISOString();
 
-  await env.DB.prepare(
-    `INSERT INTO media_files (id, filename, mime_type, media_type, size_bytes, chunk_size, chunk_count, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(mediaId, safeFilename, mimeType, mediaType, bytes.byteLength, chunkSize, chunkCount, nowIso)
-    .run();
+  await withD1TableRepair(env.DB, async () => {
+    await env.DB.prepare(
+      `INSERT INTO media_files (id, filename, mime_type, media_type, size_bytes, chunk_size, chunk_count, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(mediaId, safeFilename, mimeType, mediaType, bytes.byteLength, chunkSize, chunkCount, nowIso)
+      .run();
 
-  try {
-    const chunkStmts: D1PreparedStatement[] = [];
-    for (let idx = 0; idx < chunkCount; idx++) {
-      const start = idx * chunkSize;
-      const end = Math.min(bytes.byteLength, start + chunkSize);
-      const b64 = uint8ToBase64(bytes.subarray(start, end));
-      chunkStmts.push(
-        env.DB.prepare(`INSERT INTO media_chunks (media_id, chunk_index, data_b64) VALUES (?, ?, ?)`).bind(
-          mediaId,
-          idx,
-          b64
-        )
-      );
-      if (chunkStmts.length >= 8 || idx === chunkCount - 1) {
-        await env.DB.batch(chunkStmts.splice(0, chunkStmts.length));
+    try {
+      const chunkStmts: D1PreparedStatement[] = [];
+      for (let idx = 0; idx < chunkCount; idx++) {
+        const start = idx * chunkSize;
+        const end = Math.min(bytes.byteLength, start + chunkSize);
+        const b64 = uint8ToBase64(bytes.subarray(start, end));
+        chunkStmts.push(
+          env.DB.prepare(`INSERT INTO media_chunks (media_id, chunk_index, data_b64) VALUES (?, ?, ?)`).bind(
+            mediaId,
+            idx,
+            b64
+          )
+        );
+        if (chunkStmts.length >= 2 || idx === chunkCount - 1) {
+          await env.DB.batch(chunkStmts.splice(0, chunkStmts.length));
+        }
       }
+    } catch (err) {
+      await env.DB.prepare(`DELETE FROM media_chunks WHERE media_id = ?`).bind(mediaId).run().catch(() => {});
+      await env.DB.prepare(`DELETE FROM media_files WHERE id = ?`).bind(mediaId).run().catch(() => {});
+      throw err;
     }
-  } catch (err) {
-    await env.DB.prepare(`DELETE FROM media_chunks WHERE media_id = ?`).bind(mediaId).run().catch(() => {});
-    await env.DB.prepare(`DELETE FROM media_files WHERE id = ?`).bind(mediaId).run().catch(() => {});
-    throw err;
-  }
+  });
 
   const publicUrl = `/api/media/${encodeURIComponent(mediaId)}/${encodeURIComponent(safeFilename)}`;
   return json({
@@ -589,18 +485,19 @@ async function handleWorkerMediaUpload(request: Request, env: Env): Promise<Resp
 }
 
 async function serveWorkerMedia(request: Request, env: Env, mediaId: string): Promise<Response> {
-  await ensureD1Tables(env.DB);
-  const meta = await one<{
-    id: string;
-    filename: string;
-    mime_type: string;
-    size_bytes: number;
-    chunk_size: number;
-    chunk_count: number;
-  }>(
-    env.DB,
-    `SELECT id, filename, mime_type, size_bytes, chunk_size, chunk_count FROM media_files WHERE id = ?`,
-    mediaId
+  const meta = await withD1TableRepair(env.DB, () =>
+    one<{
+      id: string;
+      filename: string;
+      mime_type: string;
+      size_bytes: number;
+      chunk_size: number;
+      chunk_count: number;
+    }>(
+      env.DB,
+      `SELECT id, filename, mime_type, size_bytes, chunk_size, chunk_count FROM media_files WHERE id = ?`,
+      mediaId
+    )
   );
 
   if (!meta) {
@@ -856,7 +753,7 @@ async function syncLessonsSheetsToD1(db: D1Database, sheets: Record<string, any[
   }
 
   if (stmts.length > 0) {
-    await db.batch(stmts);
+    await withD1TableRepair(db, () => db.batch(stmts));
   }
 }
 
@@ -1003,7 +900,7 @@ async function syncStoriesSheetsToD1(db: D1Database, sheets: Record<string, any[
   }
 
   if (stmts.length > 0) {
-    await db.batch(stmts);
+    await withD1TableRepair(db, () => db.batch(stmts));
   }
 }
 
@@ -1043,7 +940,7 @@ async function syncReelsSheetsToD1(db: D1Database, sheets: Record<string, any[]>
   }
 
   if (stmts.length > 0) {
-    await db.batch(stmts);
+    await withD1TableRepair(db, () => db.batch(stmts));
   }
 }
 
@@ -1577,10 +1474,11 @@ async function handleForceDatabaseSync(request: Request, env: Env, url: URL): Pr
 }
 
 async function handleWorkerGetSiteConfig(request: Request, env: Env, url: URL): Promise<Response> {
-  await ensureD1Tables(env.DB);
-  const row = await one<{ config_json: string; updated_at: string }>(
-    env.DB,
-    `SELECT config_json, updated_at FROM site_config WHERE id = 'homepage'`
+  const row = await withD1TableRepair(env.DB, () =>
+    one<{ config_json: string; updated_at: string }>(
+      env.DB,
+      `SELECT config_json, updated_at FROM site_config WHERE id = 'homepage'`
+    )
   );
   if (row && row.config_json) {
     try {
@@ -1616,50 +1514,55 @@ async function handleWorkerGetSiteConfig(request: Request, env: Env, url: URL): 
 
   try {
     const nowIso = new Date().toISOString();
-    await env.DB.prepare(
-      `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
-       ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
-    )
-      .bind(JSON.stringify(finalConfig), nowIso)
-      .run();
+    await withD1TableRepair(env.DB, () =>
+      env.DB.prepare(
+        `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
+         ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
+      )
+        .bind(JSON.stringify(finalConfig), nowIso)
+        .run()
+    );
   } catch (_) {}
 
   return json({ success: true, config: finalConfig, source: 'seed-static' });
 }
 
 async function handleWorkerSaveSiteConfig(request: Request, env: Env): Promise<Response> {
-  await ensureD1Tables(env.DB);
   try {
     const body = (await request.json().catch(() => ({}))) as any;
     if (!body || typeof body !== 'object') {
       return fail('Invalid site configuration payload.', 400);
     }
-    const row = await one<{ config_json: string }>(
-      env.DB,
-      `SELECT config_json FROM site_config WHERE id = 'homepage'`
-    );
-    let existing: Record<string, any> = {};
-    if (row && row.config_json) {
-      try {
-        existing = JSON.parse(row.config_json);
-      } catch (_) {}
-    }
-    const merged = { ...existing, ...body };
-    if (!merged.siteLogoUrl && body.siteLogoUrl === '') {
-      merged.siteLogoUrl = '';
-    } else if (/^\/?public\/assets\/aistudio\//i.test(merged.siteLogoUrl)) {
-      merged.siteLogoUrl = 'assets/images/logo.svg';
-    }
-    const nowIso = new Date().toISOString();
-    merged.updatedAt = nowIso;
-    merged.configId = 'homepage';
+    const merged = await withD1TableRepair(env.DB, async () => {
+      const row = await one<{ config_json: string }>(
+        env.DB,
+        `SELECT config_json FROM site_config WHERE id = 'homepage'`
+      );
+      let existing: Record<string, any> = {};
+      if (row && row.config_json) {
+        try {
+          existing = JSON.parse(row.config_json);
+        } catch (_) {}
+      }
+      const nextCfg = { ...existing, ...body };
+      if (!nextCfg.siteLogoUrl && body.siteLogoUrl === '') {
+        nextCfg.siteLogoUrl = '';
+      } else if (/^\/?public\/assets\/aistudio\//i.test(nextCfg.siteLogoUrl)) {
+        nextCfg.siteLogoUrl = 'assets/images/logo.svg';
+      }
+      const nowIso = new Date().toISOString();
+      nextCfg.updatedAt = nowIso;
+      nextCfg.configId = 'homepage';
 
-    await env.DB.prepare(
-      `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
-       ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
-    )
-      .bind(JSON.stringify(merged), nowIso)
-      .run();
+      await env.DB.prepare(
+        `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
+         ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
+      )
+        .bind(JSON.stringify(nextCfg), nowIso)
+        .run();
+
+      return nextCfg;
+    });
 
     return json({ success: true, config: merged, storage: 'cloudflare-d1' });
   } catch (err: any) {
@@ -1687,7 +1590,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       try {
         return await handleWorkerMediaUpload(request, env);
       } catch (err: any) {
-        return fail(err?.message || 'Media upload failed.', 400);
+        return fail(err?.message || 'Media upload failed.', 500);
       }
     }
     if (path === '/api/admin/site-config' || path === '/api/site-config') {
@@ -1733,10 +1636,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api/admin/media-library') {
-    await ensureD1Tables(env.DB);
-    const rows = await all<{ id: string; filename: string; media_type: string; size_bytes: number; created_at: string }>(
-      env.DB,
-      `SELECT id, filename, media_type, size_bytes, created_at FROM media_files ORDER BY created_at DESC LIMIT 100`
+    const rows = await withD1TableRepair(env.DB, () =>
+      all<{ id: string; filename: string; media_type: string; size_bytes: number; created_at: string }>(
+        env.DB,
+        `SELECT id, filename, media_type, size_bytes, created_at FROM media_files ORDER BY created_at DESC LIMIT 100`
+      )
     );
     const items = rows.map((r) => ({
       url: `/api/media/${encodeURIComponent(r.id)}/${encodeURIComponent(r.filename)}`,

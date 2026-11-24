@@ -17,11 +17,22 @@ function json(data, status = 200) {
 function fail(message, status = 400) {
   return json({ ok: false, success: false, error: message }, status);
 }
+function isMissingTableError(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return msg.includes("no such table") || msg.includes("no such column");
+}
 async function one(db, sql, ...params) {
   if (!db) return null;
   try {
     return await db.prepare(sql).bind(...params).first();
   } catch (err) {
+    if (isMissingTableError(err)) {
+      try {
+        await ensureD1Tables(db, true);
+        return await db.prepare(sql).bind(...params).first();
+      } catch (_) {
+      }
+    }
     return null;
   }
 }
@@ -31,6 +42,14 @@ async function all(db, sql, ...params) {
     const { results } = await db.prepare(sql).bind(...params).all();
     return results ?? [];
   } catch (err) {
+    if (isMissingTableError(err)) {
+      try {
+        await ensureD1Tables(db, true);
+        const { results } = await db.prepare(sql).bind(...params).all();
+        return results ?? [];
+      } catch (_) {
+      }
+    }
     return [];
   }
 }
@@ -211,193 +230,60 @@ function normalizePronunciationRow(p, idx = 0) {
     focus
   };
 }
-async function ensureD1Tables(db) {
+var D1_TABLE_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY, course TEXT, category TEXT, categoryKey TEXT, categoryNum TEXT, title TEXT, chineseTitle TEXT, pinyin TEXT, meaning TEXT, level TEXT, description TEXT, videoUrl TEXT, posterUrl TEXT, fullAudio TEXT, keywords TEXT, accessType TEXT, price REAL, updated_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
+  `CREATE TABLE IF NOT EXISTS writing_characters (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, strokeCount INTEGER, radical TEXT, strokeAnimationUrl TEXT, svgPath TEXT, strokeOrderSteps TEXT)`,
+  `CREATE TABLE IF NOT EXISTS vocabulary (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, audio TEXT)`,
+  `CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, "order" INTEGER, title TEXT, category TEXT, badge TEXT, description TEXT, embed_code TEXT, embed_url TEXT, width INTEGER, height INTEGER, active TEXT)`,
+  `CREATE TABLE IF NOT EXISTS pronunciation (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, chinese TEXT, pinyin TEXT, meaning TEXT, focus TEXT)`,
+  `CREATE TABLE IF NOT EXISTS stories_lessons (id TEXT PRIMARY KEY, title TEXT, chineseTitle TEXT, pinyin TEXT, meaning TEXT, level TEXT, description TEXT, video TEXT, poster TEXT)`,
+  `CREATE TABLE IF NOT EXISTS story_scenes (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, chinese TEXT, pinyin TEXT, english TEXT, image TEXT, audio TEXT)`,
+  `CREATE TABLE IF NOT EXISTS stories_vocabulary (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, audio TEXT)`,
+  `CREATE TABLE IF NOT EXISTS stories_exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
+  `CREATE TABLE IF NOT EXISTS reels_videos (id TEXT PRIMARY KEY, type TEXT, holiday_id TEXT, title TEXT, video_path TEXT, thumbnail_path TEXT, duration_sec INTEGER, status TEXT, text_cn TEXT, text_pinyin TEXT, text_en TEXT, text_my TEXT)`,
+  `CREATE TABLE IF NOT EXISTS media_files (id TEXT PRIMARY KEY, filename TEXT, mime_type TEXT, media_type TEXT, size_bytes INTEGER, chunk_size INTEGER, chunk_count INTEGER, created_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS media_chunks (media_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, data_b64 TEXT NOT NULL, PRIMARY KEY (media_id, chunk_index))`,
+  `CREATE TABLE IF NOT EXISTS site_config (id TEXT PRIMARY KEY, config_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS d1_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`
+];
+var d1SchemaReady = false;
+var d1SchemaPromise = null;
+async function ensureD1Tables(db, force = false) {
   if (!db) return;
+  if (d1SchemaReady && !force) return;
+  if (d1SchemaPromise && !force) return d1SchemaPromise;
+  const runInit = async () => {
+    try {
+      const stmts = D1_TABLE_STATEMENTS.map((sql) => db.prepare(sql));
+      await db.batch(stmts);
+      d1SchemaReady = true;
+    } catch (batchErr) {
+      for (const sql of D1_TABLE_STATEMENTS) {
+        await db.prepare(sql).run();
+      }
+      d1SchemaReady = true;
+    }
+  };
+  d1SchemaPromise = runInit().catch((err) => {
+    d1SchemaReady = false;
+    throw err;
+  }).finally(() => {
+    d1SchemaPromise = null;
+  });
+  return d1SchemaPromise;
+}
+async function withD1TableRepair(db, fn) {
+  await ensureD1Tables(db);
   try {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS lessons (
-        id TEXT PRIMARY KEY,
-        course TEXT,
-        category TEXT,
-        categoryKey TEXT,
-        categoryNum TEXT,
-        title TEXT,
-        chineseTitle TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        level TEXT,
-        description TEXT,
-        videoUrl TEXT,
-        posterUrl TEXT,
-        fullAudio TEXT,
-        keywords TEXT,
-        accessType TEXT,
-        price REAL,
-        updated_at TEXT
-      );
-      CREATE TABLE IF NOT EXISTS exercises (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        type TEXT,
-        groupId TEXT,
-        groupTitle TEXT,
-        pinyin TEXT,
-        question TEXT,
-        audioUrl TEXT,
-        optionA TEXT,
-        optionB TEXT,
-        optionC TEXT,
-        optionD TEXT,
-        optionE TEXT,
-        optionAImage TEXT,
-        optionBImage TEXT,
-        optionCImage TEXT,
-        optionDImage TEXT,
-        optionEImage TEXT,
-        answer TEXT,
-        explanation TEXT
-      );
-      CREATE TABLE IF NOT EXISTS writing_characters (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        character TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        strokeCount INTEGER,
-        radical TEXT,
-        strokeAnimationUrl TEXT,
-        svgPath TEXT,
-        strokeOrderSteps TEXT
-      );
-      CREATE TABLE IF NOT EXISTS vocabulary (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        character TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        audio TEXT
-      );
-      CREATE TABLE IF NOT EXISTS games (
-        id TEXT PRIMARY KEY,
-        "order" INTEGER,
-        title TEXT,
-        category TEXT,
-        badge TEXT,
-        description TEXT,
-        embed_code TEXT,
-        embed_url TEXT,
-        width INTEGER,
-        height INTEGER,
-        active TEXT
-      );
-      CREATE TABLE IF NOT EXISTS pronunciation (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        chinese TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        focus TEXT
-      );
-      CREATE TABLE IF NOT EXISTS stories_lessons (
-        id TEXT PRIMARY KEY,
-        title TEXT,
-        chineseTitle TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        level TEXT,
-        description TEXT,
-        video TEXT,
-        poster TEXT
-      );
-      CREATE TABLE IF NOT EXISTS story_scenes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        chinese TEXT,
-        pinyin TEXT,
-        english TEXT,
-        image TEXT,
-        audio TEXT
-      );
-      CREATE TABLE IF NOT EXISTS stories_vocabulary (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        character TEXT,
-        pinyin TEXT,
-        meaning TEXT,
-        audio TEXT
-      );
-      CREATE TABLE IF NOT EXISTS stories_exercises (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lessonId TEXT,
-        "order" INTEGER,
-        type TEXT,
-        groupId TEXT,
-        groupTitle TEXT,
-        pinyin TEXT,
-        question TEXT,
-        audioUrl TEXT,
-        optionA TEXT,
-        optionB TEXT,
-        optionC TEXT,
-        optionD TEXT,
-        optionE TEXT,
-        optionAImage TEXT,
-        optionBImage TEXT,
-        optionCImage TEXT,
-        optionDImage TEXT,
-        optionEImage TEXT,
-        answer TEXT,
-        explanation TEXT
-      );
-      CREATE TABLE IF NOT EXISTS reels_videos (
-        id TEXT PRIMARY KEY,
-        type TEXT,
-        holiday_id TEXT,
-        title TEXT,
-        video_path TEXT,
-        thumbnail_path TEXT,
-        duration_sec INTEGER,
-        status TEXT,
-        text_cn TEXT,
-        text_pinyin TEXT,
-        text_en TEXT,
-        text_my TEXT
-      );
-      CREATE TABLE IF NOT EXISTS media_files (
-        id TEXT PRIMARY KEY,
-        filename TEXT,
-        mime_type TEXT,
-        media_type TEXT,
-        size_bytes INTEGER,
-        chunk_size INTEGER,
-        chunk_count INTEGER,
-        created_at TEXT
-      );
-      CREATE TABLE IF NOT EXISTS media_chunks (
-        media_id TEXT NOT NULL,
-        chunk_index INTEGER NOT NULL,
-        data_b64 TEXT NOT NULL,
-        PRIMARY KEY (media_id, chunk_index)
-      );
-      CREATE TABLE IF NOT EXISTS site_config (
-        id TEXT PRIMARY KEY,
-        config_json TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS d1_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        updated_at TEXT
-      );
-    `);
+    return await fn();
   } catch (err) {
-    console.warn("ensureD1Tables warning:", err);
+    if (isMissingTableError(err)) {
+      d1SchemaReady = false;
+      await ensureD1Tables(db, true);
+      return await fn();
+    }
+    throw err;
   }
 }
 function isDeprecatedD1MediaPath(val) {
@@ -439,7 +325,7 @@ async function setD1Meta(db, key, value) {
   } catch (_) {
   }
 }
-var WORKER_MEDIA_CHUNK_BYTES = 512 * 1024;
+var WORKER_MEDIA_CHUNK_BYTES = 256 * 1024;
 var MAX_WORKER_UPLOAD_BYTES = 25 * 1024 * 1024;
 function uint8ToBase64(bytes) {
   const parts = [];
@@ -475,6 +361,9 @@ function inferMimeFromFilename(filename, fallbackType) {
   return "application/octet-stream";
 }
 async function handleWorkerMediaUpload(request, env) {
+  if (!env.DB) {
+    return fail("Cloudflare D1 database binding (DB) is not configured.", 500);
+  }
   const formData = await request.formData();
   const file = formData.get("file");
   if (!file) {
@@ -487,7 +376,6 @@ async function handleWorkerMediaUpload(request, env) {
       413
     );
   }
-  await ensureD1Tables(env.DB);
   const rawName = String(file.name || "media").trim();
   const dotIdx = rawName.lastIndexOf(".");
   const ext = dotIdx >= 0 ? rawName.slice(dotIdx).toLowerCase().replace(/[^a-z0-9.]/g, "") : "";
@@ -502,34 +390,36 @@ async function handleWorkerMediaUpload(request, env) {
   const chunkSize = WORKER_MEDIA_CHUNK_BYTES;
   const chunkCount = Math.max(1, Math.ceil(bytes.byteLength / chunkSize));
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-  await env.DB.prepare(
-    `INSERT INTO media_files (id, filename, mime_type, media_type, size_bytes, chunk_size, chunk_count, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(mediaId, safeFilename, mimeType, mediaType, bytes.byteLength, chunkSize, chunkCount, nowIso).run();
-  try {
-    const chunkStmts = [];
-    for (let idx = 0; idx < chunkCount; idx++) {
-      const start = idx * chunkSize;
-      const end = Math.min(bytes.byteLength, start + chunkSize);
-      const b64 = uint8ToBase64(bytes.subarray(start, end));
-      chunkStmts.push(
-        env.DB.prepare(`INSERT INTO media_chunks (media_id, chunk_index, data_b64) VALUES (?, ?, ?)`).bind(
-          mediaId,
-          idx,
-          b64
-        )
-      );
-      if (chunkStmts.length >= 8 || idx === chunkCount - 1) {
-        await env.DB.batch(chunkStmts.splice(0, chunkStmts.length));
+  await withD1TableRepair(env.DB, async () => {
+    await env.DB.prepare(
+      `INSERT INTO media_files (id, filename, mime_type, media_type, size_bytes, chunk_size, chunk_count, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(mediaId, safeFilename, mimeType, mediaType, bytes.byteLength, chunkSize, chunkCount, nowIso).run();
+    try {
+      const chunkStmts = [];
+      for (let idx = 0; idx < chunkCount; idx++) {
+        const start = idx * chunkSize;
+        const end = Math.min(bytes.byteLength, start + chunkSize);
+        const b64 = uint8ToBase64(bytes.subarray(start, end));
+        chunkStmts.push(
+          env.DB.prepare(`INSERT INTO media_chunks (media_id, chunk_index, data_b64) VALUES (?, ?, ?)`).bind(
+            mediaId,
+            idx,
+            b64
+          )
+        );
+        if (chunkStmts.length >= 2 || idx === chunkCount - 1) {
+          await env.DB.batch(chunkStmts.splice(0, chunkStmts.length));
+        }
       }
+    } catch (err) {
+      await env.DB.prepare(`DELETE FROM media_chunks WHERE media_id = ?`).bind(mediaId).run().catch(() => {
+      });
+      await env.DB.prepare(`DELETE FROM media_files WHERE id = ?`).bind(mediaId).run().catch(() => {
+      });
+      throw err;
     }
-  } catch (err) {
-    await env.DB.prepare(`DELETE FROM media_chunks WHERE media_id = ?`).bind(mediaId).run().catch(() => {
-    });
-    await env.DB.prepare(`DELETE FROM media_files WHERE id = ?`).bind(mediaId).run().catch(() => {
-    });
-    throw err;
-  }
+  });
   const publicUrl = `/api/media/${encodeURIComponent(mediaId)}/${encodeURIComponent(safeFilename)}`;
   return json({
     success: true,
@@ -541,11 +431,13 @@ async function handleWorkerMediaUpload(request, env) {
   });
 }
 async function serveWorkerMedia(request, env, mediaId) {
-  await ensureD1Tables(env.DB);
-  const meta = await one(
+  const meta = await withD1TableRepair(
     env.DB,
-    `SELECT id, filename, mime_type, size_bytes, chunk_size, chunk_count FROM media_files WHERE id = ?`,
-    mediaId
+    () => one(
+      env.DB,
+      `SELECT id, filename, mime_type, size_bytes, chunk_size, chunk_count FROM media_files WHERE id = ?`,
+      mediaId
+    )
   );
   if (!meta) {
     return fail("Media file not found.", 404);
@@ -784,7 +676,7 @@ async function syncLessonsSheetsToD1(db, sheets) {
     }
   }
   if (stmts.length > 0) {
-    await db.batch(stmts);
+    await withD1TableRepair(db, () => db.batch(stmts));
   }
 }
 function assertSafeD1WorkbookSheets(sheets) {
@@ -922,7 +814,7 @@ async function syncStoriesSheetsToD1(db, sheets) {
     }
   }
   if (stmts.length > 0) {
-    await db.batch(stmts);
+    await withD1TableRepair(db, () => db.batch(stmts));
   }
 }
 async function syncReelsSheetsToD1(db, sheets) {
@@ -958,7 +850,7 @@ async function syncReelsSheetsToD1(db, sheets) {
     }
   }
   if (stmts.length > 0) {
-    await db.batch(stmts);
+    await withD1TableRepair(db, () => db.batch(stmts));
   }
 }
 async function getLessons(env, url) {
@@ -1415,10 +1307,12 @@ async function handleForceDatabaseSync(request, env, url) {
   }
 }
 async function handleWorkerGetSiteConfig(request, env, url) {
-  await ensureD1Tables(env.DB);
-  const row = await one(
+  const row = await withD1TableRepair(
     env.DB,
-    `SELECT config_json, updated_at FROM site_config WHERE id = 'homepage'`
+    () => one(
+      env.DB,
+      `SELECT config_json, updated_at FROM site_config WHERE id = 'homepage'`
+    )
   );
   if (row && row.config_json) {
     try {
@@ -1448,45 +1342,50 @@ async function handleWorkerGetSiteConfig(request, env, url) {
   };
   try {
     const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-    await env.DB.prepare(
-      `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
-       ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
-    ).bind(JSON.stringify(finalConfig), nowIso).run();
+    await withD1TableRepair(
+      env.DB,
+      () => env.DB.prepare(
+        `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
+         ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
+      ).bind(JSON.stringify(finalConfig), nowIso).run()
+    );
   } catch (_) {
   }
   return json({ success: true, config: finalConfig, source: "seed-static" });
 }
 async function handleWorkerSaveSiteConfig(request, env) {
-  await ensureD1Tables(env.DB);
   try {
     const body = await request.json().catch(() => ({}));
     if (!body || typeof body !== "object") {
       return fail("Invalid site configuration payload.", 400);
     }
-    const row = await one(
-      env.DB,
-      `SELECT config_json FROM site_config WHERE id = 'homepage'`
-    );
-    let existing = {};
-    if (row && row.config_json) {
-      try {
-        existing = JSON.parse(row.config_json);
-      } catch (_) {
+    const merged = await withD1TableRepair(env.DB, async () => {
+      const row = await one(
+        env.DB,
+        `SELECT config_json FROM site_config WHERE id = 'homepage'`
+      );
+      let existing = {};
+      if (row && row.config_json) {
+        try {
+          existing = JSON.parse(row.config_json);
+        } catch (_) {
+        }
       }
-    }
-    const merged = { ...existing, ...body };
-    if (!merged.siteLogoUrl && body.siteLogoUrl === "") {
-      merged.siteLogoUrl = "";
-    } else if (/^\/?public\/assets\/aistudio\//i.test(merged.siteLogoUrl)) {
-      merged.siteLogoUrl = "assets/images/logo.svg";
-    }
-    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-    merged.updatedAt = nowIso;
-    merged.configId = "homepage";
-    await env.DB.prepare(
-      `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
-       ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
-    ).bind(JSON.stringify(merged), nowIso).run();
+      const nextCfg = { ...existing, ...body };
+      if (!nextCfg.siteLogoUrl && body.siteLogoUrl === "") {
+        nextCfg.siteLogoUrl = "";
+      } else if (/^\/?public\/assets\/aistudio\//i.test(nextCfg.siteLogoUrl)) {
+        nextCfg.siteLogoUrl = "assets/images/logo.svg";
+      }
+      const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+      nextCfg.updatedAt = nowIso;
+      nextCfg.configId = "homepage";
+      await env.DB.prepare(
+        `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
+         ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
+      ).bind(JSON.stringify(nextCfg), nowIso).run();
+      return nextCfg;
+    });
     return json({ success: true, config: merged, storage: "cloudflare-d1" });
   } catch (err) {
     return fail(err?.message || "Failed to save site configuration.", 500);
@@ -1509,7 +1408,7 @@ async function handleApi(request, env, url) {
       try {
         return await handleWorkerMediaUpload(request, env);
       } catch (err) {
-        return fail(err?.message || "Media upload failed.", 400);
+        return fail(err?.message || "Media upload failed.", 500);
       }
     }
     if (path === "/api/admin/site-config" || path === "/api/site-config") {
@@ -1550,10 +1449,12 @@ async function handleApi(request, env, url) {
     return serveWorkerMedia(request, env, decodeURIComponent(mediaMatch[1]));
   }
   if (path === "/api/admin/media-library") {
-    await ensureD1Tables(env.DB);
-    const rows = await all(
+    const rows = await withD1TableRepair(
       env.DB,
-      `SELECT id, filename, media_type, size_bytes, created_at FROM media_files ORDER BY created_at DESC LIMIT 100`
+      () => all(
+        env.DB,
+        `SELECT id, filename, media_type, size_bytes, created_at FROM media_files ORDER BY created_at DESC LIMIT 100`
+      )
     );
     const items = rows.map((r) => ({
       url: `/api/media/${encodeURIComponent(r.id)}/${encodeURIComponent(r.filename)}`,
