@@ -257,7 +257,7 @@ function getFallbackLessonData() {
       level: "Beginner",
       description: "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
       video: "assets/video/story-02.mp4",
-      poster: "assets/images/story2-poster.jpg",
+      poster: "assets/images/story2-poster.svg",
       keywords: "fruit, market, apple, shopping, fresh, sweet, delicious, red, buy, 水果, 市场, 苹果, 买, 甜, 好吃"
     }
   ];
@@ -285,11 +285,11 @@ function getFallbackStoryData() {
     { lessonId: "lesson-01", order: 4, chinese: "然后，他去学校。", pinyin: "Ránhòu, tā qù xuéxiào.", english: "Then, he goes to school.", image: "assets/images/story-04.jpg", audio: "assets/audio/story-04.mp3" },
     { lessonId: "lesson-01", order: 5, chinese: "他很开心。", pinyin: "Tā hěn kāixīn.", english: "He is very happy.", image: "assets/images/story-05.jpg", audio: "assets/audio/story-05.mp3" },
 
-    { lessonId: "lesson-02", order: 1, chinese: "今天天气真好！", pinyin: "Jīntiān tiānqì zhēn hǎo!", english: "The weather is really nice today!", image: "assets/images/story2-01.jpg", audio: "assets/audio/story2-01.mp3" },
-    { lessonId: "lesson-02", order: 2, chinese: "小明去水果市场。", pinyin: "Xiǎomíng qù shuǐguǒ shìchǎng.", english: "Xiaoming goes to the fruit market.", image: "assets/images/story2-02.jpg", audio: "assets/audio/story2-02.mp3" },
-    { lessonId: "lesson-02", order: 3, chinese: "市场里有很多新鲜的红苹果。", pinyin: "Shìchǎng lǐ yǒu hěn duō xīnxiān de hóng píngguǒ.", english: "There are many fresh red apples in the market.", image: "assets/images/story2-03.jpg", audio: "assets/audio/story2-03.mp3" },
-    { lessonId: "lesson-02", order: 4, chinese: "他买了三个大苹果。", pinyin: "Tā mǎi le sān gè dà píngguǒ.", english: "He bought three big apples.", image: "assets/images/story2-04.jpg", audio: "assets/audio/story2-04.mp3" },
-    { lessonId: "lesson-02", order: 5, chinese: "苹果又甜又好吃，他真开心！", pinyin: "Píngguǒ yòu tián yòu hǎochī, tā zhēn kāixīn!", english: "The apples are sweet and delicious, he is really happy!", image: "assets/images/story2-05.jpg", audio: "assets/audio/story2-05.mp3" }
+    { lessonId: "lesson-02", order: 1, chinese: "今天天气真好！", pinyin: "Jīntiān tiānqì zhēn hǎo!", english: "The weather is really nice today!", image: "assets/images/story2-01.svg", audio: "assets/audio/story2-01.mp3" },
+    { lessonId: "lesson-02", order: 2, chinese: "小明去水果市场。", pinyin: "Xiǎomíng qù shuǐguǒ shìchǎng.", english: "Xiaoming goes to the fruit market.", image: "assets/images/story2-02.svg", audio: "assets/audio/story2-02.mp3" },
+    { lessonId: "lesson-02", order: 3, chinese: "市场里有很多新鲜的红苹果。", pinyin: "Shìchǎng lǐ yǒu hěn duō xīnxiān de hóng píngguǒ.", english: "There are many fresh red apples in the market.", image: "assets/images/story2-03.svg", audio: "assets/audio/story2-03.mp3" },
+    { lessonId: "lesson-02", order: 4, chinese: "他买了三个大苹果。", pinyin: "Tā mǎi le sān gè dà píngguǒ.", english: "He bought three big apples.", image: "assets/images/story2-04.svg", audio: "assets/audio/story2-04.mp3" },
+    { lessonId: "lesson-02", order: 5, chinese: "苹果又甜又好吃，他真开心！", pinyin: "Píngguǒ yòu tián yòu hǎochī, tā zhēn kāixīn!", english: "The apples are sweet and delicious, he is really happy!", image: "assets/images/story2-05.svg", audio: "assets/audio/story2-05.mp3" }
   ];
 }
 
@@ -2643,12 +2643,22 @@ function handleReviewKeyboardShortcuts(e) {
 
 let reelModalBound = false;
 
+function canonicalizeHomepageMediaPath(rawPath) {
+  const clean = String(rawPath || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!clean) return "";
+  if (/^\/?assets\/images\/(story2-(?:poster|0[1-5]))\.jpg$/i.test(clean)) {
+    return clean.replace(/^\/+/, "").replace(/\.jpg$/i, ".svg");
+  }
+  return clean;
+}
+
 function setupReelsInteractions() {
   const reelCards = document.querySelectorAll(".reel-card");
   const modal = document.getElementById("reelModal");
   const modalVideo = document.getElementById("reelModalVideo");
   const modalTitle = document.getElementById("reelModalTitle");
   const modalDesc = document.getElementById("reelModalDesc");
+  const modalStatus = document.getElementById("reelModalStatus");
   const closeBtn = document.getElementById("closeReelModalBtn");
 
   if (reelCards.length) {
@@ -2671,16 +2681,44 @@ function setupReelsInteractions() {
 
       card.addEventListener("click", () => {
         const videoSrc = card.dataset.video || (previewVideo && previewVideo.querySelector("source") ? previewVideo.querySelector("source").src : "");
+        const posterSrc = card.dataset.poster || (previewVideo ? previewVideo.getAttribute("poster") || "" : "");
         const title = card.dataset.title || "Chinese Reel Video";
         const desc = card.dataset.desc || "Bite-sized culture and Mandarin dialogue.";
 
+        document.querySelectorAll(".reel-preview-video").forEach((pv) => {
+          try {
+            if (!pv.paused) pv.pause();
+          } catch (_) {}
+        });
+
         if (modal && modalVideo) {
+          if (modalStatus) {
+            modalStatus.hidden = true;
+            modalStatus.textContent = "";
+          }
+          modalVideo.onerror = null;
+          modalVideo.onloadeddata = null;
+
+          if (posterSrc) {
+            modalVideo.poster = posterSrc;
+          } else {
+            modalVideo.removeAttribute("poster");
+          }
+
           modalVideo.src = videoSrc;
+          modalVideo.onerror = () => {
+            if (modalStatus) {
+              modalStatus.hidden = false;
+              modalStatus.textContent = "This video could not be loaded. Check the uploaded asset or video URL.";
+            }
+          };
+
           if (modalTitle) modalTitle.textContent = title;
           if (modalDesc) modalDesc.textContent = desc;
 
           modal.classList.add("active");
           modal.setAttribute("aria-hidden", "false");
+          document.body.style.overflow = "hidden";
           modalVideo.currentTime = 0;
           modalVideo.play().catch(() => {});
         }
@@ -2695,7 +2733,14 @@ function setupReelsInteractions() {
     if (!modal) return;
     modal.classList.remove("active");
     modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    if (modalStatus) {
+      modalStatus.hidden = true;
+      modalStatus.textContent = "";
+    }
     if (modalVideo) {
+      modalVideo.onerror = null;
+      modalVideo.onloadeddata = null;
       modalVideo.pause();
       modalVideo.removeAttribute("src");
       modalVideo.load();
@@ -2877,14 +2922,15 @@ function renderHomepageFeaturedReels(cfg) {
     .map((reel) => {
       const title = String(reel.title || "Mandarin Reel");
       const videoUrl = backendAssetUrl(String(reel.video_path || "assets/video/Reels Red Envelope.mp4"));
-      const thumbUrl = backendAssetUrl(String(reel.thumbnail_path || "assets/images/story-poster.jpg"));
+      const thumbUrl = backendAssetUrl(canonicalizeHomepageMediaPath(reel.thumbnail_path || "assets/images/story-poster.jpg"));
       const duration = formatReelDuration(reel.duration_sec || 30);
       const badge = getReelBadgeMeta(reel.holiday_id, reel.type);
       const zhLine = String(reel.text_cn || "").slice(0, 26);
       const enDesc = String(reel.text_en || "Bite-sized Chinese video story.");
       return `
-        <article class="reel-card" data-video="${escapeHTML(videoUrl)}" data-title="${escapeHTML(title)}" data-desc="${escapeHTML(enDesc)}">
+        <article class="reel-card" data-video="${escapeHTML(videoUrl)}" data-poster="${escapeHTML(thumbUrl)}" data-title="${escapeHTML(title)}" data-desc="${escapeHTML(enDesc)}">
           <div class="reel-thumbnail-wrap">
+            <img class="reel-preview-poster" src="${escapeHTML(thumbUrl)}" alt="${escapeHTML(title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='assets/images/story-poster.jpg';" />
             <video class="reel-preview-video" muted loop playsinline preload="metadata" poster="${escapeHTML(thumbUrl)}">
               <source src="${escapeHTML(videoUrl)}" type="video/mp4">
             </video>
@@ -2937,12 +2983,12 @@ function renderHomepageFeaturedStories(cfg) {
       const zh = String(story.chineseTitle || "");
       const pinyin = String(story.pinyin || "");
       const desc = String(story.description || "Read interactive story scenes and vocabulary.");
-      const poster = backendAssetUrl(String(story.poster || "assets/images/story-poster.jpg"));
+      const poster = backendAssetUrl(canonicalizeHomepageMediaPath(story.poster || "assets/images/story-poster.jpg"));
       const level = String(story.level || "Beginner");
       return `
         <a href="story.html?id=${encodeURIComponent(sid)}" class="home-featured-story-card">
           <div class="home-featured-story-thumb">
-            <img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}" loading="lazy" onerror="this.onerror=null;this.src='assets/images/story-poster.jpg';" />
+            <img src="${escapeHTML(poster)}" alt="${escapeHTML(title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='assets/images/story-poster.jpg';" />
           </div>
           <div class="home-featured-story-body">
             <span class="home-featured-story-kicker">Featured Story · ${escapeHTML(level)}</span>

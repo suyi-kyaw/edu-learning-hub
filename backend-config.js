@@ -313,6 +313,9 @@
         return 'assets/video/story-02.mp4';
       }
     }
+    if (/^\/?assets\/images\/(story2-(?:poster|0[1-5]))\.jpg$/i.test(clean)) {
+      return clean.replace(/^\/+/, '').replace(/\.jpg$/i, '.svg');
+    }
     return clean;
   }
 
@@ -377,6 +380,9 @@
       out.audioUrl = aUrl;
       out.audio_url = aUrl;
       out.audio = aUrl;
+    }
+    if (row.image) {
+      out.image = canonicalizeMediaPath(String(row.image).trim(), lid);
     }
     if (row.order !== undefined || row.order_num !== undefined || row.Order !== undefined) {
       var ord = Number(row.order || row.order_num || row.Order) || 1;

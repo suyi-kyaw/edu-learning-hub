@@ -60,11 +60,21 @@ function backendApiUrl(path) {
   return path;
 }
 
-function backendAssetUrl(path) {
-  if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === "function") {
-    return window.LinguaBackend.assetUrl(path);
+function canonicalizeStoryAssetPath(path) {
+  let clean = String(path || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!clean) return "";
+  if (/^\/?assets\/images\/(story2-(?:poster|0[1-5]))\.jpg$/i.test(clean)) {
+    clean = clean.replace(/^\/+/, "").replace(/\.jpg$/i, ".svg");
   }
-  return path;
+  return clean;
+}
+
+function backendAssetUrl(path) {
+  const canonical = canonicalizeStoryAssetPath(path);
+  if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === "function") {
+    return window.LinguaBackend.assetUrl(canonical);
+  }
+  return canonical;
 }
 
 function backendAvailable() {
@@ -577,7 +587,8 @@ function renderLessonHeader(
    ========================================================= */
 
 function renderVideo(
-  lesson
+  lesson,
+  storyRows = []
 ) {
 
   const videoElement =
@@ -594,6 +605,28 @@ function renderVideo(
 
   const videoCard =
     videoElement ? videoElement.closest(".video-card") : null;
+
+
+  const coverEl =
+    document.getElementById(
+      "storyVideoCover"
+    );
+
+
+  const coverImg =
+    document.getElementById(
+      "storyVideoCoverImg"
+    );
+
+
+  const coverLabel =
+    document.getElementById(
+      "storyVideoCoverLabel"
+    );
+
+
+  const coverPlayWrap =
+    coverEl ? coverEl.querySelector(".story-video-cover-play") : null;
 
 
   const rawVideo =
@@ -627,7 +660,7 @@ function renderVideo(
     return clean;
   })();
 
-  const poster =
+  const rawPoster =
     getValue(
       lesson,
       "poster",
@@ -646,6 +679,74 @@ function renderVideo(
       "title",
       "Title"
     );
+
+
+  const chineseTitle =
+    getValue(
+      lesson,
+      "chineseTitle",
+      "ChineseTitle",
+      "Chinese Title"
+    );
+
+
+  const pinyin =
+    getValue(
+      lesson,
+      "pinyin",
+      "Pinyin"
+    );
+
+
+  const meaning =
+    getValue(
+      lesson,
+      "meaning",
+      "Meaning"
+    );
+
+
+  const firstSceneImage = Array.isArray(storyRows)
+    ? (() => {
+        for (const r of storyRows) {
+          const imgVal = getValue(r || {}, "image", "Image");
+          if (imgVal) return imgVal;
+        }
+        return "";
+      })()
+    : "";
+
+
+  const fallbackCoverSvg = getStoryFallbackSvg(
+    chineseTitle || title || "中文故事",
+    pinyin || "",
+    meaning || title || "Chinese Story"
+  );
+
+
+  const coverCandidates = [];
+  const pushCoverCandidate = (rawUrl) => {
+    const clean = String(rawUrl || "").trim();
+    if (!clean) return;
+    const resolved = backendAssetUrl(clean);
+    if (resolved && !coverCandidates.includes(resolved)) {
+      coverCandidates.push(resolved);
+    }
+    if (/\.(jpg|jpeg|png)$/i.test(resolved) && !/^data:/i.test(resolved)) {
+      const svgAlt = resolved.replace(/\.(jpg|jpeg|png)$/i, ".svg");
+      if (!coverCandidates.includes(svgAlt)) {
+        coverCandidates.push(svgAlt);
+      }
+    }
+  };
+
+  pushCoverCandidate(rawPoster);
+  pushCoverCandidate(firstSceneImage);
+  if (rawId === "lesson-02" || rawId === "story_02" || rawId === "story-02") {
+    pushCoverCandidate("assets/images/story2-poster.svg");
+  }
+  pushCoverCandidate("assets/images/story-poster.jpg");
+  coverCandidates.push(fallbackCoverSvg);
 
 
   if (videoCard) {
@@ -672,18 +773,60 @@ function renderVideo(
   };
 
 
+  const hideCoverOverlay = () => {
+    if (!coverEl) return;
+    coverEl.classList.add("is-hidden");
+    coverEl.setAttribute("aria-hidden", "true");
+  };
+
+  const showCoverOverlay = () => {
+    if (!coverEl) return;
+    coverEl.hidden = false;
+    coverEl.classList.remove("is-hidden");
+    coverEl.setAttribute("aria-hidden", "false");
+  };
+
+  if (coverImg) {
+    let candidateIdx = 0;
+    const applyNextCover = () => {
+      if (candidateIdx >= coverCandidates.length) {
+        coverImg.onerror = null;
+        return;
+      }
+      coverImg.src = coverCandidates[candidateIdx++];
+    };
+    coverImg.onerror = () => {
+      applyNextCover();
+    };
+    coverImg.alt = `${title || chineseTitle || "Chinese Story"} cover preview`;
+    applyNextCover();
+  }
+
+  if (coverLabel) {
+    coverLabel.textContent = normalizedVideo
+      ? `Watch: ${title || chineseTitle || "Chinese Story"}`
+      : "Video Preview Unavailable";
+  }
+  if (coverPlayWrap) {
+    coverPlayWrap.style.display = normalizedVideo ? "" : "none";
+  }
+
   if (videoElement) {
     videoElement.onerror = null;
     videoElement.onloadedmetadata = null;
+    videoElement.onplay = null;
+    videoElement.onplaying = null;
     videoElement.setAttribute("playsinline", "");
 
-    if (poster) {
-      videoElement.poster = backendAssetUrl(poster);
+    const resolvedPoster = coverCandidates[0] || "";
+    if (resolvedPoster && !/^data:image\/svg\+xml/i.test(resolvedPoster)) {
+      videoElement.poster = resolvedPoster;
     } else {
       videoElement.removeAttribute("poster");
     }
 
     if (normalizedVideo) {
+      showCoverOverlay();
       const resolvedSrc = backendAssetUrl(normalizedVideo);
       videoElement.src = resolvedSrc;
       videoElement.onloadedmetadata = () => {
@@ -692,16 +835,42 @@ function renderVideo(
           if (banner) banner.remove();
         }
       };
+      videoElement.onplay = hideCoverOverlay;
+      videoElement.onplaying = hideCoverOverlay;
       videoElement.onerror = () => {
+        hideCoverOverlay();
         showVideoStatus(
           `Video file could not be loaded (${normalizedVideo}). Confirm the file is committed under assets/ or the hosted URL is accessible.`,
           true
         );
       };
+
+      if (coverEl) {
+        const startVideoPlayback = () => {
+          hideCoverOverlay();
+          try {
+            videoElement.focus({ preventScroll: true });
+          } catch (_) {}
+          videoElement.play().catch(() => {});
+        };
+        coverEl.onclick = startVideoPlayback;
+        coverEl.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            startVideoPlayback();
+          }
+        };
+      }
+
       try {
         videoElement.load();
       } catch (e) {}
     } else {
+      if (coverEl) {
+        coverEl.onclick = null;
+        coverEl.onkeydown = null;
+      }
+      showCoverOverlay();
       videoElement.removeAttribute("src");
       try {
         videoElement.load();
@@ -1786,7 +1955,7 @@ async function loadStoryLesson() {
           level: "Beginner",
           description: "Follow Xiaoming to the lively fruit market as he buys fresh sweet apples.",
           video: "assets/video/story-02.mp4",
-          poster: "assets/images/story2-poster.jpg"
+          poster: "assets/images/story2-poster.svg"
         }
       ];
       allStoryRows = [
@@ -1796,11 +1965,11 @@ async function loadStoryLesson() {
         { lessonId: "lesson-01", order: 4, chinese: "然后，他去学校。", pinyin: "Ránhòu, tā qù xuéxiào.", english: "Then, he goes to school.", image: "assets/images/story-04.jpg", audio: "assets/audio/story-04.mp3" },
         { lessonId: "lesson-01", order: 5, chinese: "他很开心。", pinyin: "Tā hěn kāixīn.", english: "He is very happy.", image: "assets/images/story-05.jpg", audio: "assets/audio/story-05.mp3" },
 
-        { lessonId: "lesson-02", order: 1, chinese: "今天天气真好！", pinyin: "Jīntiān tiānqì zhēn hǎo!", english: "The weather is really nice today!", image: "assets/images/story2-01.jpg", audio: "assets/audio/story2-01.mp3" },
-        { lessonId: "lesson-02", order: 2, chinese: "小明去水果市场。", pinyin: "Xiǎomíng qù shuǐguǒ shìchǎng.", english: "Xiaoming goes to the fruit market.", image: "assets/images/story2-02.jpg", audio: "assets/audio/story2-02.mp3" },
-        { lessonId: "lesson-02", order: 3, chinese: "市场里有很多新鲜的红苹果。", pinyin: "Shìchǎng lǐ yǒu hěn duō xīnxiān de hóng píngguǒ.", english: "There are many fresh red apples in the market.", image: "assets/images/story2-03.jpg", audio: "assets/audio/story2-03.mp3" },
-        { lessonId: "lesson-02", order: 4, chinese: "他买了三个大苹果。", pinyin: "Tā mǎi le sān gè dà píngguǒ.", english: "He bought three big apples.", image: "assets/images/story2-04.jpg", audio: "assets/audio/story2-04.mp3" },
-        { lessonId: "lesson-02", order: 5, chinese: "苹果又甜又好吃，他真开心！", pinyin: "Píngguǒ yòu tián yòu hǎochī, tā zhēn kāixīn!", english: "The apples are sweet and delicious, he is really happy!", image: "assets/images/story2-05.jpg", audio: "assets/audio/story2-05.mp3" }
+        { lessonId: "lesson-02", order: 1, chinese: "今天天气真好！", pinyin: "Jīntiān tiānqì zhēn hǎo!", english: "The weather is really nice today!", image: "assets/images/story2-01.svg", audio: "assets/audio/story2-01.mp3" },
+        { lessonId: "lesson-02", order: 2, chinese: "小明去水果市场。", pinyin: "Xiǎomíng qù shuǐguǒ shìchǎng.", english: "Xiaoming goes to the fruit market.", image: "assets/images/story2-02.svg", audio: "assets/audio/story2-02.mp3" },
+        { lessonId: "lesson-02", order: 3, chinese: "市场里有很多新鲜的红苹果。", pinyin: "Shìchǎng lǐ yǒu hěn duō xīnxiān de hóng píngguǒ.", english: "There are many fresh red apples in the market.", image: "assets/images/story2-03.svg", audio: "assets/audio/story2-03.mp3" },
+        { lessonId: "lesson-02", order: 4, chinese: "他买了三个大苹果。", pinyin: "Tā mǎi le sān gè dà píngguǒ.", english: "He bought three big apples.", image: "assets/images/story2-04.svg", audio: "assets/audio/story2-04.mp3" },
+        { lessonId: "lesson-02", order: 5, chinese: "苹果又甜又好吃，他真开心！", pinyin: "Píngguǒ yòu tián yòu hǎochī, tā zhēn kāixīn!", english: "The apples are sweet and delicious, he is really happy!", image: "assets/images/story2-05.svg", audio: "assets/audio/story2-05.mp3" }
       ];
       allVocabularyRows = [
         { lessonId: "lesson-01", order: 1, character: "早上", pinyin: "zǎoshang", meaning: "morning", audio: "assets/audio/zaoshang.mp3" },
@@ -1887,7 +2056,7 @@ function renderActiveStoryById(lessonId) {
 
   // Render all page sections
   renderLessonHeader(lesson);
-  renderVideo(lesson);
+  renderVideo(lesson, storyRows);
   renderStoryImages(storyRows);
   renderStoryReading(storyRows);
   renderVocabulary(vocabularyRows);
@@ -3232,7 +3401,7 @@ const FALLBACK_REELS_DATA = [
     holiday_id: "dragonboat",
     title: "端午安康 - Dragon Boat & Zongzi",
     video_path: "assets/video/Reels Red Envelope.mp4",
-    thumbnail_path: "assets/images/story2-poster.jpg",
+    thumbnail_path: "assets/images/story2-poster.svg",
     duration_sec: 18,
     status: "active",
     text_cn: "端午节安康！划龙舟，吃香甜的粽子，佩香囊，平平安安！",
@@ -3246,7 +3415,7 @@ const FALLBACK_REELS_DATA = [
     holiday_id: "midautumn",
     title: "中秋赏月 - Mid-Autumn Moon Festival",
     video_path: "assets/video/lesson-01.mp4",
-    thumbnail_path: "assets/images/story2-01.jpg",
+    thumbnail_path: "assets/images/story2-01.svg",
     duration_sec: 15,
     status: "active",
     text_cn: "中秋节快乐！但愿人长久，千里共婵娟。一起吃月饼，看明亮的满月。",
@@ -3288,7 +3457,7 @@ const FALLBACK_REELS_DATA = [
     holiday_id: "grammar",
     title: "四声歌 - Mastering the 4 Chinese Tones",
     video_path: "assets/video/lesson-01.mp4",
-    thumbnail_path: "assets/images/story2-03.jpg",
+    thumbnail_path: "assets/images/story2-03.svg",
     duration_sec: 20,
     status: "active",
     text_cn: "一声高高平又平，二声由低往上升，三声先降然后再扬起，四声重重从高降到低！",
@@ -3330,7 +3499,7 @@ const FALLBACK_REELS_DATA = [
     holiday_id: "daily",
     title: "小明买水果 - Xiaoming Buys Fruit",
     video_path: "assets/video/story-02.mp4",
-    thumbnail_path: "assets/images/story2-poster.jpg",
+    thumbnail_path: "assets/images/story2-poster.svg",
     duration_sec: 50,
     status: "active",
     text_cn: "今天天气真好！小明去水果市场。市场里有很多新鲜的红苹果。他买了三个大苹果。苹果又甜又好吃，他真开心！",
@@ -3726,12 +3895,25 @@ function openReelModalPlayer(item) {
   // Set video source and play
   const videoSrc = backendAssetUrl(item.video_path || "assets/video/lesson-01.mp4");
   const posterSrc = backendAssetUrl(item.thumbnail_path || "assets/images/story-poster.jpg");
+  const statusEl = document.getElementById("reelPlayerStatus");
+  if (statusEl) {
+    statusEl.hidden = true;
+    statusEl.textContent = "";
+  }
 
+  video.onerror = null;
+  video.onloadeddata = null;
   video.poster = posterSrc;
   const currentVideoAttr = video.getAttribute("src") || "";
   if (currentVideoAttr !== videoSrc) {
     video.src = videoSrc;
   }
+  video.onerror = () => {
+    if (statusEl) {
+      statusEl.hidden = false;
+      statusEl.textContent = "This reel video could not be loaded. Confirm the video asset or hosted URL is accessible.";
+    }
+  };
   video.currentTime = 0;
   video.play().catch(() => {});
 
@@ -3743,10 +3925,20 @@ function openReelModalPlayer(item) {
 function closeReelModalPlayer() {
   const modal = document.getElementById("reelPlayerModal");
   const video = document.getElementById("reelModalVideo");
+  const statusEl = document.getElementById("reelPlayerStatus");
   if (!modal) return;
 
+  if (statusEl) {
+    statusEl.hidden = true;
+    statusEl.textContent = "";
+  }
+
   if (video) {
+    video.onerror = null;
+    video.onloadeddata = null;
     video.pause();
+    video.removeAttribute("src");
+    video.load();
   }
 
   modal.classList.remove("active");

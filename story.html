@@ -36,7 +36,7 @@
     rel="stylesheet"
   >
 
-  <link rel="stylesheet" href="style.css?v=excel10">
+  <link rel="stylesheet" href="style.css?v=excel11">
   <!-- Early theme application & backward-compatible redirect for ?tab=reels/?reel= -->
   <script>
     (function () {
@@ -212,17 +212,40 @@
 
       <div class="video-card">
 
-        <video
-          id="lessonVideo"
-          class="story-video"
-          controls
-          playsinline
-          preload="metadata"
-        >
+        <div class="story-video-stage" id="storyVideoStage">
+          <video
+            id="lessonVideo"
+            class="story-video"
+            controls
+            playsinline
+            preload="metadata"
+          >
 
-          Your browser does not support HTML5 video.
+            Your browser does not support HTML5 video.
 
-        </video>
+          </video>
+
+          <div
+            class="story-video-cover"
+            id="storyVideoCover"
+            role="button"
+            tabindex="0"
+            aria-label="Play story video"
+          >
+            <img
+              id="storyVideoCoverImg"
+              class="story-video-cover-img"
+              src="assets/images/story-poster.jpg"
+              alt="Story cover preview"
+              referrerpolicy="no-referrer"
+            >
+            <div class="story-video-cover-scrim" aria-hidden="true"></div>
+            <div class="story-video-cover-play">
+              <span class="story-video-cover-play-btn" aria-hidden="true">▶</span>
+              <span class="story-video-cover-label" id="storyVideoCoverLabel">Watch Story Video</span>
+            </div>
+          </div>
+        </div>
 
 
         <div class="video-caption">
@@ -591,10 +614,10 @@
   <script src="story-scroll.js"></script>
 
   <!-- Runtime Backend URL & Media Asset Resolver -->
-  <script src="backend-config.js?v=excel9"></script>
+  <script src="backend-config.js?v=excel11"></script>
 
   <!-- Story JavaScript -->
-  <script src="story.js?v=excel7"></script>
+  <script src="story.js?v=excel11"></script>
 
   <!-- Excel Auth & Membership Client -->
   <script src="vendor/firebase-app.js?v=excel10"></script>

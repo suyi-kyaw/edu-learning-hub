@@ -319,6 +319,9 @@ function canonicalizeD1MediaPath(val, rowId) {
       return "assets/video/story-02.mp4";
     }
   }
+  if (/^\/?assets\/images\/(story2-(?:poster|0[1-5]))\.jpg$/i.test(clean)) {
+    return clean.replace(/^\/+/, "").replace(/\.jpg$/i, ".svg");
+  }
   return clean;
 }
 async function getD1Meta(db, key) {
@@ -1390,6 +1393,10 @@ async function getDatabaseBundle(env, url) {
       }
     }
     const normalizedStoryLessons = rawLessons.map(normalizeStoryLessonRow);
+    const normalizedStoryScenes = rawStory.map((s) => ({
+      ...s,
+      image: s && s.image ? canonicalizeD1MediaPath(s.image, s.lessonId || s.lesson_id) : s?.image || ""
+    }));
     return json({
       success: true,
       database: "edu-hub-db",
@@ -1398,13 +1405,13 @@ async function getDatabaseBundle(env, url) {
       migrated,
       counts: {
         lessons: normalizedStoryLessons.length,
-        story: rawStory.length,
+        story: normalizedStoryScenes.length,
         vocabulary: rawVocab.length,
         exercises: rawExercises.length
       },
       sheets: {
         Lessons: normalizedStoryLessons,
-        Story: rawStory,
+        Story: normalizedStoryScenes,
         Vocabulary: rawVocab,
         Exercises: rawExercises.map(normalizeExerciseRow)
       }

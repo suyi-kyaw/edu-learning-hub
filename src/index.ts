@@ -385,6 +385,9 @@ function canonicalizeD1MediaPath(val: unknown, rowId?: string): string {
       return 'assets/video/story-02.mp4';
     }
   }
+  if (/^\/?assets\/images\/(story2-(?:poster|0[1-5]))\.jpg$/i.test(clean)) {
+    return clean.replace(/^\/+/, '').replace(/\.jpg$/i, '.svg');
+  }
   return clean;
 }
 
@@ -1609,6 +1612,10 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
     }
 
     const normalizedStoryLessons = rawLessons.map(normalizeStoryLessonRow);
+    const normalizedStoryScenes = rawStory.map((s: any) => ({
+      ...s,
+      image: s && s.image ? canonicalizeD1MediaPath(s.image, s.lessonId || s.lesson_id) : s?.image || ''
+    }));
 
     return json({
       success: true,
@@ -1618,13 +1625,13 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
       migrated,
       counts: {
         lessons: normalizedStoryLessons.length,
-        story: rawStory.length,
+        story: normalizedStoryScenes.length,
         vocabulary: rawVocab.length,
         exercises: rawExercises.length
       },
       sheets: {
         Lessons: normalizedStoryLessons,
-        Story: rawStory,
+        Story: normalizedStoryScenes,
         Vocabulary: rawVocab,
         Exercises: rawExercises.map(normalizeExerciseRow)
       }

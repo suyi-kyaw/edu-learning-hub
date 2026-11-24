@@ -28,7 +28,7 @@
     rel="stylesheet"
   >
 
-  <link rel="stylesheet" href="style.css?v=excel10">
+  <link rel="stylesheet" href="style.css?v=excel11">
   <!-- Early theme application to avoid flash of incorrect theme on reload -->
   <script>
     (function () {
@@ -138,7 +138,7 @@
           </a>
           <a href="story.html?id=lesson-02" class="home-featured-story-card">
             <div class="home-featured-story-thumb">
-              <img src="assets/images/story2-poster.jpg" alt="Xiaoming Buys Fruit" loading="lazy" onerror="this.onerror=null;this.src='assets/images/story-02.jpg';">
+              <img src="assets/images/story2-poster.svg" alt="Xiaoming Buys Fruit" loading="lazy" onerror="this.onerror=null;this.src='assets/images/story-poster.jpg';">
             </div>
             <div class="home-featured-story-body">
               <span class="home-featured-story-kicker">Featured Story · Beginner</span>
@@ -363,11 +363,12 @@
     <div class="reel-modal-card">
       <button type="button" class="reel-modal-close" id="closeReelModalBtn" aria-label="Close Reel">✕</button>
       <div class="reel-modal-video-wrap">
-        <video id="reelModalVideo" controls playsinline></video>
+        <video id="reelModalVideo" controls playsinline preload="metadata"></video>
       </div>
       <div class="reel-modal-info">
         <h3 id="reelModalTitle">Reel Video</h3>
         <p id="reelModalDesc">Cultural Chinese Reel</p>
+        <p id="reelModalStatus" class="reel-modal-status" hidden></p>
       </div>
     </div>
   </div>
@@ -720,10 +721,10 @@
   <script src="audio-engine.js"></script>
 
   <!-- Runtime Backend URL & Media Asset Resolver -->
-  <script src="backend-config.js?v=excel9"></script>
+  <script src="backend-config.js?v=excel11"></script>
 
   <!-- Application JavaScript -->
-  <script src="main.js?v=excel10"></script>
+  <script src="main.js?v=excel11"></script>
 
   <!-- Excel Auth & Membership Client -->
   <script src="vendor/firebase-app.js?v=excel10"></script>

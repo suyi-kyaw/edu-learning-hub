@@ -77,7 +77,7 @@
       meaning: "Treating friends to Peking Duck, expressing thanks, and HSK 2 dining conversations",
       level: "HSK 2",
       description: "Learn how to use 请 (qǐng) for treating guests, past-action 了 (le), dining expressions, and Mandarin conversation around Peking Duck.",
-      videoUrl: "assets/video/lesson-02.mp4",
+      videoUrl: "assets/video/lesson-01.mp4",
       posterUrl: "assets/images/exercises/roast-duck.svg",
       keywords: "HSK 2, Peking Duck, Dining, Past Tense 了, Conversation",
       accessType: "paid",
@@ -1274,8 +1274,14 @@
     }
     panel.style.display = '';
 
-    const videoUrl = backendAssetUrl(lesson.videoUrl || lesson.video_url || lesson.video || 'assets/video/lesson-02.mp4');
-    const poster = backendAssetUrl(lesson.posterUrl || lesson.poster_url || lesson.poster || 'assets/images/story-02.jpg');
+    const rawVideo = String(lesson.videoUrl || lesson.video_url || lesson.video || '').trim();
+    const resolvedRawVideo = rawVideo && rawVideo !== 'assets/video/lesson-02.mp4' ? rawVideo : 'assets/video/lesson-01.mp4';
+    const videoUrl = backendAssetUrl(resolvedRawVideo);
+    const rawPoster = String(lesson.posterUrl || lesson.poster_url || lesson.poster || '').trim();
+    const poster = backendAssetUrl(rawPoster || 'assets/images/story-poster.jpg');
+    const fallbackLessonSvg = `data:image/svg+xml;utf8,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="100%" height="100%"><defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#fff7ed"/><stop offset="100%" stop-color="#fed7aa"/></linearGradient></defs><rect width="800" height="450" fill="url(#lg)"/><text x="400" y="210" font-family="'Noto Serif SC', serif" font-weight="700" font-size="44" fill="#9a3412" text-anchor="middle">${escapeHTML(lesson.chineseTitle || lesson.title || '汉语课程')}</text><text x="400" y="265" font-family="system-ui, sans-serif" font-size="22" fill="#ea580c" text-anchor="middle">${escapeHTML(lesson.title || 'Mandarin Video Lesson')}</text></svg>`
+    )}`;
 
     // Find vocabulary or story lines for this lesson
     const vocabItems = allVocabulary.filter(v => isSameLessonId(v.lessonId || v.lesson_id, lesson.id));
@@ -1284,11 +1290,20 @@
       <div class="video-lesson-grid">
         <div class="video-player-card">
           <div class="video-frame-wrap">
-            <video id="workspaceVideoPlayer" controls poster="${escapeHTML(poster)}" preload="metadata">
+            <video id="workspaceVideoPlayer" controls playsinline poster="${escapeHTML(poster)}" preload="metadata">
               <source src="${escapeHTML(videoUrl)}" type="video/mp4">
               Your browser does not support the video tag.
             </video>
+            <div class="story-video-cover" id="lessonWorkspaceVideoCover" role="button" tabindex="0" aria-label="Play lesson video">
+              <img id="lessonWorkspaceVideoCoverImg" class="story-video-cover-img" src="${escapeHTML(poster)}" alt="${escapeHTML(lesson.title || 'Lesson video cover')}" referrerpolicy="no-referrer">
+              <div class="story-video-cover-scrim" aria-hidden="true"></div>
+              <div class="story-video-cover-play">
+                <span class="story-video-cover-play-btn" aria-hidden="true">▶</span>
+                <span class="story-video-cover-label">Watch: ${escapeHTML(lesson.title || lesson.chineseTitle || 'Lesson Video')}</span>
+              </div>
+            </div>
           </div>
+          <div id="workspaceVideoStatusBanner" class="video-status-banner is-error" hidden></div>
           <div class="video-controls-toolbar">
             <div class="video-quick-buttons">
               <button type="button" class="btn-video-control" id="btnReplayVideo">↺ Replay</button>
@@ -1338,13 +1353,79 @@
       </div>
     `;
 
-    // Attach video control listeners
+    // Attach video cover & control listeners
     const video = document.getElementById('workspaceVideoPlayer');
+    const cover = document.getElementById('lessonWorkspaceVideoCover');
+    const coverImg = document.getElementById('lessonWorkspaceVideoCoverImg');
+    const statusBanner = document.getElementById('workspaceVideoStatusBanner');
+
+    if (coverImg) {
+      let fallbackStep = 0;
+      coverImg.onerror = () => {
+        if (fallbackStep === 0 && /\.(jpg|jpeg|png)$/i.test(coverImg.src)) {
+          fallbackStep = 1;
+          coverImg.src = coverImg.src.replace(/\.(jpg|jpeg|png)$/i, '.svg');
+          return;
+        }
+        if (fallbackStep <= 1) {
+          fallbackStep = 2;
+          coverImg.src = 'assets/images/story-poster.jpg';
+          return;
+        }
+        coverImg.onerror = null;
+        coverImg.src = fallbackLessonSvg;
+      };
+    }
+
+    const hideLessonCover = () => {
+      if (cover) {
+        cover.classList.add('is-hidden');
+        cover.setAttribute('aria-hidden', 'true');
+      }
+    };
+
+    if (cover && video) {
+      const startPlay = () => {
+        hideLessonCover();
+        video.play().catch(() => {});
+      };
+      cover.onclick = startPlay;
+      cover.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          startPlay();
+        }
+      };
+    }
+
+    if (video) {
+      video.onplay = hideLessonCover;
+      video.onplaying = hideLessonCover;
+      video.onerror = () => {
+        hideLessonCover();
+        if (statusBanner) {
+          statusBanner.hidden = false;
+          statusBanner.textContent = `Video could not be loaded (${resolvedRawVideo}). Confirm the asset file exists or check its hosted URL.`;
+        }
+      };
+      const sourceEl = video.querySelector('source');
+      if (sourceEl) {
+        sourceEl.onerror = () => {
+          hideLessonCover();
+          if (statusBanner) {
+            statusBanner.hidden = false;
+            statusBanner.textContent = `Video could not be loaded (${resolvedRawVideo}). Confirm the asset file exists or check its hosted URL.`;
+          }
+        };
+      }
+    }
+
     const replayBtn = document.getElementById('btnReplayVideo');
     if (replayBtn && video) {
       replayBtn.onclick = () => {
+        hideLessonCover();
         video.currentTime = 0;
-        video.play();
+        video.play().catch(() => {});
       };
     }
 
