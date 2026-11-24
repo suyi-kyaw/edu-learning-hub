@@ -2733,6 +2733,7 @@ let cachedHomeReels = [];
 let cachedHomeStories = [];
 let cachedHomeGames = [];
 let cachedHomeSiteConfig = null;
+let homeDatasetsLoaded = false;
 
 function formatReelDuration(sec) {
   const n = Math.max(0, Math.round(Number(sec) || 0));
@@ -2758,6 +2759,39 @@ function extractGameIframeSrc(codeOrUrl) {
     if (match && match[1]) return match[1];
   }
   return str;
+}
+
+function pickExactFeaturedItems(items, rawFeaturedIds, fallbackSliceCount) {
+  const hasExplicitList = Array.isArray(rawFeaturedIds);
+  if (!hasExplicitList) {
+    return {
+      hasExplicitList: false,
+      picked: items.slice(0, fallbackSliceCount)
+    };
+  }
+  const picked = [];
+  const seen = new Set();
+  for (const rawId of rawFeaturedIds) {
+    const key = String(rawId || "").trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    const match = items.find((item) => String(item?.id || "").trim().toLowerCase() === key);
+    if (match) {
+      seen.add(key);
+      picked.push(match);
+    }
+  }
+  return {
+    hasExplicitList: true,
+    picked
+  };
+}
+
+function applyCountLayoutClass(el, prefix, count) {
+  if (!el) return;
+  el.classList.remove(`${prefix}-1`, `${prefix}-2`, `${prefix}-3`);
+  if (count === 1) el.classList.add(`${prefix}-1`);
+  else if (count === 2) el.classList.add(`${prefix}-2`);
+  else if (count >= 3) el.classList.add(`${prefix}-3`);
 }
 
 function applyHomepageSiteConfig(cfg) {
@@ -2812,32 +2846,34 @@ function applyHomepageSiteConfig(cfg) {
       .join("");
   }
 
-  renderHomepageFeaturedReels(cfg);
-  renderHomepageFeaturedStories(cfg);
-  renderHomepageFeaturedGames(cfg);
+  if (homeDatasetsLoaded) {
+    renderHomepageFeaturedReels(cfg);
+    renderHomepageFeaturedStories(cfg);
+    renderHomepageFeaturedGames(cfg);
+  }
 }
 
 function renderHomepageFeaturedReels(cfg) {
   const grid = document.getElementById("homeFeaturedReelsGrid");
-  if (!grid || !cachedHomeReels.length) return;
+  if (!grid || !homeDatasetsLoaded) return;
 
   const activeReels = cachedHomeReels.filter((r) => String(r.status || "active").toLowerCase() !== "inactive");
-  const featuredIds = Array.isArray(cfg?.featuredReelIds) ? cfg.featuredReelIds : [];
+  const { hasExplicitList, picked } = pickExactFeaturedItems(activeReels, cfg?.featuredReelIds, 3);
 
-  let picked = [];
-  if (featuredIds.length > 0) {
-    featuredIds.forEach((id) => {
-      const match = activeReels.find((r) => String(r.id || "").trim() === String(id).trim());
-      if (match) picked.push(match);
-    });
+  if (picked.length === 0) {
+    if (hasExplicitList || activeReels.length === 0) {
+      grid.innerHTML = "";
+      grid.hidden = true;
+      applyCountLayoutClass(grid, "reels-count", 0);
+    }
+    return;
   }
-  if (!picked.length) {
-    picked = activeReels.slice(0, 3);
-  }
-  if (!picked.length) return;
 
-  grid.innerHTML = picked
-    .slice(0, 6)
+  const visibleReels = picked.slice(0, 6);
+  grid.hidden = false;
+  applyCountLayoutClass(grid, "reels-count", visibleReels.length);
+
+  grid.innerHTML = visibleReels
     .map((reel) => {
       const title = String(reel.title || "Mandarin Reel");
       const videoUrl = backendAssetUrl(String(reel.video_path || "assets/video/Reels Red Envelope.mp4"));
@@ -2877,24 +2913,24 @@ function renderHomepageFeaturedReels(cfg) {
 
 function renderHomepageFeaturedStories(cfg) {
   const strip = document.getElementById("homeFeaturedStoriesGrid");
-  if (!strip || !cachedHomeStories.length) return;
+  if (!strip || !homeDatasetsLoaded) return;
 
-  const featuredIds = Array.isArray(cfg?.featuredStoryIds) ? cfg.featuredStoryIds : [];
-  let picked = [];
-  if (featuredIds.length > 0) {
-    featuredIds.forEach((id) => {
-      const match = cachedHomeStories.find((s) => String(s.id || "").trim() === String(id).trim());
-      if (match) picked.push(match);
-    });
-  }
-  if (!picked.length) {
-    picked = cachedHomeStories.slice(0, 3);
-  }
-  if (!picked.length) return;
+  const { hasExplicitList, picked } = pickExactFeaturedItems(cachedHomeStories, cfg?.featuredStoryIds, 3);
 
+  if (picked.length === 0) {
+    if (hasExplicitList || cachedHomeStories.length === 0) {
+      strip.innerHTML = "";
+      strip.hidden = true;
+      applyCountLayoutClass(strip, "stories-count", 0);
+    }
+    return;
+  }
+
+  const visibleStories = picked.slice(0, 6);
   strip.hidden = false;
-  strip.innerHTML = picked
-    .slice(0, 6)
+  applyCountLayoutClass(strip, "stories-count", visibleStories.length);
+
+  strip.innerHTML = visibleStories
     .map((story) => {
       const sid = String(story.id || "lesson-01");
       const title = String(story.title || sid);
@@ -2922,34 +2958,31 @@ function renderHomepageFeaturedStories(cfg) {
 
 function renderHomepageFeaturedGames(cfg) {
   const container = document.getElementById("homeFeaturedGamesContainer");
-  if (!container || !cachedHomeGames.length) return;
+  if (!container || !homeDatasetsLoaded) return;
 
   const activeGames = cachedHomeGames
     .filter((g) => String(g.active || "TRUE").toUpperCase() !== "FALSE")
     .sort((a, b) => (Number(a.order) || 999) - (Number(b.order) || 999));
 
-  if (!activeGames.length) return;
+  const { hasExplicitList, picked } = pickExactFeaturedItems(activeGames, cfg?.featuredGameIds, 1);
 
-  const featuredIds = Array.isArray(cfg?.featuredGameIds) ? cfg.featuredGameIds : [];
-  let picked = [];
-  if (featuredIds.length > 0) {
-    featuredIds.forEach((id) => {
-      const match = activeGames.find((g) => String(g.id || "").trim() === String(id).trim());
-      if (match) picked.push(match);
-    });
-  }
-  if (!picked.length) {
-    picked = [activeGames[0]];
+  if (picked.length === 0) {
+    if (hasExplicitList || activeGames.length === 0) {
+      container.innerHTML = "";
+      container.hidden = true;
+      applyCountLayoutClass(container, "games-count", 0);
+    }
+    return;
   }
 
-  container.innerHTML = picked
-    .slice(0, 3)
+  const cardsHtml = picked
+    .slice(0, 6)
     .map((game) => {
       const src = extractGameIframeSrc(game.embed_code || game.embed_url);
       if (!src) return "";
       const title = String(game.title || "Wordwall Interactive Game");
       return `
-        <div class="game-iframe-wrapper" style="margin-bottom: 18px;">
+        <div class="game-iframe-wrapper">
           <iframe
             style="max-width:100%"
             src="${escapeHTML(src)}"
@@ -2964,8 +2997,18 @@ function renderHomepageFeaturedGames(cfg) {
         </div>
       `;
     })
-    .filter(Boolean)
-    .join("");
+    .filter(Boolean);
+
+  if (!cardsHtml.length) {
+    container.innerHTML = "";
+    container.hidden = true;
+    applyCountLayoutClass(container, "games-count", 0);
+    return;
+  }
+
+  container.hidden = false;
+  applyCountLayoutClass(container, "games-count", cardsHtml.length);
+  container.innerHTML = cardsHtml.join("");
 }
 
 async function initHomepageHydration() {
@@ -2977,53 +3020,84 @@ async function initHomepageHydration() {
     }
   });
 
-  if (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === "function") {
-    applyHomepageSiteConfig(window.LinguaAuth.getSiteConfig());
-  }
+  window.addEventListener("linguapath-content-change", (e) => {
+    const detail = e && e.detail;
+    if (!detail || !detail.sheets) return;
+    if (detail.domain === "reels" && Array.isArray(detail.sheets.Videos)) {
+      cachedHomeReels = detail.sheets.Videos;
+      homeDatasetsLoaded = true;
+      renderHomepageFeaturedReels(cachedHomeSiteConfig || window.LinguaAuth?.getSiteConfig?.());
+    } else if (detail.domain === "stories" && Array.isArray(detail.sheets.Lessons)) {
+      cachedHomeStories = detail.sheets.Lessons;
+      homeDatasetsLoaded = true;
+      renderHomepageFeaturedStories(cachedHomeSiteConfig || window.LinguaAuth?.getSiteConfig?.());
+    } else if (detail.domain === "lessons" && Array.isArray(detail.sheets.Games)) {
+      cachedHomeGames = detail.sheets.Games;
+      homeDatasetsLoaded = true;
+      renderHomepageFeaturedGames(cachedHomeSiteConfig || window.LinguaAuth?.getSiteConfig?.());
+    }
+  });
 
-  // Load config + dynamic datasets in parallel (Local Admin Draft -> Direct .xlsx -> .json fallback)
+  // Load config readiness + dynamic datasets in parallel so we never stick on pre-hydration 3-card defaults
   try {
-    let cfgData = null;
+    const authReadyPromise =
+      window.LinguaAuth && typeof window.LinguaAuth.waitUntilReady === "function"
+        ? Promise.race([
+            window.LinguaAuth.waitUntilReady().catch(() => {}),
+            new Promise((resolve) => setTimeout(resolve, 4500))
+          ])
+        : Promise.resolve();
 
+    let datasetsPromise;
     if (window.LinguaContentStore) {
-      const [reelsRes, storiesRes, lessonsRes] = await Promise.allSettled([
+      datasetsPromise = Promise.allSettled([
         window.LinguaContentStore.loadReelsWorkbook(),
         window.LinguaContentStore.loadStoriesWorkbook(),
         window.LinguaContentStore.loadLessonsWorkbook()
-      ]);
-      if (reelsRes.status === "fulfilled" && reelsRes.value?.sheets?.Videos) {
-        cachedHomeReels = reelsRes.value.sheets.Videos;
-      }
-      if (storiesRes.status === "fulfilled" && storiesRes.value?.sheets?.Lessons) {
-        cachedHomeStories = storiesRes.value.sheets.Lessons;
-      }
-      if (lessonsRes.status === "fulfilled" && lessonsRes.value?.sheets?.Games) {
-        cachedHomeGames = lessonsRes.value.sheets.Games;
-      }
+      ]).then(([reelsRes, storiesRes, lessonsRes]) => {
+        if (reelsRes.status === "fulfilled" && reelsRes.value?.sheets?.Videos) {
+          cachedHomeReels = reelsRes.value.sheets.Videos;
+        }
+        if (storiesRes.status === "fulfilled" && storiesRes.value?.sheets?.Lessons) {
+          cachedHomeStories = storiesRes.value.sheets.Lessons;
+        }
+        if (lessonsRes.status === "fulfilled" && lessonsRes.value?.sheets?.Games) {
+          cachedHomeGames = lessonsRes.value.sheets.Games;
+        }
+      });
     } else {
       const stamp = Date.now();
-      const [fbReels, fbStories, fbLessons] = await Promise.allSettled([
+      datasetsPromise = Promise.allSettled([
         cachedHomeReels.length ? Promise.resolve(null) : fetch("data/reels_stories.json?t=" + stamp).then((r) => (r.ok ? r.json() : null)),
         cachedHomeStories.length ? Promise.resolve(null) : fetch("data/stories.json?t=" + stamp).then((r) => (r.ok ? r.json() : null)),
         cachedHomeGames.length ? Promise.resolve(null) : fetch("data/lessons.json?t=" + stamp).then((r) => (r.ok ? r.json() : null))
-      ]);
-      if (!cachedHomeReels.length && fbReels.status === "fulfilled" && fbReels.value?.sheets?.Videos) {
-        cachedHomeReels = fbReels.value.sheets.Videos;
-      }
-      if (!cachedHomeStories.length && fbStories.status === "fulfilled" && fbStories.value?.sheets?.Lessons) {
-        cachedHomeStories = fbStories.value.sheets.Lessons;
-      }
-      if (!cachedHomeGames.length && fbLessons.status === "fulfilled" && fbLessons.value?.sheets?.Games) {
-        cachedHomeGames = fbLessons.value.sheets.Games;
-      }
+      ]).then(([fbReels, fbStories, fbLessons]) => {
+        if (!cachedHomeReels.length && fbReels.status === "fulfilled" && fbReels.value?.sheets?.Videos) {
+          cachedHomeReels = fbReels.value.sheets.Videos;
+        }
+        if (!cachedHomeStories.length && fbStories.status === "fulfilled" && fbStories.value?.sheets?.Lessons) {
+          cachedHomeStories = fbStories.value.sheets.Lessons;
+        }
+        if (!cachedHomeGames.length && fbLessons.status === "fulfilled" && fbLessons.value?.sheets?.Games) {
+          cachedHomeGames = fbLessons.value.sheets.Games;
+        }
+      });
     }
 
-    const activeCfg =
+    await Promise.all([authReadyPromise, datasetsPromise]);
+    homeDatasetsLoaded = true;
+
+    let activeCfg =
       (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === "function"
         ? window.LinguaAuth.getSiteConfig()
-        : null) ||
-      cfgData ||
-      cachedHomeSiteConfig;
+        : null) || cachedHomeSiteConfig;
+
+    if (!activeCfg) {
+      try {
+        const res = await fetch("data/site-config.json?t=" + Date.now(), { cache: "no-store" });
+        if (res.ok) activeCfg = await res.json();
+      } catch (_) {}
+    }
 
     if (activeCfg) {
       applyHomepageSiteConfig(activeCfg);

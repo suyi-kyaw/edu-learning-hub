@@ -1834,6 +1834,22 @@ async function handleForceDatabaseSync(request: Request, env: Env, url: URL): Pr
   }
 }
 
+function normalizeWorkerFeaturedIdList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const clean = String(item || '').trim().slice(0, 128);
+    if (!clean) continue;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean);
+    if (out.length >= 24) break;
+  }
+  return out;
+}
+
 async function handleWorkerGetSiteConfig(request: Request, env: Env, url: URL): Promise<Response> {
   const row = await withD1TableRepair(env.DB, () =>
     one<{ config_json: string; updated_at: string }>(
@@ -1844,6 +1860,20 @@ async function handleWorkerGetSiteConfig(request: Request, env: Env, url: URL): 
   if (row && row.config_json) {
     try {
       const parsed = JSON.parse(row.config_json);
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.featuredReelIds)) {
+          parsed.featuredReelIds = normalizeWorkerFeaturedIdList(parsed.featuredReelIds);
+        }
+        if (Array.isArray(parsed.featuredStoryIds)) {
+          parsed.featuredStoryIds = normalizeWorkerFeaturedIdList(parsed.featuredStoryIds);
+        }
+        if (Array.isArray(parsed.featuredGameIds)) {
+          parsed.featuredGameIds = normalizeWorkerFeaturedIdList(parsed.featuredGameIds);
+        }
+        if (!parsed.updatedAt && row.updated_at) {
+          parsed.updatedAt = row.updated_at;
+        }
+      }
       return json({ success: true, config: parsed, source: 'cloudflare-d1', updatedAt: row.updated_at });
     } catch (_) {}
   }
@@ -1906,6 +1936,18 @@ async function handleWorkerSaveSiteConfig(request: Request, env: Env): Promise<R
         } catch (_) {}
       }
       const nextCfg = { ...existing, ...body };
+      delete (nextCfg as any)._pendingServerSync;
+      delete (nextCfg as any)._savedLocallyOnly;
+
+      if (Array.isArray(nextCfg.featuredReelIds)) {
+        nextCfg.featuredReelIds = normalizeWorkerFeaturedIdList(nextCfg.featuredReelIds);
+      }
+      if (Array.isArray(nextCfg.featuredStoryIds)) {
+        nextCfg.featuredStoryIds = normalizeWorkerFeaturedIdList(nextCfg.featuredStoryIds);
+      }
+      if (Array.isArray(nextCfg.featuredGameIds)) {
+        nextCfg.featuredGameIds = normalizeWorkerFeaturedIdList(nextCfg.featuredGameIds);
+      }
       if (!nextCfg.siteLogoUrl && body.siteLogoUrl === '') {
         nextCfg.siteLogoUrl = '';
       } else if (/^\/?public\/assets\/aistudio\//i.test(nextCfg.siteLogoUrl)) {

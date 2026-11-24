@@ -1022,12 +1022,28 @@ function emitSiteConfigChange(): void {
   }
 }
 
-function normalizeStrList(raw: unknown, maxItems: number, maxLen: number, fallback: string[]): string[] {
+function normalizeStrList(
+  raw: unknown,
+  maxItems: number,
+  maxLen: number,
+  fallback: string[],
+  dedupeCaseInsensitive = false
+): string[] {
   if (!Array.isArray(raw)) return [...fallback];
-  return raw
-    .map((x) => String(x || '').trim().slice(0, maxLen))
-    .filter(Boolean)
-    .slice(0, maxItems);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const x of raw) {
+    const clean = String(x || '').trim().slice(0, maxLen);
+    if (!clean) continue;
+    if (dedupeCaseInsensitive) {
+      const key = clean.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    out.push(clean);
+    if (out.length >= maxItems) break;
+  }
+  return out;
 }
 
 function sanitizeLogoUrl(val: unknown): string {
@@ -1109,13 +1125,13 @@ function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteC
     contactPhone: s(raw?.contactPhone, 40, DEFAULT_SITE_CONFIG.contactPhone),
     contactViber: s(raw?.contactViber, 40, DEFAULT_SITE_CONFIG.contactViber),
     featuredReelIds: Array.isArray(raw?.featuredReelIds)
-      ? normalizeStrList(raw.featuredReelIds, 12, 128, [])
+      ? normalizeStrList(raw.featuredReelIds, 24, 128, [], true)
       : [...DEFAULT_SITE_CONFIG.featuredReelIds],
     featuredStoryIds: Array.isArray(raw?.featuredStoryIds)
-      ? normalizeStrList(raw.featuredStoryIds, 12, 128, [])
+      ? normalizeStrList(raw.featuredStoryIds, 24, 128, [], true)
       : [...DEFAULT_SITE_CONFIG.featuredStoryIds],
     featuredGameIds: Array.isArray(raw?.featuredGameIds)
-      ? normalizeStrList(raw.featuredGameIds, 12, 128, [])
+      ? normalizeStrList(raw.featuredGameIds, 24, 128, [], true)
       : [...DEFAULT_SITE_CONFIG.featuredGameIds],
     updatedBy: raw?.updatedBy,
     updatedAt: raw?.updatedAt
@@ -1231,11 +1247,12 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   if (serverCfg) {
     const serverTime = parseIsoTimestamp(serverCfg.updatedAt);
     const localTime = parseIsoTimestamp(dataset.siteConfig?.updatedAt);
-    if (dataset.siteConfig && localTime > serverTime) {
+    const localPending = Boolean((dataset.siteConfig as any)?._pendingServerSync);
+    if (dataset.siteConfig && localPending && localTime > serverTime) {
       effectiveCfg = { ...baseCfg, ...serverCfg, ...dataset.siteConfig };
     } else {
       effectiveCfg = { ...baseCfg, ...serverCfg };
-      // Refresh local overlay store with fresh server config
+      // Refresh local overlay store with authoritative server config
       const overlay = readOverlayStore();
       overlay.siteConfig = { ...effectiveCfg };
       writeOverlayStore(overlay);
@@ -1255,7 +1272,16 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   emitState();
 }
 
-hydratePublicAndSession();
+const initialHydrationPromise = hydratePublicAndSession();
+
+function waitUntilReady(): Promise<void> {
+  return state.ready ? Promise.resolve() : initialHydrationPromise;
+}
+
+async function reloadSiteConfig(): Promise<SiteConfig> {
+  await hydratePublicAndSession(false);
+  return getSiteConfig();
+}
 
 // --- Public Auth, Profile, Subscription & Admin Methods ---
 
@@ -1808,8 +1834,10 @@ function getSiteConfig(): SiteConfig {
   return normalizeSiteConfig(state.siteConfig);
 }
 
-async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig> {
+async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig & { _savedLocallyOnly?: boolean }> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  await waitUntilReady().catch(() => {});
+
   const nowIso = new Date().toISOString();
   const merged = normalizeSiteConfig({
     ...state.siteConfig,
@@ -1817,13 +1845,6 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig>
     updatedBy: state.user.email,
     updatedAt: nowIso
   });
-  const overlay = readOverlayStore();
-  overlay.siteConfig = { ...merged };
-  writeOverlayStore(overlay);
-
-  state.siteConfig = normalizeSiteConfig(overlay.siteConfig);
-  emitSiteConfigChange();
-  emitState();
 
   // Push to live backend / Cloudflare D1 whenever on server host OR connected to Worker URL
   const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
@@ -1831,45 +1852,57 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig>
   const hasRemoteBackend = lb?.hasBackend ? lb.hasBackend() : !isStaticHost;
 
   if (!isStaticHost || hasRemoteBackend) {
+    let bearerToken = '';
     try {
-      const token = await getIdToken();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      if (state.user?.uid) {
-        headers['X-Admin-Uid'] = state.user.uid;
-        headers['X-User-Uid'] = state.user.uid;
-      }
-      const apiPath = '/api/admin/site-config';
-      const apiUrl =
-        typeof window !== 'undefined' && (window as any).LinguaBackend?.apiUrl
-          ? (window as any).LinguaBackend.apiUrl(apiPath)
-          : apiPath;
-      const res = await fetch(apiUrl, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(merged)
-      });
-      if (res.ok) {
-        const data = (await res.json().catch(() => ({}))) as any;
-        if (data && data.success && data.config) {
-          const serverConfig = normalizeSiteConfig(data.config);
-          overlay.siteConfig = { ...serverConfig };
-          writeOverlayStore(overlay);
-          state.siteConfig = serverConfig;
-          emitSiteConfigChange();
-          emitState();
-        }
-      }
-    } catch (netErr) {
-      console.warn('Could not sync site-config to server:', netErr);
+      bearerToken = String(localStorage.getItem('linguapath_api_token') || '').trim();
+    } catch {
+      bearerToken = '';
     }
+    const uidToken = await getIdToken();
+    const effectiveToken = bearerToken || uidToken;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (effectiveToken) {
+      headers['Authorization'] = `Bearer ${effectiveToken}`;
+    }
+    if (state.user?.uid) {
+      headers['X-Admin-Uid'] = state.user.uid;
+      headers['X-User-Uid'] = state.user.uid;
+    }
+    const apiPath = '/api/admin/site-config';
+    const apiUrl = lb?.apiUrl ? lb.apiUrl(apiPath) : apiPath;
+
+    const res = await fetch(apiUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(merged)
+    });
+    const data = (await res.json().catch(() => null)) as any;
+    if (!res.ok || !data || data.success === false) {
+      const serverErr = (data && (data.error || data.message)) || `Server rejected site configuration save (HTTP ${res.status}).`;
+      throw new Error(serverErr);
+    }
+
+    const serverConfig = normalizeSiteConfig(data.config || merged);
+    const overlay = readOverlayStore();
+    overlay.siteConfig = { ...serverConfig };
+    writeOverlayStore(overlay);
+    state.siteConfig = serverConfig;
+    emitSiteConfigChange();
+    emitState();
+    return state.siteConfig;
   }
 
-  return state.siteConfig;
+  // Static GitHub Pages without remote Worker URL: persist to browser overlay only & notify caller
+  const overlay = readOverlayStore();
+  overlay.siteConfig = { ...merged, _pendingServerSync: true } as SiteConfig;
+  writeOverlayStore(overlay);
+
+  state.siteConfig = normalizeSiteConfig(overlay.siteConfig);
+  emitSiteConfigChange();
+  emitState();
+  return Object.assign({}, state.siteConfig, { _savedLocallyOnly: true });
 }
 
 function exportSiteConfigJson(): void {
@@ -2352,8 +2385,10 @@ const LinguaAuth = {
   calculateAge,
   getState,
   subscribe,
+  waitUntilReady,
   getIdToken,
   getSiteConfig,
+  reloadSiteConfig,
   saveSiteConfig,
   exportSiteConfigJson,
   registerWithEmail,

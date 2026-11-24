@@ -884,14 +884,24 @@ function sanitizeSiteConfigInput(raw) {
     const val = typeof input[key] === 'string' ? input[key].trim() : DEFAULT_SITE_CONFIG[key];
     return val.slice(0, maxLen) || DEFAULT_SITE_CONFIG[key];
   };
-  const strList = (key, maxItems, maxLen, useDefaultIfMissing) => {
+  const strList = (key, maxItems, maxLen, useDefaultIfMissing, dedupe = false) => {
     if (!Array.isArray(input[key])) {
       return useDefaultIfMissing ? [...DEFAULT_SITE_CONFIG[key]] : [];
     }
-    return input[key]
-      .map((x) => String(x || '').trim().slice(0, maxLen))
-      .filter(Boolean)
-      .slice(0, maxItems);
+    const out = [];
+    const seen = new Set();
+    for (const x of input[key]) {
+      const clean = String(x || '').trim().slice(0, maxLen);
+      if (!clean) continue;
+      if (dedupe) {
+        const lower = clean.toLowerCase();
+        if (seen.has(lower)) continue;
+        seen.add(lower);
+      }
+      out.push(clean);
+      if (out.length >= maxItems) break;
+    }
+    return out;
   };
 
   const courses = normalizeCoursesServer(
@@ -933,9 +943,9 @@ function sanitizeSiteConfigInput(raw) {
     contactEmail: str('contactEmail', 160),
     contactPhone: str('contactPhone', 40),
     contactViber: str('contactViber', 40),
-    featuredReelIds: strList('featuredReelIds', 12, 128, !('featuredReelIds' in input)),
-    featuredStoryIds: strList('featuredStoryIds', 12, 128, !('featuredStoryIds' in input)),
-    featuredGameIds: strList('featuredGameIds', 12, 128, !('featuredGameIds' in input)),
+    featuredReelIds: strList('featuredReelIds', 24, 128, !('featuredReelIds' in input), true),
+    featuredStoryIds: strList('featuredStoryIds', 24, 128, !('featuredStoryIds' in input), true),
+    featuredGameIds: strList('featuredGameIds', 24, 128, !('featuredGameIds' in input), true),
     updatedAt: typeof input.updatedAt === 'string' && input.updatedAt.trim() ? input.updatedAt.trim().slice(0, 64) : undefined
   };
 }
@@ -1419,7 +1429,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/site-config', (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-store');
   res.json({ success: true, config: readSiteConfigFile() });
 });
 
@@ -1875,7 +1885,9 @@ app.post('/api/upload-excel', requireAdminToken, express.raw({ type: '*/*', limi
 // Update homepage / contact / featured config cache on disk
 const handleAdminSiteConfigSave = (req, res) => {
   try {
-    const clean = sanitizeSiteConfigInput(req.body);
+    const existing = readSiteConfigFile();
+    const mergedInput = { ...existing, ...(req.body && typeof req.body === 'object' ? req.body : {}) };
+    const clean = sanitizeSiteConfigInput(mergedInput);
     clean.updatedAt = new Date().toISOString();
     fs.writeFileSync(SITE_CONFIG_PATH, JSON.stringify(clean, null, 2), 'utf8');
     res.json({ success: true, config: clean });

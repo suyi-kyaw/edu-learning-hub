@@ -514,6 +514,15 @@
     updateBackendBadge();
     try {
       const store = getContentStore();
+      if (force && window.LinguaAuth && typeof window.LinguaAuth.reloadSiteConfig === 'function') {
+        await window.LinguaAuth.reloadSiteConfig().catch(() => {});
+      } else if (window.LinguaAuth && typeof window.LinguaAuth.waitUntilReady === 'function') {
+        await Promise.race([
+          window.LinguaAuth.waitUntilReady().catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 4000))
+        ]);
+      }
+
       const [storiesRes, reelsRes, lessonsRes] = await Promise.all([
         store.loadStoriesWorkbook(),
         store.loadReelsWorkbook(),
@@ -1948,7 +1957,10 @@
           </div>
 
           <div style="margin-bottom:16px;">
-            <strong style="display:block; font-size:0.86rem; margin-bottom:8px;">Featured Stories (${stories.length})</strong>
+            <strong style="display:flex; align-items:center; gap:8px; font-size:0.86rem; margin-bottom:8px;">
+              <span>Featured Stories</span>
+              <span class="admin-feat-count-pill" data-featured-count-badge="featuredStoryIds">${featStories.size} featured of ${stories.length}</span>
+            </strong>
             <div class="admin-featured-checklist">
               ${
                 stories.length
@@ -1957,7 +1969,7 @@
                         (s) => `
                   <label class="admin-featured-item">
                     <input type="checkbox" name="featStory" value="${escapeHTML(s.id)}" ${
-                          featStories.has(String(s.id || '').toLowerCase()) ? 'checked' : ''
+                          featStories.has(String(s.id || '').trim().toLowerCase()) ? 'checked' : ''
                         } />
                     <span>${escapeHTML(s.title || s.id)} (${escapeHTML(s.chineseTitle || '')})</span>
                   </label>
@@ -1970,21 +1982,25 @@
           </div>
 
           <div style="margin-bottom:16px;">
-            <strong style="display:block; font-size:0.86rem; margin-bottom:8px;">Featured Short Reels (${reels.length})</strong>
+            <strong style="display:flex; align-items:center; gap:8px; font-size:0.86rem; margin-bottom:8px;">
+              <span>Featured Short Reels</span>
+              <span class="admin-feat-count-pill" data-featured-count-badge="featuredReelIds">${featReels.size} featured of ${reels.length}</span>
+            </strong>
             <div class="admin-featured-checklist">
               ${
                 reels.length
                   ? reels
-                      .map(
-                        (r) => `
+                      .map((r) => {
+                        const isInactive = String(r.status || 'active').toLowerCase() === 'inactive';
+                        return `
                   <label class="admin-featured-item">
                     <input type="checkbox" name="featReel" value="${escapeHTML(r.id)}" ${
-                          featReels.has(String(r.id || '').toLowerCase()) ? 'checked' : ''
+                          featReels.has(String(r.id || '').trim().toLowerCase()) ? 'checked' : ''
                         } />
-                    <span>${escapeHTML(r.title || r.id)}</span>
+                    <span>${escapeHTML(r.title || r.id)}${isInactive ? ' <em class="admin-feat-warn">(Inactive)</em>' : ''}</span>
                   </label>
-                `
-                      )
+                `;
+                      })
                       .join('')
                   : `<span style="font-size:0.84rem; color:#64748b;">No reels uploaded yet.</span>`
               }
@@ -1992,21 +2008,25 @@
           </div>
 
           <div>
-            <strong style="display:block; font-size:0.86rem; margin-bottom:8px;">Featured Wordwall Games (${games.length})</strong>
+            <strong style="display:flex; align-items:center; gap:8px; font-size:0.86rem; margin-bottom:8px;">
+              <span>Featured Wordwall Games</span>
+              <span class="admin-feat-count-pill" data-featured-count-badge="featuredGameIds">${featGames.size} featured of ${games.length}</span>
+            </strong>
             <div class="admin-featured-checklist">
               ${
                 games.length
                   ? games
-                      .map(
-                        (g) => `
+                      .map((g) => {
+                        const isHidden = String(g.active || 'TRUE').toUpperCase() === 'FALSE';
+                        return `
                   <label class="admin-featured-item">
                     <input type="checkbox" name="featGame" value="${escapeHTML(g.id)}" ${
-                          featGames.has(String(g.id || '').toLowerCase()) ? 'checked' : ''
+                          featGames.has(String(g.id || '').trim().toLowerCase()) ? 'checked' : ''
                         } />
-                    <span>${escapeHTML(g.title || g.id)}</span>
+                    <span>${escapeHTML(g.title || g.id)}${isHidden ? ' <em class="admin-feat-warn">(Hidden)</em>' : ''}</span>
                   </label>
-                `
-                      )
+                `;
+                      })
                       .join('')
                   : `<span style="font-size:0.84rem; color:#64748b;">No games added yet.</span>`
               }
@@ -2210,32 +2230,129 @@
         setSyncStatus('Saving…');
         const saved = await window.LinguaAuth.saveSiteConfig(nextPayload);
         state.siteConfig = saved;
-        setSyncStatus('Saved');
-        toast('Branding logo, Homepage settings, Course prices, Contact Us & Featured items saved.');
+        refreshFeaturedCountBadges();
+        if (saved && saved._savedLocallyOnly) {
+          setSyncStatus('Saved locally (Static Host)');
+          toast('Saved in browser storage only — connect Worker URL or Export site-config.json to update visitors.', 'info');
+        } else {
+          setSyncStatus('Saved & Synced');
+          toast('Branding logo, Homepage settings, Course prices, Contact Us & Featured items saved.');
+        }
       } catch (err) {
         setSyncStatus('Save failed');
         toast(err instanceof Error ? err.message : 'Failed to save homepage settings.', 'error');
       }
     };
+
+    const bindChecklistCount = (inputName, listKey, total) => {
+      form.querySelectorAll(`input[name="${inputName}"]`).forEach((cb) => {
+        cb.addEventListener('change', () => {
+          const checkedCount = form.querySelectorAll(`input[name="${inputName}"]:checked`).length;
+          const badge = form.querySelector(`[data-featured-count-badge="${listKey}"]`);
+          if (badge) badge.textContent = `${checkedCount} featured of ${total}`;
+        });
+      });
+    };
+    bindChecklistCount('featStory', 'featuredStoryIds', stories.length);
+    bindChecklistCount('featReel', 'featuredReelIds', reels.length);
+    bindChecklistCount('featGame', 'featuredGameIds', games.length);
   }
 
-  // --- Shared Featured Toggle Helper ---
-  async function toggleFeaturedId(listKey, itemId, checked) {
+  function refreshFeaturedCountBadges() {
     const cfg = state.siteConfig || {};
-    const current = Array.isArray(cfg[listKey]) ? [...cfg[listKey]] : [];
-    const next = checked
-      ? Array.from(new Set([...current, itemId]))
-      : current.filter((x) => !isSameId(x, itemId));
-    try {
-      setSyncStatus('Updating featured…');
-      const saved = await window.LinguaAuth.saveSiteConfig({ [listKey]: next });
-      state.siteConfig = saved;
-      setSyncStatus('Synced');
-      toast(checked ? `Pinned "${itemId}" to Homepage.` : `Removed "${itemId}" from Homepage featured.`);
-    } catch (err) {
-      setSyncStatus('Update error');
-      toast(err instanceof Error ? err.message : 'Could not update featured state.', 'error');
-    }
+    const storiesTotal = (state.storiesData.Lessons || []).length;
+    const reelsTotal = (state.reelsData.Videos || []).length;
+    const gamesTotal = (state.lessonsData.Games || []).length;
+    const map = {
+      featuredStoryIds: { count: Array.isArray(cfg.featuredStoryIds) ? cfg.featuredStoryIds.length : 0, total: storiesTotal },
+      featuredReelIds: { count: Array.isArray(cfg.featuredReelIds) ? cfg.featuredReelIds.length : 0, total: reelsTotal },
+      featuredGameIds: { count: Array.isArray(cfg.featuredGameIds) ? cfg.featuredGameIds.length : 0, total: gamesTotal }
+    };
+    Object.keys(map).forEach((key) => {
+      document.querySelectorAll(`[data-featured-count-badge="${key}"]`).forEach((el) => {
+        if (el.closest('#adminHomeForm')) {
+          el.textContent = `${map[key].count} featured of ${map[key].total}`;
+        } else {
+          el.textContent = `${map[key].count} Featured on Home`;
+        }
+      });
+    });
+  }
+
+  // --- Shared Featured Toggle Helper (Serialized per-list queue to prevent race overwrites) ---
+  const featuredMutationQueue = {};
+
+  function toggleFeaturedId(listKey, itemId, checked, checkboxEl = null) {
+    const cleanId = String(itemId || '').trim();
+    if (!cleanId) return Promise.resolve();
+
+    const prevTask = featuredMutationQueue[listKey] || Promise.resolve();
+    const nextTask = prevTask
+      .catch(() => {})
+      .then(async () => {
+        const cfg = state.siteConfig || (window.LinguaAuth?.getSiteConfig?.() || {});
+        const current = Array.isArray(cfg[listKey]) ? [...cfg[listKey]] : [];
+        const deduped = [];
+        const seen = new Set();
+        for (const id of current) {
+          const k = String(id || '').trim().toLowerCase();
+          if (!k || seen.has(k)) continue;
+          seen.add(k);
+          deduped.push(String(id).trim());
+        }
+
+        let next;
+        if (checked) {
+          next = seen.has(cleanId.toLowerCase()) ? deduped : [...deduped, cleanId];
+        } else {
+          next = deduped.filter((x) => !isSameId(x, cleanId));
+        }
+
+        try {
+          setSyncStatus('Updating featured…');
+          const saved = await window.LinguaAuth.saveSiteConfig({ [listKey]: next });
+          state.siteConfig = saved;
+          refreshFeaturedCountBadges();
+
+          let inactiveWarning = '';
+          if (checked && listKey === 'featuredReelIds') {
+            const reel = (state.reelsData.Videos || []).find((r) => isSameId(r.id, cleanId));
+            if (reel && String(reel.status || 'active').toLowerCase() === 'inactive') {
+              inactiveWarning = ' (Note: this Reel is currently Inactive — set it Active to show on Homepage.)';
+            }
+          } else if (checked && listKey === 'featuredGameIds') {
+            const game = (state.lessonsData.Games || []).find((g) => isSameId(g.id, cleanId));
+            if (game && String(game.active || 'TRUE').toUpperCase() === 'FALSE') {
+              inactiveWarning = ' (Note: this Game is currently Hidden — set it Active to show on Homepage.)';
+            }
+          }
+
+          if (saved && saved._savedLocallyOnly) {
+            setSyncStatus('Saved locally (Static Host)');
+            toast(
+              (checked ? `Pinned "${cleanId}" locally` : `Removed "${cleanId}" locally`) +
+                ' — connect Worker URL or Export site-config.json to update visitors.' +
+                inactiveWarning,
+              'info'
+            );
+          } else if (inactiveWarning) {
+            setSyncStatus('Synced (Item inactive)');
+            toast(`Pinned "${cleanId}"${inactiveWarning}`, 'info');
+          } else {
+            setSyncStatus('Synced');
+            toast(checked ? `Pinned "${cleanId}" to Homepage (${next.length} featured).` : `Removed "${cleanId}" from Homepage (${next.length} featured).`);
+          }
+        } catch (err) {
+          if (checkboxEl && typeof checkboxEl.checked === 'boolean') {
+            checkboxEl.checked = !checked;
+          }
+          setSyncStatus('Update error');
+          toast(err instanceof Error ? err.message : 'Could not update featured state.', 'error');
+        }
+      });
+
+    featuredMutationQueue[listKey] = nextTask;
+    return nextTask;
   }
 
   // --- Reusable Exercise Spreadsheet Importer Modal ---
@@ -3018,7 +3135,10 @@
       <div class="admin-panel-card">
         <div class="admin-panel-head">
           <div>
-            <h2>Stories &amp; Reading Lessons (${stories.length})</h2>
+            <h2>
+              Stories &amp; Reading Lessons (${stories.length})
+              <span class="admin-feat-count-pill" data-featured-count-badge="featuredStoryIds">${featSet.size} Featured on Home</span>
+            </h2>
             <p>Create, edit, or delete Mandarin stories, reading scenes, vocabulary, featured status, and exercises.</p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -3112,7 +3232,7 @@
     document.getElementById('btnUploadStoryExercises').onclick = () => openExerciseSpreadsheetModal('stories', '');
 
     viewport.querySelectorAll('[data-feat-story]').forEach((cb) => {
-      cb.onchange = () => toggleFeaturedId('featuredStoryIds', cb.getAttribute('data-feat-story'), cb.checked);
+      cb.onchange = () => toggleFeaturedId('featuredStoryIds', cb.getAttribute('data-feat-story'), cb.checked, cb);
     });
     viewport.querySelectorAll('[data-edit-story]').forEach((btn) => {
       btn.onclick = () => {
@@ -3183,6 +3303,9 @@
                 Exercises: nextExercises
               });
               state.storiesData = { ...state.storiesData, ...res.sheets };
+              if (featSet.has(String(id || '').trim().toLowerCase())) {
+                await toggleFeaturedId('featuredStoryIds', id, false);
+              }
               updateNavCounts();
               applySyncFeedback(
                 res,
@@ -3546,7 +3669,10 @@
       <div class="admin-panel-card">
         <div class="admin-panel-head">
           <div>
-            <h2>Short Video Reels (${videos.length})</h2>
+            <h2>
+              Short Video Reels (${videos.length})
+              <span class="admin-feat-count-pill" data-featured-count-badge="featuredReelIds">${featSet.size} Featured on Home</span>
+            </h2>
             <p>Add, edit, or delete vertical Mandarin reels, subtitles (CN / Pinyin / EN / Myanmar), and homepage featured reels.</p>
           </div>
           <button type="button" class="admin-btn admin-btn-primary" id="btnAddReel">+ New Short Reel</button>
@@ -3636,7 +3762,7 @@
     document.getElementById('btnAddReel').onclick = () => openReelEditorModal(null);
 
     viewport.querySelectorAll('[data-feat-reel]').forEach((cb) => {
-      cb.onchange = () => toggleFeaturedId('featuredReelIds', cb.getAttribute('data-feat-reel'), cb.checked);
+      cb.onchange = () => toggleFeaturedId('featuredReelIds', cb.getAttribute('data-feat-reel'), cb.checked, cb);
     });
     viewport.querySelectorAll('[data-edit-reel]').forEach((btn) => {
       btn.onclick = () => {
@@ -3681,6 +3807,9 @@
             try {
               const res = await getContentStore().saveReelsSheets({ Videos: nextVideos });
               state.reelsData = { ...state.reelsData, ...res.sheets };
+              if (featSet.has(String(id || '').trim().toLowerCase())) {
+                await toggleFeaturedId('featuredReelIds', id, false);
+              }
               updateNavCounts();
               applySyncFeedback(
                 res,
@@ -5262,7 +5391,10 @@
       <div class="admin-panel-card">
         <div class="admin-panel-head">
           <div>
-            <h2>Wordwall Interactive Games (${games.length})</h2>
+            <h2>
+              Wordwall Interactive Games (${games.length})
+              <span class="admin-feat-count-pill" data-featured-count-badge="featuredGameIds">${featSet.size} Featured on Home</span>
+            </h2>
             <p>Add, edit, reorder, activate/deactivate, delete Wordwall links, and choose games featured on the homepage.</p>
           </div>
           <button type="button" class="admin-btn admin-btn-primary" id="btnAddGame">+ Add Wordwall Game</button>
@@ -5366,7 +5498,7 @@
     document.getElementById('btnAddGame').onclick = () => openGameEditorModal(null, persistGames);
 
     viewport.querySelectorAll('[data-feat-game]').forEach((cb) => {
-      cb.onchange = () => toggleFeaturedId('featuredGameIds', cb.getAttribute('data-feat-game'), cb.checked);
+      cb.onchange = () => toggleFeaturedId('featuredGameIds', cb.getAttribute('data-feat-game'), cb.checked, cb);
     });
 
     viewport.querySelectorAll('[data-move-game]').forEach((btn) => {
@@ -5422,7 +5554,12 @@
           title: `Delete game "${id}"?`,
           message: 'This permanently removes this Wordwall embed from the Games Arcade.',
           confirmLabel: 'Delete Game',
-          onConfirm: () => persistGames(games.filter((x) => !isSameId(x.id, id)), `Deleted game ${id}.`)
+          onConfirm: async () => {
+            await persistGames(games.filter((x) => !isSameId(x.id, id)), `Deleted game ${id}.`);
+            if (featSet.has(String(id || '').trim().toLowerCase())) {
+              await toggleFeaturedId('featuredGameIds', id, false);
+            }
+          }
         });
       };
     });
@@ -6340,7 +6477,10 @@
     }
 
     window.addEventListener('lingua-site-config-change', (e) => {
-      if (e.detail) state.siteConfig = e.detail;
+      if (e.detail) {
+        state.siteConfig = e.detail;
+        refreshFeaturedCountBadges();
+      }
     });
   });
 })();

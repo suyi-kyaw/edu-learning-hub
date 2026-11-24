@@ -1,12 +1,11 @@
-// src/index.ts
-var CORS_HEADERS = {
+const CORS_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, HEAD, POST, PUT, DELETE, OPTIONS",
   "access-control-allow-headers": "Content-Type, Authorization, Range, X-Admin-Uid, X-User-Uid",
   "access-control-expose-headers": "Content-Range, Content-Length, Accept-Ranges, Content-Type",
   "access-control-max-age": "86400"
 };
-var JSON_HEADERS = {
+const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
   ...CORS_HEADERS
@@ -230,7 +229,7 @@ function normalizePronunciationRow(p, idx = 0) {
     focus
   };
 }
-var D1_TABLE_STATEMENTS = [
+const D1_TABLE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY, course TEXT, category TEXT, categoryKey TEXT, categoryNum TEXT, title TEXT, chineseTitle TEXT, pinyin TEXT, meaning TEXT, level TEXT, description TEXT, videoUrl TEXT, posterUrl TEXT, fullAudio TEXT, keywords TEXT, accessType TEXT, price REAL, updated_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
   `CREATE TABLE IF NOT EXISTS writing_characters (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, strokeCount INTEGER, radical TEXT, strokeAnimationUrl TEXT, svgPath TEXT, strokeOrderSteps TEXT)`,
@@ -247,14 +246,14 @@ var D1_TABLE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS site_config (id TEXT PRIMARY KEY, config_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS d1_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`
 ];
-var MEDIA_FILES_UPGRADE_COLUMNS = [
+const MEDIA_FILES_UPGRADE_COLUMNS = [
   `ALTER TABLE media_files ADD COLUMN storage_mode TEXT DEFAULT 'd1'`,
   `ALTER TABLE media_files ADD COLUMN object_key TEXT DEFAULT ''`,
   `ALTER TABLE media_files ADD COLUMN upload_id TEXT DEFAULT ''`,
   `ALTER TABLE media_files ADD COLUMN status TEXT DEFAULT 'ready'`
 ];
-var d1SchemaReady = false;
-var d1SchemaPromise = null;
+let d1SchemaReady = false;
+let d1SchemaPromise = null;
 async function ensureD1Tables(db, force = false) {
   if (!db) return;
   if (d1SchemaReady && !force) return;
@@ -336,10 +335,10 @@ async function setD1Meta(db, key, value) {
   } catch (_) {
   }
 }
-var WORKER_MEDIA_CHUNK_BYTES = 256 * 1024;
-var R2_MULTIPART_CHUNK_BYTES = 5 * 1024 * 1024;
-var MAX_WORKER_UPLOAD_BYTES = 50 * 1024 * 1024;
-var MAX_SINGLE_SHOT_UPLOAD_BYTES = 4 * 1024 * 1024;
+const WORKER_MEDIA_CHUNK_BYTES = 256 * 1024;
+const R2_MULTIPART_CHUNK_BYTES = 5 * 1024 * 1024;
+const MAX_WORKER_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_SINGLE_SHOT_UPLOAD_BYTES = 4 * 1024 * 1024;
 function uint8ToBase64(bytes) {
   const parts = [];
   const step = 32768;
@@ -1594,6 +1593,21 @@ async function handleForceDatabaseSync(request, env, url) {
     return fail(err?.message || "Force sync failed", 500);
   }
 }
+function normalizeWorkerFeaturedIdList(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of raw) {
+    const clean = String(item || "").trim().slice(0, 128);
+    if (!clean) continue;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean);
+    if (out.length >= 24) break;
+  }
+  return out;
+}
 async function handleWorkerGetSiteConfig(request, env, url) {
   const row = await withD1TableRepair(
     env.DB,
@@ -1605,6 +1619,20 @@ async function handleWorkerGetSiteConfig(request, env, url) {
   if (row && row.config_json) {
     try {
       const parsed = JSON.parse(row.config_json);
+      if (parsed && typeof parsed === "object") {
+        if (Array.isArray(parsed.featuredReelIds)) {
+          parsed.featuredReelIds = normalizeWorkerFeaturedIdList(parsed.featuredReelIds);
+        }
+        if (Array.isArray(parsed.featuredStoryIds)) {
+          parsed.featuredStoryIds = normalizeWorkerFeaturedIdList(parsed.featuredStoryIds);
+        }
+        if (Array.isArray(parsed.featuredGameIds)) {
+          parsed.featuredGameIds = normalizeWorkerFeaturedIdList(parsed.featuredGameIds);
+        }
+        if (!parsed.updatedAt && row.updated_at) {
+          parsed.updatedAt = row.updated_at;
+        }
+      }
       return json({ success: true, config: parsed, source: "cloudflare-d1", updatedAt: row.updated_at });
     } catch (_) {
     }
@@ -1660,6 +1688,17 @@ async function handleWorkerSaveSiteConfig(request, env) {
         }
       }
       const nextCfg = { ...existing, ...body };
+      delete nextCfg._pendingServerSync;
+      delete nextCfg._savedLocallyOnly;
+      if (Array.isArray(nextCfg.featuredReelIds)) {
+        nextCfg.featuredReelIds = normalizeWorkerFeaturedIdList(nextCfg.featuredReelIds);
+      }
+      if (Array.isArray(nextCfg.featuredStoryIds)) {
+        nextCfg.featuredStoryIds = normalizeWorkerFeaturedIdList(nextCfg.featuredStoryIds);
+      }
+      if (Array.isArray(nextCfg.featuredGameIds)) {
+        nextCfg.featuredGameIds = normalizeWorkerFeaturedIdList(nextCfg.featuredGameIds);
+      }
       if (!nextCfg.siteLogoUrl && body.siteLogoUrl === "") {
         nextCfg.siteLogoUrl = "";
       } else if (/^\/?public\/assets\/aistudio\//i.test(nextCfg.siteLogoUrl)) {

@@ -2568,6 +2568,16 @@ a {
   margin-bottom: 30px;
 }
 
+.reels-grid.reels-count-1 {
+  grid-template-columns: minmax(260px, 340px);
+  justify-content: center;
+}
+
+.reels-grid.reels-count-2 {
+  grid-template-columns: repeat(2, minmax(260px, 340px));
+  justify-content: center;
+}
+
 .reel-card {
   position: relative;
   border-radius: 20px;
@@ -2744,10 +2754,12 @@ a {
 
 .game-featured-container {
   width: 100%;
-  max-width: 680px;
+  max-width: 1120px;
   margin: 0 auto;
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: 24px;
 }
 
 .game-iframe-wrapper {
@@ -4068,7 +4080,9 @@ a {
   }
 
   /* Section 2: Stories & Reels on Mobile */
-  .reels-grid {
+  .reels-grid,
+  .reels-grid.reels-count-1,
+  .reels-grid.reels-count-2 {
     grid-template-columns: 1fr;
     max-width: 360px;
     margin: 0 auto 24px;
@@ -13156,6 +13170,16 @@ body.lp-modal-open {
   margin-top: 26px;
 }
 
+.featured-stories-strip.stories-count-1 {
+  grid-template-columns: minmax(280px, 540px);
+  justify-content: center;
+}
+
+.featured-stories-strip.stories-count-2 {
+  grid-template-columns: repeat(2, minmax(280px, 480px));
+  justify-content: center;
+}
+
 .featured-stories-strip[hidden] {
   display: none !important;
 }
@@ -15038,4 +15062,31 @@ body.admin-page {
   min-width: 200px;
 }
 
+.admin-feat-count-pill {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+}
+
+.admin-feat-warn {
+  font-style: normal;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #b45309;
+  margin-left: 4px;
+}
+
+[data-theme="dark"] .admin-feat-count-pill {
+  background: rgba(234, 88, 12, 0.2);
+  color: #fdba74;
+  border-color: rgba(251, 146, 60, 0.4);
+}
 
