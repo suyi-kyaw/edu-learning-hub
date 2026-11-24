@@ -85,27 +85,40 @@ export interface SiteConfig {
   heroPrimaryCta: string;
   heroSecondaryCta: string;
   heroBannerUrl: string;
+  siteLogoUrl: string;
   storiesLabel: string;
   storiesTitle: string;
   storiesSubtitle: string;
+  reelsLabel?: string;
+  reelsTitle?: string;
+  reelsSubtitle?: string;
   gamesLabel: string;
   gamesTitle: string;
   gamesSubtitle: string;
   lessonsLabel: string;
   lessonsTitle: string;
   lessonsSubtitle: string;
-  adultBadge: string;
-  adultTitle: string;
-  adultSubtitle: string;
-  adultDesc: string;
-  adultBullets: string[];
-  adultCta: string;
-  kidsBadge: string;
-  kidsTitle: string;
-  kidsSubtitle: string;
-  kidsDesc: string;
-  kidsBullets: string[];
-  kidsCta: string;
+  lessonsBadge?: string;
+  lessonsCardTitle?: string;
+  lessonsCardSubtitle?: string;
+  lessonsCardDesc?: string;
+  lessonsBullets?: string[];
+  lessonsCta?: string;
+  courses?: string[];
+  coursePrices?: Record<string, number>;
+  practicePrice?: number;
+  adultBadge?: string;
+  adultTitle?: string;
+  adultSubtitle?: string;
+  adultDesc?: string;
+  adultBullets?: string[];
+  adultCta?: string;
+  kidsBadge?: string;
+  kidsTitle?: string;
+  kidsSubtitle?: string;
+  kidsDesc?: string;
+  kidsBullets?: string[];
+  kidsCta?: string;
   contactEmail: string;
   contactPhone: string;
   contactViber: string;
@@ -208,6 +221,7 @@ export const MEMBERSHIP_PLANS = {
 
 const USERS_EXCEL_PATH = 'data/users.xlsx';
 const OVERLAY_STORAGE_KEY = 'linguapath_excel_overlay_v1';
+const SITE_CONFIG_STORAGE_KEY = 'linguapath_site_config_v1';
 const LEGACY_LOCAL_STORE_KEY = 'linguapath_local_auth_store_v1';
 const SESSION_UID_STORAGE_KEY = 'linguapath_local_session_uid';
 const ADMIN_EMAIL = 'syndkyaw@gmail.com';
@@ -536,15 +550,33 @@ function readOverlayStore(): ExcelDataset {
     const raw = localStorage.getItem(OVERLAY_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<ExcelDataset>;
+      let cfg = parsed?.siteConfig && typeof parsed.siteConfig === 'object' ? parsed.siteConfig : undefined;
+      if (!cfg) {
+        try {
+          const backupRaw = localStorage.getItem(SITE_CONFIG_STORAGE_KEY);
+          if (backupRaw) {
+            cfg = JSON.parse(backupRaw) as Partial<SiteConfig>;
+          }
+        } catch (_) {}
+      }
       return {
         users: parsed?.users && typeof parsed.users === 'object' ? parsed.users : {},
         requests: parsed?.requests && typeof parsed.requests === 'object' ? parsed.requests : {},
         progress: parsed?.progress && typeof parsed.progress === 'object' ? parsed.progress : {},
         lessonCatalog:
           parsed?.lessonCatalog && typeof parsed.lessonCatalog === 'object' ? parsed.lessonCatalog : {},
-        siteConfig: parsed?.siteConfig && typeof parsed.siteConfig === 'object' ? parsed.siteConfig : undefined
+        siteConfig: cfg
       };
     }
+
+    // Try standalone site config backup if overlay store is empty
+    let backupCfg: Partial<SiteConfig> | undefined;
+    try {
+      const backupRaw = localStorage.getItem(SITE_CONFIG_STORAGE_KEY);
+      if (backupRaw) {
+        backupCfg = JSON.parse(backupRaw) as Partial<SiteConfig>;
+      }
+    } catch (_) {}
 
     // Smoothly migrate any earlier local-mode browser registrations if present
     const legacyRaw = localStorage.getItem(LEGACY_LOCAL_STORE_KEY);
@@ -575,8 +607,11 @@ function readOverlayStore(): ExcelDataset {
       }
       if (legacy.progress) migrated.progress = legacy.progress;
       if (legacy.lessonCatalog) migrated.lessonCatalog = legacy.lessonCatalog;
-      if (legacy.siteConfig) migrated.siteConfig = legacy.siteConfig;
+      migrated.siteConfig = legacy.siteConfig || backupCfg;
       return migrated;
+    }
+    if (backupCfg) {
+      empty.siteConfig = backupCfg;
     }
   } catch {
     // ignore storage errors
@@ -587,8 +622,15 @@ function readOverlayStore(): ExcelDataset {
 function writeOverlayStore(overlay: ExcelDataset): void {
   try {
     localStorage.setItem(OVERLAY_STORAGE_KEY, JSON.stringify(overlay));
-  } catch {
-    // ignore storage errors
+  } catch (err) {
+    console.warn('Could not write full overlay store to localStorage:', err);
+  }
+  if (overlay && overlay.siteConfig) {
+    try {
+      localStorage.setItem(SITE_CONFIG_STORAGE_KEY, JSON.stringify(overlay.siteConfig));
+    } catch (err) {
+      console.warn('Could not write site config backup to localStorage:', err);
+    }
   }
 }
 
@@ -986,15 +1028,34 @@ function normalizeStrList(raw: unknown, maxItems: number, maxLen: number, fallba
     .slice(0, maxItems);
 }
 
+function sanitizeLogoUrl(val: unknown): string {
+  if (typeof val !== 'string') return DEFAULT_SITE_CONFIG.siteLogoUrl;
+  const clean = val.trim();
+  if (!clean) return '';
+  if (/^\/?public\/assets\/aistudio\//i.test(clean)) {
+    return DEFAULT_SITE_CONFIG.siteLogoUrl;
+  }
+  if (/^data:image\//i.test(clean)) {
+    return clean.length <= 2500000 ? clean : DEFAULT_SITE_CONFIG.siteLogoUrl;
+  }
+  return clean.slice(0, 1000);
+}
+
+function sanitizeBannerUrl(val: unknown): string {
+  if (typeof val !== 'string') return DEFAULT_SITE_CONFIG.heroBannerUrl;
+  const clean = val.trim();
+  if (!clean) return DEFAULT_SITE_CONFIG.heroBannerUrl;
+  if (/^data:image\//i.test(clean)) {
+    return clean.length <= 2500000 ? clean : DEFAULT_SITE_CONFIG.heroBannerUrl;
+  }
+  return clean.slice(0, 1000);
+}
+
 function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteConfig {
   const s = (val: unknown, maxLen: number, fb: string): string => {
     if (typeof val !== 'string') return fb;
     const trimmed = val.trim();
     return (trimmed || fb).slice(0, maxLen);
-  };
-  const opt = (val: unknown, maxLen: number, fb: string): string => {
-    if (typeof val !== 'string') return fb;
-    return val.trim().slice(0, maxLen);
   };
   return {
     configId: 'homepage',
@@ -1004,32 +1065,41 @@ function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteC
     heroSubtitle: s(raw?.heroSubtitle, 400, DEFAULT_SITE_CONFIG.heroSubtitle),
     heroPrimaryCta: s(raw?.heroPrimaryCta, 60, DEFAULT_SITE_CONFIG.heroPrimaryCta),
     heroSecondaryCta: s(raw?.heroSecondaryCta, 60, DEFAULT_SITE_CONFIG.heroSecondaryCta),
-    heroBannerUrl: opt(raw?.heroBannerUrl, 500, DEFAULT_SITE_CONFIG.heroBannerUrl) || DEFAULT_SITE_CONFIG.heroBannerUrl,
-    siteLogoUrl: (() => {
-      const rawLogo = opt(raw?.siteLogoUrl, 500, DEFAULT_SITE_CONFIG.siteLogoUrl) || DEFAULT_SITE_CONFIG.siteLogoUrl;
-      return /^\/?public\/assets\/aistudio\//i.test(rawLogo) ? DEFAULT_SITE_CONFIG.siteLogoUrl : rawLogo;
-    })(),
+    heroBannerUrl: sanitizeBannerUrl(raw?.heroBannerUrl),
+    siteLogoUrl: raw && 'siteLogoUrl' in raw ? sanitizeLogoUrl(raw.siteLogoUrl) : DEFAULT_SITE_CONFIG.siteLogoUrl,
     storiesLabel: s(raw?.storiesLabel, 100, DEFAULT_SITE_CONFIG.storiesLabel),
     storiesTitle: s(raw?.storiesTitle, 120, DEFAULT_SITE_CONFIG.storiesTitle),
     storiesSubtitle: s(raw?.storiesSubtitle, 400, DEFAULT_SITE_CONFIG.storiesSubtitle),
+    reelsLabel: s(raw?.reelsLabel, 100, DEFAULT_SITE_CONFIG.reelsLabel || 'Short Reels'),
+    reelsTitle: s(raw?.reelsTitle, 120, DEFAULT_SITE_CONFIG.reelsTitle || 'Short Reels'),
+    reelsSubtitle: s(raw?.reelsSubtitle, 400, DEFAULT_SITE_CONFIG.reelsSubtitle || ''),
     gamesLabel: s(raw?.gamesLabel, 100, DEFAULT_SITE_CONFIG.gamesLabel),
     gamesTitle: s(raw?.gamesTitle, 120, DEFAULT_SITE_CONFIG.gamesTitle),
     gamesSubtitle: s(raw?.gamesSubtitle, 400, DEFAULT_SITE_CONFIG.gamesSubtitle),
     lessonsLabel: s(raw?.lessonsLabel, 100, DEFAULT_SITE_CONFIG.lessonsLabel),
     lessonsTitle: s(raw?.lessonsTitle, 120, DEFAULT_SITE_CONFIG.lessonsTitle),
     lessonsSubtitle: s(raw?.lessonsSubtitle, 400, DEFAULT_SITE_CONFIG.lessonsSubtitle),
-    adultBadge: s(raw?.adultBadge, 80, DEFAULT_SITE_CONFIG.adultBadge),
-    adultTitle: s(raw?.adultTitle, 140, DEFAULT_SITE_CONFIG.adultTitle),
-    adultSubtitle: s(raw?.adultSubtitle, 140, DEFAULT_SITE_CONFIG.adultSubtitle),
-    adultDesc: s(raw?.adultDesc, 400, DEFAULT_SITE_CONFIG.adultDesc),
-    adultBullets: normalizeStrList(raw?.adultBullets, 6, 140, DEFAULT_SITE_CONFIG.adultBullets),
-    adultCta: s(raw?.adultCta, 80, DEFAULT_SITE_CONFIG.adultCta),
-    kidsBadge: s(raw?.kidsBadge, 80, DEFAULT_SITE_CONFIG.kidsBadge),
-    kidsTitle: s(raw?.kidsTitle, 140, DEFAULT_SITE_CONFIG.kidsTitle),
-    kidsSubtitle: s(raw?.kidsSubtitle, 140, DEFAULT_SITE_CONFIG.kidsSubtitle),
-    kidsDesc: s(raw?.kidsDesc, 400, DEFAULT_SITE_CONFIG.kidsDesc),
-    kidsBullets: normalizeStrList(raw?.kidsBullets, 6, 140, DEFAULT_SITE_CONFIG.kidsBullets),
-    kidsCta: s(raw?.kidsCta, 80, DEFAULT_SITE_CONFIG.kidsCta),
+    lessonsBadge: s(raw?.lessonsBadge, 100, (raw as any)?.lessonsBadge || 'HSK 2 • Structured Course'),
+    lessonsCardTitle: s(raw?.lessonsCardTitle, 140, (raw as any)?.lessonsCardTitle || 'Explore HSK 2 Courses & Lessons'),
+    lessonsCardSubtitle: s(raw?.lessonsCardSubtitle, 140, (raw as any)?.lessonsCardSubtitle || ''),
+    lessonsCardDesc: s(raw?.lessonsCardDesc, 400, (raw as any)?.lessonsCardDesc || ''),
+    lessonsBullets: Array.isArray(raw?.lessonsBullets) ? normalizeStrList(raw.lessonsBullets, 6, 140, []) : undefined,
+    lessonsCta: s(raw?.lessonsCta, 80, (raw as any)?.lessonsCta || 'Go to Lessons →'),
+    courses: Array.isArray(raw?.courses) ? normalizeStrList(raw.courses, 60, 80, ['HSK 2']) : ['HSK 2'],
+    coursePrices: raw?.coursePrices && typeof raw.coursePrices === 'object' ? { ...raw.coursePrices } : { 'HSK 2': 120 },
+    practicePrice: typeof raw?.practicePrice === 'number' && Number.isFinite(raw.practicePrice) ? Math.round(raw.practicePrice) : 55000,
+    adultBadge: s(raw?.adultBadge, 80, DEFAULT_SITE_CONFIG.adultBadge || 'Adults • Comprehensive'),
+    adultTitle: s(raw?.adultTitle, 140, DEFAULT_SITE_CONFIG.adultTitle || 'Mandarin for Adults & Professionals'),
+    adultSubtitle: s(raw?.adultSubtitle, 140, DEFAULT_SITE_CONFIG.adultSubtitle || ''),
+    adultDesc: s(raw?.adultDesc, 400, DEFAULT_SITE_CONFIG.adultDesc || ''),
+    adultBullets: normalizeStrList(raw?.adultBullets, 6, 140, DEFAULT_SITE_CONFIG.adultBullets || []),
+    adultCta: s(raw?.adultCta, 80, DEFAULT_SITE_CONFIG.adultCta || 'Start Learning →'),
+    kidsBadge: s(raw?.kidsBadge, 80, DEFAULT_SITE_CONFIG.kidsBadge || 'Kids • Playful Immersion'),
+    kidsTitle: s(raw?.kidsTitle, 140, DEFAULT_SITE_CONFIG.kidsTitle || 'Chinese for Kids & Young Learners'),
+    kidsSubtitle: s(raw?.kidsSubtitle, 140, DEFAULT_SITE_CONFIG.kidsSubtitle || ''),
+    kidsDesc: s(raw?.kidsDesc, 400, DEFAULT_SITE_CONFIG.kidsDesc || ''),
+    kidsBullets: normalizeStrList(raw?.kidsBullets, 6, 140, DEFAULT_SITE_CONFIG.kidsBullets || []),
+    kidsCta: s(raw?.kidsCta, 80, DEFAULT_SITE_CONFIG.kidsCta || 'Start Learning →'),
     contactEmail: s(raw?.contactEmail, 160, DEFAULT_SITE_CONFIG.contactEmail),
     contactPhone: s(raw?.contactPhone, 40, DEFAULT_SITE_CONFIG.contactPhone),
     contactViber: s(raw?.contactViber, 40, DEFAULT_SITE_CONFIG.contactViber),
@@ -1112,8 +1182,27 @@ function syncMemoryFromDataset(dataset: ExcelDataset, uidOverride?: string | nul
 }
 
 async function hydratePublicAndSession(forceExcelReload = false): Promise<void> {
-  // 1. Load static site-config.json merged with browser site-config edits
+  // 1. Load static site-config.json and check live server / Cloudflare D1 /api/site-config
   let baseCfg: Partial<SiteConfig> = {};
+  let serverCfg: Partial<SiteConfig> | null = null;
+
+  try {
+    const apiPath = '/api/site-config?t=' + Date.now();
+    const apiUrl =
+      typeof window !== 'undefined' && (window as any).LinguaBackend?.apiUrl
+        ? (window as any).LinguaBackend.apiUrl(apiPath)
+        : apiPath;
+    const sRes = await fetch(apiUrl, { cache: 'no-store' });
+    if (sRes.ok) {
+      const sData = (await sRes.json().catch(() => null)) as any;
+      if (sData && sData.success && sData.config && typeof sData.config === 'object') {
+        serverCfg = sData.config as Partial<SiteConfig>;
+      }
+    }
+  } catch (_) {
+    // API unreachable or static host
+  }
+
   try {
     const staticCfg = await fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' });
     if (staticCfg.ok) {
@@ -1127,9 +1216,24 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   await loadBaseWorkbookFromExcel(forceExcelReload);
   const dataset = getMergedDataset();
 
-  state.siteConfig = normalizeSiteConfig(
-    dataset.siteConfig ? { ...baseCfg, ...dataset.siteConfig } : baseCfg
-  );
+  let effectiveCfg: Partial<SiteConfig>;
+  if (serverCfg) {
+    const serverTime = parseIsoTimestamp(serverCfg.updatedAt);
+    const localTime = parseIsoTimestamp(dataset.siteConfig?.updatedAt);
+    if (dataset.siteConfig && localTime > serverTime) {
+      effectiveCfg = { ...baseCfg, ...serverCfg, ...dataset.siteConfig };
+    } else {
+      effectiveCfg = { ...baseCfg, ...serverCfg };
+      // Refresh local overlay store with fresh server config
+      const overlay = readOverlayStore();
+      overlay.siteConfig = { ...effectiveCfg };
+      writeOverlayStore(overlay);
+    }
+  } else {
+    effectiveCfg = dataset.siteConfig ? { ...baseCfg, ...dataset.siteConfig } : baseCfg;
+  }
+
+  state.siteConfig = normalizeSiteConfig(effectiveCfg);
   emitSiteConfigChange();
 
   syncMemoryFromDataset(dataset);
@@ -1692,14 +1796,66 @@ function getSiteConfig(): SiteConfig {
 
 async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-  const merged = normalizeSiteConfig({ ...state.siteConfig, ...partial });
+  const nowIso = new Date().toISOString();
+  const merged = normalizeSiteConfig({
+    ...state.siteConfig,
+    ...partial,
+    updatedBy: state.user.email,
+    updatedAt: nowIso
+  });
   const overlay = readOverlayStore();
-  overlay.siteConfig = { ...merged, updatedBy: state.user.email, updatedAt: new Date().toISOString() };
+  overlay.siteConfig = { ...merged };
   writeOverlayStore(overlay);
 
   state.siteConfig = normalizeSiteConfig(overlay.siteConfig);
   emitSiteConfigChange();
   emitState();
+
+  // On non-static hosts, push to live backend / Cloudflare D1
+  const isStaticHost =
+    typeof window !== 'undefined' &&
+    (window as any).LinguaBackend?.isStaticGithubHost &&
+    (window as any).LinguaBackend.isStaticGithubHost();
+
+  if (!isStaticHost) {
+    try {
+      const token = await getIdToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      if (state.user?.uid) {
+        headers['X-Admin-Uid'] = state.user.uid;
+        headers['X-User-Uid'] = state.user.uid;
+      }
+      const apiPath = '/api/admin/site-config';
+      const apiUrl =
+        typeof window !== 'undefined' && (window as any).LinguaBackend?.apiUrl
+          ? (window as any).LinguaBackend.apiUrl(apiPath)
+          : apiPath;
+      const res = await fetch(apiUrl, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(merged)
+      });
+      if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as any;
+        if (data && data.success && data.config) {
+          const serverConfig = normalizeSiteConfig(data.config);
+          overlay.siteConfig = { ...serverConfig };
+          writeOverlayStore(overlay);
+          state.siteConfig = serverConfig;
+          emitSiteConfigChange();
+          emitState();
+        }
+      }
+    } catch (netErr) {
+      console.warn('Could not sync site-config to server:', netErr);
+    }
+  }
+
   return state.siteConfig;
 }
 

@@ -407,6 +407,11 @@ async function ensureD1Tables(db: D1Database): Promise<void> {
         data_b64 TEXT NOT NULL,
         PRIMARY KEY (media_id, chunk_index)
       );
+      CREATE TABLE IF NOT EXISTS site_config (
+        id TEXT PRIMARY KEY,
+        config_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS d1_meta (
         key TEXT PRIMARY KEY,
         value TEXT,
@@ -1571,6 +1576,97 @@ async function handleForceDatabaseSync(request: Request, env: Env, url: URL): Pr
   }
 }
 
+async function handleWorkerGetSiteConfig(request: Request, env: Env, url: URL): Promise<Response> {
+  await ensureD1Tables(env.DB);
+  const row = await one<{ config_json: string; updated_at: string }>(
+    env.DB,
+    `SELECT config_json, updated_at FROM site_config WHERE id = 'homepage'`
+  );
+  if (row && row.config_json) {
+    try {
+      const parsed = JSON.parse(row.config_json);
+      return json({ success: true, config: parsed, source: 'cloudflare-d1', updatedAt: row.updated_at });
+    } catch (_) {}
+  }
+
+  // Seed from static /data/site-config.json if available
+  let staticConfig: any = null;
+  try {
+    const assetRes = await env.ASSETS.fetch(new Request(new URL('/data/site-config.json', url.origin)));
+    if (assetRes.ok) {
+      staticConfig = await assetRes.json();
+    }
+  } catch (_) {}
+
+  const finalConfig =
+    staticConfig && typeof staticConfig === 'object'
+      ? staticConfig
+      : {
+          configId: 'homepage',
+          heroEyebrow: 'Learn Chinese Step by Step',
+          heroTitleLine1: 'Learn Chinese',
+          heroTitleHighlight: 'with Confidence.',
+          heroSubtitle:
+            'Build your Chinese skills through pronunciation, everyday expressions, conversations, vocabulary, and practical exercises.',
+          heroPrimaryCta: 'Explore Stories',
+          heroSecondaryCta: 'Explore Lessons',
+          heroBannerUrl: 'assets/hero-banner.png',
+          siteLogoUrl: 'assets/images/logo.svg'
+        };
+
+  try {
+    const nowIso = new Date().toISOString();
+    await env.DB.prepare(
+      `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
+       ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
+    )
+      .bind(JSON.stringify(finalConfig), nowIso)
+      .run();
+  } catch (_) {}
+
+  return json({ success: true, config: finalConfig, source: 'seed-static' });
+}
+
+async function handleWorkerSaveSiteConfig(request: Request, env: Env): Promise<Response> {
+  await ensureD1Tables(env.DB);
+  try {
+    const body = (await request.json().catch(() => ({}))) as any;
+    if (!body || typeof body !== 'object') {
+      return fail('Invalid site configuration payload.', 400);
+    }
+    const row = await one<{ config_json: string }>(
+      env.DB,
+      `SELECT config_json FROM site_config WHERE id = 'homepage'`
+    );
+    let existing: Record<string, any> = {};
+    if (row && row.config_json) {
+      try {
+        existing = JSON.parse(row.config_json);
+      } catch (_) {}
+    }
+    const merged = { ...existing, ...body };
+    if (!merged.siteLogoUrl && body.siteLogoUrl === '') {
+      merged.siteLogoUrl = '';
+    } else if (/^\/?public\/assets\/aistudio\//i.test(merged.siteLogoUrl)) {
+      merged.siteLogoUrl = 'assets/images/logo.svg';
+    }
+    const nowIso = new Date().toISOString();
+    merged.updatedAt = nowIso;
+    merged.configId = 'homepage';
+
+    await env.DB.prepare(
+      `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
+       ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
+    )
+      .bind(JSON.stringify(merged), nowIso)
+      .run();
+
+    return json({ success: true, config: merged, storage: 'cloudflare-d1' });
+  } catch (err: any) {
+    return fail(err?.message || 'Failed to save site configuration.', 500);
+  }
+}
+
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname.replace(/\/+$/, '') || '/api';
   const method = request.method;
@@ -1593,6 +1689,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       } catch (err: any) {
         return fail(err?.message || 'Media upload failed.', 400);
       }
+    }
+    if (path === '/api/admin/site-config' || path === '/api/site-config') {
+      return handleWorkerSaveSiteConfig(request, env);
     }
 
     const adminWorkbookMatch = path.match(/^\/api\/admin\/workbook\/([^/]+)$/);
@@ -1624,6 +1723,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   // Read routes
+  if (path === '/api/site-config') {
+    return handleWorkerGetSiteConfig(request, env, url);
+  }
+
   const mediaMatch = path.match(/^\/api\/media\/([^/]+)(?:\/[^/]+)?$/);
   if (mediaMatch && (method === 'GET' || method === 'HEAD')) {
     return serveWorkerMedia(request, env, decodeURIComponent(mediaMatch[1]));
@@ -1655,6 +1758,23 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       success: true,
       database: 'edu-hub-db',
       status: 'connected',
+      tables: [
+        'lessons',
+        'exercises',
+        'writing_characters',
+        'vocabulary',
+        'games',
+        'pronunciation',
+        'stories_lessons',
+        'story_scenes',
+        'stories_vocabulary',
+        'stories_exercises',
+        'reels_videos',
+        'media_files',
+        'media_chunks',
+        'site_config',
+        'd1_meta'
+      ],
       timestamp: new Date().toISOString()
     });
   }

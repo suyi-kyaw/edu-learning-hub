@@ -385,6 +385,11 @@ async function ensureD1Tables(db) {
         data_b64 TEXT NOT NULL,
         PRIMARY KEY (media_id, chunk_index)
       );
+      CREATE TABLE IF NOT EXISTS site_config (
+        id TEXT PRIMARY KEY,
+        config_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS d1_meta (
         key TEXT PRIMARY KEY,
         value TEXT,
@@ -1409,6 +1414,84 @@ async function handleForceDatabaseSync(request, env, url) {
     return fail(err?.message || "Force sync failed", 500);
   }
 }
+async function handleWorkerGetSiteConfig(request, env, url) {
+  await ensureD1Tables(env.DB);
+  const row = await one(
+    env.DB,
+    `SELECT config_json, updated_at FROM site_config WHERE id = 'homepage'`
+  );
+  if (row && row.config_json) {
+    try {
+      const parsed = JSON.parse(row.config_json);
+      return json({ success: true, config: parsed, source: "cloudflare-d1", updatedAt: row.updated_at });
+    } catch (_) {
+    }
+  }
+  let staticConfig = null;
+  try {
+    const assetRes = await env.ASSETS.fetch(new Request(new URL("/data/site-config.json", url.origin)));
+    if (assetRes.ok) {
+      staticConfig = await assetRes.json();
+    }
+  } catch (_) {
+  }
+  const finalConfig = staticConfig && typeof staticConfig === "object" ? staticConfig : {
+    configId: "homepage",
+    heroEyebrow: "Learn Chinese Step by Step",
+    heroTitleLine1: "Learn Chinese",
+    heroTitleHighlight: "with Confidence.",
+    heroSubtitle: "Build your Chinese skills through pronunciation, everyday expressions, conversations, vocabulary, and practical exercises.",
+    heroPrimaryCta: "Explore Stories",
+    heroSecondaryCta: "Explore Lessons",
+    heroBannerUrl: "assets/hero-banner.png",
+    siteLogoUrl: "assets/images/logo.svg"
+  };
+  try {
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    await env.DB.prepare(
+      `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
+       ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
+    ).bind(JSON.stringify(finalConfig), nowIso).run();
+  } catch (_) {
+  }
+  return json({ success: true, config: finalConfig, source: "seed-static" });
+}
+async function handleWorkerSaveSiteConfig(request, env) {
+  await ensureD1Tables(env.DB);
+  try {
+    const body = await request.json().catch(() => ({}));
+    if (!body || typeof body !== "object") {
+      return fail("Invalid site configuration payload.", 400);
+    }
+    const row = await one(
+      env.DB,
+      `SELECT config_json FROM site_config WHERE id = 'homepage'`
+    );
+    let existing = {};
+    if (row && row.config_json) {
+      try {
+        existing = JSON.parse(row.config_json);
+      } catch (_) {
+      }
+    }
+    const merged = { ...existing, ...body };
+    if (!merged.siteLogoUrl && body.siteLogoUrl === "") {
+      merged.siteLogoUrl = "";
+    } else if (/^\/?public\/assets\/aistudio\//i.test(merged.siteLogoUrl)) {
+      merged.siteLogoUrl = "assets/images/logo.svg";
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    merged.updatedAt = nowIso;
+    merged.configId = "homepage";
+    await env.DB.prepare(
+      `INSERT INTO site_config (id, config_json, updated_at) VALUES ('homepage', ?, ?)
+       ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`
+    ).bind(JSON.stringify(merged), nowIso).run();
+    return json({ success: true, config: merged, storage: "cloudflare-d1" });
+  } catch (err) {
+    return fail(err?.message || "Failed to save site configuration.", 500);
+  }
+}
 async function handleApi(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/api";
   const method = request.method;
@@ -1428,6 +1511,9 @@ async function handleApi(request, env, url) {
       } catch (err) {
         return fail(err?.message || "Media upload failed.", 400);
       }
+    }
+    if (path === "/api/admin/site-config" || path === "/api/site-config") {
+      return handleWorkerSaveSiteConfig(request, env);
     }
     const adminWorkbookMatch = path.match(/^\/api\/admin\/workbook\/([^/]+)$/);
     if (adminWorkbookMatch) {
@@ -1455,6 +1541,9 @@ async function handleApi(request, env, url) {
       }
     }
     return fail("Method not allowed for this route", 405);
+  }
+  if (path === "/api/site-config") {
+    return handleWorkerGetSiteConfig(request, env, url);
   }
   const mediaMatch = path.match(/^\/api\/media\/([^/]+)(?:\/[^/]+)?$/);
   if (mediaMatch && (method === "GET" || method === "HEAD")) {
@@ -1484,6 +1573,23 @@ async function handleApi(request, env, url) {
       success: true,
       database: "edu-hub-db",
       status: "connected",
+      tables: [
+        "lessons",
+        "exercises",
+        "writing_characters",
+        "vocabulary",
+        "games",
+        "pronunciation",
+        "stories_lessons",
+        "story_scenes",
+        "stories_vocabulary",
+        "stories_exercises",
+        "reels_videos",
+        "media_files",
+        "media_chunks",
+        "site_config",
+        "d1_meta"
+      ],
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
   }

@@ -528,7 +528,7 @@ const DEFAULT_SITE_CONFIG = {
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range, X-Admin-Uid, X-User-Uid');
   res.header('Access-Control-Max-Age', '86400');
   res.header('Cross-Origin-Resource-Policy', 'cross-origin');
   if (req.method === 'OPTIONS') {
@@ -871,7 +871,7 @@ function sanitizeLogoUrlServer(val) {
   if (clean.startsWith('data:image/')) {
     return clean.length <= 2500000 ? clean : '';
   }
-  return clean.slice(0, 500);
+  return clean.slice(0, 1000);
 }
 
 function sanitizeSiteConfigInput(raw) {
@@ -994,6 +994,7 @@ app.get(['/api/database/status', '/api/status'], (req, res) => {
       'subscription_requests',
       'user_subscriptions',
       'user_progress',
+      'site_config',
       'sqlite_sequence'
     ],
     timestamp: new Date().toISOString()
@@ -1870,7 +1871,7 @@ app.post('/api/upload-excel', requireAdminToken, express.raw({ type: '*/*', limi
 });
 
 // Update homepage / contact / featured config cache on disk
-app.put('/api/admin/site-config', requireAdminToken, jsonParser, (req, res) => {
+const handleAdminSiteConfigSave = (req, res) => {
   try {
     const clean = sanitizeSiteConfigInput(req.body);
     clean.updatedAt = new Date().toISOString();
@@ -1880,7 +1881,9 @@ app.put('/api/admin/site-config', requireAdminToken, jsonParser, (req, res) => {
     console.error('API admin site-config error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
+app.put('/api/admin/site-config', requireAdminToken, jsonParser, handleAdminSiteConfigSave);
+app.post('/api/admin/site-config', requireAdminToken, jsonParser, handleAdminSiteConfigSave);
 
 // Create a new course in site-config
 app.post('/api/admin/courses', requireAdminToken, jsonParser, (req, res) => {

@@ -1603,7 +1603,9 @@
           const nextLogoUrl = getMediaInputValue(logoInput);
           const saved = await window.LinguaAuth.saveSiteConfig({ siteLogoUrl: nextLogoUrl });
           state.siteConfig = saved;
-          setSyncStatus('Logo saved');
+          applyMediaInputValue(logoInput, saved.siteLogoUrl || '', 'image');
+          syncLogoDualPreview();
+          setSyncStatus('Logo saved & synced');
           toast(nextLogoUrl ? 'Custom site logo saved & applied sitewide.' : 'Restored default 语 JiedeEdu brand lockup.');
         } catch (err) {
           setSyncStatus('Save failed');
