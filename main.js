@@ -2774,11 +2774,41 @@ function setupReelsInteractions() {
    HOMEPAGE CMS HYDRATION & FEATURED ITEMS RENDERER
 ========================================================= */
 
-let cachedHomeReels = [];
-let cachedHomeStories = [];
-let cachedHomeGames = [];
+let cachedHomeReels = (typeof window !== "undefined" && window.__INITIAL_REELS_CACHE__) || (() => {
+  try {
+    const raw = localStorage.getItem("linguapath_cms_reels_v2");
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p?.sheets?.Videos) return p.sheets.Videos;
+    }
+  } catch (_) {}
+  return [];
+})();
+
+let cachedHomeStories = (typeof window !== "undefined" && window.__INITIAL_STORIES_CACHE__) || (() => {
+  try {
+    const raw = localStorage.getItem("linguapath_cms_stories_v2");
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p?.sheets?.Lessons) return p.sheets.Lessons;
+    }
+  } catch (_) {}
+  return [];
+})();
+
+let cachedHomeGames = (typeof window !== "undefined" && window.__INITIAL_GAMES_CACHE__) || (() => {
+  try {
+    const raw = localStorage.getItem("linguapath_cms_lessons_v2");
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p?.sheets?.Games) return p.sheets.Games;
+    }
+  } catch (_) {}
+  return [];
+})();
+
 let cachedHomeSiteConfig = null;
-let homeDatasetsLoaded = false;
+let homeDatasetsLoaded = cachedHomeReels.length > 0 || cachedHomeStories.length > 0 || cachedHomeGames.length > 0;
 
 function formatReelDuration(sec) {
   const n = Math.max(0, Math.round(Number(sec) || 0));
@@ -3059,6 +3089,12 @@ function renderHomepageFeaturedGames(cfg) {
 
 async function initHomepageHydration() {
   if (!document.getElementById("homeHeroEyebrow")) return;
+
+  if (homeDatasetsLoaded) {
+    renderHomepageFeaturedReels(cachedHomeSiteConfig);
+    renderHomepageFeaturedStories(cachedHomeSiteConfig);
+    renderHomepageFeaturedGames(cachedHomeSiteConfig);
+  }
 
   window.addEventListener("lingua-site-config-change", (e) => {
     if (e && e.detail) {

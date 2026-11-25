@@ -25,6 +25,19 @@
       } catch (e) {}
     })();
   </script>
+  <!-- Instant Client-Side Hydration Bootstrap -->
+  <script>
+    (function () {
+      try {
+        var r = localStorage.getItem("linguapath_cms_reels_v2");
+        if (r) { var p = JSON.parse(r); if (p && p.sheets && p.sheets.Videos) window.__INITIAL_REELS_CACHE__ = p.sheets.Videos; }
+        var s = localStorage.getItem("linguapath_cms_stories_v2");
+        if (s) { var p2 = JSON.parse(s); if (p2 && p2.sheets && p2.sheets.Lessons) window.__INITIAL_STORIES_CACHE__ = p2.sheets.Lessons; }
+        var l = localStorage.getItem("linguapath_cms_lessons_v2");
+        if (l) { var p3 = JSON.parse(l); if (p3 && p3.sheets) { window.__INITIAL_LESSONS_CACHE__ = p3.sheets.Lessons || []; window.__INITIAL_GAMES_CACHE__ = p3.sheets.Games || []; } }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="admin-page">
 
