@@ -92,6 +92,20 @@ document.addEventListener("DOMContentLoaded", () => {
       renderLearningHub();
     }
   });
+
+  window.addEventListener("storage", (e) => {
+    if (e.key === "linguapath_local_lesson_pricing" || e.key === "linguapath_cms_lessons_v2" || e.key === "linguapath_cms_reels_v2") {
+      loadWorkbook();
+      if (typeof renderLearningHub === "function") renderLearningHub();
+    }
+  });
+
+  window.addEventListener("linguapath-content-change", (e) => {
+    if (!e.detail || e.detail.domain === "lessons") {
+      loadWorkbook();
+      if (typeof renderLearningHub === "function") renderLearningHub();
+    }
+  });
 });
 
 

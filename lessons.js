@@ -6046,5 +6046,21 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     init();
+
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'linguapath_local_lesson_pricing' || e.key === 'linguapath_cms_lessons_v2') {
+        init();
+      }
+    });
+
+    window.addEventListener('linguapath-content-change', (e) => {
+      if (!e.detail || e.detail.domain === 'lessons') {
+        init();
+      }
+    });
+
+    window.addEventListener('lingua-auth-change', () => {
+      init();
+    });
   });
 })();

@@ -35,6 +35,8 @@
         if (s) { var p2 = JSON.parse(s); if (p2 && p2.sheets && p2.sheets.Lessons) window.__INITIAL_STORIES_CACHE__ = p2.sheets.Lessons; }
         var l = localStorage.getItem("linguapath_cms_lessons_v2");
         if (l) { var p3 = JSON.parse(l); if (p3 && p3.sheets) { window.__INITIAL_LESSONS_CACHE__ = p3.sheets.Lessons || []; window.__INITIAL_GAMES_CACHE__ = p3.sheets.Games || []; } }
+        var pr = localStorage.getItem("linguapath_local_lesson_pricing");
+        if (pr) { window.__INITIAL_PRICING_CACHE__ = JSON.parse(pr); }
       } catch (e) {}
     })();
   </script>
