@@ -2078,6 +2078,12 @@
   let activeWritingChar = null;
   let activeWritingLesson = null;
   let activeWritingChars = [];
+  let consecutiveMistakesOnStep = 0;
+  let canvasCssSize = 320;
+  let canvasPaddingPx = 12;
+  let writingHintFlashTimer = null;
+  let activeCanvasLoadToken = 0;
+  const hanziCharDataCache = Object.create(null);
 
   // --- STROKE ORDER RULES ENGINE (HanziStroke Standard) ---
   function getCharacterStrokeRule(char) {
@@ -2257,6 +2263,8 @@
     activeWritingChars = chars;
 
     const ruleInfo = getCharacterStrokeRule(currentChar.character);
+    const initialVectors = getCharacterStrokeVectors(currentChar);
+    const initialStrokeCount = getAuthoritativeStrokeCount(currentChar, initialVectors);
 
     panel.innerHTML = `
       <div class="writing-workspace">
@@ -2278,7 +2286,7 @@
               <div class="char-meaning-badge" id="charMeaningDisplay">"${escapeHTML(currentChar.meaning || '')}"</div>
               
               <div class="char-meta-row">
-                <span class="char-stat-pill" id="charStrokeCountDisplay">✏️ ${currentChar.strokeCount || '?'} Strokes</span>
+                <span class="char-stat-pill" id="charStrokeCountDisplay" style="font-variant-numeric: tabular-nums;">✏️ ${initialStrokeCount} Strokes</span>
                 ${currentChar.radical ? `<span class="char-stat-pill" id="charRadicalDisplay">Radical: <span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif; font-size: 1.15em; font-weight: bold; margin-left: 2px;">${escapeHTML(currentChar.radical)}</span></span>` : ''}
                 <button type="button" class="btn-canvas-action" id="btnSpeakWritingChar">🔊 Pronounce</button>
               </div>
@@ -2309,18 +2317,21 @@
 
           <!-- Right Column: Interactive Mi-Zi-Ge (米字格) Canvas & Stroke Order Indicator -->
           <div class="writing-canvas-col">
-            <div class="stroke-order-indicator-bar" id="strokeOrderStepBar">
-              <span><span class="stroke-order-step-badge" id="strokeStepBadge">Stroke 1 / ${currentChar.strokeCount || 4}</span> Step 1: Draw 1st Stroke</span>
-              <span id="strokeOrderHintText">Follow top-to-bottom order</span>
+            <div class="stroke-order-indicator-bar" id="strokeOrderStepBar" role="status" aria-live="polite">
+              <div class="stroke-order-bar-top">
+                <span class="stroke-order-step-badge" id="strokeStepBadge">Stroke 1 / ${initialStrokeCount}</span>
+                <span class="stroke-order-step-rule" id="strokeStepRuleTag">Strict Sequence Mode</span>
+              </div>
+              <div class="stroke-order-hint-line" id="strokeOrderHintText">Follow stroke-by-stroke sequence</div>
             </div>
 
             <div class="stroke-live-scores-row" id="strokeLiveScoresRow">
-              <span style="font-size: 0.8rem; color: #a8a29e; font-style: italic;">Draw strokes on canvas to check accuracy</span>
+              <span style="font-size: 0.8rem; color: #a8a29e; font-style: italic;">Draw strokes step-by-step in exact sequence</span>
             </div>
 
             <div class="canvas-mizige-box" id="canvasContainer">
               <div class="canvas-grid-lines"></div>
-              <div id="hanziWriterTarget" class="${showGhostChar ? '' : 'hidden'}" style="position: absolute; inset: 0; z-index: 3; pointer-events: none;"></div>
+              <div id="hanziWriterTarget" style="position: absolute; inset: 0; z-index: 3; pointer-events: none;"></div>
               <canvas id="strokeDrawCanvas" width="320" height="320" style="z-index: 10; pointer-events: auto; touch-action: none; position: absolute; inset: 0; cursor: crosshair;"></canvas>
             </div>
 
@@ -2390,13 +2401,18 @@
       toggleGhostBtn.onclick = () => {
         showGhostChar = !showGhostChar;
         const hwTarget = document.getElementById('hanziWriterTarget');
-        if (hwTarget) hwTarget.classList.toggle('hidden', !showGhostChar);
+        const fallbackGhost = hwTarget ? hwTarget.querySelector('.fallback-ghost-char') : null;
+        if (fallbackGhost) {
+          fallbackGhost.classList.toggle('hidden', !showGhostChar);
+        }
         if (currentHanziWriter && typeof currentHanziWriter.showOutline === 'function') {
           if (showGhostChar) {
             currentHanziWriter.showOutline();
           } else {
             currentHanziWriter.hideOutline();
           }
+        } else if (hwTarget && !fallbackGhost) {
+          hwTarget.classList.toggle('hidden', !showGhostChar);
         }
         toggleGhostBtn.textContent = showGhostChar ? '👁️ Hide Guide' : '👁️ Show Guide';
       };
@@ -2440,12 +2456,11 @@
     if (stepBadge) stepBadge.textContent = '▶ Animating...';
 
     // Clear canvas user strokes so animation is crystal clear
-    if (canvas && ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    clearCanvasSurface();
     drawnStrokes = [];
     strokeScores = [];
     currentStrokePoints = [];
+    consecutiveMistakesOnStep = 0;
 
     // Ensure HanziWriter element is visible
     const hwTarget = document.getElementById('hanziWriterTarget');
@@ -2483,7 +2498,7 @@
 
         // Sync live step badges during animation
         const vectors = getCharacterStrokeVectors(currentChar);
-        const total = (currentChar && currentChar.strokeCount) || vectors.length || 4;
+        const total = getAuthoritativeStrokeCount(currentChar, vectors);
         let currentStrokeStep = 0;
         const stepInterval = setInterval(() => {
           if (currentToken !== strokeAnimToken || !isStrokeAnimating) {
@@ -2523,6 +2538,16 @@
       animateBtn.textContent = '▶️ Stroke Animation';
       animateBtn.style.background = '#0284c7';
       animateBtn.style.borderColor = '#0284c7';
+    }
+    if (currentHanziWriter) {
+      try {
+        if (typeof currentHanziWriter.hideCharacter === 'function') {
+          currentHanziWriter.hideCharacter({ duration: 150 });
+        }
+        if (!showGhostChar && typeof currentHanziWriter.hideOutline === 'function') {
+          currentHanziWriter.hideOutline({ duration: 150 });
+        }
+      } catch (e) {}
     }
     if (activeWritingChar) {
       startStrokeWriting(activeWritingChar, activeWritingLesson, activeWritingChars);
@@ -2706,9 +2731,85 @@
   // --- STRICT STROKE-ORDER WRITING ENGINE ---
   let userMistakesCount = 0;
 
+  function getHanziPositioner(size, padding) {
+    const effectiveSize = Math.max(120, Number(size) || canvasCssSize || 320);
+    const pad = Number.isFinite(padding)
+      ? padding
+      : Math.max(10, Math.round(effectiveSize * 0.04));
+    const scale = (effectiveSize - 2 * pad) / 1024;
+    const xOffset = pad;
+    const yOffset = 124 * scale + pad;
+    return {
+      size: effectiveSize,
+      padding: pad,
+      scale,
+      xOffset,
+      yOffset,
+      toCanvas(hx, hy) {
+        return {
+          x: hx * scale + xOffset,
+          y: (effectiveSize - yOffset) - hy * scale
+        };
+      },
+      toHanzi(cx, cy) {
+        return {
+          x: (cx - xOffset) / scale,
+          y: ((effectiveSize - yOffset) - cy) / scale
+        };
+      }
+    };
+  }
+
+  function getLoadedHanziCharData(cleanChar) {
+    if (!cleanChar) return null;
+    if (hanziCharDataCache[cleanChar] && Array.isArray(hanziCharDataCache[cleanChar].medians)) {
+      return hanziCharDataCache[cleanChar];
+    }
+    if (
+      typeof window !== 'undefined' &&
+      window.EMBEDDED_HANZI_DATA &&
+      window.EMBEDDED_HANZI_DATA[cleanChar] &&
+      Array.isArray(window.EMBEDDED_HANZI_DATA[cleanChar].medians)
+    ) {
+      hanziCharDataCache[cleanChar] = window.EMBEDDED_HANZI_DATA[cleanChar];
+      return hanziCharDataCache[cleanChar];
+    }
+    return null;
+  }
+
+  function getAuthoritativeStrokeCount(currentChar, vectors) {
+    const rawChar = typeof currentChar === 'string'
+      ? currentChar
+      : (currentChar && (currentChar.character || currentChar.char || currentChar.word || currentChar.title || '')) || '';
+    const cleanChar = (String(rawChar).match(/[\u4e00-\u9fa5]/) || [''])[0];
+    const loadedData = getLoadedHanziCharData(cleanChar);
+    if (loadedData && Array.isArray(loadedData.medians) && loadedData.medians.length > 0) {
+      return loadedData.medians.length;
+    }
+    if (currentChar && Number(currentChar.resolvedStrokeCount) > 0) {
+      return Number(currentChar.resolvedStrokeCount);
+    }
+    if (Array.isArray(vectors) && vectors.length > 0) {
+      return vectors.length;
+    }
+    return (currentChar && parseInt(currentChar.strokeCount, 10)) || 4;
+  }
+
+  function clearCanvasSurface() {
+    if (!canvas || !ctx) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  }
+
   function startStrokeWriting(currentChar, lesson, chars) {
     if (isStrokeAnimating) {
       stopStrokeAnimation();
+    }
+    if (writingHintFlashTimer) {
+      clearTimeout(writingHintFlashTimer);
+      writingHintFlashTimer = null;
     }
 
     activeWritingChar = currentChar;
@@ -2716,27 +2817,31 @@
     activeWritingChars = chars;
 
     const vectors = getCharacterStrokeVectors(currentChar);
-    const total = (currentChar && currentChar.strokeCount) || vectors.length || 4;
+    const total = getAuthoritativeStrokeCount(currentChar, vectors);
     const stepBadge = document.getElementById('strokeStepBadge');
     const stepHint = document.getElementById('strokeOrderHintText');
+    const stepBar = document.getElementById('strokeOrderStepBar');
     const liveScoresRow = document.getElementById('strokeLiveScoresRow');
 
     drawnStrokes = [];
     strokeScores = [];
     currentStrokePoints = [];
     userMistakesCount = 0;
+    consecutiveMistakesOnStep = 0;
 
-    if (canvas && ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    clearCanvasSurface();
+
+    if (stepBar) {
+      stepBar.classList.remove('is-error', 'is-complete', 'stroke-error-shake');
     }
 
     const firstVector = vectors[0] || { label: '1st Stroke', direction: 'Follow stroke order' };
     if (stepBadge) stepBadge.textContent = `Stroke 1 / ${total}`;
     if (stepHint) {
-      stepHint.innerHTML = `👉 Draw <strong>Stroke 1</strong>: <span class="chinese-kaiti" style="color: #ea580c; font-weight: bold;">${escapeHTML(firstVector.label || '1st Stroke')}</span> (${escapeHTML(firstVector.direction || 'Follow stroke order')})`;
+      stepHint.innerHTML = `Draw <strong>Stroke 1</strong>: <span class="chinese-kaiti" style="color: #ea580c; font-weight: bold;">${escapeHTML(firstVector.label || '1st Stroke')}</span> (${escapeHTML(firstVector.direction || 'Follow stroke order')})`;
     }
     if (liveScoresRow) {
-      liveScoresRow.innerHTML = '<span style="font-size: 0.8rem; color: #a8a29e; font-style: italic;">Write strokes step-by-step on the canvas in correct sequence</span>';
+      liveScoresRow.innerHTML = '<span style="font-size: 0.8rem; color: #78716c; font-style: italic;">Draw strokes step-by-step in exact sequence</span>';
     }
 
     if (currentHanziWriter && typeof currentHanziWriter.cancelQuiz === 'function') {
@@ -2746,10 +2851,7 @@
 
   function redrawCanvasFromStrokes() {
     if (!canvas || !ctx) return;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
+    clearCanvasSurface();
 
     ctx.lineWidth = brushSizes[currentBrushIndex] || 10;
     ctx.strokeStyle = currentColor || '#ea580c';
@@ -2767,8 +2869,122 @@
     });
   }
 
+  function flashTargetStrokeHint(strokeIdx, expectedVector) {
+    if (currentHanziWriter && typeof currentHanziWriter.highlightStroke === 'function') {
+      try {
+        currentHanziWriter.highlightStroke(strokeIdx);
+        return;
+      } catch (e) {}
+    }
+    if (!canvas || !ctx || !expectedVector || !Array.isArray(expectedVector.pts) || expectedVector.pts.length < 2) {
+      return;
+    }
+    if (writingHintFlashTimer) {
+      clearTimeout(writingHintFlashTimer);
+      writingHintFlashTimer = null;
+    }
+    redrawCanvasFromStrokes();
+    ctx.save();
+    ctx.strokeStyle = 'rgba(37, 99, 235, 0.72)';
+    ctx.lineWidth = Math.max(6, (brushSizes[currentBrushIndex] || 10) - 2);
+    ctx.setLineDash([8, 6]);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(expectedVector.pts[0].x, expectedVector.pts[0].y);
+    for (let k = 1; k < expectedVector.pts.length; k++) {
+      ctx.lineTo(expectedVector.pts[k].x, expectedVector.pts[k].y);
+    }
+    ctx.stroke();
+    const startPt = expectedVector.pts[0];
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#2563eb';
+    ctx.beginPath();
+    ctx.arc(startPt.x, startPt.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    writingHintFlashTimer = setTimeout(() => {
+      writingHintFlashTimer = null;
+      if (!isDrawing && !isStrokeAnimating) {
+        redrawCanvasFromStrokes();
+      }
+    }, 850);
+  }
+
+  function classifyStrokeMetadata(hanziPts, idx, parsedStepLabel, presetMeta) {
+    const pStart = hanziPts[0];
+    const pEnd = hanziPts[hanziPts.length - 1];
+    const dx = pEnd.x - pStart.x;
+    const dyCanvas = -(pEnd.y - pStart.y); // positive dyCanvas means downward on screen
+    const pathLen = polylineLength(hanziPts);
+    const stepText = String(parsedStepLabel || (presetMeta && presetMeta.label) || '').toLowerCase();
+
+    let type = presetMeta ? presetMeta.type : 'stroke';
+    let label = parsedStepLabel || (presetMeta && presetMeta.label) || '';
+    let direction = (presetMeta && presetMeta.direction) || '';
+
+    if ((stepText.includes('horizontal') && !stepText.includes('turn')) || (stepText.includes('横') && !stepText.includes('折') && !stepText.includes('钩'))) {
+      type = 'horizontal';
+      if (!direction) direction = 'Left to right (从左到右)';
+    } else if ((stepText.includes('vertical') && !stepText.includes('turn')) || (stepText.includes('竖') && !stepText.includes('折') && !stepText.includes('弯'))) {
+      type = 'vertical';
+      if (!direction) direction = 'Top to bottom (从上到下)';
+    } else if (stepText.includes('dot') || stepText.includes('点')) {
+      type = 'dot';
+      if (!direction) direction = 'Top to bottom-right';
+    } else if (stepText.includes('slant') || stepText.includes('left fall') || stepText.includes('撇')) {
+      type = 'left_fall';
+      if (!direction) direction = 'Top-right to bottom-left';
+    } else if ((stepText.includes('right') && stepText.includes('fall')) || stepText.includes('捺')) {
+      type = 'right_fall';
+      if (!direction) direction = 'Top-left to bottom-right';
+    } else if (stepText.includes('turn') || stepText.includes('hook') || stepText.includes('corner') || stepText.includes('折') || stepText.includes('钩')) {
+      type = 'corner';
+      if (!direction) direction = 'Follow stroke turn in order';
+    }
+
+    if (!label) {
+      if (pathLen < 125) {
+        type = 'dot';
+        label = `第${idx + 1}笔 丶 点 (Dot)`;
+        direction = direction || 'Top to bottom-right';
+      } else if (hanziPts.length >= 3 && Math.abs(dyCanvas) > 80 && Math.abs(dx) > 80) {
+        type = 'corner';
+        label = `第${idx + 1}笔 折/钩 (Turn / Hook)`;
+        direction = direction || 'Follow stroke turn smoothly';
+      } else if (Math.abs(dx) > Math.abs(dyCanvas) * 1.45 && dx > 0) {
+        type = 'horizontal';
+        label = `第${idx + 1}笔 一 横 (Horizontal)`;
+        direction = direction || 'Left to right (从左到右)';
+      } else if (Math.abs(dyCanvas) > Math.abs(dx) * 1.45 && dyCanvas > 0) {
+        type = 'vertical';
+        label = `第${idx + 1}笔 丨 竖 (Vertical)`;
+        direction = direction || 'Top to bottom (从上到下)';
+      } else if (dx < 0 && dyCanvas > 0) {
+        type = 'left_fall';
+        label = `第${idx + 1}笔 丿 撇 (Left Falling)`;
+        direction = direction || 'Top-right to bottom-left';
+      } else if (dx > 0 && dyCanvas > 0) {
+        type = 'right_fall';
+        label = `第${idx + 1}笔 ㇏ 捺 (Right Falling)`;
+        direction = direction || 'Top-left to bottom-right';
+      } else if (dx > 0 && dyCanvas < 0) {
+        type = 'rising';
+        label = `第${idx + 1}笔 提 (Rising)`;
+        direction = direction || 'Lower-left to upper-right';
+      } else {
+        type = 'corner';
+        label = `第${idx + 1}笔 折/钩 (Fold / Hook)`;
+        direction = direction || 'Follow stroke trajectory';
+      }
+    }
+
+    return { type, label, direction: direction || 'Follow stroke direction' };
+  }
+
   // Exact Character Stroke Animation & Geometry Engine
-  function getCharacterStrokeVectors(currentChar) {
+  function getCharacterStrokeVectors(currentChar, customPositioner) {
     if (!currentChar) return [];
     let char = '';
     let count = 4;
@@ -2789,6 +3005,8 @@
     }
 
     const cleanChar = (String(char).match(/[\u4e00-\u9fa5]/) || ['早'])[0];
+    const positioner = customPositioner || getHanziPositioner(canvasCssSize, canvasPaddingPx);
+    const ref320Pos = getHanziPositioner(320, 12);
 
     const charMap = {
       "我": [
@@ -2931,167 +3149,318 @@
       ]
     };
 
+    // 1. Authoritative MakeMeAHanzi medians (from embedded hanzi-data.js or runtime HanziWriter cache)
+    const charData = getLoadedHanziCharData(cleanChar);
+    if (charData && Array.isArray(charData.medians) && charData.medians.length > 0) {
+      return charData.medians.map((medianPts, idx) => {
+        const hanziPts = medianPts.map(pt => ({ x: pt[0], y: pt[1] }));
+        const pts = hanziPts.map(pt => positioner.toCanvas(pt.x, pt.y));
+        const pStart = pts[0];
+        const pEnd = pts[pts.length - 1];
+        const pMid = pts.length >= 3 ? pts[Math.floor(pts.length / 2)] : null;
+        const pre = charMap[cleanChar] && charMap[cleanChar][idx];
+        const meta = classifyStrokeMetadata(hanziPts, idx, parsedSteps[idx], pre);
+
+        const out = {
+          type: meta.type,
+          x1: Math.round(pStart.x),
+          y1: Math.round(pStart.y),
+          x2: Math.round(pMid ? pMid.x : pEnd.x),
+          y2: Math.round(pMid ? pMid.y : pEnd.y),
+          pts,
+          hanziPts,
+          len: Math.round(polylineLength(hanziPts)),
+          label: meta.label,
+          direction: meta.direction
+        };
+        if (pMid) {
+          out.x3 = Math.round(pEnd.x);
+          out.y3 = Math.round(pEnd.y);
+        }
+        return out;
+      });
+    }
+
+    // 2. Curated charMap fallback (converted to normalized 1024 space & projected to active canvas size)
     if (charMap[cleanChar]) {
-      return charMap[cleanChar].map((st, idx) => ({
-        ...st,
-        label: parsedSteps[idx] || st.label
-      }));
+      return charMap[cleanChar].map((st, idx) => {
+        const rawCanvasPts = [{ x: st.x1, y: st.y1 }, { x: st.x2, y: st.y2 }];
+        if (st.x3 !== undefined && st.y3 !== undefined) {
+          rawCanvasPts.push({ x: st.x3, y: st.y3 });
+        }
+        const hanziPts = rawCanvasPts.map(p => ref320Pos.toHanzi(p.x, p.y));
+        const pts = hanziPts.map(p => positioner.toCanvas(p.x, p.y));
+        const pStart = pts[0];
+        const pMidOrEnd = pts[1];
+        const out = {
+          ...st,
+          x1: Math.round(pStart.x),
+          y1: Math.round(pStart.y),
+          x2: Math.round(pMidOrEnd.x),
+          y2: Math.round(pMidOrEnd.y),
+          pts,
+          hanziPts,
+          len: Math.round(polylineLength(hanziPts)),
+          label: parsedSteps[idx] || st.label
+        };
+        if (pts[2]) {
+          out.x3 = Math.round(pts[2].x);
+          out.y3 = Math.round(pts[2].y);
+        }
+        return out;
+      });
     }
 
-    // Extract authoritative strokes from embedded hanzi-data medians if available
-    if (window.EMBEDDED_HANZI_DATA && window.EMBEDDED_HANZI_DATA[cleanChar]) {
-      const charData = window.EMBEDDED_HANZI_DATA[cleanChar];
-      if (charData && Array.isArray(charData.medians) && charData.medians.length > 0) {
-        const padding = 20;
-        const width = 320;
-        const height = 320;
-        const scale = (width - 2 * padding) / 1024;
-        const xOffset = padding;
-        const yOffset = 124 * scale + padding;
-
-        const vectors = charData.medians.map((medianPts, idx) => {
-          const pts = medianPts.map(pt => ({
-            x: Math.round(pt[0] * scale + xOffset),
-            y: Math.round(height - yOffset - pt[1] * scale)
-          }));
-          const pStart = pts[0];
-          const pEnd = pts[pts.length - 1];
-          const dx = pEnd.x - pStart.x;
-          const dy = pEnd.y - pStart.y;
-          const len = Math.round(Math.hypot(dx, dy));
-
-          const pre = charMap[cleanChar] && charMap[cleanChar][idx];
-          const authoritativeLabel = parsedSteps[idx] || (pre && pre.label);
-          const stepText = (authoritativeLabel || '').toLowerCase();
-
-          let type = pre ? pre.type : 'stroke';
-          let label = authoritativeLabel || `第${idx + 1}笔`;
-          let direction = 'Follow stroke flow';
-          let x2 = pEnd.x;
-          let y2 = pEnd.y;
-
-          if (stepText.includes('horizontal') || stepText.includes('横')) {
-            type = 'horizontal';
-            direction = 'Left to right (从左到右)';
-            if (Math.abs(pEnd.x - pStart.x) < Math.abs(pEnd.y - pStart.y)) {
-              x2 = pStart.x + 120;
-              y2 = pStart.y;
-            }
-          } else if (stepText.includes('vertical') || stepText.includes('竖')) {
-            type = 'vertical';
-            direction = 'Top to bottom (从上到下)';
-            if (Math.abs(pEnd.y - pStart.y) < Math.abs(pEnd.x - pStart.x)) {
-              x2 = pStart.x;
-              y2 = pStart.y + 120;
-            }
-          } else if (stepText.includes('dot') || stepText.includes('点')) {
-            type = 'dot';
-            direction = 'Top to bottom-right';
-          } else if (stepText.includes('slant') || stepText.includes('fall') || stepText.includes('撇')) {
-            type = 'left_fall';
-            direction = 'Top-right to bottom-left';
-          } else if (stepText.includes('right') && stepText.includes('fall') || stepText.includes('捺')) {
-            type = 'right_fall';
-            direction = 'Top-left to bottom-right';
-          } else if (!pre) {
-            if (len < 38) {
-              type = 'dot';
-              label = parsedSteps[idx] || `第${idx + 1}笔 丶 点 (Diǎn, Dot)`;
-              direction = 'Top to bottom-right';
-            } else if (Math.abs(dx) > Math.abs(dy) * 1.4 && dx > 0) {
-              type = 'horizontal';
-              label = parsedSteps[idx] || `第${idx + 1}笔 一 横 (Héng, Left to Right)`;
-              direction = 'Left to right (从左到右)';
-            } else if (Math.abs(dy) > Math.abs(dx) * 1.4 && dy > 0) {
-              type = 'vertical';
-              label = parsedSteps[idx] || `第${idx + 1}笔 丨 竖 (Shù, Top to Bottom)`;
-              direction = 'Top to bottom (从上到下)';
-            } else if (dx < 0 && dy > 0) {
-              type = 'left_fall';
-              label = parsedSteps[idx] || `第${idx + 1}笔 丿 撇 (Piě, Left Falling)`;
-              direction = 'Top-right to bottom-left (从右上到左下)';
-            } else if (dx > 0 && dy > 0) {
-              type = 'right_fall';
-              label = parsedSteps[idx] || `第${idx + 1}笔 ㇏ 捺 (Nà, Right Falling)`;
-              direction = 'Top-left to bottom-right (从左上到右下)';
-            } else if (dx > 0 && dy < 0) {
-              type = 'rising';
-              label = parsedSteps[idx] || `第${idx + 1}笔 提 (Tí, Rising)`;
-              direction = 'Lower-left to upper-right (从左下到右上)';
-            } else {
-              type = 'corner';
-              label = parsedSteps[idx] || `第${idx + 1}笔 折/钩 (Zhé / Gōu)`;
-              direction = 'Follow stroke trajectory';
-            }
-          }
-
-          const finalLen = Math.round(Math.hypot(x2 - pStart.x, y2 - pStart.y));
-
-          return {
-            type,
-            x1: pStart.x,
-            y1: pStart.y,
-            x2,
-            y2,
-            pts,
-            len: finalLen,
-            label,
-            direction
-          };
-        });
-
-        return vectors;
-      }
-    }
-
-    if (charMap[cleanChar]) {
-      return charMap[cleanChar].map((st, idx) => ({
-        ...st,
-        label: parsedSteps[idx] || st.label
-      }));
-    }
-
+    // 3. Generic count-based fallback when neither Hanzi data nor charMap has loaded
     const strokes = [];
     for (let i = 0; i < count; i++) {
       const t = i / Math.max(1, count - 1);
-      const y = 65 + t * 170;
+      const cy = 65 + t * 170;
       const stepLabel = parsedSteps[i];
+      let rawCanvasPts;
+      let type;
+      let label;
+      let direction;
       if (i % 2 === 0) {
-        strokes.push({
-          type: "horizontal",
-          x1: 60, y1: y, x2: 260, y2: y,
-          label: stepLabel || `第${i + 1}笔 一 横 (Left to Right)`,
-          direction: "Left to right (从左到右)"
-        });
+        rawCanvasPts = [{ x: 60, y: cy }, { x: 260, y: cy }];
+        type = "horizontal";
+        label = stepLabel || `第${i + 1}笔 一 横 (Left to Right)`;
+        direction = "Left to right (从左到右)";
       } else {
-        strokes.push({
-          type: "vertical",
-          x1: 60 + ((i * 45) % 180), y1: Math.max(40, y - 50),
-          x2: 60 + ((i * 45) % 180), y2: Math.min(280, y + 60),
-          label: stepLabel || `第${i + 1}笔 丨 竖 (Top to Bottom)`,
-          direction: "Top to bottom (从上到下)"
-        });
+        const cx = 60 + ((i * 45) % 180);
+        rawCanvasPts = [{ x: cx, y: Math.max(40, cy - 50) }, { x: cx, y: Math.min(280, cy + 60) }];
+        type = "vertical";
+        label = stepLabel || `第${i + 1}笔 丨 竖 (Top to Bottom)`;
+        direction = "Top to bottom (从上到下)";
       }
+      const hanziPts = rawCanvasPts.map(p => ref320Pos.toHanzi(p.x, p.y));
+      const pts = hanziPts.map(p => positioner.toCanvas(p.x, p.y));
+      strokes.push({
+        type,
+        x1: Math.round(pts[0].x),
+        y1: Math.round(pts[0].y),
+        x2: Math.round(pts[1].x),
+        y2: Math.round(pts[1].y),
+        pts,
+        hanziPts,
+        len: Math.round(polylineLength(hanziPts)),
+        label,
+        direction
+      });
     }
     return strokes;
   }
 
-  // Multi-Factor Strict Stroke Step & Format Evaluator with generous tolerances
-  function evaluateSingleStroke(points, strokeIdx, currentChar) {
+  function polylineLength(pts) {
+    if (!Array.isArray(pts) || pts.length < 2) return 0;
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) {
+      total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    }
+    return total;
+  }
+
+  function resamplePolyline(pts, count = 20) {
+    if (!Array.isArray(pts) || pts.length === 0) return [];
+    if (pts.length === 1 || count <= 1) return [{ x: pts[0].x, y: pts[0].y }];
+    const totalLen = polylineLength(pts);
+    if (totalLen < 1e-3) {
+      return Array.from({ length: count }, () => ({ x: pts[0].x, y: pts[0].y }));
+    }
+    const step = totalLen / (count - 1);
+    const out = [{ x: pts[0].x, y: pts[0].y }];
+    let prev = { x: pts[0].x, y: pts[0].y };
+    let accum = 0;
+    let i = 1;
+    while (i < pts.length) {
+      const cur = pts[i];
+      const segLen = Math.hypot(cur.x - prev.x, cur.y - prev.y);
+      if (accum + segLen >= step) {
+        const t = (step - accum) / segLen;
+        const nx = prev.x + t * (cur.x - prev.x);
+        const ny = prev.y + t * (cur.y - prev.y);
+        const np = { x: nx, y: ny };
+        out.push(np);
+        prev = np;
+        accum = 0;
+        if (out.length === count) break;
+      } else {
+        accum += segLen;
+        prev = { x: cur.x, y: cur.y };
+        i++;
+      }
+    }
+    while (out.length < count) {
+      const last = pts[pts.length - 1];
+      out.push({ x: last.x, y: last.y });
+    }
+    return out;
+  }
+
+  function pointToSegmentDist(p, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq <= 1e-6) return Math.hypot(p.x - a.x, p.y - a.y);
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
+    const px = a.x + t * dx;
+    const py = a.y + t * dy;
+    return Math.hypot(p.x - px, p.y - py);
+  }
+
+  function pointToPolylineMinDist(p, poly) {
+    if (!poly || poly.length === 0) return 9999;
+    if (poly.length === 1) return Math.hypot(p.x - poly[0].x, p.y - poly[0].y);
+    let minD = Infinity;
+    for (let i = 1; i < poly.length; i++) {
+      const d = pointToSegmentDist(p, poly[i - 1], poly[i]);
+      if (d < minD) minD = d;
+    }
+    return minD;
+  }
+
+  function simplifyJitterPoints(pts, minStep = 16) {
+    if (!Array.isArray(pts) || pts.length <= 2) return pts || [];
+    const out = [pts[0]];
+    let last = pts[0];
+    for (let i = 1; i < pts.length - 1; i++) {
+      if (Math.hypot(pts[i].x - last.x, pts[i].y - last.y) >= minStep) {
+        out.push(pts[i]);
+        last = pts[i];
+      }
+    }
+    const endPt = pts[pts.length - 1];
+    if (Math.hypot(endPt.x - last.x, endPt.y - last.y) >= 1 || out.length === 1) {
+      out.push(endPt);
+    } else {
+      out[out.length - 1] = endPt;
+    }
+    return out;
+  }
+
+  function scoreStrokeAgainstVector(rawUserHanziPts, expectedVector) {
+    const expPoly = (expectedVector && Array.isArray(expectedVector.hanziPts) && expectedVector.hanziPts.length >= 2)
+      ? expectedVector.hanziPts
+      : [{ x: 200, y: 400 }, { x: 800, y: 400 }];
+
+    const expLen = Math.max(1, polylineLength(expPoly));
+    const isDot = expectedVector.type === 'dot' || expLen < 125;
+    const userHanziPts = simplifyJitterPoints(rawUserHanziPts, isDot ? 8 : 26);
+    const userLen = polylineLength(userHanziPts);
+
+    if (userLen < (isDot ? 14 : 42)) {
+      return {
+        isMatch: false,
+        score: 0,
+        reason: 'too_short',
+        avgDist: 9999,
+        startDist: 9999,
+        endDist: 9999,
+        angleDiff: Math.PI
+      };
+    }
+
+    const uStart = userHanziPts[0];
+    const uEnd = userHanziPts[userHanziPts.length - 1];
+    const eStart = expPoly[0];
+    const eEnd = expPoly[expPoly.length - 1];
+
+    const startDist = Math.hypot(uStart.x - eStart.x, uStart.y - eStart.y);
+    const endDist = Math.hypot(uEnd.x - eEnd.x, uEnd.y - eEnd.y);
+
+    const uResampled = resamplePolyline(userHanziPts, 20);
+    const eResampled = resamplePolyline(expPoly, 20);
+
+    let sumUtoE = 0;
+    for (let i = 0; i < uResampled.length; i++) {
+      sumUtoE += pointToPolylineMinDist(uResampled[i], expPoly);
+    }
+    const avgUserToExp = sumUtoE / uResampled.length;
+
+    let sumEtoU = 0;
+    for (let i = 0; i < eResampled.length; i++) {
+      sumEtoU += pointToPolylineMinDist(eResampled[i], userHanziPts);
+    }
+    const avgExpToUser = sumEtoU / eResampled.length;
+
+    const avgDist = Math.max(avgUserToExp, avgExpToUser * 0.9);
+
+    // Directional agreement along resampled vectors
+    let cosSum = 0;
+    let cosCount = 0;
+    for (let i = 1; i < uResampled.length; i++) {
+      const ux = uResampled[i].x - uResampled[i - 1].x;
+      const uy = uResampled[i].y - uResampled[i - 1].y;
+      const ex = eResampled[i].x - eResampled[i - 1].x;
+      const ey = eResampled[i].y - eResampled[i - 1].y;
+      const uSeg = Math.hypot(ux, uy);
+      const eSeg = Math.hypot(ex, ey);
+      if (uSeg > 1e-3 && eSeg > 1e-3) {
+        cosSum += (ux * ex + uy * ey) / (uSeg * eSeg);
+        cosCount++;
+      }
+    }
+    const avgSegCos = cosCount > 0 ? cosSum / cosCount : 1;
+
+    const userAngle = Math.atan2(uEnd.y - uStart.y, uEnd.x - uStart.x);
+    const expAngle = Math.atan2(eEnd.y - eStart.y, eEnd.x - eStart.x);
+    let angleDiff = Math.abs(userAngle - expAngle);
+    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+
+    const lenRatio = userLen / expLen;
+
+    const maxAvgDist = isDot ? 155 : 145;
+    const maxEndpointDist = isDot ? 210 : 225;
+    const minLenRatio = isDot ? 0.25 : 0.42;
+    const maxLenRatio = isDot ? 3.5 : 2.6;
+
+    let failReason = null;
+    if (!isDot && (lenRatio < minLenRatio)) {
+      failReason = 'too_short';
+    } else if (!isDot && (avgSegCos < 0.25 || (expPoly.length === 2 && angleDiff > 1.05) || angleDiff > 1.35)) {
+      failReason = 'wrong_direction';
+    } else if (lenRatio > maxLenRatio) {
+      failReason = 'wrong_shape';
+    } else if (startDist > maxEndpointDist || endDist > maxEndpointDist) {
+      failReason = 'wrong_position';
+    } else if (avgDist > maxAvgDist) {
+      failReason = 'wrong_position';
+    }
+
+    const distScore = Math.max(0, 1 - avgDist / 185);
+    const anchorScore = Math.max(0, 1 - (startDist + endDist) / 520);
+    const dirScore = isDot ? 1 : Math.max(0, (avgSegCos + 1) / 2);
+    const rawScore = Math.round((distScore * 0.45 + anchorScore * 0.3 + dirScore * 0.25) * 100);
+
+    return {
+      isMatch: !failReason,
+      score: Math.min(100, Math.max(15, rawScore)),
+      reason: failReason || 'ok',
+      avgDist,
+      startDist,
+      endDist,
+      angleDiff,
+      avgSegCos
+    };
+  }
+
+  // Strict Stroke-by-Stroke Sequence & Polyline Evaluator (1024 MakeMeAHanzi space)
+  function evaluateSingleStroke(points, strokeIdx, currentChar, customPositioner) {
     if (!points || points.length < 2) {
       return {
         pass: false,
         score: 0,
         reason: 'too_short',
-        hint: '⚠️ Stroke too short. Please draw the stroke on the canvas.',
+        hint: '⚠️ Stroke too short. Please draw the full stroke on the canvas.',
         valueOf() { return 0; }
       };
     }
 
-    const strokeVectors = getCharacterStrokeVectors(currentChar);
-    const totalExpected = strokeVectors.length || 4;
+    const positioner = customPositioner || getHanziPositioner(canvasCssSize, canvasPaddingPx);
+    const strokeVectors = getCharacterStrokeVectors(currentChar, positioner);
+    const totalExpected = getAuthoritativeStrokeCount(currentChar, strokeVectors);
 
-    if (strokeIdx >= totalExpected) {
+    if (strokeIdx >= totalExpected || strokeIdx >= strokeVectors.length) {
       return {
         pass: true,
         score: 75,
@@ -3101,78 +3470,114 @@
       };
     }
 
-    const expected = strokeVectors[strokeIdx] || { x1: 50, y1: 150, x2: 250, y2: 150, label: `Stroke ${strokeIdx + 1}` };
-    const startP = points[0];
-    const endP = points[points.length - 1];
-    const dx = endP.x - startP.x;
-    const dy = endP.y - startP.y;
-    const len = Math.hypot(dx, dy);
+    const userHanziPts = points.map(p => positioner.toHanzi(p.x, p.y));
+    const expected = strokeVectors[strokeIdx];
+    const expectedLabel = expected.label || `Stroke ${strokeIdx + 1}`;
+    const expectedDir = expected.direction || 'Follow stroke order';
 
-    // Reject tiny taps under 8px unless expected is a dot
-    if (len < 8 && expected.type !== 'dot') {
+    const primaryEval = scoreStrokeAgainstVector(userHanziPts, expected);
+
+    // Check if the user actually drew a LATER stroke out of sequence (better fit than expected stroke)
+    let bestLaterMatch = null;
+    for (let j = strokeIdx + 1; j < strokeVectors.length; j++) {
+      const fwd = scoreStrokeAgainstVector(userHanziPts, strokeVectors[j]);
+      const rev = scoreStrokeAgainstVector([...userHanziPts].reverse(), strokeVectors[j]);
+      const candidate = fwd.score >= rev.score ? fwd : rev;
+      if (candidate.isMatch || (candidate.avgDist < 165 && candidate.score >= 62)) {
+        if (!bestLaterMatch || candidate.score > bestLaterMatch.eval.score) {
+          bestLaterMatch = { index: j, eval: candidate };
+        }
+      }
+    }
+
+    // Check if user repeated an ALREADY drawn earlier stroke
+    let bestPriorMatch = null;
+    for (let k = 0; k < strokeIdx && k < strokeVectors.length; k++) {
+      const prior = scoreStrokeAgainstVector(userHanziPts, strokeVectors[k]);
+      if (prior.isMatch || (prior.avgDist < 145 && prior.score >= 65)) {
+        if (!bestPriorMatch || prior.score > bestPriorMatch.eval.score) {
+          bestPriorMatch = { index: k, eval: prior };
+        }
+      }
+    }
+
+    // Reject if a later stroke is genuinely a much better fit than the expected stroke
+    const clearlyMeantLaterStroke = Boolean(
+      bestLaterMatch &&
+      bestLaterMatch.eval.avgDist < primaryEval.avgDist * 0.85 &&
+      (
+        !primaryEval.isMatch ||
+        (bestLaterMatch.eval.score >= primaryEval.score + 12 && bestLaterMatch.eval.avgDist < primaryEval.avgDist * 0.72)
+      )
+    );
+
+    if (clearlyMeantLaterStroke) {
       return {
         pass: false,
-        score: 0,
-        reason: 'too_short',
-        hint: '⚠️ Stroke is too short. Please draw the full stroke.',
-        valueOf() { return 0; }
+        score: 25,
+        reason: 'wrong_sequence',
+        matchedStroke: bestLaterMatch.index + 1,
+        hint: `⚠️ Wrong sequence! That looks like Stroke ${bestLaterMatch.index + 1}. Draw <strong>${escapeHTML(expectedLabel)}</strong> (Stroke ${strokeIdx + 1}) first.`,
+        valueOf() { return 25; }
       };
     }
 
-    const userAngle = Math.atan2(dy, dx);
-    const expDx = (expected.x2 || 0) - (expected.x1 || 0);
-    const expDy = (expected.y2 || 0) - (expected.y1 || 0);
-    const expAngle = Math.atan2(expDy, expDx);
+    if (!primaryEval.isMatch) {
+      // Check reversed direction on expected stroke
+      const reversedEval = scoreStrokeAgainstVector([...userHanziPts].reverse(), expected);
+      if (reversedEval.isMatch) {
+        return {
+          pass: false,
+          score: 35,
+          reason: 'wrong_direction',
+          hint: `⚠️ Wrong stroke direction for <strong>${escapeHTML(expectedLabel)}</strong>! Draw ${escapeHTML(expectedDir)}.`,
+          valueOf() { return 35; }
+        };
+      }
 
-    let angleDiff = Math.abs(userAngle - expAngle);
-    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+      if (bestPriorMatch && (!primaryEval.isMatch || bestPriorMatch.eval.avgDist < primaryEval.avgDist * 0.75)) {
+        return {
+          pass: false,
+          score: 30,
+          reason: 'already_drawn',
+          matchedStroke: bestPriorMatch.index + 1,
+          hint: `⚠️ Stroke ${bestPriorMatch.index + 1} is already done! Draw <strong>${escapeHTML(expectedLabel)}</strong> (Stroke ${strokeIdx + 1}) next.`,
+          valueOf() { return 30; }
+        };
+      }
 
-    const startDist = Math.hypot(startP.x - expected.x1, startP.y - expected.y1);
+      if (primaryEval.reason === 'too_short') {
+        return {
+          pass: false,
+          score: 20,
+          reason: 'too_short',
+          hint: `⚠️ Stroke too short! Draw the complete <strong>${escapeHTML(expectedLabel)}</strong> (${escapeHTML(expectedDir)}).`,
+          valueOf() { return 20; }
+        };
+      }
 
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    points.forEach(p => {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    });
-    const drawnMidX = (minX + maxX) / 2;
-    const drawnMidY = (minY + maxY) / 2;
-    const expMidX = ((expected.x1 || 0) + (expected.x2 || 0)) / 2;
-    const expMidY = ((expected.y1 || 0) + (expected.y2 || 0)) / 2;
-    const midDist = Math.hypot(drawnMidX - expMidX, drawnMidY - expMidY);
+      if (primaryEval.reason === 'wrong_direction') {
+        return {
+          pass: false,
+          score: 35,
+          reason: 'wrong_direction',
+          hint: `⚠️ Wrong direction for <strong>${escapeHTML(expectedLabel)}</strong>! Follow: ${escapeHTML(expectedDir)}.`,
+          valueOf() { return 35; }
+        };
+      }
 
-    // Generous direction tolerance (up to 2.1 radians / ~120 degrees)
-    if (angleDiff > 2.1 && expected.type !== 'dot') {
-      let dirTip = expected.direction || 'Follow stroke direction';
       return {
         pass: false,
-        score: 40,
-        reason: 'wrong_direction',
-        hint: `⚠️ Wrong direction for <strong>${escapeHTML(expected.label || `Stroke ${strokeIdx + 1}`)}</strong>! Please follow: ${dirTip}.`,
-        valueOf() { return 40; }
+        score: primaryEval.score,
+        reason: primaryEval.reason || 'wrong_position',
+        hint: `⚠️ Incorrect placement for <strong>${escapeHTML(expectedLabel)}</strong>! Follow the highlighted blue guide on the grid.`,
+        valueOf() { return primaryEval.score; }
       };
     }
-
-    // Generous position tolerance (up to 170px start/mid distance on 320x320 canvas)
-    if (startDist > 170 || midDist > 180) {
-      return {
-        pass: false,
-        score: 40,
-        reason: 'wrong_position',
-        hint: `⚠️ Wrong position! Draw <strong>${escapeHTML(expected.label || `Stroke ${strokeIdx + 1}`)}</strong> in the correct section.`,
-        valueOf() { return 40; }
-      };
-    }
-
-    // Score calculation
-    const dirFactor = Math.max(0, 1 - angleDiff / Math.PI);
-    const posFactor = Math.max(0, 1 - (startDist * 0.4 + midDist * 0.6) / 180);
-    const rawScore = Math.round((dirFactor * 0.5 + posFactor * 0.5) * 100);
 
     return {
       pass: true,
-      score: Math.min(100, Math.max(60, rawScore)),
+      score: Math.min(100, Math.max(60, primaryEval.score)),
       reason: 'ok',
       hint: `✅ Correct stroke!`,
       valueOf() { return this.score; }
@@ -3191,9 +3596,12 @@
     activeWritingChar = currentChar;
     activeWritingLesson = lesson;
     activeWritingChars = chars;
+    const loadToken = ++activeCanvasLoadToken;
 
     const rect = canvas.parentElement.getBoundingClientRect();
-    const size = Math.min(rect.width || 320, 320);
+    const size = Math.max(200, Math.min(Math.round(rect.width || 320), 320));
+    canvasCssSize = size;
+    canvasPaddingPx = Math.max(10, Math.round(size * 0.04));
 
     canvas.width = size * window.devicePixelRatio;
     canvas.height = size * window.devicePixelRatio;
@@ -3201,7 +3609,7 @@
     canvas.style.height = `${size}px`;
 
     ctx = canvas.getContext('2d');
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = brushSizes[currentBrushIndex];
@@ -3217,7 +3625,7 @@
     canvas.onpointermove = handlePointerMove;
     canvas.onpointerup = handlePointerUp;
     canvas.onpointercancel = handlePointerCancel;
-    canvas.onpointerleave = handlePointerCancel;
+    canvas.onpointerleave = handlePointerLeave;
 
     // Helper to ensure container is mounted and visible with valid dimensions
     function waitForContainerMountedAndVisible(container, callback, maxFrames = 25) {
@@ -3226,9 +3634,9 @@
       function poll() {
         frameCount++;
         const isMounted = document.body.contains(container);
-        const rect = container.getBoundingClientRect();
+        const cRect = container.getBoundingClientRect();
         const style = window.getComputedStyle(container);
-        const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0;
+        const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && cRect.width > 0;
         if (isMounted && isVisible) {
           callback();
         } else if (frameCount < maxFrames) {
@@ -3240,39 +3648,58 @@
       requestAnimationFrame(poll);
     }
 
-    // Initialize single, high-precision HanziWriter instance
+    // Initialize single, high-precision HanziWriter instance aligned with canvas size & padding
     const targetElement = document.getElementById('hanziWriterTarget');
     if (targetElement) {
       targetElement.style.pointerEvents = 'none';
       targetElement.style.zIndex = '3';
+      targetElement.classList.remove('hidden');
       targetElement.innerHTML = '';
       const rawCharStr = (currentChar && (currentChar.character || currentChar.char || (typeof currentChar === 'string' ? currentChar : ''))) || '早';
       const validChar = (String(rawCharStr).match(/[\u4e00-\u9fa5]/) || ['早'])[0];
 
       if (window.HanziWriter && validChar) {
         waitForContainerMountedAndVisible(targetElement, () => {
+          if (loadToken !== activeCanvasLoadToken) return;
           try {
             if (currentHanziWriter && typeof currentHanziWriter.cancelQuiz === 'function') {
               try { currentHanziWriter.cancelQuiz(); } catch (e) {}
             }
-            const rect = targetElement.getBoundingClientRect();
-            const computedW = Math.round(rect.width) > 40 ? Math.round(rect.width) : 290;
-            const computedH = Math.round(rect.height) > 40 ? Math.round(rect.height) : 290;
+            const tRect = targetElement.getBoundingClientRect();
+            const measuredSize = Math.round(Math.min(tRect.width || 0, tRect.height || 0));
+            const computedSize = measuredSize > 40 ? measuredSize : size;
+            canvasCssSize = computedSize;
+            canvasPaddingPx = Math.max(10, Math.round(computedSize * 0.04));
+
+            if (Math.round(parseFloat(canvas.style.width) || 0) !== computedSize) {
+              canvas.width = computedSize * window.devicePixelRatio;
+              canvas.height = computedSize * window.devicePixelRatio;
+              canvas.style.width = `${computedSize}px`;
+              canvas.style.height = `${computedSize}px`;
+              ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              ctx.lineWidth = brushSizes[currentBrushIndex];
+              ctx.strokeStyle = currentColor;
+            }
 
             currentHanziWriter = HanziWriter.create(targetElement, validChar, {
-              width: computedW,
-              height: computedH,
-              padding: 10,
+              width: computedSize,
+              height: computedSize,
+              padding: canvasPaddingPx,
               showOutline: showGhostChar,
               showCharacter: false,
               strokeColor: '#ea580c',
               outlineColor: 'rgba(234, 88, 12, 0.28)',
+              highlightColor: '#2563eb',
+              strokeHighlightSpeed: 1.8,
               drawingWidth: 16,
               strokeAnimationSpeed: 1.2,
               delayBetweenStrokes: 250,
               charDataLoader: function (charToLoad, onComplete, onError) {
-                if (window.EMBEDDED_HANZI_DATA && window.EMBEDDED_HANZI_DATA[charToLoad]) {
-                  onComplete(window.EMBEDDED_HANZI_DATA[charToLoad]);
+                const cached = getLoadedHanziCharData(charToLoad);
+                if (cached) {
+                  onComplete(cached);
                   return;
                 }
                 fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${encodeURIComponent(charToLoad)}.json`)
@@ -3280,7 +3707,12 @@
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     return res.json();
                   })
-                  .then(data => onComplete(data))
+                  .then(data => {
+                    if (data && Array.isArray(data.medians)) {
+                      hanziCharDataCache[charToLoad] = data;
+                    }
+                    onComplete(data);
+                  })
                   .catch(err => {
                     if (typeof onError === 'function') onError(err);
                   });
@@ -3288,9 +3720,22 @@
               onLoadCharDataError: function (err) {
                 console.warn('HanziWriter data notice for ' + validChar, err);
               },
-              onLoadCharDataSuccess: function () {
+              onLoadCharDataSuccess: function (loadedData) {
+                if (loadToken !== activeCanvasLoadToken) return;
+                if (loadedData && Array.isArray(loadedData.medians) && loadedData.medians.length > 0) {
+                  hanziCharDataCache[validChar] = loadedData;
+                  if (activeWritingChar) {
+                    activeWritingChar.resolvedStrokeCount = loadedData.medians.length;
+                  }
+                  const strokeCountEl = document.getElementById('charStrokeCountDisplay');
+                  if (strokeCountEl) {
+                    strokeCountEl.textContent = `✏️ ${loadedData.medians.length} Strokes`;
+                  }
+                }
                 if (drawnStrokes.length === 0) {
                   startStrokeWriting(currentChar, lesson, chars);
+                } else {
+                  updateStrokeBadgesUI(activeWritingChar);
                 }
               }
             });
@@ -3311,13 +3756,23 @@
   function getCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x: Math.max(0, Math.min(rect.width, e.clientX - rect.left)),
+      y: Math.max(0, Math.min(rect.height, e.clientY - rect.top))
     };
   }
 
   function handlePointerDown(e) {
     e.preventDefault();
+    if (isStrokeAnimating) {
+      stopStrokeAnimation();
+      redrawCanvasFromStrokes();
+    }
+    if (writingHintFlashTimer) {
+      clearTimeout(writingHintFlashTimer);
+      writingHintFlashTimer = null;
+      redrawCanvasFromStrokes();
+    }
+
     isDrawing = true;
     try {
       canvas.setPointerCapture(e.pointerId);
@@ -3328,6 +3783,8 @@
     lastY = y;
     currentStrokePoints = [{ x, y }];
 
+    ctx.lineWidth = brushSizes[currentBrushIndex] || 10;
+    ctx.strokeStyle = currentColor || '#ea580c';
     ctx.beginPath();
     ctx.arc(x, y, ctx.lineWidth / 2, 0, Math.PI * 2);
     ctx.fillStyle = ctx.strokeStyle;
@@ -3352,92 +3809,115 @@
     if (!isDrawing) return;
     isDrawing = false;
     try {
-      canvas.releasePointerCapture(e.pointerId);
+      if (canvas.hasPointerCapture && canvas.hasPointerCapture(e.pointerId)) {
+        canvas.releasePointerCapture(e.pointerId);
+      }
     } catch (err) {}
 
-    if (currentStrokePoints && currentStrokePoints.length > 1) {
-      const strokeVectors = getCharacterStrokeVectors(activeWritingChar);
-      const totalExpected = (activeWritingChar && activeWritingChar.strokeCount) || strokeVectors.length || 4;
-      const strokeIdx = drawnStrokes.length;
+    const strokeVectors = getCharacterStrokeVectors(activeWritingChar);
+    const totalExpected = getAuthoritativeStrokeCount(activeWritingChar, strokeVectors);
+    const strokeIdx = drawnStrokes.length;
 
-      if (strokeIdx < totalExpected) {
-        const evalResult = evaluateSingleStroke(currentStrokePoints, strokeIdx, activeWritingChar);
-        const expectedVector = strokeVectors[strokeIdx] || { label: `Stroke ${strokeIdx + 1}` };
+    if (currentStrokePoints && currentStrokePoints.length > 0 && strokeIdx < totalExpected) {
+      const evalResult = evaluateSingleStroke(currentStrokePoints, strokeIdx, activeWritingChar);
+      const expectedVector = strokeVectors[strokeIdx] || { label: `Stroke ${strokeIdx + 1}` };
 
-        // Strictly block incorrect stroke, erase invalid drawing line, and show instructional correction
-        if (!evalResult.pass) {
-          userMistakesCount++;
-          if (window.LinguaAudio) window.LinguaAudio.playChime(false);
+      // Strictly block incorrect or out-of-sequence stroke, erase ONLY the invalid line, and let learner retry immediately
+      if (!evalResult.pass) {
+        userMistakesCount++;
+        consecutiveMistakesOnStep++;
+        if (window.LinguaAudio) window.LinguaAudio.playChime(false);
 
-          // Clear invalid stroke from canvas, leaving all previously drawn correct strokes intact
-          redrawCanvasFromStrokes();
+        // Clear invalid stroke from canvas, leaving all previously accepted strokes intact
+        redrawCanvasFromStrokes();
 
-          const stepHint = document.getElementById('strokeOrderHintText');
+        const stepBar = document.getElementById('strokeOrderStepBar');
+        const stepBadge = document.getElementById('strokeStepBadge');
+        const stepHint = document.getElementById('strokeOrderHintText');
+        if (stepBadge) stepBadge.textContent = `Stroke ${strokeIdx + 1} / ${totalExpected}`;
+        if (stepHint) {
+          stepHint.innerHTML = `<span style="color: #dc2626; font-weight: 700;">${evalResult.hint || `⚠️ Incorrect stroke! Draw: ${escapeHTML(expectedVector.label || `Stroke ${strokeIdx + 1}`)}`}</span>`;
+        }
+        if (stepBar) {
+          stepBar.classList.add('is-error', 'stroke-error-shake');
+          setTimeout(() => stepBar.classList.remove('stroke-error-shake'), 450);
+        }
+        const container = document.getElementById('canvasContainer');
+        if (container) {
+          container.classList.add('stroke-error-shake');
+          setTimeout(() => container.classList.remove('stroke-error-shake'), 450);
+        }
+
+        // Visually highlight expected next stroke on the guide layer so learner can continue right away
+        flashTargetStrokeHint(strokeIdx, expectedVector);
+      } else {
+        // ACCEPT STROKE: Keep user's exact handwritten stroke on canvas & advance step
+        consecutiveMistakesOnStep = 0;
+        if (window.LinguaAudio) window.LinguaAudio.playChime(true);
+        drawnStrokes.push([...currentStrokePoints]);
+        strokeScores.push(evalResult.score);
+
+        redrawCanvasFromStrokes();
+        updateStrokeBadgesUI(activeWritingChar);
+
+        const nextIdx = drawnStrokes.length;
+        const stepBar = document.getElementById('strokeOrderStepBar');
+        const stepBadge = document.getElementById('strokeStepBadge');
+        const stepHint = document.getElementById('strokeOrderHintText');
+        if (stepBar) stepBar.classList.remove('is-error');
+
+        if (nextIdx < totalExpected) {
+          const nextVector = strokeVectors[nextIdx] || { label: `Stroke ${nextIdx + 1}` };
+          if (stepBadge) stepBadge.textContent = `Stroke ${nextIdx + 1} / ${totalExpected}`;
           if (stepHint) {
-            stepHint.innerHTML = `<span style="color: #dc2626; font-weight: 700;">${evalResult.hint || `⚠️ Incorrect stroke! Try drawing: ${escapeHTML(expectedVector.label || `Stroke ${strokeIdx + 1}`)}`}</span>`;
-          }
-          const stepBar = document.getElementById('strokeOrderStepBar');
-          if (stepBar) {
-            stepBar.classList.add('stroke-error-shake');
-            setTimeout(() => stepBar.classList.remove('stroke-error-shake'), 450);
-          }
-          const container = document.getElementById('canvasContainer');
-          if (container) {
-            container.classList.add('stroke-error-shake');
-            setTimeout(() => container.classList.remove('stroke-error-shake'), 450);
+            stepHint.innerHTML = `✅ Step ${strokeIdx + 1} Correct! Next: <strong class="chinese-kaiti" style="color: #ea580c;">${escapeHTML(nextVector.label || `Stroke ${nextIdx + 1}`)}</strong> (${escapeHTML(nextVector.direction || 'Follow stroke order')})`;
           }
         } else {
-          // ACCEPT STROKE: Keep user's exact handwritten stroke on canvas & advance step
-          if (window.LinguaAudio) window.LinguaAudio.playChime(true);
-          drawnStrokes.push([...currentStrokePoints]);
-          strokeScores.push(evalResult.score);
+          if (stepBar) stepBar.classList.add('is-complete');
+          if (stepBadge) stepBadge.textContent = `Completed (${totalExpected} / ${totalExpected})`;
+          if (stepHint) stepHint.innerHTML = `🎉 <strong>Character Completed!</strong> Great handwriting!`;
 
-          redrawCanvasFromStrokes();
-          updateStrokeBadgesUI(activeWritingChar);
-
-          const nextIdx = drawnStrokes.length;
-          const stepBadge = document.getElementById('strokeStepBadge');
-          const stepHint = document.getElementById('strokeOrderHintText');
-
-          if (nextIdx < totalExpected) {
-            const nextVector = strokeVectors[nextIdx] || { label: `Stroke ${nextIdx + 1}` };
-            if (stepBadge) stepBadge.textContent = `Stroke ${nextIdx + 1} / ${totalExpected}`;
-            if (stepHint) {
-              stepHint.innerHTML = `✅ Step ${strokeIdx + 1} Correct! Next: 👉 <strong class="chinese-kaiti" style="color: #ea580c;">${escapeHTML(nextVector.label || `Stroke ${nextIdx + 1}`)}</strong> (${escapeHTML(nextVector.direction || 'Follow stroke order')})`;
-            }
-          } else {
-            if (stepBadge) stepBadge.textContent = `Completed (${totalExpected} / ${totalExpected})`;
-            if (stepHint) stepHint.innerHTML = `🎉 <strong>Character Completed!</strong> Great handwriting!`;
-
-            const accuracy = Math.max(50, Math.round(strokeScores.reduce((a, b) => a + b, 0) / totalExpected));
-            if (activeWritingLesson && activeWritingLesson.id) {
-              saveLessonProgressRecord(activeWritingLesson.id, accuracy, true);
-            }
-            saveUserScore(20);
-
-            setTimeout(() => {
-              openPracticeResultModal(activeWritingChar, activeWritingLesson, activeWritingChars, accuracy);
-            }, 550);
+          const accuracy = Math.max(50, Math.round(strokeScores.reduce((a, b) => a + b, 0) / totalExpected));
+          if (activeWritingLesson && activeWritingLesson.id) {
+            saveLessonProgressRecord(activeWritingLesson.id, accuracy, true);
           }
+          saveUserScore(20);
+
+          setTimeout(() => {
+            openPracticeResultModal(activeWritingChar, activeWritingLesson, activeWritingChars, accuracy);
+          }, 550);
         }
       }
     }
     currentStrokePoints = [];
   }
 
+  function handlePointerLeave(e) {
+    if (!isDrawing) return;
+    try {
+      if (canvas && canvas.hasPointerCapture && canvas.hasPointerCapture(e.pointerId)) {
+        return;
+      }
+    } catch (err) {}
+    handlePointerUp(e);
+  }
+
   function handlePointerCancel(e) {
     if (!isDrawing) return;
     isDrawing = false;
     try {
-      canvas.releasePointerCapture(e.pointerId);
+      if (canvas && canvas.hasPointerCapture && canvas.hasPointerCapture(e.pointerId)) {
+        canvas.releasePointerCapture(e.pointerId);
+      }
     } catch (err) {}
     currentStrokePoints = [];
+    redrawCanvasFromStrokes();
   }
 
   // Update stroke live scores row & step indicator
   function updateStrokeBadgesUI(currentChar) {
     const strokeVectors = getCharacterStrokeVectors(currentChar);
-    const totalExpected = currentChar.strokeCount || strokeVectors.length || 4;
+    const totalExpected = getAuthoritativeStrokeCount(currentChar, strokeVectors);
     const stepBadge = document.getElementById('strokeStepBadge');
     const stepHint = document.getElementById('strokeOrderHintText');
     const liveScoresRow = document.getElementById('strokeLiveScoresRow');
@@ -3445,11 +3925,13 @@
     const nextStrokeNum = Math.min(drawnStrokes.length + 1, totalExpected);
 
     if (stepBadge) {
-      stepBadge.textContent = `Stroke ${nextStrokeNum} / ${totalExpected}`;
+      stepBadge.textContent = drawnStrokes.length >= totalExpected
+        ? `Completed (${totalExpected} / ${totalExpected})`
+        : `Stroke ${nextStrokeNum} / ${totalExpected}`;
     }
     if (stepHint) {
       if (drawnStrokes.length >= totalExpected) {
-        stepHint.innerHTML = 'All strokes drawn! Click Grade below.';
+        stepHint.innerHTML = '🎉 All strokes completed! Click Grade Writing to review.';
       } else {
         const nextVector = strokeVectors[nextStrokeNum - 1];
         if (nextVector && nextVector.label) {
@@ -3462,18 +3944,17 @@
 
     if (liveScoresRow) {
       liveScoresRow.innerHTML = strokeScores.map(score => `
-        <span class="stroke-live-badge">${score}</span>
+        <span class="stroke-live-badge" style="font-variant-numeric: tabular-nums;">${score}</span>
       `).join('');
     }
   }
 
   function clearCanvas(currentChar) {
-    if (canvas && ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    clearCanvasSurface();
     drawnStrokes = [];
     strokeScores = [];
     currentStrokePoints = [];
+    consecutiveMistakesOnStep = 0;
 
     if (currentHanziWriter) {
       try {
@@ -3490,6 +3971,21 @@
     if (currentChar) {
       startStrokeWriting(currentChar, activeWritingLesson, activeWritingChars);
     }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.LinguaStrokeValidator = {
+      getHanziPositioner,
+      getCharacterStrokeVectors,
+      getAuthoritativeStrokeCount,
+      evaluateSingleStroke,
+      scoreStrokeAgainstVector,
+      registerCharData: function (ch, data) {
+        if (ch && data && Array.isArray(data.medians)) {
+          hanziCharDataCache[ch] = data;
+        }
+      }
+    };
   }
 
   // =========================================================
@@ -4735,7 +5231,7 @@
   // --- PRACTICE RESULT MODAL ---
   function openPracticeResultModal(currentChar, lesson, chars) {
     const strokeVectors = getCharacterStrokeVectors(currentChar);
-    const totalExpected = currentChar.strokeCount || strokeVectors.length || 4;
+    const totalExpected = getAuthoritativeStrokeCount(currentChar, strokeVectors);
 
     const fullStrokeScores = [];
     for (let i = 0; i < totalExpected; i++) {

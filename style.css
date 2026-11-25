@@ -77,7 +77,6 @@
 .stroke-rule-card-example,
 .stroke-rule-card-example strong,
 .stroke-rule-badge-pill,
-.stroke-order-indicator-bar,
 .hero-character,
 .hero-pinyin-cn,
 .reading-item .chinese-sentence,
@@ -9721,32 +9720,114 @@ a {
 
 .stroke-order-indicator-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   width: 100%;
   max-width: 320px;
   background: rgba(234, 88, 12, 0.08);
-  border: 1px solid rgba(234, 88, 12, 0.2);
+  border: 1.5px solid rgba(234, 88, 12, 0.22);
   border-radius: 12px;
-  padding: 8px 12px;
-  font-size: 0.85rem;
-  color: #c2410c;
+  padding: 10px 12px;
+  font-size: 0.84rem;
+  color: #9a3412;
+  font-weight: 600;
+  line-height: 1.45;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.stroke-order-bar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stroke-order-step-rule {
+  font-size: 0.74rem;
   font-weight: 700;
+  color: #78716c;
+  white-space: nowrap;
+}
+
+.stroke-order-hint-line {
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: #7c2d12;
+  word-break: break-word;
+}
+
+.stroke-order-indicator-bar.is-error {
+  background: rgba(239, 68, 68, 0.09);
+  border-color: rgba(220, 38, 38, 0.45);
+  color: #b91c1c;
+}
+
+.stroke-order-indicator-bar.is-error .stroke-order-step-rule {
+  color: #dc2626;
+}
+
+.stroke-order-indicator-bar.is-error .stroke-order-hint-line {
+  color: #b91c1c;
+}
+
+.stroke-order-indicator-bar.is-complete {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(5, 150, 105, 0.4);
+  color: #065f46;
+}
+
+.stroke-order-indicator-bar.is-complete .stroke-order-step-badge {
+  background: #059669;
+}
+
+.stroke-order-indicator-bar.is-complete .stroke-order-hint-line {
+  color: #047857;
 }
 
 [data-theme="dark"] .stroke-order-indicator-bar {
-  background: rgba(251, 146, 60, 0.1);
-  border-color: rgba(251, 146, 60, 0.3);
-  color: #fb923c;
+  background: rgba(251, 146, 60, 0.12);
+  border-color: rgba(251, 146, 60, 0.32);
+  color: #fed7aa;
+}
+
+[data-theme="dark"] .stroke-order-step-rule {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .stroke-order-hint-line {
+  color: #fed7aa;
+}
+
+[data-theme="dark"] .stroke-order-indicator-bar.is-error {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
+[data-theme="dark"] .stroke-order-indicator-bar.is-error .stroke-order-hint-line {
+  color: #fecaca;
+}
+
+[data-theme="dark"] .stroke-order-indicator-bar.is-complete {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(52, 211, 153, 0.45);
+  color: #a7f3d0;
+}
+
+[data-theme="dark"] .stroke-order-indicator-bar.is-complete .stroke-order-hint-line {
+  color: #a7f3d0;
 }
 
 .stroke-order-step-badge {
   background: #ea580c;
   color: #ffffff;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .stroke-live-scores-row {
