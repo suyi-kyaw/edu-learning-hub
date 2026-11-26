@@ -727,6 +727,9 @@ const DEFAULT_SITE_CONFIG = {
   coursePrices: {
     'HSK 2': 280000
   },
+  coursePracticePrices: {
+    'HSK 2': 55000
+  },
   practicePrice: 55000,
   contactEmail: 'syndkyaw@gmail.com',
   contactPhone: '+95 9 798 123 456',
@@ -1083,6 +1086,46 @@ function normalizeCoursePricesServer(rawPrices, coursesList) {
   return out;
 }
 
+function normalizeCoursePracticePricesServer(rawPrices, coursesList, defaultPrac) {
+  const out = {};
+  const slugToKey = {};
+  const hasExplicitPrices = rawPrices && typeof rawPrices === 'object' && !Array.isArray(rawPrices);
+  if (hasExplicitPrices) {
+    for (const [k, v] of Object.entries(rawPrices)) {
+      if (!String(k || '').trim()) continue;
+      const name = normalizeCourseNameServer(k);
+      const slug = courseSlugServer(name);
+      const cleanVal = typeof v === 'string' ? v.replace(/,/g, '').trim() : v;
+      const n = Number(cleanVal);
+      if (name && Number.isFinite(n) && n >= 0) {
+        if (slug && slugToKey[slug] && slugToKey[slug] !== name) {
+          delete out[slugToKey[slug]];
+        }
+        if (slug) slugToKey[slug] = name;
+        out[name] = Math.round(n);
+      }
+    }
+  } else {
+    Object.assign(out, DEFAULT_SITE_CONFIG.coursePracticePrices);
+  }
+  if (Array.isArray(coursesList)) {
+    for (const cName of coursesList) {
+      if (!cName) continue;
+      const slug = courseSlugServer(cName);
+      const existingKey = Object.keys(out).find((k) => courseSlugServer(k) === slug);
+      if (!existingKey) {
+        if (slug === 'hsk2') {
+          out[cName] = defaultPrac > 0 ? defaultPrac : 55000;
+        }
+      } else if (existingKey !== cName) {
+        out[cName] = out[existingKey];
+        delete out[existingKey];
+      }
+    }
+  }
+  return out;
+}
+
 function sanitizeLogoUrlServer(val) {
   if (typeof val !== 'string') return '';
   let clean = val.trim();
@@ -1131,6 +1174,11 @@ function sanitizeSiteConfigInput(raw) {
     input.coursePrices
   );
 
+  const practiceDefault =
+    Number.isFinite(Number(input.practicePrice)) && Number(input.practicePrice) > 0
+      ? Math.round(Number(input.practicePrice))
+      : DEFAULT_SITE_CONFIG.practicePrice;
+
   return {
     configId: 'homepage',
     heroEyebrow: str('heroEyebrow', 100),
@@ -1161,7 +1209,8 @@ function sanitizeSiteConfigInput(raw) {
     lessonsCta: str('lessonsCta', 80),
     courses,
     coursePrices: normalizeCoursePricesServer(input.coursePrices, courses),
-    practicePrice: Number.isFinite(Number(input.practicePrice)) && Number(input.practicePrice) >= 0 ? Math.round(Number(input.practicePrice)) : DEFAULT_SITE_CONFIG.practicePrice,
+    coursePracticePrices: normalizeCoursePracticePricesServer(input.coursePracticePrices, courses, practiceDefault),
+    practicePrice: practiceDefault,
     contactEmail: str('contactEmail', 160),
     contactPhone: str('contactPhone', 40),
     contactViber: str('contactViber', 40),
@@ -1983,14 +2032,72 @@ app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
     const isCoursePlan = planType === 'course' || planType === 'practice_course';
     const isPracticePlan = planType === 'practice_lesson' || planType === 'practice_course';
     const siteCfg = readSiteConfigFile();
-    const practicePrice = Number(siteCfg.practicePrice) > 0 ? Number(siteCfg.practicePrice) : 55000;
-    const practicePriceFormatted = practicePrice.toLocaleString('en-US');
+    const defaultPracticePrice = Number(siteCfg.practicePrice) > 0 ? Math.round(Number(siteCfg.practicePrice)) : 55000;
+    const lessonId = isLessonPlan
+      ? String(body.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').slice(0, 128)
+      : '';
+
+    let wbLessons = [];
+    let wbExercises = [];
+    try {
+      const parsedWb = parseLessonsWorkbook();
+      wbLessons = Array.isArray(parsedWb.sheets.Lessons) ? parsedWb.sheets.Lessons : [];
+      wbExercises = Array.isArray(parsedWb.sheets.Exercises) ? parsedWb.sheets.Exercises : [];
+    } catch (_) {}
+
+    const matchedLessonRow = lessonId
+      ? wbLessons.find((l) => normalizeLessonIdKeyServer(l?.id || l?.lessonId) === normalizeLessonIdKeyServer(lessonId))
+      : null;
+    const matchedCatalog = lessonId
+      ? store.lessonCatalog?.[lessonId] ||
+        Object.values(store.lessonCatalog || {}).find(
+          (c) => normalizeLessonIdKeyServer(c?.lessonId) === normalizeLessonIdKeyServer(lessonId)
+        )
+      : null;
+
     const courseName = isCoursePlan
       ? normalizeCourseNameServer(body.courseName || body.lessonTitle || 'HSK 2')
       : body.courseName
       ? normalizeCourseNameServer(body.courseName)
+      : matchedCatalog?.course
+      ? normalizeCourseNameServer(matchedCatalog.course)
+      : matchedLessonRow
+      ? getLessonCourseServer(matchedLessonRow)
       : '';
     const courseSlugTarget = courseSlugServer(courseName);
+
+    if (planType === 'practice_lesson' && lessonId) {
+      const lessonExCount = wbExercises.filter(
+        (ex) => normalizeLessonIdKeyServer(ex?.lessonId) === normalizeLessonIdKeyServer(lessonId)
+      ).length;
+      if (wbExercises.length > 0 && lessonExCount === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Practice Only is unavailable because this lesson has no exercises.'
+        });
+      }
+      if (wbExercises.length === 0 && matchedCatalog && matchedCatalog.hasExercises === false) {
+        return res.status(400).json({
+          success: false,
+          error: 'Practice Only is unavailable because this lesson has no exercises.'
+        });
+      }
+    } else if (planType === 'practice_course' && courseSlugTarget) {
+      const courseLessonKeys = new Set(
+        wbLessons
+          .filter((l) => courseSlugServer(getLessonCourseServer(l)) === courseSlugTarget)
+          .map((l) => normalizeLessonIdKeyServer(l?.id || l?.lessonId))
+          .filter(Boolean)
+      );
+      const courseExCount = wbExercises.filter((ex) => courseLessonKeys.has(normalizeLessonIdKeyServer(ex?.lessonId))).length;
+      if (wbLessons.length > 0 && courseExCount === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Practice Only is unavailable because this course has no exercises yet.'
+        });
+      }
+    }
+
     const matchedCoursePrice = Object.entries(siteCfg.coursePrices || {}).find(
       ([k]) => courseSlugServer(k) === courseSlugTarget
     )?.[1];
@@ -1998,22 +2105,44 @@ app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
       matchedCoursePrice != null && Number.isFinite(Number(matchedCoursePrice))
         ? Math.round(Number(matchedCoursePrice))
         : (courseSlugTarget === 'hsk2' ? 280000 : 100);
+
+    const matchedCoursePracticePrice = Object.entries(siteCfg.coursePracticePrices || {}).find(
+      ([k]) => courseSlugServer(k) === courseSlugTarget
+    )?.[1];
+    const resolvedCoursePracticePrice =
+      matchedCoursePracticePrice != null && Number(matchedCoursePracticePrice) > 0
+        ? Math.round(Number(matchedCoursePracticePrice))
+        : defaultPracticePrice;
+
+    const catalogPracNum = Number(matchedCatalog?.practicePrice);
+    const wbPracNum = Number(matchedLessonRow?.practicePrice);
+    const resolvedLessonPracticePrice =
+      Number.isFinite(catalogPracNum) && catalogPracNum > 0
+        ? Math.round(catalogPracNum)
+        : Number.isFinite(wbPracNum) && wbPracNum > 0
+        ? Math.round(wbPracNum)
+        : resolvedCoursePracticePrice;
+
+    const resolvedPerLessonPrice =
+      Number(matchedCatalog?.price) > 0
+        ? Math.round(Number(matchedCatalog.price))
+        : Number(matchedLessonRow?.price) > 0
+        ? Math.round(Number(matchedLessonRow.price))
+        : 75000;
+
     const planMeta = {
-      per_lesson: { name: 'Lesson Pass', amountLabel: '75,000 Kyat / lesson' },
+      per_lesson: { name: 'Lesson Pass', amountLabel: `${resolvedPerLessonPrice.toLocaleString('en-US')} Kyat / lesson` },
       practice_lesson: {
-        name: `${String(body.lessonTitle || 'Lesson').trim()} (Practice Only)`,
-        amountLabel: `${practicePriceFormatted} Kyat / lesson`
+        name: `${String(body.lessonTitle || matchedCatalog?.title || 'Lesson').trim()} (Practice Only)`,
+        amountLabel: `${resolvedLessonPracticePrice.toLocaleString('en-US')} Kyat / lesson`
       },
       course: { name: `${courseName || 'HSK 2'} Course Pass`, amountLabel: `${defaultCoursePrice.toLocaleString('en-US')} Kyat / course` },
       practice_course: {
         name: `${courseName || 'HSK 2'} Course (Practice Only)`,
-        amountLabel: `${practicePriceFormatted} Kyat / course`
+        amountLabel: `${resolvedCoursePracticePrice.toLocaleString('en-US')} Kyat / course`
       }
     }[planType];
 
-    const lessonId = isLessonPlan
-      ? String(body.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').slice(0, 128)
-      : '';
     const lessonTitle = isLessonPlan
       ? String(
           body.lessonTitle ||
@@ -2158,7 +2287,18 @@ app.post('/api/admin/courses', requireAdminToken, jsonParser, (req, res) => {
       ? Math.round(priceNum)
       : (targetSlug === 'hsk2' ? 280000 : 100);
 
+    const rawPracticePrice =
+      typeof req.body?.practicePrice === 'string'
+        ? req.body.practicePrice.replace(/,/g, '').trim()
+        : req.body?.practicePrice;
+    const pracNum = Number(rawPracticePrice);
+
     const currentCfg = readSiteConfigFile();
+    const defaultPrac = Number(currentCfg.practicePrice) > 0 ? Math.round(Number(currentCfg.practicePrice)) : 55000;
+    const practicePrice =
+      rawPracticePrice !== undefined && rawPracticePrice !== null && rawPracticePrice !== '' && Number.isFinite(pracNum) && pracNum > 0
+        ? Math.round(pracNum)
+        : defaultPrac;
     let lessonsRows = [];
     try {
       lessonsRows = parseLessonsWorkbook().sheets.Lessons || [];
@@ -2173,9 +2313,15 @@ app.post('/api/admin/courses', requireAdminToken, jsonParser, (req, res) => {
 
     const nextCourses = [...(currentCfg.courses || []), normName];
     const nextPrices = { ...(currentCfg.coursePrices || {}), [normName]: price };
-    const cleanCfg = sanitizeSiteConfigInput({ ...currentCfg, courses: nextCourses, coursePrices: nextPrices });
+    const nextPracticePrices = { ...(currentCfg.coursePracticePrices || {}), [normName]: practicePrice };
+    const cleanCfg = sanitizeSiteConfigInput({
+      ...currentCfg,
+      courses: nextCourses,
+      coursePrices: nextPrices,
+      coursePracticePrices: nextPracticePrices
+    });
     fs.writeFileSync(SITE_CONFIG_PATH, JSON.stringify(cleanCfg, null, 2), 'utf8');
-    res.status(201).json({ success: true, course: { name: normName, price, lessonCount: 0 }, config: cleanCfg });
+    res.status(201).json({ success: true, course: { name: normName, price, practicePrice, lessonCount: 0 }, config: cleanCfg });
   } catch (err) {
     console.error('POST /api/admin/courses error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -2246,6 +2392,22 @@ app.put('/api/admin/courses/:courseName', requireAdminToken, jsonParser, (req, r
       updatedCourses.push(newNorm);
     }
 
+    const prevPracticePrice =
+      Object.entries(currentCfg.coursePracticePrices || {}).find(([k]) => courseSlugServer(k) === oldSlug)?.[1] ??
+      (Number(currentCfg.practicePrice) > 0 ? Math.round(Number(currentCfg.practicePrice)) : 55000);
+    const rawReqPracticePrice =
+      typeof req.body?.practicePrice === 'string'
+        ? req.body.practicePrice.replace(/,/g, '').trim()
+        : req.body?.practicePrice;
+    const pracPriceNum =
+      rawReqPracticePrice !== undefined && rawReqPracticePrice !== null && rawReqPracticePrice !== ''
+        ? Number(rawReqPracticePrice)
+        : Number(prevPracticePrice);
+    const nextPracticePrice =
+      Number.isFinite(pracPriceNum) && pracPriceNum > 0
+        ? Math.round(pracPriceNum)
+        : Math.round(Number(prevPracticePrice) || 55000);
+
     const nextPrices = {};
     Object.entries(currentCfg.coursePrices || {}).forEach(([k, v]) => {
       if (courseSlugServer(k) !== oldSlug && courseSlugServer(k) !== newSlug) {
@@ -2254,10 +2416,19 @@ app.put('/api/admin/courses/:courseName', requireAdminToken, jsonParser, (req, r
     });
     nextPrices[newNorm] = nextPrice;
 
+    const nextPracticePrices = {};
+    Object.entries(currentCfg.coursePracticePrices || {}).forEach(([k, v]) => {
+      if (courseSlugServer(k) !== oldSlug && courseSlugServer(k) !== newSlug) {
+        nextPracticePrices[k] = v;
+      }
+    });
+    nextPracticePrices[newNorm] = nextPracticePrice;
+
     const cleanCfg = sanitizeSiteConfigInput({
       ...currentCfg,
       courses: updatedCourses,
-      coursePrices: nextPrices
+      coursePrices: nextPrices,
+      coursePracticePrices: nextPracticePrices
     });
     fs.writeFileSync(SITE_CONFIG_PATH, JSON.stringify(cleanCfg, null, 2), 'utf8');
 
@@ -2382,11 +2553,18 @@ app.delete('/api/admin/courses/:courseName', requireAdminToken, (req, res) => {
         nextPrices[k] = v;
       }
     });
+    const nextPracticePrices = {};
+    Object.entries(currentCfg.coursePracticePrices || {}).forEach(([k, v]) => {
+      if (courseSlugServer(k) !== targetSlug) {
+        nextPracticePrices[k] = v;
+      }
+    });
 
     const cleanCfg = sanitizeSiteConfigInput({
       ...currentCfg,
       courses: nextCourses,
-      coursePrices: nextPrices
+      coursePrices: nextPrices,
+      coursePracticePrices: nextPracticePrices
     });
     fs.writeFileSync(SITE_CONFIG_PATH, JSON.stringify(cleanCfg, null, 2), 'utf8');
     res.json({ success: true, config: cleanCfg });
@@ -2649,12 +2827,30 @@ app.get('/api/admin/media-library', (req, res) => {
   }
 });
 
-function syncCatalogFromLessonsRows(lessonRows, adminUid) {
+function syncCatalogFromLessonsRows(lessonRows, adminUid, exercisesRows) {
   const store = readAuthStore();
   const prevCatalogKeys = Object.keys(store.lessonCatalog || {});
   const nowIso = new Date().toISOString();
   const nextCatalog = {};
   const validMap = new Map();
+
+  let exRows = Array.isArray(exercisesRows) ? exercisesRows : null;
+  if (!exRows) {
+    try {
+      const excelPath = path.join(__dirname, 'data', 'lessons.xlsx');
+      if (fs.existsSync(excelPath)) {
+        exRows = parseLessonsWorkbook().sheets.Exercises || [];
+      }
+    } catch (_) {}
+  }
+  const exCountMap = new Map();
+  if (Array.isArray(exRows)) {
+    for (const ex of exRows) {
+      const ek = normalizeLessonIdKeyServer(ex?.lessonId || '');
+      if (ek) exCountMap.set(ek, (exCountMap.get(ek) || 0) + 1);
+    }
+  }
+
   for (const row of lessonRows || []) {
     const rawId = String(row?.id || row?.lessonId || '').trim();
     const lessonId = rawId
@@ -2669,12 +2865,20 @@ function syncCatalogFromLessonsRows(lessonRows, adminUid) {
       accessType === 'free'
         ? 0
         : Math.min(10000000, Math.max(0, Number.isFinite(rawPrice) ? rawPrice : 0));
+    const rawPracticePrice = Number(row.practicePrice);
+    const practicePrice =
+      accessType === 'free'
+        ? 0
+        : Math.min(10000000, Math.max(0, Number.isFinite(rawPracticePrice) && rawPracticePrice > 0 ? Math.round(rawPracticePrice) : 0));
+    const hasExercises = Array.isArray(exRows) ? (exCountMap.get(normKey) || 0) > 0 : true;
     nextCatalog[lessonId] = {
       lessonId,
       title: String(row.title || lessonId).trim().slice(0, 160) || lessonId,
       course: normalizeCourseNameServer(row.course || row.category || 'HSK 2'),
       accessType,
       price,
+      practicePrice,
+      hasExercises,
       updatedBy: adminUid || 'admin',
       updatedAt: nowIso
     };
@@ -2711,7 +2915,10 @@ app.put('/api/admin/workbook/:domain', requireAdminToken, jsonParser, (req, res)
       syncLessonsJson();
       let lessonCatalog = readAuthStore().lessonCatalog || {};
       if (Array.isArray(updates.Lessons)) {
-        lessonCatalog = syncCatalogFromLessonsRows(updates.Lessons, req.authUser.uid);
+        lessonCatalog = syncCatalogFromLessonsRows(updates.Lessons, req.authUser.uid, updates.Exercises);
+      } else if (Array.isArray(updates.Exercises)) {
+        const currentLessons = parseLessonsWorkbook().sheets.Lessons || [];
+        lessonCatalog = syncCatalogFromLessonsRows(currentLessons, req.authUser.uid, updates.Exercises);
       }
       return res.json({ success: true, domain, syncedToServer: true, ...result, lessonCatalog });
     }
@@ -2773,7 +2980,7 @@ app.put('/api/admin/content/lessons', requireAdminToken, jsonParser, (req, res) 
       'Pronunciation'
     ]);
     syncLessonsJson();
-    const lessonCatalog = syncCatalogFromLessonsRows(lessons, req.authUser.uid);
+    const lessonCatalog = syncCatalogFromLessonsRows(lessons, req.authUser.uid, updates.Exercises);
     res.json({ success: true, syncedToServer: true, ...result, lessonCatalog });
   } catch (err) {
     console.error('PUT /api/admin/content/lessons error:', err);
@@ -3206,6 +3413,18 @@ app.put('/api/admin/catalog', requireAdminToken, jsonParser, (req, res) => {
       const accessType = String(item.accessType || '').toLowerCase() === 'paid' ? 'paid' : 'free';
       const rawPrice = Number(item.price);
       const price = accessType === 'free' ? 0 : Math.min(10000000, Math.max(0, Number.isFinite(rawPrice) ? rawPrice : 0));
+      const rawPrac = Number(item.practicePrice);
+      const practicePrice =
+        accessType === 'free'
+          ? 0
+          : Math.min(10000000, Math.max(0, Number.isFinite(rawPrac) && rawPrac > 0 ? Math.round(rawPrac) : 0));
+      const prevEntry = store.lessonCatalog[lessonId];
+      const hasExercises =
+        typeof item.hasExercises === 'boolean'
+          ? item.hasExercises
+          : typeof prevEntry?.hasExercises === 'boolean'
+          ? prevEntry.hasExercises
+          : true;
 
       store.lessonCatalog[lessonId] = {
         lessonId,
@@ -3213,6 +3432,8 @@ app.put('/api/admin/catalog', requireAdminToken, jsonParser, (req, res) => {
         course,
         accessType,
         price,
+        practicePrice,
+        hasExercises,
         updatedBy: req.authUser.uid,
         updatedAt: nowIso
       };

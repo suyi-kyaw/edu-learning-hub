@@ -266,6 +266,8 @@
     const keywords = String(l.keywords || l.Keywords || '').trim();
     const accessType = String(l.accessType || l.access_type || 'paid').trim().toLowerCase() === 'free' ? 'free' : 'paid';
     const price = Number(l.price) || (accessType === 'paid' ? 75000 : 0);
+    const rawPracticePrice = Number(String(l.practicePrice ?? l.practice_price ?? '').replace(/,/g, '').trim());
+    const practicePrice = Number.isFinite(rawPracticePrice) && rawPracticePrice > 0 ? Math.round(rawPracticePrice) : 0;
     return {
       ...l,
       id,
@@ -293,7 +295,8 @@
       keywords,
       accessType,
       access_type: accessType,
-      price
+      price,
+      practicePrice
     };
   }
 
@@ -474,6 +477,46 @@
     return result;
   }
 
+  function getLessonExerciseCountLocal(lessonId) {
+    if (!lessonId) return 0;
+    if (Array.isArray(allExercises) && allExercises.length > 0) {
+      return allExercises.filter((ex) => isSameLessonId(ex.lessonId, lessonId)).length;
+    }
+    if (loadedFromStoreOrRepo) return 0;
+    if (window.LinguaAuth && typeof window.LinguaAuth.getLessonExerciseCount === 'function') {
+      return window.LinguaAuth.getLessonExerciseCount(lessonId);
+    }
+    return 0;
+  }
+
+  function lessonHasExercisesLocal(lesson) {
+    if (!lesson) return false;
+    const id = typeof lesson === 'string' ? lesson : String(lesson.id || lesson.lessonId || '');
+    if (loadedFromStoreOrRepo) {
+      return (allExercises || []).some((ex) => isSameLessonId(ex.lessonId, id));
+    }
+    if (window.LinguaAuth && typeof window.LinguaAuth.lessonHasExercises === 'function') {
+      return window.LinguaAuth.lessonHasExercises(lesson);
+    }
+    return (allExercises || []).some((ex) => isSameLessonId(ex.lessonId, id));
+  }
+
+  function courseHasExercisesLocal(courseName) {
+    const norm = normalizeCourseName(courseName);
+    const targetSlug = courseKeySlug(norm);
+    if (!targetSlug) return false;
+    if (loadedFromStoreOrRepo) {
+      const courseLessonIds = (allLessons || [])
+        .filter((l) => courseKeySlug(getLessonCourse(l)) === targetSlug)
+        .map((l) => l.id);
+      return courseLessonIds.some((lid) => (allExercises || []).some((ex) => isSameLessonId(ex.lessonId, lid)));
+    }
+    if (window.LinguaAuth && typeof window.LinguaAuth.courseHasExercises === 'function') {
+      return window.LinguaAuth.courseHasExercises(norm);
+    }
+    return true;
+  }
+
   function getCoursePricingInfo(courseName) {
     const norm = normalizeCourseName(courseName);
     const targetSlug = courseKeySlug(norm);
@@ -486,34 +529,34 @@
       }
     }
 
+    const readPriceFromMap = (map, positiveOnly = false) => {
+      if (!map || typeof map !== 'object') return null;
+      for (const [c, p] of Object.entries(map)) {
+        if (courseKeySlug(c) === targetSlug) {
+          const parsed = typeof p === 'string' ? Number(p.replace(/,/g, '').trim()) : Number(p);
+          if (p !== undefined && p !== null && Number.isFinite(parsed) && (positiveOnly ? parsed > 0 : parsed >= 0)) {
+            return Math.round(parsed);
+          }
+        }
+      }
+      return null;
+    };
+
     if (price === null) {
       try {
-        const readPriceFromMap = (map) => {
-          if (!map || typeof map !== 'object') return null;
-          for (const [c, p] of Object.entries(map)) {
-            if (courseKeySlug(c) === targetSlug) {
-              const parsed = typeof p === 'string' ? Number(p.replace(/,/g, '').trim()) : Number(p);
-              if (p !== undefined && p !== null && Number.isFinite(parsed) && parsed >= 0) {
-                return Math.round(parsed);
-              }
-            }
-          }
-          return null;
-        };
-
         const headCache = typeof window !== 'undefined' ? window.__INITIAL_SITE_CONFIG_CACHE__ : null;
-        price = readPriceFromMap(headCache?.coursePrices);
+        price = readPriceFromMap(headCache?.coursePrices, false);
 
         if (price === null && typeof localStorage !== 'undefined') {
           const rawCfg = localStorage.getItem('linguapath_site_config_v1');
           if (rawCfg) {
-            price = readPriceFromMap(JSON.parse(rawCfg)?.coursePrices);
+            price = readPriceFromMap(JSON.parse(rawCfg)?.coursePrices, false);
           }
         }
         if (price === null && typeof localStorage !== 'undefined') {
           const rawOverlay = localStorage.getItem('linguapath_excel_overlay_store');
           if (rawOverlay) {
-            price = readPriceFromMap(JSON.parse(rawOverlay)?.siteConfig?.coursePrices);
+            price = readPriceFromMap(JSON.parse(rawOverlay)?.siteConfig?.coursePrices, false);
           }
         }
       } catch (_) {}
@@ -523,11 +566,40 @@
       price = targetSlug.includes('hsk2') ? 280000 : 100;
     }
 
-    let practicePrice = window.LinguaAuth && typeof window.LinguaAuth.getPracticePrice === 'function'
-      ? window.LinguaAuth.getPracticePrice()
-      : 55000;
-    if (!Number.isFinite(Number(practicePrice)) || Number(practicePrice) < 0) practicePrice = 55000;
+    let practicePrice = null;
+    if (window.LinguaAuth && typeof window.LinguaAuth.getCoursePracticePrice === 'function') {
+      const apiPrac = window.LinguaAuth.getCoursePracticePrice(norm);
+      if (Number.isFinite(Number(apiPrac)) && Number(apiPrac) > 0) {
+        practicePrice = Math.round(Number(apiPrac));
+      }
+    }
+    if (practicePrice === null) {
+      try {
+        const headCache = typeof window !== 'undefined' ? window.__INITIAL_SITE_CONFIG_CACHE__ : null;
+        practicePrice = readPriceFromMap(headCache?.coursePracticePrices, true);
+        if (practicePrice === null && typeof localStorage !== 'undefined') {
+          const rawCfg = localStorage.getItem('linguapath_site_config_v1');
+          if (rawCfg) {
+            practicePrice = readPriceFromMap(JSON.parse(rawCfg)?.coursePracticePrices, true);
+          }
+        }
+        if (practicePrice === null && typeof localStorage !== 'undefined') {
+          const rawOverlay = localStorage.getItem('linguapath_excel_overlay_store');
+          if (rawOverlay) {
+            practicePrice = readPriceFromMap(JSON.parse(rawOverlay)?.siteConfig?.coursePracticePrices, true);
+          }
+        }
+      } catch (_) {}
+    }
+    if (practicePrice === null) {
+      const fallbackPrac =
+        window.LinguaAuth && typeof window.LinguaAuth.getPracticePrice === 'function'
+          ? window.LinguaAuth.getPracticePrice()
+          : 55000;
+      practicePrice = Number.isFinite(Number(fallbackPrac)) && Number(fallbackPrac) > 0 ? Math.round(Number(fallbackPrac)) : 55000;
+    }
 
+    const hasExercises = courseHasExercisesLocal(norm);
     const accessMode = window.LinguaAuth && typeof window.LinguaAuth.getCourseAccessMode === 'function'
       ? window.LinguaAuth.getCourseAccessMode(norm)
       : (window.LinguaAuth && typeof window.LinguaAuth.hasCourseAccess === 'function' && window.LinguaAuth.hasCourseAccess(norm) ? 'full' : 'none');
@@ -535,6 +607,7 @@
       courseName: norm,
       price,
       practicePrice,
+      hasExercises,
       accessMode,
       unlocked: accessMode === 'full',
       isPracticeOnly: accessMode === 'practice'
@@ -686,9 +759,9 @@
     // Apply any saved local pricing overrides onto in-memory lessons
     applyLocalPricingOverrides(allLessons);
 
-    // Sync active lessons registry with LinguaAuth so deleted lesson passes/artifacts get pruned
+    // Sync active lessons & exercises registry with LinguaAuth so deleted lesson passes & exercise gates update cleanly
     if (loadedFromStoreOrRepo && window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
-      window.LinguaAuth.syncValidLessonIds(allLessons, { allowEmpty: true });
+      window.LinguaAuth.syncValidLessonIds(allLessons, { allowEmpty: true, exercises: allExercises });
     }
   }
 
@@ -709,33 +782,63 @@
       if (id && localMap[id]) {
         l.accessType = localMap[id].accessType;
         l.price = localMap[id].price;
+        if (localMap[id].practicePrice !== undefined) {
+          const rp = Number(localMap[id].practicePrice);
+          l.practicePrice = Number.isFinite(rp) && rp > 0 ? Math.round(rp) : 0;
+        }
       }
     });
   }
 
   function resolveLessonPricing(lesson) {
+    const id = String(lesson?.id || lesson?.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-');
+    const courseName = getLessonCourse(lesson);
+    const hasExercises = lessonHasExercisesLocal(lesson);
+    const exCount = getLessonExerciseCountLocal(id);
+    const coursePracticeFallback = getCoursePricingInfo(courseName).practicePrice || 55000;
+    const rawLessonPrac = Number(lesson?.practicePrice) || 0;
+
     if (window.LinguaAuth && typeof window.LinguaAuth.getLessonPricing === 'function') {
       const state = window.LinguaAuth.getState();
-      const id = String(lesson?.id || lesson?.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-');
+      const enriched = {
+        ...lesson,
+        course: courseName,
+        hasExercises,
+        exerciseCount: exCount
+      };
       // If lessonCatalog has an entry, it takes highest priority
       if (state.lessonCatalog && state.lessonCatalog[id]) {
-        return window.LinguaAuth.getLessonPricing(lesson);
+        const res = window.LinguaAuth.getLessonPricing(enriched);
+        return {
+          ...res,
+          hasExercises,
+          practicePrice: Number(res.practicePrice) > 0 ? res.practicePrice : coursePracticeFallback
+        };
       }
       // Next check local override map if set
       const localMap = getLocalPricingOverrides();
       if (localMap[id]) {
+        const localPrac = Number(localMap[id].practicePrice) || 0;
         return {
           accessType: localMap[id].accessType === 'paid' ? 'paid' : 'free',
-          price: Number(localMap[id].price) || (localMap[id].accessType === 'paid' ? 75000 : 0)
+          price: Number(localMap[id].price) || (localMap[id].accessType === 'paid' ? 75000 : 0),
+          practicePrice: localPrac > 0 ? Math.round(localPrac) : rawLessonPrac > 0 ? Math.round(rawLessonPrac) : coursePracticeFallback,
+          hasExercises
         };
       }
-      return window.LinguaAuth.getLessonPricing(lesson);
+      const res = window.LinguaAuth.getLessonPricing(enriched);
+      return {
+        ...res,
+        hasExercises,
+        practicePrice: Number(res.practicePrice) > 0 ? res.practicePrice : coursePracticeFallback
+      };
     }
 
+    const fallbackPractice = rawLessonPrac > 0 ? Math.round(rawLessonPrac) : coursePracticeFallback;
     const rawAccess = String(lesson?.accessType || lesson?.access || '').trim().toLowerCase();
-    if (rawAccess === 'free') return { accessType: 'free', price: 0 };
-    if (rawAccess === 'paid') return { accessType: 'paid', price: Number(lesson?.price) || 75000 };
-    return { accessType: 'paid', price: Number(lesson?.price) || 75000 };
+    if (rawAccess === 'free') return { accessType: 'free', price: 0, practicePrice: fallbackPractice, hasExercises };
+    if (rawAccess === 'paid') return { accessType: 'paid', price: Number(lesson?.price) || 75000, practicePrice: fallbackPractice, hasExercises };
+    return { accessType: 'paid', price: Number(lesson?.price) || 75000, practicePrice: fallbackPractice, hasExercises };
   }
 
   function getLessonAccessTier(lesson) {
@@ -824,13 +927,18 @@
     const isPractice = !isUnlocked && info.isPracticeOnly;
     const practicePriceFmt = Number(info.practicePrice || 55000).toLocaleString('en-US');
     const fullPriceFmt = Number(info.price || 0).toLocaleString('en-US');
+    const hasCourseExercises = Boolean(info.hasExercises);
 
     header.innerHTML = `
       <div class="course-banner-info">
         <div class="course-banner-kicker">Active Course</div>
         <h2 class="course-banner-title">${escapeHTML(info.courseName)}</h2>
         <p class="course-banner-desc">
-          <span class="tabular-nums">${courseLessonCount}</span> lesson${courseLessonCount === 1 ? '' : 's'} available · Unlock full lessons (with Video) or choose <strong>Practice Only (${practicePriceFmt} Kyat)</strong> for Exercises, Writing &amp; Pronunciation.
+          <span class="tabular-nums">${courseLessonCount}</span> lesson${courseLessonCount === 1 ? '' : 's'} available${
+            hasCourseExercises
+              ? ` · Unlock full lessons (with Video) or choose <strong>Practice Only (${practicePriceFmt} Kyat)</strong> for Exercises, Writing &amp; Pronunciation.`
+              : ` · Unlock full lessons (with Video, Writing &amp; Pronunciation).`
+          }
         </p>
       </div>
       <div class="course-banner-actions">
@@ -840,7 +948,11 @@
             : isPractice
             ? `<span class="course-practice-badge">✓ Practice Only Active (No Video)</span>
                <button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Upgrade for Video (${escapeHTML(fullPriceFmt)} Kyat)</button>`
-            : `<button type="button" class="btn btn-secondary" id="btnUnlockPracticeCourse">Practice Only (${practicePriceFmt} Kyat)</button>
+            : `${
+                hasCourseExercises
+                  ? `<button type="button" class="btn btn-secondary" id="btnUnlockPracticeCourse">Practice Only (${practicePriceFmt} Kyat)</button>`
+                  : ''
+              }
                <button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Unlock Full Course (${escapeHTML(fullPriceFmt)} Kyat)</button>`
         }
       </div>
@@ -900,8 +1012,12 @@
 
     const authState = window.LinguaAuth ? window.LinguaAuth.getState() : { user: null, isAdmin: false, profile: null };
     const courseInfo = getCoursePricingInfo(activeCourseName);
+    const coursePracFmt = Number(courseInfo.practicePrice || 55000).toLocaleString('en-US');
+    const hasCourseExercises = Boolean(courseInfo.hasExercises);
 
-    let accessSummary = 'Free starter lessons open · Choose Full Access or 55,000 Kyat Practice-Only (No Video)';
+    let accessSummary = hasCourseExercises
+      ? `Free starter lessons open · Choose Full Access or ${coursePracFmt} Kyat Practice-Only (No Video)`
+      : 'Free starter lessons open · Unlock Individual Lessons or Full Course (with Video)';
     if (authState.isAdmin) {
       accessSummary = 'Admin signed in · Manage courses, pricing & Excel curriculum';
     } else if (courseInfo.unlocked) {
@@ -909,7 +1025,9 @@
     } else if (courseInfo.isPracticeOnly) {
       accessSummary = `${courseInfo.courseName} Practice-Only Active · Exercises, Writing & Pronunciation (No Video)`;
     } else if (authState.user) {
-      accessSummary = 'Choose Full Access (with Video) or Practice-Only (55,000 Kyat · No Video)';
+      accessSummary = hasCourseExercises
+        ? `Choose Full Access (with Video) or Practice-Only (${coursePracFmt} Kyat · No Video)`
+        : 'Choose Individual Lesson Pass or Full Course Access (with Video)';
     }
 
     bar.innerHTML = `
@@ -983,7 +1101,9 @@
       const isPracticeOnly = accessTier === 'practice';
       const isLocked = isPaid && !isUnlocked;
 
-      const formattedPrice = Number(pricing.price || 0).toLocaleString();
+      const formattedPrice = Number(pricing.price || 0).toLocaleString('en-US');
+      const formattedPracticePrice = Number(pricing.practicePrice || 55000).toLocaleString('en-US');
+      const lessonHasEx = Boolean(pricing.hasExercises);
       const accessMetaText = !isPaid
         ? 'Free Lesson'
         : accessTier === 'full'
@@ -994,7 +1114,11 @@
       const accessTagClass = !isPaid ? 'is-free' : isPracticeOnly ? 'is-practice' : isUnlocked ? 'is-unlocked' : 'is-paid';
       const featuresLine = isPracticeOnly
         ? '✏️ Exercises · 🖌️ Stroke Writing · 🎤 Pronunciation (Video Excluded)'
-        : '📺 Video · ✏️ Exercises · 🖌️ Stroke Writing · 🎤 Pronunciation';
+        : lessonHasEx
+        ? isLocked
+          ? `📺 Video · ✏️ Practice Only (${formattedPracticePrice} Kyat) · 🖌️ Writing · 🎤 Pronunciation`
+          : '📺 Video · ✏️ Exercises · 🖌️ Stroke Writing · 🎤 Pronunciation'
+        : '📺 Video · 🖌️ Stroke Writing · 🎤 Pronunciation';
       const btnText = isLocked
         ? `🔒 Unlock (${escapeHTML(formattedPrice)} Kyat) →`
         : isPracticeOnly
@@ -1178,6 +1302,7 @@
     const courseName = getLessonCourse(lesson);
     const catName = lesson.category || courseName || 'HSK 2';
     const isPracticeOnly = getLessonAccessTier(lesson) === 'practice';
+    const lessonPracFmt = Number(resolveLessonPricing(lesson).practicePrice || 55000).toLocaleString('en-US');
 
     hero.innerHTML = `
       <div class="workspace-top-bar">
@@ -1220,7 +1345,7 @@
         isPracticeOnly
           ? `<div class="practice-only-workspace-banner" role="status">
                <div>
-                 <strong>Practice-Only Plan (55,000 Kyat):</strong> You have access to <strong>Exercises, Writing &amp; Pronunciation</strong>. Video lessons are excluded on this plan.
+                 <strong>Practice-Only Plan (${escapeHTML(lessonPracFmt)} Kyat):</strong> You have access to <strong>Exercises, Writing &amp; Pronunciation</strong>. Video lessons are excluded on this plan.
                </div>
                <button type="button" class="btn-upgrade-video" id="btnUpgradeFromWorkspaceBanner">Unlock Full Video</button>
              </div>`
@@ -5617,19 +5742,25 @@
       .map((l, idx) => {
         const id = String(l.id || `lesson-${idx + 1}`).trim();
         const pricing = resolveLessonPricing(l);
+        const courseName = getLessonCourse(l);
+        const exCount = getLessonExerciseCountLocal(id);
+        const hasEx = exCount > 0;
+        const explicitPracticeNum = Number(l.practicePrice) > 0 ? Math.round(Number(l.practicePrice)) : 0;
+        const coursePracticeFmt = Number(getCoursePricingInfo(courseName).practicePrice || 55000).toLocaleString('en-US');
+        const disablePractice = pricing.accessType === 'free' || !hasEx;
         return `
-          <div class="excel-pricing-row" data-pricing-row="${escapeHTML(id)}">
+          <div class="excel-pricing-row" data-pricing-row="${escapeHTML(id)}" data-has-ex="${hasEx ? '1' : '0'}">
             <div class="excel-pricing-info">
               <strong>${escapeHTML(l.title || id)}</strong>
-              <span>${escapeHTML(getLessonCourse(l))} (${escapeHTML(id)})</span>
+              <span>${escapeHTML(courseName)} (${escapeHTML(id)}) · ${exCount} exercise${exCount === 1 ? '' : 's'}</span>
             </div>
-            <div class="excel-pricing-controls">
-              <select class="lp-inline-select" data-pricing-access="${escapeHTML(id)}" aria-label="Access type for ${escapeHTML(l.title || id)}">
+            <div class="excel-pricing-controls" style="flex-wrap: wrap;">
+              <select class="lp-inline-select" data-pricing-access="${escapeHTML(id)}" data-has-ex="${hasEx ? '1' : '0'}" aria-label="Access type for ${escapeHTML(l.title || id)}">
                 <option value="free" ${pricing.accessType === 'free' ? 'selected' : ''}>Free</option>
                 <option value="paid" ${pricing.accessType === 'paid' ? 'selected' : ''}>Paid</option>
               </select>
-              <div class="excel-price-input-wrap">
-                <span>Kyat</span>
+              <div class="excel-price-input-wrap" title="Full Lesson Price (Kyat)">
+                <span>Full Kyat</span>
                 <input
                   type="text"
                   inputmode="numeric"
@@ -5637,8 +5768,21 @@
                   data-pricing-price="${escapeHTML(id)}"
                   value="${pricing.accessType === 'free' ? 0 : Number(pricing.price).toLocaleString()}"
                   ${pricing.accessType === 'free' ? 'disabled' : ''}
-                  aria-label="Price in Kyat for ${escapeHTML(l.title || id)}"
+                  aria-label="Full price in Kyat for ${escapeHTML(l.title || id)}"
                   placeholder="0"
+                />
+              </div>
+              <div class="excel-price-input-wrap" title="${hasEx ? 'Practice Only price (blank/0 = course/default rate)' : 'No exercises in this lesson'}">
+                <span>Practice</span>
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  class="lp-inline-price"
+                  data-pricing-practice="${escapeHTML(id)}"
+                  value="${!disablePractice && explicitPracticeNum > 0 ? explicitPracticeNum.toLocaleString() : ''}"
+                  ${disablePractice ? 'disabled' : ''}
+                  aria-label="Practice Only price in Kyat for ${escapeHTML(l.title || id)}"
+                  placeholder="${hasEx ? (pricing.accessType === 'free' ? 'Free' : `Auto (${coursePracticeFmt})`) : '0 exercises'}"
                 />
               </div>
             </div>
@@ -5650,7 +5794,9 @@
     listWrap.querySelectorAll('[data-pricing-access]').forEach((sel) => {
       sel.onchange = () => {
         const lid = sel.dataset.pricingAccess;
+        const hasEx = sel.dataset.hasEx === '1';
         const priceInput = listWrap.querySelector(`[data-pricing-price="${lid}"]`);
+        const practiceInput = listWrap.querySelector(`[data-pricing-practice="${lid}"]`);
         if (priceInput) {
           if (sel.value === 'free') {
             priceInput.value = '0';
@@ -5661,14 +5807,27 @@
             if (!parsed) priceInput.value = '75,000';
           }
         }
+        if (practiceInput) {
+          if (sel.value === 'free' || !hasEx) {
+            practiceInput.value = '';
+            practiceInput.disabled = true;
+          } else {
+            practiceInput.disabled = false;
+          }
+        }
       };
     });
 
     listWrap.querySelectorAll('.lp-inline-price').forEach((priceInput) => {
       priceInput.addEventListener('blur', () => {
-        const raw = Number(String(priceInput.value || '').replace(/,/g, '').replace(/[^0-9]/g, ''));
+        const cleaned = String(priceInput.value || '').replace(/,/g, '').replace(/[^0-9]/g, '');
+        if (!cleaned && priceInput.dataset.pricingPractice !== undefined) {
+          priceInput.value = '';
+          return;
+        }
+        const raw = Number(cleaned);
         if (!isNaN(raw) && raw >= 0) {
-          priceInput.value = raw.toLocaleString();
+          priceInput.value = raw === 0 && priceInput.dataset.pricingPractice !== undefined ? '' : raw.toLocaleString();
         }
       });
     });
@@ -5793,22 +5952,29 @@
           const lid = row.dataset.pricingRow;
           const accessSel = row.querySelector(`[data-pricing-access="${lid}"]`);
           const priceInput = row.querySelector(`[data-pricing-price="${lid}"]`);
+          const practiceInput = row.querySelector(`[data-pricing-practice="${lid}"]`);
           const accessType = accessSel?.value === 'paid' ? 'paid' : 'free';
           const rawPriceStr = String(priceInput?.value || '').replace(/,/g, '').replace(/[^0-9.]/g, '');
           const price = accessType === 'free' ? 0 : Math.max(0, Number(rawPriceStr) || 75000);
-          localMap[lid] = { accessType, price };
+          const hasEx = getLessonExerciseCountLocal(lid) > 0;
+          const rawPracStr = String(practiceInput?.value || '').replace(/,/g, '').replace(/[^0-9.]/g, '');
+          const practicePrice = accessType === 'free' || !hasEx ? 0 : Math.max(0, Number(rawPracStr) || 0);
+          localMap[lid] = { accessType, price, practicePrice };
 
           const lessonObj = allLessons.find((l) => String(l.id || '').trim() === lid);
           if (lessonObj) {
             lessonObj.accessType = accessType;
             lessonObj.price = price;
+            lessonObj.practicePrice = practicePrice;
           }
           catalogItems.push({
             lessonId: lid,
             title: lessonObj?.title || lid,
             course: getLessonCourse(lessonObj),
             accessType,
-            price
+            price,
+            practicePrice,
+            hasExercises: hasEx
           });
         });
 
@@ -5877,10 +6043,12 @@
     const rawLessonsList = loadedFromStoreOrRepo ? allLessons : (allLessons.length ? allLessons : FALLBACK_LESSONS);
     const exportLessonsList = rawLessonsList.map((l) => {
       const pricing = resolveLessonPricing(l);
+      const explicitPrac = Number(l.practicePrice) > 0 ? Math.round(Number(l.practicePrice)) : 0;
       return {
         ...l,
         accessType: pricing.accessType,
-        price: pricing.price
+        price: pricing.price,
+        practicePrice: pricing.accessType === 'paid' && pricing.hasExercises ? explicitPrac : 0
       };
     });
     const exportExercisesList = loadedFromStoreOrRepo ? allExercises : (allExercises.length ? allExercises : FALLBACK_EXERCISES);
@@ -5991,7 +6159,7 @@
         }
 
         if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
-          window.LinguaAuth.syncValidLessonIds(allLessons, { allowEmpty: true });
+          window.LinguaAuth.syncValidLessonIds(allLessons, { allowEmpty: true, exercises: allExercises });
         }
 
         renderCourseSidebar();
@@ -6121,7 +6289,7 @@
         if (Array.isArray(e.detail.sheets.Pronunciation)) allPronunciation = e.detail.sheets.Pronunciation.map(normalizePronunciationRow);
         if (Array.isArray(e.detail.sheets.Exercises)) allExercises = e.detail.sheets.Exercises.map(normalizeExerciseRow);
         if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
-          window.LinguaAuth.syncValidLessonIds(allLessons, { allowEmpty: true });
+          window.LinguaAuth.syncValidLessonIds(allLessons, { allowEmpty: true, exercises: allExercises });
         }
         renderCourseSidebar();
         renderLessonGrid();

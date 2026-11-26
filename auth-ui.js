@@ -20,7 +20,7 @@
     practice_lesson: {
       id: 'practice_lesson',
       title: 'Single Lesson · Practice Only',
-      defaultAmount: '55,000 Kyat',
+      defaultAmount: 'Practice Rate',
       subtitle: 'Exercises, Writing & Pronunciation for one lesson (No Video)'
     },
     course: {
@@ -32,7 +32,7 @@
     practice_course: {
       id: 'practice_course',
       title: 'Course · Practice Only',
-      defaultAmount: '55,000 Kyat',
+      defaultAmount: 'Practice Rate',
       subtitle: 'Exercises, Writing & Pronunciation for every lesson in a course (No Video)'
     }
   };
@@ -347,12 +347,107 @@
     return target.includes('hsk2') ? 280000 : 100;
   }
 
-  function resolvePracticePriceKyat() {
+  function resolveCoursePracticePriceKyat(courseName) {
     const api = getAuthApi();
+    if (courseName && api && typeof api.getCoursePracticePrice === 'function') {
+      const p = api.getCoursePracticePrice(courseName);
+      if (p !== undefined && p !== null && Number.isFinite(Number(p)) && Number(p) > 0) {
+        return Math.round(Number(p));
+      }
+    }
+    const target = String(courseName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const readPositiveMap = (map) => {
+      if (!map || typeof map !== 'object' || !target) return null;
+      for (const [c, p] of Object.entries(map)) {
+        if (String(c || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === target) {
+          const parsed = typeof p === 'string' ? Number(p.replace(/,/g, '').trim()) : Number(p);
+          if (parsed !== undefined && parsed !== null && Number.isFinite(parsed) && parsed > 0) {
+            return Math.round(parsed);
+          }
+        }
+      }
+      return null;
+    };
+    try {
+      const headPrac = readPositiveMap(window.__INITIAL_SITE_CONFIG_CACHE__?.coursePracticePrices);
+      if (headPrac !== null) return headPrac;
+      const rawCfg = localStorage.getItem('linguapath_site_config_v1');
+      if (rawCfg) {
+        const lsPrac = readPositiveMap(JSON.parse(rawCfg)?.coursePracticePrices);
+        if (lsPrac !== null) return lsPrac;
+      }
+      const rawOverlay = localStorage.getItem('linguapath_excel_overlay_store');
+      if (rawOverlay) {
+        const ovPrac = readPositiveMap(JSON.parse(rawOverlay)?.siteConfig?.coursePracticePrices);
+        if (ovPrac !== null) return ovPrac;
+      }
+    } catch (_) {}
     if (api && typeof api.getPracticePrice === 'function') {
-      return api.getPracticePrice();
+      const def = api.getPracticePrice();
+      if (Number.isFinite(Number(def)) && Number(def) > 0) return Math.round(Number(def));
     }
     return 55000;
+  }
+
+  function resolveLessonPracticePriceKyat(lessonOrOpts, courseName) {
+    const api = getAuthApi();
+    const fallbackCourse =
+      courseName ||
+      (api && typeof api.getLessonCourseName === 'function'
+        ? api.getLessonCourseName(lessonOrOpts || {})
+        : lessonOrOpts?.course || lessonOrOpts?.category || 'HSK 2');
+    const coursePrac = resolveCoursePracticePriceKyat(fallbackCourse);
+    const id = String(lessonOrOpts?.id || lessonOrOpts?.lessonId || '')
+      .trim()
+      .replace(/[^a-zA-Z0-9_\-]+/g, '-');
+    if (api && typeof api.getLessonPricing === 'function') {
+      const p = api.getLessonPricing({
+        ...(typeof lessonOrOpts === 'object' ? lessonOrOpts : {}),
+        id,
+        course: fallbackCourse
+      });
+      if (p && Number(p.practicePrice) > 0) {
+        return Math.round(Number(p.practicePrice));
+      }
+    }
+    try {
+      const rawLocal = localStorage.getItem('linguapath_local_lesson_pricing');
+      if (rawLocal && id) {
+        const map = JSON.parse(rawLocal);
+        const lp = Number(map?.[id]?.practicePrice);
+        if (Number.isFinite(lp) && lp > 0) return Math.round(lp);
+      }
+    } catch (_) {}
+    const directPrac = Number(lessonOrOpts?.practicePrice);
+    if (Number.isFinite(directPrac) && directPrac > 0) return Math.round(directPrac);
+    return coursePrac;
+  }
+
+  function resolvePracticePriceKyat(lessonOrCourse) {
+    if (typeof lessonOrCourse === 'string') return resolveCoursePracticePriceKyat(lessonOrCourse);
+    if (lessonOrCourse && typeof lessonOrCourse === 'object') return resolveLessonPracticePriceKyat(lessonOrCourse);
+    return resolveCoursePracticePriceKyat('');
+  }
+
+  function lessonHasExercisesUI(lessonOrId) {
+    if (!lessonOrId) return false;
+    const api = getAuthApi();
+    if (api && typeof api.lessonHasExercises === 'function') {
+      return Boolean(api.lessonHasExercises(lessonOrId));
+    }
+    if (typeof lessonOrId === 'object') {
+      if (typeof lessonOrId.exerciseCount === 'number') return lessonOrId.exerciseCount > 0;
+      if (typeof lessonOrId.hasExercises === 'boolean') return lessonOrId.hasExercises;
+    }
+    return true;
+  }
+
+  function courseHasExercisesUI(courseName) {
+    const api = getAuthApi();
+    if (api && typeof api.courseHasExercises === 'function') {
+      return Boolean(api.courseHasExercises(courseName));
+    }
+    return true;
   }
 
   function openSubscribeModal(lessonOrOpts) {
@@ -364,8 +459,9 @@
       const cName = api && api.normalizeCourseName
         ? api.normalizeCourseName(lessonOrOpts.courseName || 'HSK 2')
         : (lessonOrOpts.courseName || 'HSK 2');
-      const isPracticeCourse = lessonOrOpts.planType === 'practice_course';
-      const cPrice = isPracticeCourse ? resolvePracticePriceKyat() : resolveCoursePriceKyat(cName);
+      const hasCourseEx = courseHasExercisesUI(cName);
+      const isPracticeCourse = lessonOrOpts.planType === 'practice_course' && hasCourseEx;
+      const cPrice = isPracticeCourse ? resolveCoursePracticePriceKyat(cName) : resolveCoursePriceKyat(cName);
       subscribeContext = {
         planType: isPracticeCourse ? 'practice_course' : 'course',
         lessonId: '',
@@ -378,11 +474,18 @@
       const pricing = api ? api.getLessonPricing(lessonOrOpts) : { accessType: 'paid', price: 75000 };
       const lessonId = String(lessonOrOpts.id || lessonOrOpts.lessonId);
       const baseTitle = String(lessonOrOpts.title || lessonId);
-      const isPracticeLesson = lessonOrOpts.planType === 'practice_lesson';
       const cName = api && api.getLessonCourseName
         ? api.getLessonCourseName(lessonOrOpts)
         : (lessonOrOpts.course || lessonOrOpts.category || 'HSK 2');
-      const amtNum = isPracticeLesson ? resolvePracticePriceKyat() : (pricing.price || 75000);
+      const hasLessonEx = lessonHasExercisesUI({
+        id: lessonId,
+        hasExercises: lessonOrOpts.hasExercises,
+        exerciseCount: lessonOrOpts.exerciseCount
+      });
+      const isPracticeLesson = lessonOrOpts.planType === 'practice_lesson' && hasLessonEx;
+      const amtNum = isPracticeLesson
+        ? resolveLessonPracticePriceKyat(lessonOrOpts, cName)
+        : pricing.price || 75000;
       subscribeContext = {
         planType: isPracticeLesson ? 'practice_lesson' : 'per_lesson',
         lessonId,
@@ -618,28 +721,54 @@
       : coursesList[0] || 'HSK 2';
     subscribeContext.courseName = activeCourse;
 
+    const practiceEligibleCourses = coursesList.filter((c) => courseHasExercisesUI(c));
+    const activeCourseHasEx = courseHasExercisesUI(activeCourse);
+    const showPracticeCourseCard =
+      practiceEligibleCourses.length > 0 && (isLessonContext ? activeCourseHasEx : true);
+    const practiceDisplayCourse = activeCourseHasEx
+      ? activeCourse
+      : practiceEligibleCourses[0] || activeCourse;
+
     const perLessonBaseTitle = String(subscribeContext.lessonTitle || 'Selected Paid Lesson').replace(/\s*\(Practice Only\)$/i, '');
     const api = getAuthApi();
     const matchedLessonPricing =
       isLessonContext && api && typeof api.getLessonPricing === 'function'
         ? api.getLessonPricing({ id: subscribeContext.lessonId, course: activeCourse })
         : null;
+    const lessonHasEx = isLessonContext ? lessonHasExercisesUI({ id: subscribeContext.lessonId }) : false;
+
     const perLessonPriceNum =
       subscribeContext.planType === 'per_lesson'
         ? (Number(String(subscribeContext.amountLabel || '').replace(/[^\d.]/g, '')) || (matchedLessonPricing ? matchedLessonPricing.price : 75000) || 75000)
         : ((matchedLessonPricing && matchedLessonPricing.price) || 75000);
     const perLessonPrice = `${Number(perLessonPriceNum).toLocaleString('en-US')} Kyat`;
 
-    const practicePriceKyat = resolvePracticePriceKyat();
-    const practicePriceLabel = `${Number(practicePriceKyat).toLocaleString('en-US')} Kyat`;
+    const lessonPracticePriceKyat = isLessonContext
+      ? resolveLessonPracticePriceKyat({ id: subscribeContext.lessonId }, activeCourse)
+      : resolveCoursePracticePriceKyat(activeCourse);
+    const lessonPracticePriceLabel = `${Number(lessonPracticePriceKyat).toLocaleString('en-US')} Kyat`;
+
+    const coursePracticePriceKyat = resolveCoursePracticePriceKyat(practiceDisplayCourse);
+    const coursePracticePriceLabel = `${Number(coursePracticePriceKyat).toLocaleString('en-US')} Kyat`;
 
     const coursePriceKyat = resolveCoursePriceKyat(activeCourse);
     const coursePriceLabel = `${Number(coursePriceKyat).toLocaleString('en-US')} Kyat`;
 
-    const allowedPlans = isLessonContext
-      ? ['per_lesson', 'practice_lesson', 'course', 'practice_course']
-      : ['course', 'practice_course'];
-    const selectedPlan = allowedPlans.includes(subscribeContext.planType) ? subscribeContext.planType : 'course';
+    const allowedPlans = [];
+    if (isLessonContext) {
+      allowedPlans.push('per_lesson');
+      if (lessonHasEx) allowedPlans.push('practice_lesson');
+    }
+    allowedPlans.push('course');
+    if (activeCourseHasEx) {
+      allowedPlans.push('practice_course');
+    }
+
+    const selectedPlan = allowedPlans.includes(subscribeContext.planType)
+      ? subscribeContext.planType
+      : isLessonContext
+      ? 'per_lesson'
+      : 'course';
     subscribeContext.planType = selectedPlan;
 
     let selectedRequestTitle = `${activeCourse} Full Course`;
@@ -652,12 +781,13 @@
       selectedLabel = `${perLessonBaseTitle} — Full Access (${perLessonPrice})`;
     } else if (selectedPlan === 'practice_lesson') {
       selectedRequestTitle = `${perLessonBaseTitle} (Practice Only)`;
-      selectedAmount = practicePriceLabel;
-      selectedLabel = `${perLessonBaseTitle} — Practice Only: Exercises, Writing & Pronunciation (${practicePriceLabel})`;
+      selectedAmount = lessonPracticePriceLabel;
+      selectedLabel = `${perLessonBaseTitle} — Practice Only: Exercises, Writing & Pronunciation (${lessonPracticePriceLabel})`;
     } else if (selectedPlan === 'practice_course') {
+      const selectedPracAmt = `${Number(resolveCoursePracticePriceKyat(activeCourse)).toLocaleString('en-US')} Kyat`;
       selectedRequestTitle = `${activeCourse} Course (Practice Only)`;
-      selectedAmount = practicePriceLabel;
-      selectedLabel = `${activeCourse} Course — Practice Only: Exercises, Writing & Pronunciation (${practicePriceLabel})`;
+      selectedAmount = selectedPracAmt;
+      selectedLabel = `${activeCourse} Course — Practice Only: Exercises, Writing & Pronunciation (${selectedPracAmt})`;
     }
 
     subscribeContext.amountLabel = selectedAmount;
@@ -686,10 +816,20 @@
         isLessonContext
           ? `<div class="lp-context-callout">
                <strong>Lesson Access Options:</strong> ${escapeHTML(perLessonBaseTitle)} (${escapeHTML(activeCourse)})
-               <span>· Choose Full Access (with Video) or the 55,000 Kyat Practice-Only tier (Exercises, Writing &amp; Pronunciation) for this lesson or the full ${escapeHTML(activeCourse)} course.</span>
+               <span>· ${
+                 lessonHasEx
+                   ? `Choose Full Access (with Video) or Practice Only (${escapeHTML(lessonPracticePriceLabel)} — Exercises, Writing &amp; Pronunciation).`
+                   : `Choose Full Access for this lesson (${escapeHTML(perLessonPrice)}) or the full ${escapeHTML(activeCourse)} course${
+                       activeCourseHasEx ? ` (or ${escapeHTML(coursePracticePriceLabel)} Practice-Only for ${escapeHTML(activeCourse)} exercises)` : ''
+                     }.`
+               }</span>
              </div>`
           : `<div class="lp-context-callout">
-               <strong>Course &amp; Practice-Only Access:</strong> Choose Full Course Access (Video + Practice) or the <strong>55,000 Kyat Practice-Only</strong> tier (Exercises, Writing &amp; Pronunciation without Video) for any course (${escapeHTML(coursesList.join(', '))}).
+               <strong>Course Access:</strong> ${
+                 showPracticeCourseCard
+                   ? `Choose Full Course Access (Video + Practice) or Practice Only (${escapeHTML(coursePracticePriceLabel)} for ${escapeHTML(practiceDisplayCourse)} Exercises, Writing &amp; Pronunciation without Video).`
+                   : `Choose Full Course Access (Video, Writing &amp; Pronunciation) for any course (${escapeHTML(coursesList.join(', '))}).`
+               }
              </div>`
       }
 
@@ -702,16 +842,20 @@
               <strong>Single Lesson · Full Access</strong>
               <span class="lp-plan-price">${escapeHTML(perLessonPrice)}</span>
             </div>
-            <p>${escapeHTML(perLessonBaseTitle)} · Video Lesson, Exercises, Writing &amp; Pronunciation.</p>
+            <p>${escapeHTML(perLessonBaseTitle)} · Video Lesson, ${lessonHasEx ? 'Exercises, ' : ''}Writing &amp; Pronunciation.</p>
           </button>
 
-          <button type="button" class="lp-plan-card ${selectedPlan === 'practice_lesson' ? 'is-selected' : ''}" data-select-plan="practice_lesson">
-            <div class="lp-plan-top">
-              <strong>Single Lesson · Practice Only</strong>
-              <span class="lp-plan-price">${escapeHTML(practicePriceLabel)}</span>
-            </div>
-            <p>${escapeHTML(perLessonBaseTitle)} · <strong>Exercises, Writing &amp; Pronunciation only</strong> (No Video).</p>
-          </button>
+          ${
+            lessonHasEx
+              ? `<button type="button" class="lp-plan-card ${selectedPlan === 'practice_lesson' ? 'is-selected' : ''}" data-select-plan="practice_lesson">
+                   <div class="lp-plan-top">
+                     <strong>Single Lesson · Practice Only</strong>
+                     <span class="lp-plan-price">${escapeHTML(lessonPracticePriceLabel)}</span>
+                   </div>
+                   <p>${escapeHTML(perLessonBaseTitle)} · <strong>Exercises, Writing &amp; Pronunciation only</strong> (No Video).</p>
+                 </button>`
+              : ''
+          }
         `
             : ''
         }
@@ -721,7 +865,7 @@
             <strong>Full Course (${escapeHTML(activeCourse)})</strong>
             <span class="lp-plan-price">${escapeHTML(coursePriceLabel)}</span>
           </div>
-          <p>Video + Exercises + Writing + Pronunciation for all lessons in <strong>${escapeHTML(activeCourse)}</strong>.</p>
+          <p>Video + ${activeCourseHasEx ? 'Exercises + ' : ''}Writing + Pronunciation for all lessons in <strong>${escapeHTML(activeCourse)}</strong>.</p>
           <div style="margin-top: 8px;">
             <label for="lpSubCourseSelect" style="display:block; font-size:0.78rem; font-weight:700; margin-bottom:4px;">Select Course</label>
             <select id="lpSubCourseSelect" data-sub-course-select="course" class="lp-inline-select" style="width:100%;">
@@ -735,21 +879,28 @@
           </div>
         </div>
 
-        <div class="lp-plan-card ${selectedPlan === 'practice_course' ? 'is-selected' : ''}" data-select-plan="practice_course" role="button" tabindex="0">
-          <div class="lp-plan-top">
-            <strong>Course · Practice Only (${escapeHTML(activeCourse)})</strong>
-            <span class="lp-plan-price">${escapeHTML(practicePriceLabel)}</span>
-          </div>
-          <p><strong>Exercises, Writing &amp; Pronunciation only</strong> (No Video) for all lessons in <strong>${escapeHTML(activeCourse)}</strong>.</p>
-          <div style="margin-top: 8px;">
-            <label for="lpSubPracticeCourseSelect" style="display:block; font-size:0.78rem; font-weight:700; margin-bottom:4px;">Select Practice Course</label>
-            <select id="lpSubPracticeCourseSelect" data-sub-course-select="practice_course" class="lp-inline-select" style="width:100%;">
-              ${coursesList
-                .map((c) => `<option value="${escapeHTML(c)}" ${c === activeCourse ? 'selected' : ''}>${escapeHTML(c)} — ${escapeHTML(practicePriceLabel)}</option>`)
-                .join('')}
-            </select>
-          </div>
-        </div>
+        ${
+          showPracticeCourseCard
+            ? `<div class="lp-plan-card ${selectedPlan === 'practice_course' ? 'is-selected' : ''}" data-select-plan="practice_course" role="button" tabindex="0">
+                 <div class="lp-plan-top">
+                   <strong>Course · Practice Only (${escapeHTML(practiceDisplayCourse)})</strong>
+                   <span class="lp-plan-price">${escapeHTML(coursePracticePriceLabel)}</span>
+                 </div>
+                 <p><strong>Exercises, Writing &amp; Pronunciation only</strong> (No Video) for all lessons in <strong>${escapeHTML(practiceDisplayCourse)}</strong>.</p>
+                 <div style="margin-top: 8px;">
+                   <label for="lpSubPracticeCourseSelect" style="display:block; font-size:0.78rem; font-weight:700; margin-bottom:4px;">Select Practice Course</label>
+                   <select id="lpSubPracticeCourseSelect" data-sub-course-select="practice_course" class="lp-inline-select" style="width:100%;">
+                     ${practiceEligibleCourses
+                       .map((c) => {
+                         const cpPrac = `${Number(resolveCoursePracticePriceKyat(c)).toLocaleString('en-US')} Kyat`;
+                         return `<option value="${escapeHTML(c)}" ${c === practiceDisplayCourse ? 'selected' : ''}>${escapeHTML(c)} — ${escapeHTML(cpPrac)}</option>`;
+                       })
+                       .join('')}
+                   </select>
+                 </div>
+               </div>`
+            : ''
+        }
       </div>
 
       ${
@@ -852,7 +1003,7 @@
     const practiceLessonLabels = practiceLessons.map(formatLessonLabelUI);
 
     let membershipHeadline = 'Free Learner Plan';
-    let membershipSub = 'Access free starter lessons. Subscribe to individual lessons, courses, or the 55,000 Kyat Practice-Only tier anytime.';
+    let membershipSub = 'Access free starter lessons. Subscribe to individual lessons, courses, or Practice-Only tiers anytime.';
     let membershipTone = 'free';
 
     if (state.isAdmin) {
@@ -1132,9 +1283,9 @@
                         <select class="lp-inline-select" data-user-plan="${escapeHTML(u.uid)}" aria-label="Membership plan">
                           <option value="none" ${u.membershipPlan === 'none' ? 'selected' : ''}>none</option>
                           <option value="per_lesson" ${u.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson</option>
-                          <option value="practice_lesson" ${u.membershipPlan === 'practice_lesson' ? 'selected' : ''}>practice_lesson (55,000)</option>
+                          <option value="practice_lesson" ${u.membershipPlan === 'practice_lesson' ? 'selected' : ''}>practice_lesson (Practice Only)</option>
                           <option value="course" ${u.membershipPlan === 'course' || u.membershipPlan === 'monthly' || u.membershipPlan === 'annual' ? 'selected' : ''}>course</option>
-                          <option value="practice_course" ${u.membershipPlan === 'practice_course' ? 'selected' : ''}>practice_course (55,000)</option>
+                          <option value="practice_course" ${u.membershipPlan === 'practice_course' ? 'selected' : ''}>practice_course (Practice Only)</option>
                         </select>
                         <input type="date" class="lp-inline-date" data-user-expiry="${escapeHTML(u.uid)}" value="${escapeHTML(
                       u.membershipExpiresAt || ''
@@ -1604,12 +1755,27 @@
         const planId = card.dataset.selectPlan;
         const validPlans = ['per_lesson', 'practice_lesson', 'course', 'practice_course'];
         subscribeContext.planType = validPlans.includes(planId) ? planId : 'course';
-        const cName = subscribeContext.courseName || 'HSK 2';
-        const pracAmt = `${Number(resolvePracticePriceKyat()).toLocaleString('en-US')} Kyat`;
+        let cName = subscribeContext.courseName || 'HSK 2';
+        if (subscribeContext.planType === 'practice_course' && !courseHasExercisesUI(cName)) {
+          const eligible = getAvailableCoursesList().filter((c) => courseHasExercisesUI(c));
+          if (eligible.length > 0) {
+            cName = eligible[0];
+            subscribeContext.courseName = cName;
+          } else {
+            subscribeContext.planType = 'course';
+          }
+        }
         if (subscribeContext.planType === 'course') {
           subscribeContext.amountLabel = `${Number(resolveCoursePriceKyat(cName)).toLocaleString('en-US')} Kyat`;
-        } else if (subscribeContext.planType === 'practice_course' || subscribeContext.planType === 'practice_lesson') {
-          subscribeContext.amountLabel = pracAmt;
+        } else if (subscribeContext.planType === 'practice_course') {
+          subscribeContext.amountLabel = `${Number(resolveCoursePracticePriceKyat(cName)).toLocaleString('en-US')} Kyat`;
+        } else if (subscribeContext.planType === 'practice_lesson') {
+          subscribeContext.amountLabel = `${Number(
+            resolveLessonPracticePriceKyat({ id: subscribeContext.lessonId }, cName)
+          ).toLocaleString('en-US')} Kyat`;
+        } else if (subscribeContext.planType === 'per_lesson' && api && typeof api.getLessonPricing === 'function') {
+          const lp = api.getLessonPricing({ id: subscribeContext.lessonId, course: cName });
+          subscribeContext.amountLabel = `${Number(lp?.price || 75000).toLocaleString('en-US')} Kyat`;
         }
         renderModal();
       };
@@ -1623,7 +1789,7 @@
         subscribeContext.planType = targetPlan;
         subscribeContext.courseName = chosen;
         if (targetPlan === 'practice_course') {
-          subscribeContext.amountLabel = `${Number(resolvePracticePriceKyat()).toLocaleString('en-US')} Kyat`;
+          subscribeContext.amountLabel = `${Number(resolveCoursePracticePriceKyat(chosen)).toLocaleString('en-US')} Kyat`;
         } else {
           subscribeContext.amountLabel = `${Number(resolveCoursePriceKyat(chosen)).toLocaleString('en-US')} Kyat`;
         }
@@ -1685,12 +1851,18 @@
           const baseLessonTitle = String(subscribeContext.lessonTitle || '').replace(/\s*\(Practice Only\)$/i, '').trim();
           const cName = subscribeContext.courseName || 'HSK 2';
           let reqTitle = subscribeContext.lessonTitle;
+          let resolvedAmountLabel = subscribeContext.amountLabel;
           if (subscribeContext.planType === 'course') {
             reqTitle = `${cName} Full Course`;
+            resolvedAmountLabel = `${Number(resolveCoursePriceKyat(cName)).toLocaleString('en-US')} Kyat`;
           } else if (subscribeContext.planType === 'practice_course') {
             reqTitle = `${cName} Course (Practice Only)`;
+            resolvedAmountLabel = `${Number(resolveCoursePracticePriceKyat(cName)).toLocaleString('en-US')} Kyat`;
           } else if (subscribeContext.planType === 'practice_lesson') {
             reqTitle = `${baseLessonTitle || 'Lesson'} (Practice Only)`;
+            resolvedAmountLabel = `${Number(
+              resolveLessonPracticePriceKyat({ id: subscribeContext.lessonId }, cName)
+            ).toLocaleString('en-US')} Kyat`;
           } else {
             reqTitle = baseLessonTitle || 'Lesson Pass';
           }
@@ -1699,7 +1871,7 @@
             lessonId: subscribeContext.lessonId,
             courseName: subscribeContext.courseName,
             lessonTitle: reqTitle,
-            amountLabel: subscribeContext.amountLabel,
+            amountLabel: resolvedAmountLabel,
             contactChannel,
             contactHandle,
             note

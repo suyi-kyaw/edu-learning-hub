@@ -256,9 +256,44 @@
     return out;
   }
 
-  async function doCreateCourse(name, price, lessons) {
+  function getCourseExerciseCountAdmin(courseName) {
+    const targetSlug = courseSlug(courseName);
+    if (!targetSlug) return 0;
+    const courseLessonIds = new Set(
+      (state.lessonsData.Lessons || [])
+        .filter((l) => courseSlug(getLessonCourse(l)) === targetSlug)
+        .map((l) => String(l.id || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+    if (!courseLessonIds.size) return 0;
+    return (state.lessonsData.Exercises || []).filter((ex) =>
+      courseLessonIds.has(String(ex?.lessonId || '').trim().toLowerCase())
+    ).length;
+  }
+
+  function getLessonExerciseCountAdmin(lessonId) {
+    const idKey = String(lessonId || '').trim().toLowerCase();
+    if (!idKey) return 0;
+    return (state.lessonsData.Exercises || []).filter((ex) => isSameId(ex?.lessonId, idKey)).length;
+  }
+
+  function getDefaultPracticePriceAdmin() {
+    const cfg = state.siteConfig || {};
+    const p = Number(cfg.practicePrice);
+    return Number.isFinite(p) && p > 0 ? Math.round(p) : 55000;
+  }
+
+  function getCoursePracticePriceAdmin(courseName) {
+    if (window.LinguaAuth && typeof window.LinguaAuth.getCoursePracticePrice === 'function') {
+      return window.LinguaAuth.getCoursePracticePrice(courseName);
+    }
+    const cfg = state.siteConfig || {};
+    return getCoursePriceFromMap(cfg.coursePracticePrices || {}, courseName, getDefaultPracticePriceAdmin()) || getDefaultPracticePriceAdmin();
+  }
+
+  async function doCreateCourse(name, price, lessons, practicePrice) {
     if (window.LinguaAuth && typeof window.LinguaAuth.createCourseAdmin === 'function') {
-      return await window.LinguaAuth.createCourseAdmin(name, price, lessons);
+      return await window.LinguaAuth.createCourseAdmin(name, price, lessons, practicePrice);
     }
     const cfg = state.siteConfig || (window.LinguaAuth && window.LinguaAuth.getSiteConfig ? window.LinguaAuth.getSiteConfig() : {});
     const currentCourses = Array.isArray(cfg.courses) ? [...cfg.courses] : ['HSK 2'];
@@ -268,17 +303,28 @@
       : [...currentCourses, trimmed];
     const nextPrices = Object.assign({}, cfg.coursePrices || {});
     nextPrices[trimmed] = Math.max(0, Number(price) || 0);
+    const nextPracticePrices = Object.assign({}, cfg.coursePracticePrices || {});
+    nextPracticePrices[trimmed] =
+      Number(practicePrice) > 0 ? Math.round(Number(practicePrice)) : getDefaultPracticePriceAdmin();
 
-    let updatedConfig = Object.assign({}, cfg, { courses: nextCourses, coursePrices: nextPrices });
+    let updatedConfig = Object.assign({}, cfg, {
+      courses: nextCourses,
+      coursePrices: nextPrices,
+      coursePracticePrices: nextPracticePrices
+    });
     if (window.LinguaAuth && typeof window.LinguaAuth.saveSiteConfig === 'function') {
-      updatedConfig = await window.LinguaAuth.saveSiteConfig({ courses: nextCourses, coursePrices: nextPrices });
+      updatedConfig = await window.LinguaAuth.saveSiteConfig({
+        courses: nextCourses,
+        coursePrices: nextPrices,
+        coursePracticePrices: nextPracticePrices
+      });
     }
     return { config: updatedConfig };
   }
 
-  async function doRenameCourse(oldName, newName, price, lessons) {
+  async function doRenameCourse(oldName, newName, price, lessons, practicePrice) {
     if (window.LinguaAuth && typeof window.LinguaAuth.renameCourseAdmin === 'function') {
-      return await window.LinguaAuth.renameCourseAdmin(oldName, newName, price, lessons);
+      return await window.LinguaAuth.renameCourseAdmin(oldName, newName, price, lessons, practicePrice);
     }
     const cfg = state.siteConfig || (window.LinguaAuth && window.LinguaAuth.getSiteConfig ? window.LinguaAuth.getSiteConfig() : {});
     const currentCourses = Array.isArray(cfg.courses) ? [...cfg.courses] : ['HSK 2'];
@@ -294,9 +340,25 @@
     }
     nextPrices[newTrimmed] = Math.max(0, Number(price) || 0);
 
-    let updatedConfig = Object.assign({}, cfg, { courses: nextCourses, coursePrices: nextPrices });
+    const prevPrac = getCoursePracticePriceAdmin(oldTrimmed);
+    const nextPracticePrices = Object.assign({}, cfg.coursePracticePrices || {});
+    if (courseSlug(oldTrimmed) !== courseSlug(newTrimmed) && nextPracticePrices[oldTrimmed] !== undefined) {
+      delete nextPracticePrices[oldTrimmed];
+    }
+    nextPracticePrices[newTrimmed] =
+      Number(practicePrice) > 0 ? Math.round(Number(practicePrice)) : prevPrac;
+
+    let updatedConfig = Object.assign({}, cfg, {
+      courses: nextCourses,
+      coursePrices: nextPrices,
+      coursePracticePrices: nextPracticePrices
+    });
     if (window.LinguaAuth && typeof window.LinguaAuth.saveSiteConfig === 'function') {
-      updatedConfig = await window.LinguaAuth.saveSiteConfig({ courses: nextCourses, coursePrices: nextPrices });
+      updatedConfig = await window.LinguaAuth.saveSiteConfig({
+        courses: nextCourses,
+        coursePrices: nextPrices,
+        coursePracticePrices: nextPracticePrices
+      });
     }
 
     const oldSlug = courseSlug(oldTrimmed);
@@ -328,10 +390,20 @@
     const nextCourses = currentCourses.filter((c) => courseSlug(c) !== courseSlug(trimmed));
     const nextPrices = Object.assign({}, cfg.coursePrices || {});
     delete nextPrices[trimmed];
+    const nextPracticePrices = Object.assign({}, cfg.coursePracticePrices || {});
+    delete nextPracticePrices[trimmed];
 
-    let updatedConfig = Object.assign({}, cfg, { courses: nextCourses, coursePrices: nextPrices });
+    let updatedConfig = Object.assign({}, cfg, {
+      courses: nextCourses,
+      coursePrices: nextPrices,
+      coursePracticePrices: nextPracticePrices
+    });
     if (window.LinguaAuth && typeof window.LinguaAuth.saveSiteConfig === 'function') {
-      updatedConfig = await window.LinguaAuth.saveSiteConfig({ courses: nextCourses, coursePrices: nextPrices });
+      updatedConfig = await window.LinguaAuth.saveSiteConfig({
+        courses: nextCourses,
+        coursePrices: nextPrices,
+        coursePracticePrices: nextPracticePrices
+      });
     }
     return { config: updatedConfig };
   }
@@ -505,7 +577,10 @@
           else if (domain === 'lessons' && res.sheets) {
             state.lessonsData = res.sheets;
             if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
-              window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+              window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
+                allowEmpty: true,
+                exercises: state.lessonsData.Exercises || []
+              });
             }
           }
           state.lastSyncNotice = null;
@@ -577,7 +652,10 @@
           else if (domain === 'lessons') {
             state.lessonsData = res.sheets;
             if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
-              window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+              window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
+                allowEmpty: true,
+                exercises: state.lessonsData.Exercises || []
+              });
             }
           }
           updateNavCounts();
@@ -610,7 +688,10 @@
               else if (domain === 'lessons') {
                 state.lessonsData = res.sheets;
                 if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
-                  window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+                  window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
+                    allowEmpty: true,
+                    exercises: state.lessonsData.Exercises || []
+                  });
                 }
               }
               state.lastSyncNotice = null;
@@ -678,7 +759,10 @@
           Pronunciation: Array.isArray(lessonsRes.sheets.Pronunciation) ? lessonsRes.sheets.Pronunciation : []
         };
         if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
-          window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+          window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
+            allowEmpty: true,
+            exercises: state.lessonsData.Exercises || []
+          });
         }
       }
 
@@ -1767,6 +1851,8 @@
     const games = state.lessonsData.Games || [];
     const coursesList = getAdminCoursesList();
     const coursePricesMap = cfg.coursePrices && typeof cfg.coursePrices === 'object' ? cfg.coursePrices : {};
+    const coursePracticePricesMap =
+      cfg.coursePracticePrices && typeof cfg.coursePracticePrices === 'object' ? cfg.coursePracticePrices : {};
     const currentLogoUrl = String(cfg.siteLogoUrl || '').trim();
 
     const featStories = new Set((cfg.featuredStoryIds || []).map((x) => x.toLowerCase()));
@@ -2015,9 +2101,9 @@
             </div>
 
             <div class="admin-subrow">
-              <strong>Course Pass Pricing (Kyat)</strong>
+              <strong>Course Pass &amp; Practice Pass Pricing (Kyat)</strong>
               <p style="font-size:0.82rem; color:#64748b; margin:4px 0 12px;">
-                Set the full-course unlock price in Kyat for each course. Manage courses in the <strong>Lessons &amp; Exercises</strong> tab.
+                Set Full Course and Practice-Only prices in Kyat. Practice Pass editing is enabled whenever a course contains exercises.
               </p>
               <div style="display:flex; flex-direction:column; gap:10px;">
                 ${
@@ -2026,14 +2112,34 @@
                         .map((cName) => {
                           const fallbackVal = courseSlug(cName) === 'hsk2' ? 280000 : 100;
                           const curPrice = getCoursePriceFromMap(coursePricesMap, cName, fallbackVal);
+                          const curPracticePrice = getCoursePriceFromMap(
+                            coursePracticePricesMap,
+                            cName,
+                            getDefaultPracticePriceAdmin()
+                          );
+                          const courseExCount = getCourseExerciseCountAdmin(cName);
                           return `
-                      <div class="admin-field" style="display:grid; grid-template-columns: 1fr 140px; gap:10px; align-items:center;">
+                      <div class="admin-field" style="display:grid; grid-template-columns: 1fr auto auto; gap:10px; align-items:center;">
                         <label style="margin:0; font-weight:700;">${escapeHTML(cName)}</label>
                         <div style="display:flex; align-items:center; gap:6px;">
-                          <input type="text" inputmode="numeric" class="admin-input" data-cfg-course-price="${escapeHTML(
+                          <span style="font-size:0.75rem; color:#64748b; font-weight:600;">Full</span>
+                          <input type="text" inputmode="numeric" class="admin-input" style="width:110px; text-align:right;" data-cfg-course-price="${escapeHTML(
                             cName
                           )}" value="${escapeHTML(Number(curPrice).toLocaleString())}" placeholder="0" />
-                          <span style="font-size:0.82rem; color:#64748b; font-weight:600;">Kyat</span>
+                          <span style="font-size:0.78rem; color:#64748b;">Kyat</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                          <span style="font-size:0.75rem; color:#64748b; font-weight:600;">Practice</span>
+                          ${
+                            courseExCount > 0
+                              ? `<input type="text" inputmode="numeric" class="admin-input" style="width:110px; text-align:right;" data-cfg-course-practice-price="${escapeHTML(
+                                  cName
+                                )}" value="${escapeHTML(Number(curPracticePrice).toLocaleString())}" placeholder="${escapeHTML(
+                                  getDefaultPracticePriceAdmin().toLocaleString()
+                                )}" />
+                                <span style="font-size:0.78rem; color:#64748b;">Kyat</span>`
+                              : `<span style="font-size:0.78rem; color:#94a3b8; white-space:nowrap;">No exercises yet</span>`
+                          }
                         </div>
                       </div>
                     `;
@@ -2304,6 +2410,18 @@
         }
       });
 
+      const coursePracticePrices = {};
+      Object.entries(coursePracticePricesMap).forEach(([k, v]) => {
+        coursePracticePrices[k] = parsePriceInput(v);
+      });
+      form.querySelectorAll('[data-cfg-course-practice-price]').forEach((inp) => {
+        const cname = inp.getAttribute('data-cfg-course-practice-price');
+        if (cname) {
+          const parsedVal = parsePriceInput(inp.value, 0);
+          coursePracticePrices[cname] = parsedVal > 0 ? parsedVal : getDefaultPracticePriceAdmin();
+        }
+      });
+
       const featuredStoryIds = Array.from(form.querySelectorAll('input[name="featStory"]:checked')).map((c) => c.value);
       const featuredReelIds = Array.from(form.querySelectorAll('input[name="featReel"]:checked')).map((c) => c.value);
       const featuredGameIds = Array.from(form.querySelectorAll('input[name="featGame"]:checked')).map((c) => c.value);
@@ -2353,6 +2471,7 @@
         lessonsBullets: lines('cfgLessonsBullets'),
         lessonsCta: val('cfgLessonsCta'),
         coursePrices,
+        coursePracticePrices,
         contactEmail: val('cfgContactEmail'),
         contactPhone: val('cfgContactPhone'),
         contactViber: val('cfgContactViber'),
@@ -3036,6 +3155,12 @@
                   state.storiesData.Exercises = res.exercises || cleaned;
                 } else {
                   state.lessonsData.Exercises = res.exercises || cleaned;
+                  if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+                    window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
+                      allowEmpty: true,
+                      exercises: state.lessonsData.Exercises || []
+                    });
+                  }
                 }
                 state.editingExercisesList = cloneArray(res.exercises || cleaned);
                 renderEditorBody();
@@ -3230,6 +3355,30 @@
               state.storiesData.Exercises = res.exercises || cleaned;
             } else {
               state.lessonsData.Exercises = res.exercises || cleaned;
+              if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+                window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
+                  allowEmpty: true,
+                  exercises: state.lessonsData.Exercises || []
+                });
+              }
+              if (window.LinguaAuth && typeof window.LinguaAuth.saveLessonCatalogItems === 'function') {
+                const catalogSyncItems = (state.lessonsData.Lessons || []).map((l) => {
+                  const pr = window.LinguaAuth.getLessonPricing(l);
+                  const exCnt = getLessonExerciseCountAdmin(l.id);
+                  return {
+                    lessonId: l.id,
+                    title: l.title || l.id,
+                    course: getLessonCourse(l),
+                    accessType: pr.accessType,
+                    price: pr.price,
+                    practicePrice: Number(l.practicePrice) > 0 ? Number(l.practicePrice) : 0,
+                    hasExercises: exCnt > 0
+                  };
+                });
+                if (catalogSyncItems.length) {
+                  await window.LinguaAuth.saveLessonCatalogItems(catalogSyncItems).catch(() => {});
+                }
+              }
             }
 
             closeModal();
@@ -4134,6 +4283,7 @@
     const courseFilter = state.filters.lessonCourse || 'all';
     const q = state.filters.lessonSearch.toLowerCase();
     const cfgCoursePrices = (state.siteConfig && state.siteConfig.coursePrices) || {};
+    const cfgCoursePracticePrices = (state.siteConfig && state.siteConfig.coursePracticePrices) || {};
 
     const filtered = lessons.filter((l) => {
       const cName = getLessonCourse(l);
@@ -4151,7 +4301,7 @@
         <div class="admin-panel-head">
           <div>
             <h2>Courses &amp; Course Pass Pricing (${coursesList.length})</h2>
-            <p>Create new courses, rename courses (automatically updates linked lessons &amp; learner subscriptions), and manage Course Pass pricing. Courses can only be deleted when 0 lessons belong to them.</p>
+            <p>Create or rename courses and configure Full Course Pass &amp; Practice Pass pricing in Kyat. Practice Pass is editable only when a course has at least one exercise.</p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnSaveCoursePricesInline">Save Course Prices</button>
@@ -4166,6 +4316,7 @@
                 <th>Course Name</th>
                 <th class="num">Lessons</th>
                 <th class="num">Course Pass (Kyat)</th>
+                <th class="num">Practice Pass (Kyat)</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -4175,8 +4326,14 @@
                   ? coursesList
                       .map((cName) => {
                         const countInCourse = lessons.filter((l) => courseSlug(getLessonCourse(l)) === courseSlug(cName)).length;
+                        const courseExCount = getCourseExerciseCountAdmin(cName);
                         const fallbackPrice = courseSlug(cName) === 'hsk2' ? 280000 : 100;
                         const priceVal = getCoursePriceFromMap(cfgCoursePrices, cName, fallbackPrice);
+                        const pracPriceVal = getCoursePriceFromMap(
+                          cfgCoursePracticePrices,
+                          cName,
+                          getDefaultPracticePriceAdmin()
+                        );
                         const delDisabledAttr =
                           countInCourse > 0
                             ? `disabled title="Cannot delete '${escapeHTML(cName)}' while ${countInCourse} lesson(s) belong to it. Move or delete those lessons first."`
@@ -4193,6 +4350,20 @@
                                 <span style="color:#64748b; font-size:0.8rem;">Kyat</span>
                               </div>
                             </td>
+                            <td class="num">
+                              ${
+                                courseExCount > 0
+                                  ? `<div style="display:inline-flex; align-items:center; justify-content:flex-end; gap:6px;">
+                                      <input type="text" inputmode="numeric" class="admin-input" style="width:110px; text-align:right; padding:4px 8px;" data-ls-course-practice-price="${escapeHTML(
+                                        cName
+                                      )}" value="${escapeHTML(Number(pracPriceVal).toLocaleString())}" placeholder="${escapeHTML(
+                                      getDefaultPracticePriceAdmin().toLocaleString()
+                                    )}" />
+                                      <span style="color:#64748b; font-size:0.8rem;">Kyat</span>
+                                    </div>`
+                                  : `<span style="color:#94a3b8; font-size:0.8rem;" title="Add exercises to at least one lesson in this course to enable Practice Pass pricing">No exercises</span>`
+                              }
+                            </td>
                             <td>
                               <div style="display:flex; gap:6px; flex-wrap:wrap;">
                                 <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-edit-course="${escapeHTML(
@@ -4207,7 +4378,7 @@
                         `;
                       })
                       .join('')
-                  : `<tr><td colspan="4" style="text-align:center; color:#64748b; padding:20px;">No courses configured yet. Click <strong>+ New Course</strong> above to add one.</td></tr>`
+                  : `<tr><td colspan="5" style="text-align:center; color:#64748b; padding:20px;">No courses configured yet. Click <strong>+ New Course</strong> above to add one.</td></tr>`
               }
             </tbody>
           </table>
@@ -4218,7 +4389,7 @@
         <div class="admin-panel-head">
           <div>
             <h2>Curriculum Lessons (${lessons.length})</h2>
-            <p>Assign lessons to courses, duplicate existing lessons with full child content, configure Free/Paid pricing (Kyat), media, Vocabulary/Writing, Pronunciation, and Exercises.</p>
+            <p>Assign lessons to courses, duplicate existing lessons with full child content, configure Free/Paid &amp; Practice-Only pricing (when exercises exist), media, Vocabulary/Writing, Pronunciation, and Exercises.</p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button type="button" class="admin-btn admin-btn-secondary" id="btnUploadLessonExercises">Upload Exercises (.xlsx)</button>
@@ -4264,12 +4435,18 @@
                   ? filtered
                       .map((l) => {
                         const cName = getLessonCourse(l);
-                        const pricing = window.LinguaAuth
-                          ? window.LinguaAuth.getLessonPricing(l)
-                          : { accessType: 'free', price: 0 };
                         const exCount = exercises.filter((x) => isSameId(x.lessonId, l.id)).length;
+                        const pricing = window.LinguaAuth
+                          ? window.LinguaAuth.getLessonPricing({ ...l, course: cName, exerciseCount: exCount })
+                          : { accessType: 'free', price: 0, practicePrice: getDefaultPracticePriceAdmin(), hasExercises: exCount > 0 };
                         const writingCount = writings.filter((x) => isSameId(x.lessonId, l.id)).length;
                         const pronCount = pronunciations.filter((x) => isSameId(x.lessonId, l.id)).length;
+                        const pracLine =
+                          pricing.accessType === 'paid'
+                            ? exCount > 0
+                              ? `<div style="font-size:0.74rem; color:#64748b; margin-top:2px;">Practice Only: ${Number(pricing.practicePrice || getCoursePracticePriceAdmin(cName)).toLocaleString()} Kyat</div>`
+                              : `<div style="font-size:0.74rem; color:#94a3b8; margin-top:2px;">Practice hidden (0 exercises)</div>`
+                            : '';
                         return `
                         <tr>
                           <td><code>${escapeHTML(l.id)}</code></td>
@@ -4282,8 +4459,9 @@
                           </td>
                           <td>
                             <span class="${pricing.accessType === 'paid' ? 'admin-status-pending' : 'admin-status-active'}">
-                              ${pricing.accessType === 'paid' ? `Paid (${pricing.price} Kyat)` : 'Free'}
+                              ${pricing.accessType === 'paid' ? `Paid (${Number(pricing.price || 0).toLocaleString()} Kyat)` : 'Free'}
                             </span>
+                            ${pracLine}
                           </td>
                           <td class="num">${exCount}</td>
                           <td class="num">${writingCount}</td>
@@ -4344,18 +4522,35 @@
           const cname = inp.getAttribute('data-ls-course-price');
           if (cname) nextPrices[cname] = parsePriceInput(inp.value);
         });
+
+        const nextPracticePrices = {};
+        Object.entries(cfgCoursePracticePrices).forEach(([k, v]) => {
+          nextPracticePrices[k] = parsePriceInput(v);
+        });
+        viewport.querySelectorAll('[data-ls-course-practice-price]').forEach((inp) => {
+          const cname = inp.getAttribute('data-ls-course-practice-price');
+          if (cname) {
+            const pVal = parsePriceInput(inp.value, 0);
+            nextPracticePrices[cname] = pVal > 0 ? pVal : getDefaultPracticePriceAdmin();
+          }
+        });
+
         saveCoursePricesBtn.disabled = true;
         saveCoursePricesBtn.textContent = 'Saving…';
         try {
           setSyncStatus('Saving course prices…');
-          const saved = await window.LinguaAuth.saveSiteConfig({ courses: coursesList, coursePrices: nextPrices });
+          const saved = await window.LinguaAuth.saveSiteConfig({
+            courses: coursesList,
+            coursePrices: nextPrices,
+            coursePracticePrices: nextPracticePrices
+          });
           state.siteConfig = saved;
           if (saved && saved._savedLocallyOnly) {
             setSyncStatus('Saved locally (Static Host)');
             toast('Saved in browser storage only — connect Worker URL or Export site-config.json to update visitors.', 'info');
           } else {
             setSyncStatus('Saved & Synced');
-            toast('Saved course pass prices in Kyat.');
+            toast('Saved Course Pass & Practice Pass prices in Kyat.');
           }
           renderActiveTab();
         } catch (err) {
@@ -4379,7 +4574,13 @@
         const countInCourse = lessons.filter((l) => courseSlug(getLessonCourse(l)) === courseSlug(cname)).length;
         const fallbackPrice = courseSlug(cname) === 'hsk2' ? 280000 : 100;
         const curPrice = getCoursePriceFromMap(cfgCoursePrices, cname, fallbackPrice);
-        openEditCourseModal(cname, curPrice, countInCourse);
+        const curPracPrice = getCoursePriceFromMap(
+          cfgCoursePracticePrices,
+          cname,
+          getDefaultPracticePriceAdmin()
+        );
+        const courseExCount = getCourseExerciseCountAdmin(cname);
+        openEditCourseModal(cname, curPrice, countInCourse, curPracPrice, courseExCount);
       };
     });
 
@@ -4464,7 +4665,10 @@
             });
             state.lessonsData = { ...state.lessonsData, ...res.sheets };
             if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
-              window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+              window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
+                allowEmpty: true,
+                exercises: state.lessonsData.Exercises || []
+              });
             }
             const cName = getLessonCourse(copiedLesson);
             if (window.LinguaAuth && typeof window.LinguaAuth.saveLessonCatalogItems === 'function') {
@@ -4474,7 +4678,9 @@
                   title: newTitle,
                   course: cName,
                   accessType: pricing.accessType,
-                  price: pricing.price
+                  price: pricing.price,
+                  practicePrice: Number(src.practicePrice) > 0 ? Number(src.practicePrice) : 0,
+                  hasExercises: copiedExercises.length > 0
                 }
               ]);
             }
@@ -4526,7 +4732,8 @@
               if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
                 window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
                   allowEmpty: true,
-                  explicitDeletedIds: [id]
+                  explicitDeletedIds: [id],
+                  exercises: state.lessonsData.Exercises || []
                 });
               }
               try {
@@ -4566,7 +4773,7 @@
       <div class="admin-panel-head" style="margin-bottom:12px;">
         <div>
           <h2>Create New Course</h2>
-          <p>Add a new course name and set its full Course Pass price in Kyat.</p>
+          <p>Add a new course name and set its full Course Pass price in Kyat. Practice Pass price unlocks once exercises are added to a lesson in this course.</p>
         </div>
         <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="ccCloseBtn">✕</button>
       </div>
@@ -4580,6 +4787,9 @@
             <label for="ccPrice">Course Pass Price (Kyat) *</label>
             <input type="text" inputmode="numeric" class="admin-input" id="ccPrice" value="120,000" placeholder="e.g. 120,000" required />
           </div>
+        </div>
+        <div class="admin-backend-status is-info" style="margin-top:10px;">
+          Practice Pass pricing is hidden until at least one lesson under this course has exercises (defaults to ${getDefaultPracticePriceAdmin().toLocaleString()} Kyat once enabled).
         </div>
         <div id="ccErrorBox" class="admin-backend-status is-error" hidden style="margin-top:10px;"></div>
         <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
@@ -4618,7 +4828,9 @@
     };
   }
 
-  function openEditCourseModal(courseName, curPrice, lessonCount) {
+  function openEditCourseModal(courseName, curPrice, lessonCount, curPracticePrice, courseExCount) {
+    const hasEx = Number(courseExCount) > 0;
+    const pracVal = Number(curPracticePrice) > 0 ? Number(curPracticePrice) : getDefaultPracticePriceAdmin();
     openModal(`
       <div class="admin-panel-head" style="margin-bottom:12px;">
         <div>
@@ -4626,13 +4838,13 @@
           <p>${
             lessonCount > 0
               ? `Renaming this course automatically updates ${lessonCount} linked lesson(s), catalog items, and active learner course passes.`
-              : 'Update the course name or Course Pass price in Kyat.'
+              : 'Update the course name and pricing in Kyat.'
           }</p>
         </div>
         <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="ecCloseBtn">✕</button>
       </div>
       <form id="editCourseForm">
-        <div class="admin-grid-2">
+        <div class="admin-grid-3">
           <div class="admin-field">
             <label for="ecName">Course Name *</label>
             <input type="text" class="admin-input" id="ecName" value="${escapeHTML(courseName)}" required />
@@ -4641,7 +4853,20 @@
             <label for="ecPrice">Course Pass Price (Kyat) *</label>
             <input type="text" inputmode="numeric" class="admin-input" id="ecPrice" value="${escapeHTML(Number(curPrice).toLocaleString())}" placeholder="e.g. 120,000" required />
           </div>
+          <div class="admin-field">
+            <label for="ecPracticePrice">Practice Pass Price (Kyat)</label>
+            ${
+              hasEx
+                ? `<input type="text" inputmode="numeric" class="admin-input" id="ecPracticePrice" value="${escapeHTML(Number(pracVal).toLocaleString())}" placeholder="${escapeHTML(getDefaultPracticePriceAdmin().toLocaleString())}" />`
+                : `<input type="text" class="admin-input" id="ecPracticePrice" value="No exercises yet" disabled />`
+            }
+          </div>
         </div>
+        ${
+          !hasEx
+            ? `<div style="font-size:0.8rem; color:#64748b; margin-top:6px;">Practice Pass price is only editable when at least one lesson in this course has exercises.</div>`
+            : ''
+        }
         <div id="ecErrorBox" class="admin-backend-status is-error" hidden style="margin-top:10px;"></div>
         <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
           <button type="button" class="admin-btn admin-btn-secondary" id="ecCancelBtn">Cancel</button>
@@ -4654,6 +4879,14 @@
     document.getElementById('ecPrice').addEventListener('blur', (e) => {
       e.target.value = formatPriceInput(e.target.value);
     });
+    const ecPracInput = document.getElementById('ecPracticePrice');
+    if (hasEx && ecPracInput) {
+      ecPracInput.addEventListener('blur', (e) => {
+        if (String(e.target.value || '').trim()) {
+          e.target.value = formatPriceInput(e.target.value);
+        }
+      });
+    }
     document.getElementById('editCourseForm').onsubmit = async (e) => {
       e.preventDefault();
       const errBox = document.getElementById('ecErrorBox');
@@ -4661,6 +4894,11 @@
       const rawNewName = (document.getElementById('ecName').value || '').trim();
       const newName = normalizeCourseName(rawNewName);
       const price = parsePriceInput(document.getElementById('ecPrice').value);
+      const pracPriceInputEl = document.getElementById('ecPracticePrice');
+      const practicePrice =
+        hasEx && pracPriceInputEl
+          ? parsePriceInput(pracPriceInputEl.value, 0) || getDefaultPracticePriceAdmin()
+          : undefined;
       submitBtn.disabled = true;
       submitBtn.textContent = 'Saving…';
       errBox.hidden = true;
@@ -4671,7 +4909,8 @@
           courseName,
           newName,
           price,
-          state.lessonsData.Lessons || []
+          state.lessonsData.Lessons || [],
+          practicePrice
         );
         state.siteConfig = out.config;
         if (out.lessonsSheets && Array.isArray(out.lessonsSheets.Lessons)) {
@@ -4732,7 +4971,18 @@
       keywords: ''
     };
     const baseCourse = getLessonCourse(base);
-    const pricing = window.LinguaAuth ? window.LinguaAuth.getLessonPricing(base) : { accessType: 'free', price: 0 };
+    const lessonExCount = lesson ? getLessonExerciseCountAdmin(lesson.id) : 0;
+    const pricing = window.LinguaAuth
+      ? window.LinguaAuth.getLessonPricing({ ...base, exerciseCount: lessonExCount })
+      : { accessType: 'free', price: 0, practicePrice: getCoursePracticePriceAdmin(baseCourse), hasExercises: lessonExCount > 0 };
+    const catEntry = (state.authState?.lessonCatalog && lesson && state.authState.lessonCatalog[base.id]) || null;
+    const explicitPracticeVal =
+      Number(catEntry?.practicePrice) > 0
+        ? Math.round(Number(catEntry.practicePrice))
+        : Number(base.practicePrice) > 0
+        ? Math.round(Number(base.practicePrice))
+        : 0;
+    const coursePracDefault = getCoursePracticePriceAdmin(baseCourse);
 
     state.editingLessonVocab = lesson
       ? state.lessonsData.Vocabulary.filter((r) => isSameId(r.lessonId, lesson.id)).map((r) => ({ ...r }))
@@ -4912,9 +5162,31 @@
             )}" placeholder="0" />
           </div>
           <div class="admin-field">
-            <label for="lsMeaning">Meaning</label>
-            <input type="text" class="admin-input" id="lsMeaning" value="${escapeHTML(base.meaning || '')}" />
+            <label for="lsPracticePrice">Practice Only Price (Kyat)</label>
+            <input type="text" inputmode="numeric" class="admin-input" id="lsPracticePrice" value="${
+              lessonExCount > 0 && pricing.accessType === 'paid' && explicitPracticeVal > 0
+                ? escapeHTML(explicitPracticeVal.toLocaleString())
+                : ''
+            }" placeholder="${
+              lessonExCount > 0
+                ? `Default (${escapeHTML(coursePracDefault.toLocaleString())} Kyat)`
+                : 'No exercises yet (Hidden)'
+            }" ${lessonExCount === 0 || pricing.accessType === 'free' ? 'disabled' : ''} />
+            <div id="lsPracticePriceHint" style="font-size:0.74rem; color:#64748b; margin-top:3px;">
+              ${
+                lessonExCount === 0
+                  ? 'Add at least 1 exercise to set a Practice Only price (hidden on lesson page when 0 exercises).'
+                  : pricing.accessType === 'free'
+                  ? 'Free lesson includes all sections.'
+                  : `Leave blank or 0 to use ${escapeHTML(baseCourse)} / Default price (${escapeHTML(coursePracDefault.toLocaleString())} Kyat).`
+              }
+            </div>
           </div>
+        </div>
+
+        <div class="admin-field" style="margin-top:10px;">
+          <label for="lsMeaning">Meaning</label>
+          <input type="text" class="admin-input" id="lsMeaning" value="${escapeHTML(base.meaning || '')}" />
         </div>
 
         <div class="admin-grid-2" style="margin-top:10px;">
@@ -5004,6 +5276,31 @@
 
     const lsAccessEl = document.getElementById('lsAccess');
     const lsPriceEl = document.getElementById('lsPrice');
+    const lsPracticePriceEl = document.getElementById('lsPracticePrice');
+    const lsPracticeHintEl = document.getElementById('lsPracticePriceHint');
+    const refreshPracticeInputState = () => {
+      if (!lsAccessEl || !lsPracticePriceEl) return;
+      const isFree = lsAccessEl.value === 'free';
+      const canSetPractice = !isFree && lessonExCount > 0;
+      lsPracticePriceEl.disabled = !canSetPractice;
+      if (isFree) {
+        lsPracticePriceEl.value = '';
+        lsPracticePriceEl.placeholder = 'Free lesson';
+      } else if (lessonExCount === 0) {
+        lsPracticePriceEl.placeholder = 'No exercises yet (Hidden)';
+      } else {
+        const curCourseName = normalizeCourseName(document.getElementById('lsCourse')?.value || baseCourse);
+        const defPrac = getCoursePracticePriceAdmin(curCourseName);
+        lsPracticePriceEl.placeholder = `Default (${defPrac.toLocaleString()} Kyat)`;
+        if (lsPracticeHintEl) {
+          lsPracticeHintEl.textContent = `Leave blank or 0 to use ${curCourseName} / Default price (${defPrac.toLocaleString()} Kyat).`;
+        }
+      }
+    };
+    const lsCourseInputEl = document.getElementById('lsCourse');
+    if (lsCourseInputEl) {
+      lsCourseInputEl.addEventListener('change', refreshPracticeInputState);
+    }
     if (lsAccessEl && lsPriceEl) {
       lsAccessEl.onchange = () => {
         if (lsAccessEl.value === 'free') {
@@ -5011,11 +5308,13 @@
         } else if (parsePriceInput(lsPriceEl.value) === 0) {
           lsPriceEl.value = '75,000';
         }
+        refreshPracticeInputState();
       };
       lsPriceEl.oninput = () => {
         const val = parsePriceInput(lsPriceEl.value);
         if (val > 0 && lsAccessEl.value === 'free') {
           lsAccessEl.value = 'paid';
+          refreshPracticeInputState();
         }
       };
     }
@@ -5026,6 +5325,11 @@
       const courseName = normalizeCourseName(document.getElementById('lsCourse').value);
       const accessType = document.getElementById('lsAccess').value === 'paid' ? 'paid' : 'free';
       const price = accessType === 'free' ? 0 : parsePriceInput(document.getElementById('lsPrice').value, 75000);
+      const rawPracStr = String(document.getElementById('lsPracticePrice')?.value || '').trim();
+      const practicePrice =
+        accessType === 'free' || lessonExCount === 0 || !rawPracStr
+          ? 0
+          : Math.max(0, parsePriceInput(rawPracStr, 0));
 
       const rec = {
         id,
@@ -5044,7 +5348,8 @@
         fullAudio: getMediaInputValue(document.getElementById('lsAudio')),
         keywords: document.getElementById('lsKeywords').value.trim(),
         accessType,
-        price
+        price,
+        practicePrice
       };
 
       const nextLessons = [...state.lessonsData.Lessons];
@@ -5071,7 +5376,10 @@
         });
         state.lessonsData = { ...state.lessonsData, ...res.sheets };
         if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
-          window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+          window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
+            allowEmpty: true,
+            exercises: state.lessonsData.Exercises || []
+          });
         }
         // Ensure any custom course typed in the Lesson Editor is registered in Courses Manager
         const knownCourses = getAdminCoursesList();
@@ -5084,14 +5392,22 @@
         }
         if (window.LinguaAuth && typeof window.LinguaAuth.saveLessonCatalogItems === 'function') {
           await window.LinguaAuth.saveLessonCatalogItems([
-            { lessonId: id, title: rec.title, course: courseName, accessType, price }
+            {
+              lessonId: id,
+              title: rec.title,
+              course: courseName,
+              accessType,
+              price,
+              practicePrice,
+              hasExercises: lessonExCount > 0
+            }
           ]);
         }
         try {
           if (!res.syncedToServer) {
             const pricingRaw = localStorage.getItem('linguapath_local_lesson_pricing');
             const pricingMap = pricingRaw ? JSON.parse(pricingRaw) : {};
-            pricingMap[id] = { accessType, price };
+            pricingMap[id] = { accessType, price, practicePrice };
             localStorage.setItem('linguapath_local_lesson_pricing', JSON.stringify(pricingMap));
           } else {
             localStorage.removeItem('linguapath_custom_lessons');
@@ -5938,9 +6254,9 @@
             <select class="admin-select" id="udPlan">
               <option value="none" ${user.membershipPlan === 'none' ? 'selected' : ''}>none</option>
               <option value="per_lesson" ${user.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson (Full Lesson Pass)</option>
-              <option value="practice_lesson" ${user.membershipPlan === 'practice_lesson' ? 'selected' : ''}>practice_lesson (55,000 Kyat · Practice Only)</option>
+              <option value="practice_lesson" ${user.membershipPlan === 'practice_lesson' ? 'selected' : ''}>practice_lesson (Practice Only · Lesson)</option>
               <option value="course" ${user.membershipPlan === 'course' ? 'selected' : ''}>course (Full Course Pass)</option>
-              <option value="practice_course" ${user.membershipPlan === 'practice_course' ? 'selected' : ''}>practice_course (55,000 Kyat · Practice Only)</option>
+              <option value="practice_course" ${user.membershipPlan === 'practice_course' ? 'selected' : ''}>practice_course (Practice Only · Course)</option>
             </select>
           </div>
           <div class="admin-field">
@@ -6165,9 +6481,9 @@
                             <select class="admin-select" data-u-plan="${escapeHTML(u.uid)}">
                               <option value="none" ${u.membershipPlan === 'none' ? 'selected' : ''}>none</option>
                               <option value="per_lesson" ${u.membershipPlan === 'per_lesson' ? 'selected' : ''}>per_lesson</option>
-                              <option value="practice_lesson" ${u.membershipPlan === 'practice_lesson' ? 'selected' : ''}>practice_lesson (55,000)</option>
+                              <option value="practice_lesson" ${u.membershipPlan === 'practice_lesson' ? 'selected' : ''}>practice_lesson (Practice)</option>
                               <option value="course" ${u.membershipPlan === 'course' ? 'selected' : ''}>course</option>
-                              <option value="practice_course" ${u.membershipPlan === 'practice_course' ? 'selected' : ''}>practice_course (55,000)</option>
+                              <option value="practice_course" ${u.membershipPlan === 'practice_course' ? 'selected' : ''}>practice_course (Practice)</option>
                             </select>
                           </td>
                           <td>
@@ -6324,7 +6640,7 @@
           <div class="admin-panel-head" style="margin-bottom:12px;">
             <div>
               <h2>Unlocked Courses &amp; Lessons · ${escapeHTML(user.username || user.email)}</h2>
-              <p>Grant Full Access (Video + Exercises, Writing, Pronunciation) or 55,000 Kyat Practice-Only Access (No Video) per course or per lesson.</p>
+              <p>Grant Full Access (Video + Exercises, Writing, Pronunciation) or Practice-Only Access (No Video) per course or per lesson.</p>
             </div>
             <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="ulCloseBtn">✕</button>
           </div>
@@ -6350,19 +6666,21 @@
               .join('')}
           </div>
 
-          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Practice-Only Courses · 55,000 Kyat (Exercises, Writing &amp; Pronunciation · No Video)</strong>
+          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Practice-Only Courses (Exercises, Writing &amp; Pronunciation · No Video)</strong>
           <div class="admin-featured-checklist" style="margin-bottom:14px;">
             ${coursesList
-              .map(
-                (cName) => `
+              .map((cName) => {
+                const cEx = getCourseExerciseCountAdmin(cName);
+                const cPrac = getCoursePracticePriceAdmin(cName);
+                return `
               <label class="admin-featured-item">
                 <input type="checkbox" name="ulPracticeCourse" value="${escapeHTML(cName)}" ${
                   practiceCourses.has(courseSlug(cName)) ? 'checked' : ''
                 } />
-                <span>${escapeHTML(cName)} (Practice Only)</span>
+                <span>${escapeHTML(cName)} (${cEx > 0 ? `${cPrac.toLocaleString()} Kyat` : 'No exercises'})</span>
               </label>
-            `
-              )
+            `;
+              })
               .join('')}
           </div>
 
@@ -6380,19 +6698,25 @@
               .join('')}
           </div>
 
-          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Individual Unlocked Lessons · Practice Only · 55,000 Kyat (No Video)</strong>
+          <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Individual Unlocked Lessons · Practice Only (No Video)</strong>
           <div class="admin-featured-checklist" style="max-height:180px; overflow-y:auto;">
             ${allLessons
-              .map(
-                (l) => `
+              .map((l) => {
+                const exCnt = getLessonExerciseCountAdmin(l.id);
+                const lp = window.LinguaAuth
+                  ? window.LinguaAuth.getLessonPricing({ ...l, course: getLessonCourse(l), exerciseCount: exCnt })
+                  : { practicePrice: getCoursePracticePriceAdmin(getLessonCourse(l)) };
+                return `
               <label class="admin-featured-item">
                 <input type="checkbox" name="ulPracticeLesson" value="${escapeHTML(l.id)}" ${
                   practiceLessons.has(normLessonKey(l.id)) ? 'checked' : ''
                 } />
-                <span>${escapeHTML(l.title || l.id)} (${escapeHTML(getLessonCourse(l))})</span>
+                <span>${escapeHTML(l.title || l.id)} (${escapeHTML(getLessonCourse(l))} · ${
+                  exCnt > 0 ? `${Number(lp.practicePrice || 55000).toLocaleString()} Kyat` : '0 exercises'
+                })</span>
               </label>
-            `
-              )
+            `;
+              })
               .join('')}
           </div>
           <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">

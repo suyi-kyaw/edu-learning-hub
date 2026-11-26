@@ -72,6 +72,8 @@ export interface LessonCatalogItem {
   audience: 'Adult' | 'Kids' | string;
   accessType: 'free' | 'paid';
   price: number;
+  practicePrice?: number;
+  hasExercises?: boolean;
   updatedBy: string;
   updatedAt?: unknown;
 }
@@ -120,6 +122,7 @@ export interface SiteConfig {
   lessonsCta?: string;
   courses?: string[];
   coursePrices?: Record<string, number>;
+  coursePracticePrices?: Record<string, number>;
   practicePrice?: number;
   adultBadge?: string;
   adultTitle?: string;
@@ -204,6 +207,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   featuredGameIds: ['game-01'],
   courses: ['HSK 2'],
   coursePrices: { 'HSK 2': 280000 },
+  coursePracticePrices: { 'HSK 2': 55000 },
   practicePrice: 55000
 };
 
@@ -840,6 +844,12 @@ function parseWorkbookToDataset(wb: { SheetNames: string[]; Sheets: Record<strin
     for (const row of rows) {
       const lessonId = sanitizeDocId(String(row.lessonId || ''));
       if (!row.lessonId) continue;
+      const rawPrac = Number(String(row.practicePrice ?? '').replace(/,/g, '').trim());
+      const rawHasEx = row.hasExercises;
+      const hasExParsed =
+        rawHasEx === '' || rawHasEx === undefined || rawHasEx === null
+          ? undefined
+          : normalizeBool(rawHasEx, true);
       dataset.lessonCatalog[lessonId] = {
         lessonId,
         title: String(row.title || lessonId).trim(),
@@ -847,6 +857,8 @@ function parseWorkbookToDataset(wb: { SheetNames: string[]; Sheets: Record<strin
         audience: String(row.audience || '').trim().toLowerCase() === 'kids' ? 'Kids' : 'Adult',
         accessType: String(row.accessType || '').trim().toLowerCase() === 'paid' ? 'paid' : 'free',
         price: Math.max(0, Number(row.price) || 0),
+        practicePrice: Number.isFinite(rawPrac) && rawPrac > 0 ? Math.round(rawPrac) : 0,
+        ...(typeof hasExParsed === 'boolean' ? { hasExercises: hasExParsed } : {}),
         updatedBy: String(row.updatedBy || '').trim(),
         updatedAt: String(row.updatedAt || '').trim()
       };
@@ -1217,6 +1229,31 @@ function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteC
       }
       return Object.keys(cleanMap).length > 0 ? cleanMap : { ...(DEFAULT_SITE_CONFIG.coursePrices || { 'HSK 2': 280000 }) };
     })(),
+    coursePracticePrices: (() => {
+      const defaultPrac =
+        typeof raw?.practicePrice === 'number' && Number.isFinite(raw.practicePrice) && raw.practicePrice > 0
+          ? Math.round(raw.practicePrice)
+          : DEFAULT_SITE_CONFIG.practicePrice || 55000;
+      const rawMap =
+        raw?.coursePracticePrices && typeof raw.coursePracticePrices === 'object'
+          ? raw.coursePracticePrices
+          : DEFAULT_SITE_CONFIG.coursePracticePrices || { 'HSK 2': defaultPrac };
+      const cleanMap: Record<string, number> = {};
+      const slugToKey: Record<string, string> = {};
+      for (const [k, v] of Object.entries(rawMap)) {
+        const key = String(k || '').trim();
+        if (!key) continue;
+        const slug = key.toLowerCase().replace(/[^a-z0-9]+/g, '');
+        const cleanVal = typeof v === 'string' ? Number(String(v).replace(/,/g, '').trim()) : Number(v);
+        if (!Number.isFinite(cleanVal) || cleanVal < 0) continue;
+        if (slug && slugToKey[slug] && slugToKey[slug] !== key) {
+          delete cleanMap[slugToKey[slug]];
+        }
+        if (slug) slugToKey[slug] = key;
+        cleanMap[key] = Math.round(cleanVal);
+      }
+      return cleanMap;
+    })(),
     practicePrice: typeof raw?.practicePrice === 'number' && Number.isFinite(raw.practicePrice) ? Math.round(raw.practicePrice) : 55000,
     adultBadge: s(raw?.adultBadge, 80, DEFAULT_SITE_CONFIG.adultBadge || 'Adults • Comprehensive'),
     adultTitle: s(raw?.adultTitle, 140, DEFAULT_SITE_CONFIG.adultTitle || 'Mandarin for Adults & Professionals'),
@@ -1293,9 +1330,12 @@ if (typeof window !== 'undefined') {
       try {
         const draftRaw = localStorage.getItem('linguapath_cms_lessons_v2');
         if (draftRaw) {
-          const parsed = JSON.parse(draftRaw) as { sheets?: { Lessons?: unknown[] } };
+          const parsed = JSON.parse(draftRaw) as { sheets?: { Lessons?: unknown[]; Exercises?: Array<{ lessonId?: string }> } };
           if (Array.isArray(parsed?.sheets?.Lessons)) {
-            updateActiveLessonsRegistry(parsed.sheets.Lessons, { allowEmpty: true });
+            updateActiveLessonsRegistry(parsed.sheets.Lessons, {
+              allowEmpty: true,
+              exercises: Array.isArray(parsed?.sheets?.Exercises) ? parsed.sheets.Exercises : undefined
+            });
           }
         }
       } catch (_) {}
@@ -1311,9 +1351,15 @@ if (typeof window !== 'undefined') {
   });
 
   window.addEventListener('linguapath-content-change', (e: Event) => {
-    const detail = (e as CustomEvent)?.detail as { domain?: string; sheets?: { Lessons?: unknown[] } } | undefined;
+    const detail = (e as CustomEvent)?.detail as {
+      domain?: string;
+      sheets?: { Lessons?: unknown[]; Exercises?: Array<{ lessonId?: string }> };
+    } | undefined;
     if (detail?.domain === 'lessons' && Array.isArray(detail?.sheets?.Lessons)) {
-      updateActiveLessonsRegistry(detail.sheets.Lessons, { allowEmpty: true });
+      updateActiveLessonsRegistry(detail.sheets.Lessons, {
+        allowEmpty: true,
+        exercises: Array.isArray(detail?.sheets?.Exercises) ? detail.sheets.Exercises : undefined
+      });
     }
   });
 }
@@ -1321,8 +1367,12 @@ if (typeof window !== 'undefined') {
 // --- Active Curriculum Lesson Registry & Deleted-Lesson Reconciliation ---
 
 let validLessonIdsLoaded = false;
+let validExercisesLoaded = false;
 const validLessonIdMap = new Map<string, string>(); // normalized lower key -> canonical id
 const validLessonTitleMap = new Map<string, string>(); // normalized lower key -> display title
+const validLessonCourseMap = new Map<string, string>(); // normalized lower key -> normalized course name
+const validLessonExerciseMap = new Map<string, number>(); // normalized lower key -> exercise count
+const validCourseExerciseMap = new Map<string, number>(); // course slug -> total exercises in course
 let validStoryIdSet: Set<string> | null = null;
 
 function isLessonIdActive(lessonId: string): boolean {
@@ -1345,6 +1395,54 @@ function getLessonTitle(lessonId: string): string {
   }
   const cat = state.lessonCatalog[sanitizeDocId(lessonId)] || state.lessonCatalog[lessonId];
   return cat?.title ? String(cat.title) : '';
+}
+
+function getLessonExerciseCount(lessonOrId: string | { id?: string; lessonId?: string }): number | null {
+  const rawId = typeof lessonOrId === 'string' ? lessonOrId : String(lessonOrId?.id || lessonOrId?.lessonId || '');
+  const key = normalizeLessonIdKey(rawId);
+  if (!key) return 0;
+  if (validExercisesLoaded) {
+    return validLessonExerciseMap.get(key) || 0;
+  }
+  return null;
+}
+
+function lessonHasExercises(
+  lessonOrId: string | { id?: string; lessonId?: string; hasExercises?: boolean; exerciseCount?: number }
+): boolean {
+  if (!lessonOrId) return false;
+  if (typeof lessonOrId === 'object' && typeof lessonOrId.exerciseCount === 'number') {
+    return lessonOrId.exerciseCount > 0;
+  }
+  const rawId = typeof lessonOrId === 'string' ? lessonOrId : String(lessonOrId?.id || lessonOrId?.lessonId || '');
+  const key = normalizeLessonIdKey(rawId);
+  if (!key) return false;
+  if (validExercisesLoaded) {
+    return (validLessonExerciseMap.get(key) || 0) > 0;
+  }
+  if (typeof lessonOrId === 'object' && typeof lessonOrId.hasExercises === 'boolean') {
+    return lessonOrId.hasExercises;
+  }
+  const cat = state.lessonCatalog[sanitizeDocId(rawId)] || state.lessonCatalog[rawId];
+  if (cat && typeof cat.hasExercises === 'boolean') {
+    return cat.hasExercises;
+  }
+  return true;
+}
+
+function courseHasExercises(courseName: string): boolean {
+  const slug = courseSlug(normalizeCourseName(courseName));
+  if (!slug) return false;
+  if (validExercisesLoaded) {
+    return (validCourseExerciseMap.get(slug) || 0) > 0;
+  }
+  const matchingCatalog = Object.values(state.lessonCatalog).filter(
+    (c) => courseSlug(normalizeCourseName(c.course || 'HSK 2')) === slug
+  );
+  if (matchingCatalog.length > 0 && matchingCatalog.some((c) => typeof c.hasExercises === 'boolean')) {
+    return matchingCatalog.some((c) => c.hasExercises === true);
+  }
+  return true;
 }
 
 function isTimePassActive(profile: UserProfile): boolean {
@@ -1648,7 +1746,7 @@ function reconcileDatasetWithLessons(
 
 function updateActiveLessonsRegistry(
   lessonsOrIds: unknown[],
-  options?: { allowEmpty?: boolean; explicitDeletedIds?: string[] }
+  options?: { allowEmpty?: boolean; explicitDeletedIds?: string[]; exercises?: Array<{ lessonId?: string }> }
 ): boolean {
   if (!Array.isArray(lessonsOrIds)) return false;
   if (lessonsOrIds.length === 0 && !options?.allowEmpty) {
@@ -1667,6 +1765,7 @@ function updateActiveLessonsRegistry(
   const prevKeys = validLessonIdsLoaded ? new Set(validLessonIdMap.keys()) : new Set<string>();
   const nextIdMap = new Map<string, string>();
   const nextTitleMap = new Map<string, string>();
+  const nextCourseMap = new Map<string, string>();
 
   for (const entry of lessonsOrIds) {
     if (typeof entry === 'string') {
@@ -1674,13 +1773,17 @@ function updateActiveLessonsRegistry(
       const key = normalizeLessonIdKey(rawId);
       if (key) nextIdMap.set(key, rawId);
     } else if (entry && typeof entry === 'object') {
-      const obj = entry as { id?: string; lessonId?: string; title?: string };
+      const obj = entry as { id?: string; lessonId?: string; title?: string; course?: string; category?: string };
       const rawId = String(obj.id || obj.lessonId || '').trim();
       const key = normalizeLessonIdKey(rawId);
       if (key) {
         nextIdMap.set(key, rawId);
         if (obj.title) {
           nextTitleMap.set(key, String(obj.title).trim());
+        }
+        const cName = getLessonCourseName(obj);
+        if (cName) {
+          nextCourseMap.set(key, cName);
         }
       }
     }
@@ -1699,7 +1802,25 @@ function updateActiveLessonsRegistry(
   for (const [k, v] of nextIdMap.entries()) validLessonIdMap.set(k, v);
   validLessonTitleMap.clear();
   for (const [k, v] of nextTitleMap.entries()) validLessonTitleMap.set(k, v);
+  validLessonCourseMap.clear();
+  for (const [k, v] of nextCourseMap.entries()) validLessonCourseMap.set(k, v);
   validLessonIdsLoaded = true;
+
+  if (Array.isArray(options?.exercises)) {
+    validLessonExerciseMap.clear();
+    validCourseExerciseMap.clear();
+    for (const ex of options.exercises) {
+      const key = normalizeLessonIdKey(ex?.lessonId || '');
+      if (!key) continue;
+      validLessonExerciseMap.set(key, (validLessonExerciseMap.get(key) || 0) + 1);
+      const cName = validLessonCourseMap.get(key) || state.lessonCatalog[key]?.course || '';
+      const cSlug = courseSlug(normalizeCourseName(cName));
+      if (cSlug) {
+        validCourseExerciseMap.set(cSlug, (validCourseExerciseMap.get(cSlug) || 0) + 1);
+      }
+    }
+    validExercisesLoaded = true;
+  }
 
   const merged = getMergedDataset();
   const { changed } = reconcileDatasetWithLessons(merged, newlyMissing);
@@ -1714,6 +1835,7 @@ async function resolveActiveCurriculumForHydration(): Promise<void> {
   const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
   const hasBackend = lb && typeof lb.hasBackend === 'function' ? lb.hasBackend() : false;
   let loadedLessons: unknown[] | null = null;
+  let loadedExercises: Array<{ lessonId?: string }> | undefined = undefined;
   let authoritativeEmptyAllowed = false;
 
   // Fetch story IDs lightly in parallel so completedLessonIds keeps valid Story IDs
@@ -1740,9 +1862,13 @@ async function resolveActiveCurriculumForHydration(): Promise<void> {
       const apiUrl = lb?.apiUrl ? lb.apiUrl(apiPath) : apiPath;
       const res = await fetch(apiUrl, { cache: 'no-store' });
       if (res.ok) {
-        const data = (await res.json().catch(() => null)) as { success?: boolean; sheets?: { Lessons?: unknown[] } } | null;
+        const data = (await res.json().catch(() => null)) as {
+          success?: boolean;
+          sheets?: { Lessons?: unknown[]; Exercises?: Array<{ lessonId?: string }> };
+        } | null;
         if (data?.success && Array.isArray(data?.sheets?.Lessons)) {
           loadedLessons = data.sheets.Lessons;
+          if (Array.isArray(data?.sheets?.Exercises)) loadedExercises = data.sheets.Exercises;
           authoritativeEmptyAllowed = true;
         }
       }
@@ -1756,9 +1882,13 @@ async function resolveActiveCurriculumForHydration(): Promise<void> {
     try {
       const draftRaw = localStorage.getItem('linguapath_cms_lessons_v2');
       if (draftRaw) {
-        const draft = JSON.parse(draftRaw) as { sheets?: { Lessons?: unknown[] }; pendingSync?: boolean };
+        const draft = JSON.parse(draftRaw) as {
+          sheets?: { Lessons?: unknown[]; Exercises?: Array<{ lessonId?: string }> };
+          pendingSync?: boolean;
+        };
         if (Array.isArray(draft?.sheets?.Lessons) && (!hasBackend || draft?.pendingSync)) {
           loadedLessons = draft.sheets.Lessons;
+          if (Array.isArray(draft?.sheets?.Exercises)) loadedExercises = draft.sheets.Exercises;
           authoritativeEmptyAllowed = true;
         }
       }
@@ -1772,9 +1902,12 @@ async function resolveActiveCurriculumForHydration(): Promise<void> {
     try {
       const res = await fetch(`data/lessons.json?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
-        const data = (await res.json().catch(() => null)) as { sheets?: { Lessons?: unknown[] } } | null;
+        const data = (await res.json().catch(() => null)) as {
+          sheets?: { Lessons?: unknown[]; Exercises?: Array<{ lessonId?: string }> };
+        } | null;
         if (Array.isArray(data?.sheets?.Lessons)) {
           loadedLessons = data.sheets.Lessons;
+          if (Array.isArray(data?.sheets?.Exercises)) loadedExercises = data.sheets.Exercises;
           authoritativeEmptyAllowed = true;
         }
       }
@@ -1795,6 +1928,10 @@ async function resolveActiveCurriculumForHydration(): Promise<void> {
           const sheetName = wb.SheetNames.find((n) => n.toLowerCase() === 'lessons');
           if (sheetName) {
             loadedLessons = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+            const exSheetName = wb.SheetNames.find((n) => n.toLowerCase() === 'exercises');
+            if (exSheetName) {
+              loadedExercises = xlsx.utils.sheet_to_json(wb.Sheets[exSheetName], { defval: '' });
+            }
             authoritativeEmptyAllowed = true;
           }
         }
@@ -1807,7 +1944,10 @@ async function resolveActiveCurriculumForHydration(): Promise<void> {
   await storiesPromise;
 
   if (loadedLessons && (loadedLessons.length > 0 || authoritativeEmptyAllowed)) {
-    updateActiveLessonsRegistry(loadedLessons, { allowEmpty: authoritativeEmptyAllowed });
+    updateActiveLessonsRegistry(loadedLessons, {
+      allowEmpty: authoritativeEmptyAllowed,
+      exercises: loadedExercises
+    });
   }
 }
 
@@ -2325,6 +2465,21 @@ async function submitSubscriptionRequest(params: {
       ? rawPlan
       : 'course';
   const cleanCourse = params.courseName ? normalizeCourseName(params.courseName) : 'HSK 2';
+  if (planType === 'practice_lesson' && params.lessonId && validExercisesLoaded && !lessonHasExercises(params.lessonId)) {
+    throw new Error('Practice Only is unavailable because this lesson has no exercises.');
+  }
+  if (planType === 'practice_course' && validExercisesLoaded && !courseHasExercises(cleanCourse)) {
+    throw new Error('Practice Only is unavailable because this course has no exercises yet.');
+  }
+  const resolvedLessonPricing = params.lessonId
+    ? getLessonPricing({ id: params.lessonId, course: cleanCourse })
+    : null;
+  const resolvedPracticeAmt =
+    planType === 'practice_lesson'
+      ? resolvedLessonPricing
+        ? resolvedLessonPricing.practicePrice
+        : getCoursePracticePrice(cleanCourse)
+      : getCoursePracticePrice(cleanCourse);
   const defaultTitle =
     planType === 'course'
       ? `${cleanCourse} Full Course`
@@ -2341,9 +2496,9 @@ async function submitSubscriptionRequest(params: {
     planType === 'course'
       ? `${Number(getCoursePrice(cleanCourse)).toLocaleString('en-US')} Kyat`
       : planType === 'practice_course' || planType === 'practice_lesson'
-      ? `${Number(getPracticePrice()).toLocaleString('en-US')} Kyat`
+      ? `${Number(resolvedPracticeAmt).toLocaleString('en-US')} Kyat`
       : planType === 'per_lesson'
-      ? '75,000 Kyat'
+      ? `${Number(resolvedLessonPricing?.price || 75000).toLocaleString('en-US')} Kyat`
       : planType === 'annual'
       ? '$149 / yr'
       : '$19 / mo';
@@ -2723,6 +2878,8 @@ async function saveLessonCatalogItems(
     audience?: 'Adult' | 'Kids' | string;
     accessType: 'free' | 'paid' | string;
     price: number;
+    practicePrice?: number;
+    hasExercises?: boolean;
   }>
 ): Promise<void> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
@@ -2731,6 +2888,7 @@ async function saveLessonCatalogItems(
   const cleanItems: LessonCatalogItem[] = [];
   for (const item of items || []) {
     const id = sanitizeDocId(item.lessonId);
+    const rawPrac = Number(item.practicePrice);
     const entry: LessonCatalogItem = {
       lessonId: id,
       title: String(item.title || id).trim(),
@@ -2738,6 +2896,8 @@ async function saveLessonCatalogItems(
       audience: item.audience === 'Kids' ? 'Kids' : 'Adult',
       accessType: item.accessType === 'paid' ? 'paid' : 'free',
       price: Math.max(0, Number(item.price) || 0),
+      practicePrice: Number.isFinite(rawPrac) && rawPrac > 0 ? Math.round(rawPrac) : 0,
+      ...(typeof item.hasExercises === 'boolean' ? { hasExercises: item.hasExercises } : {}),
       updatedBy: state.user.email,
       updatedAt: nowIso
     };
@@ -2948,15 +3108,54 @@ function getCoursePrice(courseName: string): number {
   return target.includes('hsk2') ? 280000 : 100;
 }
 
-function getPracticePrice(): number {
+function getDefaultPracticePrice(): number {
   const cfg = getSiteConfig();
-  return typeof cfg.practicePrice === 'number' ? cfg.practicePrice : 55000;
+  return typeof cfg.practicePrice === 'number' && cfg.practicePrice > 0 ? Math.round(cfg.practicePrice) : 55000;
+}
+
+function getCoursePracticePrice(courseName: string): number {
+  const cfg = getSiteConfig();
+  const target = String(courseName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const readPositiveFromMap = (map: unknown): number | null => {
+    if (!map || typeof map !== 'object') return null;
+    for (const [c, p] of Object.entries(map as Record<string, unknown>)) {
+      const cSlug = String(c || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+      if (cSlug === target) {
+        const n = typeof p === 'string' ? Number(String(p).replace(/,/g, '').trim()) : Number(p);
+        if (Number.isFinite(n) && n > 0) return Math.round(n);
+      }
+    }
+    return null;
+  };
+  const fromState = readPositiveFromMap(cfg.coursePracticePrices);
+  if (fromState !== null) return fromState;
+  try {
+    const winCache = typeof window !== 'undefined' ? (window as any).__INITIAL_SITE_CONFIG_CACHE__ : null;
+    const fromCache = readPositiveFromMap(winCache?.coursePracticePrices);
+    if (fromCache !== null) return fromCache;
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(SITE_CONFIG_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const fromStorage = readPositiveFromMap(parsed?.coursePracticePrices);
+        if (fromStorage !== null) return fromStorage;
+      }
+    }
+  } catch (_) {}
+  return getDefaultPracticePrice();
+}
+
+function getPracticePrice(lessonOrCourse?: string | { id?: string; lessonId?: string; course?: string; category?: string; practicePrice?: unknown }): number {
+  if (!lessonOrCourse) return getDefaultPracticePrice();
+  if (typeof lessonOrCourse === 'string') return getCoursePracticePrice(lessonOrCourse);
+  return getLessonPricing(lessonOrCourse).practicePrice;
 }
 
 async function createCourseAdmin(
   courseName: string,
   price: number,
-  _lessons?: any[]
+  _lessons?: any[],
+  practicePrice?: number
 ): Promise<{ config: SiteConfig }> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
   const trimmed = String(courseName || '').trim();
@@ -2974,9 +3173,22 @@ async function createCourseAdmin(
   });
   nextPrices[trimmed] = Math.max(0, Number(price) || 0);
 
+  const nextPracticePrices: Record<string, number> = {};
+  Object.entries(cfg.coursePracticePrices || {}).forEach(([k, v]) => {
+    if (k.toLowerCase().replace(/[^a-z0-9]+/g, '') !== newSlug) {
+      nextPracticePrices[k] = Number(v) || 0;
+    }
+  });
+  if (typeof practicePrice === 'number' && Number.isFinite(practicePrice) && practicePrice > 0) {
+    nextPracticePrices[trimmed] = Math.round(practicePrice);
+  } else {
+    nextPracticePrices[trimmed] = getDefaultPracticePrice();
+  }
+
   const updatedConfig = await saveSiteConfig({
     courses: nextCourses,
-    coursePrices: nextPrices
+    coursePrices: nextPrices,
+    coursePracticePrices: nextPracticePrices
   });
   return { config: updatedConfig };
 }
@@ -2985,7 +3197,8 @@ async function renameCourseAdmin(
   oldCourseName: string,
   newCourseName: string,
   price: number,
-  lessons?: any[]
+  lessons?: any[],
+  practicePrice?: number
 ): Promise<{ config: SiteConfig; lessonsSheets?: { Lessons: any[] } }> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
   const oldTrimmed = String(oldCourseName || '').trim();
@@ -3009,6 +3222,20 @@ async function renameCourseAdmin(
     }
   });
   nextPrices[newTrimmed] = Math.max(0, Number(price) || 0);
+
+  const existingCoursePrac = getCoursePracticePrice(oldTrimmed);
+  const nextPracticePrices: Record<string, number> = { ...(cfg.coursePracticePrices || {}) };
+  Object.keys(nextPracticePrices).forEach((k) => {
+    const kSlug = k.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (kSlug === oldSlug || kSlug === newSlug) {
+      delete nextPracticePrices[k];
+    }
+  });
+  if (typeof practicePrice === 'number' && Number.isFinite(practicePrice) && practicePrice > 0) {
+    nextPracticePrices[newTrimmed] = Math.round(practicePrice);
+  } else if (existingCoursePrac > 0) {
+    nextPracticePrices[newTrimmed] = existingCoursePrac;
+  }
 
   // If overlay user subscriptions or course passes have oldCourseName, rename them as well
   const overlay = readOverlayStore();
@@ -3057,7 +3284,8 @@ async function renameCourseAdmin(
 
   const updatedConfig = await saveSiteConfig({
     courses: nextCourses,
-    coursePrices: nextPrices
+    coursePrices: nextPrices,
+    coursePracticePrices: nextPracticePrices
   });
 
   return {
@@ -3082,10 +3310,17 @@ async function deleteCourseAdmin(
       delete nextPrices[k];
     }
   });
+  const nextPracticePrices: Record<string, number> = { ...(cfg.coursePracticePrices || {}) };
+  Object.keys(nextPracticePrices).forEach((k) => {
+    if (k.toLowerCase().replace(/[^a-z0-9]+/g, '') === delSlug) {
+      delete nextPracticePrices[k];
+    }
+  });
 
   const updatedConfig = await saveSiteConfig({
     courses: nextCourses,
-    coursePrices: nextPrices
+    coursePrices: nextPrices,
+    coursePracticePrices: nextPracticePrices
   });
   return { config: updatedConfig };
 }
@@ -3163,6 +3398,8 @@ async function exportUsersWorkbook(): Promise<{
     audience: c.audience,
     accessType: c.accessType,
     price: Number(c.price) || 0,
+    practicePrice: Number(c.practicePrice) || 0,
+    hasExercises: typeof c.hasExercises === 'boolean' ? (c.hasExercises ? 'true' : 'false') : 'true',
     updatedBy: c.updatedBy || '',
     updatedAt: String(c.updatedAt || '')
   }));
@@ -3200,7 +3437,7 @@ async function exportUsersWorkbook(): Promise<{
     catRows.length
       ? xlsx.utils.json_to_sheet(catRows)
       : xlsx.utils.aoa_to_sheet([
-          ['lessonId', 'title', 'course', 'audience', 'accessType', 'price', 'updatedBy', 'updatedAt']
+          ['lessonId', 'title', 'course', 'audience', 'accessType', 'price', 'practicePrice', 'hasExercises', 'updatedBy', 'updatedAt']
         ]),
     'Catalog'
   );
@@ -3290,36 +3527,65 @@ async function reloadUsersWorkbookFromRepo(): Promise<ExcelSyncSummary> {
 function getLessonPricing(lesson: {
   id?: string;
   lessonId?: string;
+  course?: string;
+  category?: string;
   categoryKey?: string;
   accessType?: string;
   access?: string;
   isFree?: unknown;
   price?: unknown;
-}): { accessType: 'free' | 'paid'; price: number } {
+  practicePrice?: unknown;
+  hasExercises?: unknown;
+  exerciseCount?: unknown;
+}): { accessType: 'free' | 'paid'; price: number; practicePrice: number; hasExercises: boolean } {
   const id = sanitizeDocId(lesson?.id || lesson?.lessonId || '');
   const catalogEntry = state.lessonCatalog[id];
+  const courseName = getLessonCourseName({
+    course: lesson?.course || catalogEntry?.course || '',
+    category: lesson?.category || ''
+  });
+  const coursePracticeDefault = getCoursePracticePrice(courseName);
+
+  const parsePositive = (val: unknown): number => {
+    const cleaned = typeof val === 'string' ? Number(val.replace(/,/g, '').trim()) : Number(val);
+    return Number.isFinite(cleaned) && cleaned > 0 ? Math.round(cleaned) : 0;
+  };
+
+  const hasEx = lessonHasExercises({
+    id,
+    lessonId: id,
+    hasExercises: typeof lesson?.hasExercises === 'boolean' ? lesson.hasExercises : catalogEntry?.hasExercises,
+    exerciseCount: typeof lesson?.exerciseCount === 'number' ? lesson.exerciseCount : undefined
+  });
+
+  const catPrac = parsePositive(catalogEntry?.practicePrice);
+  const lessonPrac = parsePositive(lesson?.practicePrice);
+  const resolvedPracticePrice = catPrac || lessonPrac || coursePracticeDefault;
+
   if (catalogEntry) {
     return {
       accessType: catalogEntry.accessType === 'paid' ? 'paid' : 'free',
-      price: Number(catalogEntry.price) || (catalogEntry.accessType === 'paid' ? 9 : 0)
+      price: Number(catalogEntry.price) || (catalogEntry.accessType === 'paid' ? 75000 : 0),
+      practicePrice: resolvedPracticePrice,
+      hasExercises: hasEx
     };
   }
 
   const rawAccess = String(lesson?.accessType || lesson?.access || '').trim().toLowerCase();
   if (rawAccess === 'free' || lesson?.isFree === true || String(lesson?.isFree).toLowerCase() === 'true') {
-    return { accessType: 'free', price: 0 };
+    return { accessType: 'free', price: 0, practicePrice: resolvedPracticePrice, hasExercises: hasEx };
   }
   if (rawAccess === 'paid' || rawAccess === 'premium' || lesson?.isFree === false || String(lesson?.isFree).toLowerCase() === 'false') {
-    const p = Number(lesson?.price);
-    return { accessType: 'paid', price: Number.isFinite(p) && p > 0 ? p : 9 };
+    const p = parsePositive(lesson?.price);
+    return { accessType: 'paid', price: p > 0 ? p : 75000, practicePrice: resolvedPracticePrice, hasExercises: hasEx };
   }
 
   const cat = String(lesson?.categoryKey || '').toLowerCase();
   if (cat === 'basics' || cat === 'pinyin' || id.includes('basics') || id.includes('pinyin')) {
-    return { accessType: 'free', price: 0 };
+    return { accessType: 'free', price: 0, practicePrice: resolvedPracticePrice, hasExercises: hasEx };
   }
-  const parsedPrice = Number(lesson?.price);
-  return { accessType: 'paid', price: Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : 9 };
+  const parsedPrice = parsePositive(lesson?.price);
+  return { accessType: 'paid', price: parsedPrice > 0 ? parsedPrice : 75000, practicePrice: resolvedPracticePrice, hasExercises: hasEx };
 }
 
 function hasActiveMembership(): boolean {
@@ -3649,7 +3915,11 @@ const LinguaAuth = {
   getExcelSyncSummary,
   getLessonPricing,
   getCoursePrice,
+  getCoursePracticePrice,
   getPracticePrice,
+  lessonHasExercises,
+  courseHasExercises,
+  getLessonExerciseCount,
   createCourseAdmin,
   renameCourseAdmin,
   deleteCourseAdmin,
