@@ -21,6 +21,7 @@
   let activeCourseName = 'HSK 2'; // 'HSK 2' or custom courses added in Admin
   let activeLesson = null;
   let activeWorkspaceTab = 'video'; // 'video', 'exercises', 'writing', 'pronunciation'
+  let activeLessonExTab = 'reading'; // 'reading' or 'listening'
   let activeWritingCharIndex = 0;
   let exerciseAnswersState = {}; // { questionIndex: { selectedOption, isCorrect } }
   const autoReviewedLessons = new Set();
@@ -1850,10 +1851,14 @@
         .filter((slot) => slot.text || slot.image);
     };
 
+    const readingExercises = normalizedExercises.filter(ex => String(ex.type || '').trim().toLowerCase() !== 'listening');
+    const listeningExercises = normalizedExercises.filter(ex => String(ex.type || '').trim().toLowerCase() === 'listening');
+    const activeExercises = activeLessonExTab === 'listening' ? listeningExercises : readingExercises;
+
     // Build render blocks, grouping shared-image-match / shared-text-match rows sharing the same groupId
     const renderBlocks = [];
     const seenSharedGroups = new Map();
-    normalizedExercises.forEach((ex, idx) => {
+    activeExercises.forEach((ex, idx) => {
       const qNum = idx + 1;
       const isSharedMatch = ex.type === 'shared-image-match' || ex.type === 'shared-text-match';
       if (isSharedMatch) {
@@ -1903,15 +1908,23 @@
         <div class="quiz-header-bar">
           <div>
             <h3 style="margin: 0 0 4px; font-size: 1.3rem; font-weight: 800;">Interactive Practice Exercises</h3>
-            <span class="quiz-progress-counter">${normalizedExercises.length} Questions to Test Your Mastery</span>
+            <span class="quiz-progress-counter">${normalizedExercises.length} Total Questions (${readingExercises.length} Reading, ${listeningExercises.length} Listening)</span>
           </div>
           <div class="quiz-score-badge" id="quizScoreBadge">
             <span>⭐ Score: 0 / ${normalizedExercises.length}</span>
           </div>
         </div>
 
+        <div class="quiz-ex-subtabs">
+          <button type="button" class="quiz-ex-subtab ${activeLessonExTab === 'reading' ? 'active' : ''}" data-lesson-ex-tab="reading">📖 Reading Exercises (${readingExercises.length})</button>
+          <button type="button" class="quiz-ex-subtab ${activeLessonExTab === 'listening' ? 'active' : ''}" data-lesson-ex-tab="listening">🎧 Listening Exercises (${listeningExercises.length})</button>
+        </div>
+
         <div class="quiz-questions-stack">
-          ${renderBlocks.map((block) => {
+          ${
+            activeExercises.length === 0
+              ? `<div style="text-align:center; padding:36px; color:#64748b; font-size:0.95rem;">No ${activeLessonExTab} exercises in this lesson yet.</div>`
+              : renderBlocks.map((block) => {
             if (block.kind === 'shared-match') {
               const slots = block.sharedSlots.length
                 ? block.sharedSlots
@@ -2275,6 +2288,13 @@
             normalizedExercises.length
           );
         }
+      };
+    });
+
+    panel.querySelectorAll('[data-lesson-ex-tab]').forEach((btn) => {
+      btn.onclick = () => {
+        activeLessonExTab = btn.getAttribute('data-lesson-ex-tab');
+        renderExercisesSection(lesson);
       };
     });
 

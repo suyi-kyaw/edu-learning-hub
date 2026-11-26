@@ -15489,3 +15489,66 @@ body.admin-page {
   border-color: rgba(251, 146, 60, 0.4);
 }
 
+/* Exercise Sub-Tabs (Reading vs Listening) */
+.admin-ex-tabs,
+.quiz-ex-subtabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 8px;
+}
+
+[data-theme="dark"] .admin-ex-tabs,
+[data-theme="dark"] .quiz-ex-subtabs {
+  border-bottom-color: #334155;
+}
+
+.admin-ex-tab,
+.quiz-ex-subtab {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+[data-theme="dark"] .admin-ex-tab,
+[data-theme="dark"] .quiz-ex-subtab {
+  background: #1e293b;
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.admin-ex-tab:hover,
+.quiz-ex-subtab:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+[data-theme="dark"] .admin-ex-tab:hover,
+[data-theme="dark"] .quiz-ex-subtab:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.admin-ex-tab.active,
+.quiz-ex-subtab.active {
+  background: #ea580c;
+  border-color: #ea580c;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.25);
+}
+
+[data-theme="dark"] .admin-ex-tab.active,
+[data-theme="dark"] .quiz-ex-subtab.active {
+  background: #ea580c;
+  border-color: #ea580c;
+  color: #ffffff;
+}
+
+

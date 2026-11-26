@@ -2610,7 +2610,7 @@
   }
 
   // --- Reusable Exercise Spreadsheet Importer Modal ---
-  function openExerciseSpreadsheetModal(target = 'lessons', presetLessonId = '') {
+  function openExerciseSpreadsheetModal(target = 'lessons', presetLessonId = '', initialTab = 'reading') {
     try {
       const isStories = target === 'stories';
       const dataObj = isStories ? (state.storiesData || {}) : (state.lessonsData || {});
@@ -2621,6 +2621,7 @@
       state.editingExercisesTarget = target;
       state.editingExercisesLessonId = presetLessonId || (lessonsList[0] ? lessonsList[0].id : '');
       state.editingExercisesList = allExercises;
+      let activeExEditorTab = initialTab || 'reading';
 
       openModal(`
         <div class="admin-panel-head" style="margin-bottom:14px;">
@@ -2641,9 +2642,12 @@
 
       const renderEditorBody = () => {
         const activeLessonId = state.editingExercisesLessonId;
-        const filtered = (state.editingExercisesList || []).filter(
+        const lessonExercises = (state.editingExercisesList || []).filter(
           (e) => !activeLessonId || isSameId(e.lessonId, activeLessonId)
         );
+        const readingExercises = lessonExercises.filter(e => String(e.type || '').trim().toLowerCase() !== 'listening');
+        const listeningExercises = lessonExercises.filter(e => String(e.type || '').trim().toLowerCase() === 'listening');
+        const filtered = activeExEditorTab === 'listening' ? listeningExercises : readingExercises;
 
         const container = document.getElementById('exEditorContent');
         if (!container) return;
@@ -2702,6 +2706,11 @@
             </div>
           </div>
 
+          <div class="admin-ex-tabs">
+            <button type="button" class="admin-ex-tab ${activeExEditorTab === 'reading' ? 'active' : ''}" data-ex-tab="reading">📖 Reading Exercises (${readingExercises.length})</button>
+            <button type="button" class="admin-ex-tab ${activeExEditorTab === 'listening' ? 'active' : ''}" data-ex-tab="listening">🎧 Listening Exercises (${listeningExercises.length})</button>
+          </div>
+
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <strong>Exercises for:</strong>
@@ -2718,11 +2727,14 @@
               </select>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddListeningBtn">+ Listening Exercise</button>
-              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddImgBtn">+ Image Choice</button>
-              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddSharedBtn">+ Shared Top Bank</button>
-              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddFillBtn">+ Write Character (Pinyin)</button>
-              <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="exAddRowBtn">+ Add Text Exercise</button>
+              ${
+                activeExEditorTab === 'listening'
+                  ? `<button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="exAddListeningBtn">+ Add Listening Exercise</button>`
+                  : `<button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddImgBtn">+ Image Choice</button>
+                     <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddSharedBtn">+ Shared Top Bank</button>
+                     <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddFillBtn">+ Write Character (Pinyin)</button>
+                     <button type="button" class="admin-btn admin-btn-primary admin-btn-sm" id="exAddRowBtn">+ Add Reading Exercise</button>`
+              }
             </div>
           </div>
 
@@ -3033,6 +3045,13 @@
           });
           renderEditorBody();
         };
+
+        container.querySelectorAll('[data-ex-tab]').forEach((btn) => {
+          btn.onclick = () => {
+            activeExEditorTab = btn.getAttribute('data-ex-tab');
+            renderEditorBody();
+          };
+        });
 
         const addListeningBtn = document.getElementById('exAddListeningBtn');
         if (addListeningBtn) addListeningBtn.onclick = () => pushNewExercise('listening');
@@ -4590,15 +4609,18 @@
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-dup-lesson="${escapeHTML(
                                 l.id
                               )}">Duplicate</button>
-                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-lesson="${escapeHTML(
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-listen-lesson="${escapeHTML(
                                 l.id
-                              )}">Exercises</button>
+                              )}">Listening</button>
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-reading-lesson="${escapeHTML(
+                                l.id
+                              )}">Reading</button>
                               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-writing-lesson="${escapeHTML(
                                 l.id
                               )}">Writing</button>
-                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-pron-lesson="${escapeHTML(
+                              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-speaking-lesson="${escapeHTML(
                                 l.id
-                              )}">Pronunciation</button>
+                              )}">Speaking</button>
                               <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" data-del-lesson="${escapeHTML(
                                 l.id
                               )}">Delete</button>
@@ -4811,14 +4833,17 @@
         });
       };
     });
-    viewport.querySelectorAll('[data-ex-lesson]').forEach((btn) => {
-      btn.onclick = () => openExerciseSpreadsheetModal('lessons', btn.getAttribute('data-ex-lesson'));
+    viewport.querySelectorAll('[data-listen-lesson]').forEach((btn) => {
+      btn.onclick = () => openExerciseSpreadsheetModal('lessons', btn.getAttribute('data-listen-lesson'), 'listening');
+    });
+    viewport.querySelectorAll('[data-reading-lesson]').forEach((btn) => {
+      btn.onclick = () => openExerciseSpreadsheetModal('lessons', btn.getAttribute('data-reading-lesson'), 'reading');
     });
     viewport.querySelectorAll('[data-writing-lesson]').forEach((btn) => {
       btn.onclick = () => openWritingEditorModal(btn.getAttribute('data-writing-lesson'));
     });
-    viewport.querySelectorAll('[data-pron-lesson]').forEach((btn) => {
-      btn.onclick = () => openPronunciationEditorModal(btn.getAttribute('data-pron-lesson'));
+    viewport.querySelectorAll('[data-speaking-lesson]').forEach((btn) => {
+      btn.onclick = () => openPronunciationEditorModal(btn.getAttribute('data-speaking-lesson'));
     });
     viewport.querySelectorAll('[data-del-lesson]').forEach((btn) => {
       btn.onclick = () => {
