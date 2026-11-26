@@ -476,12 +476,58 @@
 
   function getCoursePricingInfo(courseName) {
     const norm = normalizeCourseName(courseName);
-    const price = window.LinguaAuth && typeof window.LinguaAuth.getCoursePrice === 'function'
-      ? window.LinguaAuth.getCoursePrice(norm)
-      : 120;
-    const practicePrice = window.LinguaAuth && typeof window.LinguaAuth.getPracticePrice === 'function'
+    const targetSlug = courseKeySlug(norm);
+    let price = null;
+
+    if (window.LinguaAuth && typeof window.LinguaAuth.getCoursePrice === 'function') {
+      const apiPrice = window.LinguaAuth.getCoursePrice(norm);
+      if (apiPrice !== null && apiPrice !== undefined && Number.isFinite(Number(apiPrice)) && Number(apiPrice) >= 0) {
+        price = Math.round(Number(apiPrice));
+      }
+    }
+
+    if (price === null) {
+      try {
+        const readPriceFromMap = (map) => {
+          if (!map || typeof map !== 'object') return null;
+          for (const [c, p] of Object.entries(map)) {
+            if (courseKeySlug(c) === targetSlug) {
+              const parsed = typeof p === 'string' ? Number(p.replace(/,/g, '').trim()) : Number(p);
+              if (p !== undefined && p !== null && Number.isFinite(parsed) && parsed >= 0) {
+                return Math.round(parsed);
+              }
+            }
+          }
+          return null;
+        };
+
+        const headCache = typeof window !== 'undefined' ? window.__INITIAL_SITE_CONFIG_CACHE__ : null;
+        price = readPriceFromMap(headCache?.coursePrices);
+
+        if (price === null && typeof localStorage !== 'undefined') {
+          const rawCfg = localStorage.getItem('linguapath_site_config_v1');
+          if (rawCfg) {
+            price = readPriceFromMap(JSON.parse(rawCfg)?.coursePrices);
+          }
+        }
+        if (price === null && typeof localStorage !== 'undefined') {
+          const rawOverlay = localStorage.getItem('linguapath_excel_overlay_store');
+          if (rawOverlay) {
+            price = readPriceFromMap(JSON.parse(rawOverlay)?.siteConfig?.coursePrices);
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (price === null) {
+      price = targetSlug.includes('hsk2') ? 280000 : 100;
+    }
+
+    let practicePrice = window.LinguaAuth && typeof window.LinguaAuth.getPracticePrice === 'function'
       ? window.LinguaAuth.getPracticePrice()
       : 55000;
+    if (!Number.isFinite(Number(practicePrice)) || Number(practicePrice) < 0) practicePrice = 55000;
+
     const accessMode = window.LinguaAuth && typeof window.LinguaAuth.getCourseAccessMode === 'function'
       ? window.LinguaAuth.getCourseAccessMode(norm)
       : (window.LinguaAuth && typeof window.LinguaAuth.hasCourseAccess === 'function' && window.LinguaAuth.hasCourseAccess(norm) ? 'full' : 'none');
@@ -5604,6 +5650,15 @@
         }
       };
     });
+
+    listWrap.querySelectorAll('.lp-inline-price').forEach((priceInput) => {
+      priceInput.addEventListener('blur', () => {
+        const raw = Number(String(priceInput.value || '').replace(/,/g, '').replace(/[^0-9]/g, ''));
+        if (!isNaN(raw) && raw >= 0) {
+          priceInput.value = raw.toLocaleString();
+        }
+      });
+    });
   }
 
   function openExcelManagerModal() {
@@ -5726,7 +5781,8 @@
           const accessSel = row.querySelector(`[data-pricing-access="${lid}"]`);
           const priceInput = row.querySelector(`[data-pricing-price="${lid}"]`);
           const accessType = accessSel?.value === 'paid' ? 'paid' : 'free';
-          const price = accessType === 'free' ? 0 : Math.max(0, Number(priceInput?.value || 75000));
+          const rawPriceStr = String(priceInput?.value || '').replace(/,/g, '').replace(/[^0-9.]/g, '');
+          const price = accessType === 'free' ? 0 : Math.max(0, Number(rawPriceStr) || 75000);
           localMap[lid] = { accessType, price };
 
           const lessonObj = allLessons.find((l) => String(l.id || '').trim() === lid);
@@ -5981,8 +6037,46 @@
   // --- Initialization ---
   async function init() {
     setupWorkspaceTabs();
-    await loadLessonsWorkbook();
-    handleUrlParams();
+
+    const refreshPricingViews = () => {
+      renderCourseSidebar();
+      renderLessonGrid();
+      renderContinueLessonBanner();
+      if (activeLesson) {
+        renderWorkspaceHeader(activeLesson);
+      }
+    };
+
+    window.addEventListener('lingua-site-config-change', refreshPricingViews);
+
+    try {
+      if ('BroadcastChannel' in window) {
+        const syncChannel = new BroadcastChannel('lingua-sync');
+        syncChannel.onmessage = (event) => {
+          if (event?.data?.type === 'site-config') {
+            if (event.data.config && typeof event.data.config === 'object') {
+              window.__INITIAL_SITE_CONFIG_CACHE__ = event.data.config;
+            }
+            refreshPricingViews();
+          }
+        };
+      }
+    } catch (_) {}
+
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'linguapath_site_config_v1' || e.key === 'linguapath_sync_timestamp' || e.key === 'linguapath_local_lesson_pricing' || e.key === 'linguapath_excel_overlay_store') {
+        try {
+          const freshRaw = localStorage.getItem('linguapath_site_config_v1');
+          if (freshRaw) {
+            const parsed = JSON.parse(freshRaw);
+            if (parsed && typeof parsed === 'object') {
+              window.__INITIAL_SITE_CONFIG_CACHE__ = parsed;
+            }
+          }
+        } catch (_) {}
+        refreshPricingViews();
+      }
+    });
 
     window.addEventListener('lingua-auth-change', (e) => {
       const authState = e?.detail;
@@ -5995,10 +6089,8 @@
       }
     });
 
-    window.addEventListener('lingua-site-config-change', () => {
-      renderCourseSidebar();
-      renderLessonGrid();
-    });
+    await loadLessonsWorkbook();
+    handleUrlParams();
 
     window.addEventListener('popstate', () => {
       handleUrlParams();

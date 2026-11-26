@@ -513,7 +513,7 @@ const DEFAULT_SITE_CONFIG = {
   lessonsCta: 'Go to Lessons →',
   courses: ['HSK 2'],
   coursePrices: {
-    'HSK 2': 120
+    'HSK 2': 280000
   },
   practicePrice: 55000,
   contactEmail: 'syndkyaw@gmail.com',
@@ -835,13 +835,20 @@ function normalizeCoursesServer(rawCourses, rawPrices) {
 
 function normalizeCoursePricesServer(rawPrices, coursesList) {
   const out = {};
+  const slugToKey = {};
   const hasExplicitPrices = rawPrices && typeof rawPrices === 'object' && !Array.isArray(rawPrices);
   if (hasExplicitPrices) {
     for (const [k, v] of Object.entries(rawPrices)) {
       if (!String(k || '').trim()) continue;
       const name = normalizeCourseNameServer(k);
-      const n = Number(v);
+      const slug = courseSlugServer(name);
+      const cleanVal = typeof v === 'string' ? v.replace(/,/g, '').trim() : v;
+      const n = Number(cleanVal);
       if (name && Number.isFinite(n) && n >= 0) {
+        if (slug && slugToKey[slug] && slugToKey[slug] !== name) {
+          delete out[slugToKey[slug]];
+        }
+        if (slug) slugToKey[slug] = name;
         out[name] = Math.round(n);
       }
     }
@@ -854,7 +861,10 @@ function normalizeCoursePricesServer(rawPrices, coursesList) {
       const slug = courseSlugServer(cName);
       const existingKey = Object.keys(out).find((k) => courseSlugServer(k) === slug);
       if (!existingKey) {
-        out[cName] = courseSlugServer(cName) === 'hsk2' ? 120 : 120;
+        out[cName] = courseSlugServer(cName) === 'hsk2' ? 280000 : 100;
+      } else if (existingKey !== cName) {
+        out[cName] = out[existingKey];
+        delete out[existingKey];
       }
     }
   }
@@ -1755,17 +1765,21 @@ app.post('/api/requests', requireAuthToken, jsonParser, (req, res) => {
       : body.courseName
       ? normalizeCourseNameServer(body.courseName)
       : '';
+    const courseSlugTarget = courseSlugServer(courseName);
+    const matchedCoursePrice = Object.entries(siteCfg.coursePrices || {}).find(
+      ([k]) => courseSlugServer(k) === courseSlugTarget
+    )?.[1];
     const defaultCoursePrice =
-      (siteCfg.coursePrices && siteCfg.coursePrices[courseName]) != null
-        ? Number(siteCfg.coursePrices[courseName])
-        : 120;
+      matchedCoursePrice != null && Number.isFinite(Number(matchedCoursePrice))
+        ? Math.round(Number(matchedCoursePrice))
+        : (courseSlugTarget === 'hsk2' ? 280000 : 100);
     const planMeta = {
       per_lesson: { name: 'Lesson Pass', amountLabel: '75,000 Kyat / lesson' },
       practice_lesson: {
         name: `${String(body.lessonTitle || 'Lesson').trim()} (Practice Only)`,
         amountLabel: `${practicePriceFormatted} Kyat / lesson`
       },
-      course: { name: `${courseName || 'HSK 2'} Course Pass`, amountLabel: `${defaultCoursePrice} Kyat / course` },
+      course: { name: `${courseName || 'HSK 2'} Course Pass`, amountLabel: `${defaultCoursePrice.toLocaleString('en-US')} Kyat / course` },
       practice_course: {
         name: `${courseName || 'HSK 2'} Course (Practice Only)`,
         amountLabel: `${practicePriceFormatted} Kyat / course`
@@ -1911,8 +1925,11 @@ app.post('/api/admin/courses', requireAdminToken, jsonParser, (req, res) => {
     if (!targetSlug) {
       return res.status(400).json({ success: false, error: 'Course name must contain valid letters or numbers.' });
     }
-    const priceNum = Number(req.body?.price);
-    const price = Number.isFinite(priceNum) && priceNum >= 0 ? Math.round(priceNum) : 120;
+    const rawPrice = typeof req.body?.price === 'string' ? req.body.price.replace(/,/g, '').trim() : req.body?.price;
+    const priceNum = Number(rawPrice);
+    const price = rawPrice !== undefined && rawPrice !== null && rawPrice !== '' && Number.isFinite(priceNum) && priceNum >= 0
+      ? Math.round(priceNum)
+      : (targetSlug === 'hsk2' ? 280000 : 100);
 
     const currentCfg = readSiteConfigFile();
     let lessonsRows = [];
@@ -1976,9 +1993,10 @@ app.put('/api/admin/courses/:courseName', requireAdminToken, jsonParser, (req, r
     }
 
     const prevPrice =
-      Object.entries(currentCfg.coursePrices || {}).find(([k]) => courseSlugServer(k) === oldSlug)?.[1] ?? 120;
-    const priceNum = req.body?.price !== undefined ? Number(req.body.price) : Number(prevPrice);
-    const nextPrice = Number.isFinite(priceNum) && priceNum >= 0 ? Math.round(priceNum) : Math.round(Number(prevPrice) || 120);
+      Object.entries(currentCfg.coursePrices || {}).find(([k]) => courseSlugServer(k) === oldSlug)?.[1] ?? (oldSlug === 'hsk2' ? 280000 : 100);
+    const rawReqPrice = typeof req.body?.price === 'string' ? req.body.price.replace(/,/g, '').trim() : req.body?.price;
+    const priceNum = rawReqPrice !== undefined && rawReqPrice !== null && rawReqPrice !== '' ? Number(rawReqPrice) : Number(prevPrice);
+    const nextPrice = Number.isFinite(priceNum) && priceNum >= 0 ? Math.round(priceNum) : Math.round(Number(prevPrice) || 280000);
 
     // 1. Update site-config courses & coursePrices
     const updatedCourses = [];

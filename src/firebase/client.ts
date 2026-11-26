@@ -188,7 +188,10 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   contactViber: '+95 9 798 123 456',
   featuredReelIds: ['cny_01', 'daily_01', 'kids_01'],
   featuredStoryIds: ['lesson-01'],
-  featuredGameIds: ['game-01']
+  featuredGameIds: ['game-01'],
+  courses: ['HSK 2'],
+  coursePrices: { 'HSK 2': 280000 },
+  practicePrice: 55000
 };
 
 export const CONTACT_INFO = {
@@ -1016,10 +1019,34 @@ function emitState(): void {
   }
 }
 
-function emitSiteConfigChange(): void {
+let linguaSyncChannel: BroadcastChannel | null = null;
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    linguaSyncChannel = new BroadcastChannel('lingua-sync');
+    linguaSyncChannel.onmessage = (event) => {
+      if (event?.data?.type === 'site-config' && event?.data?.config) {
+        state.siteConfig = normalizeSiteConfig(event.data.config);
+        (window as any).__INITIAL_SITE_CONFIG_CACHE__ = state.siteConfig;
+        emitSiteConfigChange(false);
+      }
+    };
+  }
+} catch (_) {}
+
+function emitSiteConfigChange(broadcast = true): void {
   if (typeof CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
     window.dispatchEvent(new CustomEvent('lingua-site-config-change', { detail: state.siteConfig }));
   }
+  if (broadcast && linguaSyncChannel) {
+    try {
+      linguaSyncChannel.postMessage({ type: 'site-config', config: state.siteConfig });
+    } catch (_) {}
+  }
+  try {
+    if (typeof localStorage !== 'undefined' && broadcast) {
+      localStorage.setItem('linguapath_sync_timestamp', String(Date.now()));
+    }
+  } catch (_) {}
 }
 
 function normalizeStrList(
@@ -1107,7 +1134,24 @@ function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteC
     lessonsBullets: Array.isArray(raw?.lessonsBullets) ? normalizeStrList(raw.lessonsBullets, 6, 140, []) : undefined,
     lessonsCta: s(raw?.lessonsCta, 80, (raw as any)?.lessonsCta || 'Go to Lessons →'),
     courses: Array.isArray(raw?.courses) ? normalizeStrList(raw.courses, 60, 80, ['HSK 2']) : ['HSK 2'],
-    coursePrices: raw?.coursePrices && typeof raw.coursePrices === 'object' ? { ...raw.coursePrices } : { 'HSK 2': 120 },
+    coursePrices: (() => {
+      const rawMap = raw?.coursePrices && typeof raw.coursePrices === 'object' ? raw.coursePrices : (DEFAULT_SITE_CONFIG.coursePrices || { 'HSK 2': 280000 });
+      const cleanMap: Record<string, number> = {};
+      const slugToKey: Record<string, string> = {};
+      for (const [k, v] of Object.entries(rawMap)) {
+        const key = String(k || '').trim();
+        if (!key) continue;
+        const slug = key.toLowerCase().replace(/[^a-z0-9]+/g, '');
+        const cleanVal = typeof v === 'string' ? Number(String(v).replace(/,/g, '').trim()) : Number(v);
+        if (!Number.isFinite(cleanVal) || cleanVal < 0) continue;
+        if (slug && slugToKey[slug] && slugToKey[slug] !== key) {
+          delete cleanMap[slugToKey[slug]];
+        }
+        if (slug) slugToKey[slug] = key;
+        cleanMap[key] = Math.round(cleanVal);
+      }
+      return Object.keys(cleanMap).length > 0 ? cleanMap : { ...(DEFAULT_SITE_CONFIG.coursePrices || { 'HSK 2': 280000 }) };
+    })(),
     practicePrice: typeof raw?.practicePrice === 'number' && Number.isFinite(raw.practicePrice) ? Math.round(raw.practicePrice) : 55000,
     adultBadge: s(raw?.adultBadge, 80, DEFAULT_SITE_CONFIG.adultBadge || 'Adults • Comprehensive'),
     adultTitle: s(raw?.adultTitle, 140, DEFAULT_SITE_CONFIG.adultTitle || 'Mandarin for Adults & Professionals'),
@@ -1136,6 +1180,51 @@ function normalizeSiteConfig(raw: Partial<SiteConfig> | null | undefined): SiteC
     updatedBy: raw?.updatedBy,
     updatedAt: raw?.updatedAt
   };
+}
+
+function getInitialSynchronousSiteConfig(): SiteConfig {
+  try {
+    if (typeof window !== 'undefined' && (window as any).__INITIAL_SITE_CONFIG_CACHE__) {
+      return normalizeSiteConfig((window as any).__INITIAL_SITE_CONFIG_CACHE__);
+    }
+    if (typeof localStorage !== 'undefined') {
+      const backupRaw = localStorage.getItem(SITE_CONFIG_STORAGE_KEY);
+      if (backupRaw) {
+        const parsed = JSON.parse(backupRaw);
+        if (parsed && typeof parsed === 'object') {
+          return normalizeSiteConfig(parsed);
+        }
+      }
+      const overlayRaw = localStorage.getItem(OVERLAY_STORAGE_KEY);
+      if (overlayRaw) {
+        const parsedOverlay = JSON.parse(overlayRaw);
+        if (parsedOverlay?.siteConfig && typeof parsedOverlay.siteConfig === 'object') {
+          return normalizeSiteConfig(parsedOverlay.siteConfig);
+        }
+      }
+    }
+  } catch (_) {}
+  return { ...DEFAULT_SITE_CONFIG };
+}
+
+state.siteConfig = getInitialSynchronousSiteConfig();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === SITE_CONFIG_STORAGE_KEY || e.key === 'linguapath_sync_timestamp') {
+      try {
+        const freshRaw = localStorage.getItem(SITE_CONFIG_STORAGE_KEY);
+        if (freshRaw) {
+          const parsed = JSON.parse(freshRaw);
+          if (parsed && typeof parsed === 'object') {
+            state.siteConfig = normalizeSiteConfig(parsed);
+            (window as any).__INITIAL_SITE_CONFIG_CACHE__ = state.siteConfig;
+            emitSiteConfigChange(false);
+          }
+        }
+      } catch (_) {}
+    }
+  });
 }
 
 function applySessionPayload(data: Record<string, unknown>): void {
@@ -1262,10 +1351,13 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   }
 
   state.siteConfig = normalizeSiteConfig(effectiveCfg);
+  if (typeof window !== 'undefined') {
+    (window as any).__INITIAL_SITE_CONFIG_CACHE__ = state.siteConfig;
+  }
   if (state.siteConfig.workerApiBaseUrl && lb && typeof lb.setSiteWorkerBase === 'function') {
     lb.setSiteWorkerBase(state.siteConfig.workerApiBaseUrl);
   }
-  emitSiteConfigChange();
+  emitSiteConfigChange(false);
 
   syncMemoryFromDataset(dataset);
   state.ready = true;
@@ -1846,6 +1938,17 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig 
     updatedAt: nowIso
   });
 
+  // 1. Immediately persist locally with _pendingServerSync until backend confirms
+  const overlay = readOverlayStore();
+  overlay.siteConfig = { ...merged, _pendingServerSync: true } as SiteConfig;
+  writeOverlayStore(overlay);
+  state.siteConfig = merged;
+  if (typeof window !== 'undefined') {
+    (window as any).__INITIAL_SITE_CONFIG_CACHE__ = state.siteConfig;
+  }
+  emitSiteConfigChange(true);
+  emitState();
+
   // Push to live backend / Cloudflare D1 whenever on server host OR connected to Worker URL
   const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
   const isStaticHost = lb?.isStaticGithubHost ? lb.isStaticGithubHost() : false;
@@ -1873,35 +1976,57 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig 
     const apiPath = '/api/admin/site-config';
     const apiUrl = lb?.apiUrl ? lb.apiUrl(apiPath) : apiPath;
 
-    const res = await fetch(apiUrl, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(merged)
-    });
-    const data = (await res.json().catch(() => null)) as any;
-    if (!res.ok || !data || data.success === false) {
-      const serverErr = (data && (data.error || data.message)) || `Server rejected site configuration save (HTTP ${res.status}).`;
-      throw new Error(serverErr);
+    let remoteSavedConfig: SiteConfig | null = null;
+    try {
+      const res = await fetch(apiUrl, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(merged)
+      });
+      const data = (await res.json().catch(() => null)) as any;
+      if (res.ok && data && data.success !== false) {
+        remoteSavedConfig = normalizeSiteConfig(data.config || merged);
+      } else {
+        const serverErr = (data && (data.error || data.message)) || `Server rejected site configuration save (HTTP ${res.status}).`;
+        console.warn('Remote site-config save error, local changes retained:', serverErr);
+      }
+    } catch (err) {
+      console.warn('Network error saving site-config to backend, local changes retained:', err);
     }
 
-    const serverConfig = normalizeSiteConfig(data.config || merged);
-    const overlay = readOverlayStore();
-    overlay.siteConfig = { ...serverConfig };
-    writeOverlayStore(overlay);
-    state.siteConfig = serverConfig;
-    emitSiteConfigChange();
-    emitState();
-    return state.siteConfig;
+    // If a remote Worker URL is active on an Express/Node origin, also sync same-origin server.js
+    // so visitors without a custom Worker override in localStorage receive the exact same prices.
+    const storedOverride = lb?.getStoredOverride ? lb.getStoredOverride() : '';
+    if (!isStaticHost && storedOverride && apiUrl !== apiPath) {
+      try {
+        const localRes = await fetch(apiPath, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(remoteSavedConfig || merged)
+        });
+        const localData = (await localRes.json().catch(() => null)) as any;
+        if (!remoteSavedConfig && localRes.ok && localData && localData.success !== false) {
+          remoteSavedConfig = normalizeSiteConfig(localData.config || merged);
+        }
+      } catch (_) {}
+    }
+
+    if (remoteSavedConfig) {
+      const freshOverlay = readOverlayStore();
+      freshOverlay.siteConfig = { ...remoteSavedConfig };
+      writeOverlayStore(freshOverlay);
+      state.siteConfig = remoteSavedConfig;
+      if (typeof window !== 'undefined') {
+        (window as any).__INITIAL_SITE_CONFIG_CACHE__ = state.siteConfig;
+      }
+      emitSiteConfigChange(true);
+      emitState();
+      return state.siteConfig;
+    }
+
+    return Object.assign({}, state.siteConfig, { _savedLocallyOnly: true });
   }
 
-  // Static GitHub Pages without remote Worker URL: persist to browser overlay only & notify caller
-  const overlay = readOverlayStore();
-  overlay.siteConfig = { ...merged, _pendingServerSync: true } as SiteConfig;
-  writeOverlayStore(overlay);
-
-  state.siteConfig = normalizeSiteConfig(overlay.siteConfig);
-  emitSiteConfigChange();
-  emitState();
   return Object.assign({}, state.siteConfig, { _savedLocallyOnly: true });
 }
 
@@ -1925,9 +2050,40 @@ function getCoursePrice(courseName: string): number {
   const target = String(courseName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   for (const [c, p] of Object.entries(cfg.coursePrices || {})) {
     const cSlug = String(c || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-    if (cSlug === target) return Number(p) || 0;
+    if (cSlug === target) {
+      const n = Number(p);
+      if (p !== undefined && p !== null && Number.isFinite(n)) return Math.max(0, n);
+    }
   }
-  return target.includes('hsk2') ? 120 : 100;
+  // Secondary check: look directly in head cache or localStorage in case state.siteConfig was not yet hydrated
+  try {
+    const winCache = typeof window !== 'undefined' ? (window as any).__INITIAL_SITE_CONFIG_CACHE__ : null;
+    if (winCache?.coursePrices && typeof winCache.coursePrices === 'object') {
+      for (const [c, p] of Object.entries(winCache.coursePrices)) {
+        const cSlug = String(c || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+        if (cSlug === target) {
+          const n = Number(p);
+          if (p !== undefined && p !== null && Number.isFinite(n)) return Math.max(0, n);
+        }
+      }
+    }
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(SITE_CONFIG_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.coursePrices && typeof parsed.coursePrices === 'object') {
+          for (const [c, p] of Object.entries(parsed.coursePrices)) {
+            const cSlug = String(c || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+            if (cSlug === target) {
+              const n = Number(p);
+              if (p !== undefined && p !== null && Number.isFinite(n)) return Math.max(0, n);
+            }
+          }
+        }
+      }
+    }
+  } catch (_) {}
+  return target.includes('hsk2') ? 280000 : 100;
 }
 
 function getPracticePrice(): number {
@@ -1948,7 +2104,12 @@ async function createCourseAdmin(
   const currentCourses = Array.isArray(cfg.courses) ? [...cfg.courses] : ['HSK 2'];
   const exists = currentCourses.some((c) => c.toLowerCase().replace(/[^a-z0-9]+/g, '') === newSlug);
   const nextCourses = exists ? currentCourses : [...currentCourses, trimmed];
-  const nextPrices: Record<string, number> = { ...(cfg.coursePrices || {}) };
+  const nextPrices: Record<string, number> = {};
+  Object.entries(cfg.coursePrices || {}).forEach(([k, v]) => {
+    if (k.toLowerCase().replace(/[^a-z0-9]+/g, '') !== newSlug) {
+      nextPrices[k] = Number(v) || 0;
+    }
+  });
   nextPrices[trimmed] = Math.max(0, Number(price) || 0);
 
   const updatedConfig = await saveSiteConfig({
@@ -1979,13 +2140,12 @@ async function renameCourseAdmin(
     nextCourses.push(newTrimmed);
   }
   const nextPrices: Record<string, number> = { ...(cfg.coursePrices || {}) };
-  if (oldSlug !== newSlug) {
-    Object.keys(nextPrices).forEach((k) => {
-      if (k.toLowerCase().replace(/[^a-z0-9]+/g, '') === oldSlug) {
-        delete nextPrices[k];
-      }
-    });
-  }
+  Object.keys(nextPrices).forEach((k) => {
+    const kSlug = k.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (kSlug === oldSlug || kSlug === newSlug) {
+      delete nextPrices[k];
+    }
+  });
   nextPrices[newTrimmed] = Math.max(0, Number(price) || 0);
 
   // If overlay user subscriptions or course passes have oldCourseName, rename them as well

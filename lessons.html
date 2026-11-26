@@ -32,6 +32,12 @@
         if (l) { var p3 = JSON.parse(l); if (p3 && p3.sheets) { window.__INITIAL_LESSONS_CACHE__ = p3.sheets.Lessons || []; window.__INITIAL_GAMES_CACHE__ = p3.sheets.Games || []; } }
         var pr = localStorage.getItem("linguapath_local_lesson_pricing");
         if (pr) { window.__INITIAL_PRICING_CACHE__ = JSON.parse(pr); }
+        var cfg = localStorage.getItem("linguapath_site_config_v1");
+        if (cfg) { window.__INITIAL_SITE_CONFIG_CACHE__ = JSON.parse(cfg); }
+        else {
+          var ov = localStorage.getItem("linguapath_excel_overlay_store");
+          if (ov) { var pov = JSON.parse(ov); if (pov && pov.siteConfig) window.__INITIAL_SITE_CONFIG_CACHE__ = pov.siteConfig; }
+        }
       } catch (e) {}
     })();
   </script>

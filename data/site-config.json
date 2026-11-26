@@ -34,7 +34,7 @@
     "HSK 2"
   ],
   "coursePrices": {
-    "HSK 2": 120
+    "HSK 2": 280000
   },
   "practicePrice": 55000,
   "contactEmail": "syndkyaw@gmail.com",
@@ -52,5 +52,5 @@
   "featuredGameIds": [
     "game-01"
   ],
-  "updatedAt": "2026-11-24T02:07:05.529Z"
+  "updatedAt": "2026-11-26T09:02:42.772Z"
 }

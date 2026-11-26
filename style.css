@@ -13532,22 +13532,32 @@ body.admin-page {
 
 .admin-shell {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: calc(100vh - 72px);
+  align-items: start;
 }
 
 .admin-sidebar {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 71px;
+  max-height: calc(100vh - 71px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: #ffffff;
   border-right: 1px solid #e2e8f0;
   padding: 20px 14px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  z-index: 40;
+  scrollbar-width: thin;
 }
 
 [data-theme="dark"] .admin-sidebar {
   background: #0f172a;
   border-right-color: #1e293b;
+  border-bottom-color: #1e293b;
 }
 
 .admin-sidebar-header {
@@ -14276,18 +14286,42 @@ body.admin-page {
     grid-template-columns: 1fr;
   }
   .admin-sidebar {
+    position: -webkit-sticky;
+    position: sticky;
+    top: 60px;
+    max-height: none;
+    overflow-y: visible;
     border-right: none;
     border-bottom: 1px solid #e2e8f0;
-    padding: 14px;
+    padding: 10px 14px;
+    z-index: 50;
+    background: #ffffff;
+    gap: 8px;
+  }
+  [data-theme="dark"] .admin-sidebar {
+    background: #0f172a;
+    border-bottom-color: #1e293b;
+  }
+  .admin-sidebar-header {
+    display: none;
   }
   .admin-nav-list {
     flex-direction: row;
     overflow-x: auto;
-    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+    gap: 8px;
+  }
+  .admin-nav-list::-webkit-scrollbar {
+    display: none;
   }
   .admin-nav-btn {
     white-space: nowrap;
     width: auto;
+    flex-shrink: 0;
+    padding: 8px 12px;
+    font-size: 0.84rem;
   }
   .admin-grid-2,
   .admin-grid-3 {

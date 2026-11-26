@@ -78,6 +78,19 @@
     return num.toLocaleString();
   }
 
+  function getCoursePriceFromMap(map, courseName, fallback) {
+    const targetSlug = courseSlug(courseName);
+    if (map && typeof map === 'object') {
+      for (const [k, v] of Object.entries(map)) {
+        if (courseSlug(k) === targetSlug && v !== undefined && v !== null && v !== '') {
+          const n = parsePriceInput(v, NaN);
+          if (Number.isFinite(n) && n >= 0) return n;
+        }
+      }
+    }
+    return fallback;
+  }
+
   function toast(msg, type = 'success') {
     if (window.LinguaAuthUI && typeof window.LinguaAuthUI.showToast === 'function') {
       window.LinguaAuthUI.showToast(msg, type);
@@ -1993,8 +2006,8 @@
                   coursesList.length
                     ? coursesList
                         .map((cName) => {
-                          const fallbackVal = courseSlug(cName) === 'hsk2' ? 120 : 100;
-                          const curPrice = Number(coursePricesMap[cName]) || fallbackVal;
+                          const fallbackVal = courseSlug(cName) === 'hsk2' ? 280000 : 100;
+                          const curPrice = getCoursePriceFromMap(coursePricesMap, cName, fallbackVal);
                           return `
                       <div class="admin-field" style="display:grid; grid-template-columns: 1fr 140px; gap:10px; align-items:center;">
                         <label style="margin:0; font-weight:700;">${escapeHTML(cName)}</label>
@@ -2130,6 +2143,12 @@
 
     wireMediaPickers(viewport);
 
+    viewport.querySelectorAll('[data-cfg-course-price]').forEach((inp) => {
+      inp.addEventListener('blur', () => {
+        inp.value = formatPriceInput(inp.value);
+      });
+    });
+
     const logoInput = document.getElementById('cfgSiteLogoUrl');
     const syncLogoDualPreview = () => {
       const urlVal = getMediaInputValue(logoInput);
@@ -2253,7 +2272,13 @@
           .map((s) => s.trim())
           .filter(Boolean);
 
-      const coursePrices = Object.assign({}, coursePricesMap);
+      const coursePrices = {};
+      Object.entries(coursePricesMap).forEach(([k, v]) => {
+        const kSlug = courseSlug(k);
+        if (!coursesList.some((c) => courseSlug(c) === kSlug)) {
+          coursePrices[k] = parsePriceInput(v);
+        }
+      });
       form.querySelectorAll('[data-cfg-course-price]').forEach((inp) => {
         const cname = inp.getAttribute('data-cfg-course-price');
         if (cname) {
@@ -4132,8 +4157,8 @@
                   ? coursesList
                       .map((cName) => {
                         const countInCourse = lessons.filter((l) => courseSlug(getLessonCourse(l)) === courseSlug(cName)).length;
-                        const fallbackPrice = courseSlug(cName) === 'hsk2' ? 120 : 100;
-                        const priceVal = Number(cfgCoursePrices[cName]) || fallbackPrice;
+                        const fallbackPrice = courseSlug(cName) === 'hsk2' ? 280000 : 100;
+                        const priceVal = getCoursePriceFromMap(cfgCoursePrices, cName, fallbackPrice);
                         const delDisabledAttr =
                           countInCourse > 0
                             ? `disabled title="Cannot delete '${escapeHTML(cName)}' while ${countInCourse} lesson(s) belong to it. Move or delete those lessons first."`
@@ -4281,20 +4306,46 @@
 
     wireWorkbookSyncToolbar(viewport);
 
+    viewport.querySelectorAll('[data-ls-course-price]').forEach((inp) => {
+      inp.addEventListener('blur', () => {
+        inp.value = formatPriceInput(inp.value);
+      });
+    });
+
     const saveCoursePricesBtn = document.getElementById('btnSaveCoursePricesInline');
     if (saveCoursePricesBtn) {
       saveCoursePricesBtn.onclick = async () => {
-        const nextPrices = Object.assign({}, cfgCoursePrices);
+        const nextPrices = {};
+        Object.entries(cfgCoursePrices).forEach(([k, v]) => {
+          const kSlug = courseSlug(k);
+          if (!coursesList.some((c) => courseSlug(c) === kSlug)) {
+            nextPrices[k] = parsePriceInput(v);
+          }
+        });
         viewport.querySelectorAll('[data-ls-course-price]').forEach((inp) => {
           const cname = inp.getAttribute('data-ls-course-price');
           if (cname) nextPrices[cname] = parsePriceInput(inp.value);
         });
+        saveCoursePricesBtn.disabled = true;
+        saveCoursePricesBtn.textContent = 'Saving…';
         try {
+          setSyncStatus('Saving course prices…');
           const saved = await window.LinguaAuth.saveSiteConfig({ courses: coursesList, coursePrices: nextPrices });
           state.siteConfig = saved;
-          toast('Saved course pass prices in Kyat.');
+          if (saved && saved._savedLocallyOnly) {
+            setSyncStatus('Saved locally (Static Host)');
+            toast('Saved in browser storage only — connect Worker URL or Export site-config.json to update visitors.', 'info');
+          } else {
+            setSyncStatus('Saved & Synced');
+            toast('Saved course pass prices in Kyat.');
+          }
+          renderActiveTab();
         } catch (err) {
+          setSyncStatus('Save failed');
           toast(err instanceof Error ? err.message : 'Failed to save course prices.', 'error');
+        } finally {
+          saveCoursePricesBtn.disabled = false;
+          saveCoursePricesBtn.textContent = 'Save Course Prices';
         }
       };
     }
@@ -4308,8 +4359,8 @@
       btn.onclick = () => {
         const cname = btn.getAttribute('data-edit-course');
         const countInCourse = lessons.filter((l) => courseSlug(getLessonCourse(l)) === courseSlug(cname)).length;
-        const fallbackPrice = courseSlug(cname) === 'hsk2' ? 120 : 100;
-        const curPrice = Number(cfgCoursePrices[cname]) || fallbackPrice;
+        const fallbackPrice = courseSlug(cname) === 'hsk2' ? 280000 : 100;
+        const curPrice = getCoursePriceFromMap(cfgCoursePrices, cname, fallbackPrice);
         openEditCourseModal(cname, curPrice, countInCourse);
       };
     });
@@ -4505,6 +4556,9 @@
     `);
     document.getElementById('ccCloseBtn').onclick = closeModal;
     document.getElementById('ccCancelBtn').onclick = closeModal;
+    document.getElementById('ccPrice').addEventListener('blur', (e) => {
+      e.target.value = formatPriceInput(e.target.value);
+    });
     document.getElementById('ccName').focus();
     document.getElementById('createCourseForm').onsubmit = async (e) => {
       e.preventDefault();
@@ -4563,6 +4617,9 @@
     `);
     document.getElementById('ecCloseBtn').onclick = closeModal;
     document.getElementById('ecCancelBtn').onclick = closeModal;
+    document.getElementById('ecPrice').addEventListener('blur', (e) => {
+      e.target.value = formatPriceInput(e.target.value);
+    });
     document.getElementById('editCourseForm').onsubmit = async (e) => {
       e.preventDefault();
       const errBox = document.getElementById('ecErrorBox');
@@ -4983,7 +5040,8 @@
         const knownCourses = getAdminCoursesList();
         if (!knownCourses.some((c) => courseSlug(c) === courseSlug(courseName))) {
           try {
-            const cOut = await doCreateCourse(courseName, 120, state.lessonsData.Lessons || []);
+            const defaultNewCoursePrice = courseSlug(courseName) === 'hsk2' ? 280000 : 120000;
+            const cOut = await doCreateCourse(courseName, defaultNewCoursePrice, state.lessonsData.Lessons || []);
             if (cOut && cOut.config) state.siteConfig = cOut.config;
           } catch (_) {}
         }

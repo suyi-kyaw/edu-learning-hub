@@ -26,7 +26,7 @@
     course: {
       id: 'course',
       title: 'Full Course Pass',
-      defaultAmount: '120 Kyat',
+      defaultAmount: '280,000 Kyat',
       subtitle: 'Video & Practice for every lesson inside a selected course (e.g., HSK 1, HSK 2)'
     },
     practice_course: {
@@ -46,7 +46,7 @@
     lessonId: '',
     lessonTitle: '',
     courseName: 'HSK 2',
-    amountLabel: '120 Kyat',
+    amountLabel: '280,000 Kyat',
     contactChannel: 'viber'
   };
   let pendingPostAuthSubscribe = null;
@@ -247,9 +247,39 @@
   function resolveCoursePriceKyat(courseName) {
     const api = getAuthApi();
     if (api && typeof api.getCoursePrice === 'function') {
-      return api.getCoursePrice(courseName);
+      const p = api.getCoursePrice(courseName);
+      if (p !== undefined && p !== null && Number.isFinite(Number(p)) && Number(p) >= 0) {
+        return Math.round(Number(p));
+      }
     }
-    return 120;
+    const target = String(courseName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const readMap = (map) => {
+      if (!map || typeof map !== 'object') return null;
+      for (const [c, p] of Object.entries(map)) {
+        if (String(c || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === target) {
+          const parsed = typeof p === 'string' ? Number(p.replace(/,/g, '').trim()) : Number(p);
+          if (p !== undefined && p !== null && Number.isFinite(parsed) && parsed >= 0) {
+            return Math.round(parsed);
+          }
+        }
+      }
+      return null;
+    };
+    try {
+      const headPrice = readMap(window.__INITIAL_SITE_CONFIG_CACHE__?.coursePrices);
+      if (headPrice !== null) return headPrice;
+      const rawCfg = localStorage.getItem('linguapath_site_config_v1');
+      if (rawCfg) {
+        const lsPrice = readMap(JSON.parse(rawCfg)?.coursePrices);
+        if (lsPrice !== null) return lsPrice;
+      }
+      const rawOverlay = localStorage.getItem('linguapath_excel_overlay_store');
+      if (rawOverlay) {
+        const ovPrice = readMap(JSON.parse(rawOverlay)?.siteConfig?.coursePrices);
+        if (ovPrice !== null) return ovPrice;
+      }
+    } catch (_) {}
+    return target.includes('hsk2') ? 280000 : 100;
   }
 
   function resolvePracticePriceKyat() {
@@ -304,7 +334,7 @@
         lessonId: '',
         lessonTitle: `${firstCourse} Full Course`,
         courseName: firstCourse,
-        amountLabel: `${cPrice} Kyat`,
+        amountLabel: `${Number(cPrice).toLocaleString('en-US')} Kyat`,
         contactChannel: subscribeContext.contactChannel || 'viber'
       };
     }
@@ -2308,6 +2338,16 @@
 
   window.addEventListener('lingua-auth-change', (e) => {
     onAuthChange(e.detail);
+  });
+
+  window.addEventListener('lingua-site-config-change', () => {
+    if (modalMode === 'subscribe') {
+      const activeEl = document.activeElement;
+      const isEditingInput = activeEl && activeEl.closest('#linguaAuthModal') && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
+      if (!isEditingInput) {
+        renderModal();
+      }
+    }
   });
 
   // Also re-sync header UI after header.js finishes injecting header.html
