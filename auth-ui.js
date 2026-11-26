@@ -84,20 +84,85 @@
     return age !== null ? `${age} yrs` : '';
   }
 
+  function normalizeLessonKeyUI(raw) {
+    return String(raw || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').toLowerCase();
+  }
+
+  function getValidatedEntitlements(state, profile) {
+    const api = getAuthApi();
+    let validIds = api && typeof api.getValidLessonIds === 'function' ? api.getValidLessonIds() : null;
+    if (!validIds && window.LinguaLessons && typeof window.LinguaLessons.getAllLessonIds === 'function') {
+      const fromPage = window.LinguaLessons.getAllLessonIds();
+      if (Array.isArray(fromPage) && fromPage.length > 0) validIds = fromPage;
+    }
+    const validSet = Array.isArray(validIds)
+      ? new Set(validIds.map(normalizeLessonKeyUI).filter(Boolean))
+      : null;
+
+    const filterLessons = (arr) => {
+      if (!Array.isArray(arr)) return [];
+      const out = [];
+      const seen = new Set();
+      for (const id of arr) {
+        const key = normalizeLessonKeyUI(id);
+        if (!key || seen.has(key)) continue;
+        if (validSet !== null && !validSet.has(key)) continue;
+        seen.add(key);
+        out.push(String(id).trim());
+      }
+      return out;
+    };
+
+    const unlockedCourses = Array.isArray(profile?.subscribedCourses) ? profile.subscribedCourses.filter(Boolean) : [];
+    const practiceCourses = Array.isArray(profile?.practiceCourses) ? profile.practiceCourses.filter(Boolean) : [];
+    const unlockedLessons = filterLessons(profile?.subscribedLessonIds);
+    const practiceLessons = filterLessons(profile?.practiceLessonIds);
+
+    const hasTimePass =
+      Boolean(api && typeof api.hasActiveMembership === 'function' && api.hasActiveMembership()) &&
+      (profile?.membershipPlan === 'monthly' || profile?.membershipPlan === 'annual');
+
+    const hasAnyEntitlement =
+      unlockedCourses.length > 0 ||
+      practiceCourses.length > 0 ||
+      unlockedLessons.length > 0 ||
+      practiceLessons.length > 0 ||
+      hasTimePass;
+
+    return {
+      unlockedCourses,
+      practiceCourses,
+      unlockedLessons,
+      practiceLessons,
+      hasTimePass,
+      isEffectivelyActive: Boolean(state?.isAdmin || hasAnyEntitlement)
+    };
+  }
+
+  function formatLessonLabelUI(lessonId) {
+    const api = getAuthApi();
+    const title = api && typeof api.getLessonTitle === 'function' ? api.getLessonTitle(lessonId) : '';
+    if (title && title.trim() && title.trim() !== String(lessonId).trim()) {
+      return `${title.trim()} (${lessonId})`;
+    }
+    return String(lessonId);
+  }
+
   function formatMembershipBadge(state) {
     const profile = state?.profile;
     if (!state?.user) return '';
     if (state.isAdmin) return 'Admin';
     if (!profile) return 'Free';
-    const hasCourses = (profile.subscribedCourses || []).length > 0;
-    const hasPracticeCourses = (profile.practiceCourses || []).length > 0;
-    const hasLessons = (profile.subscribedLessonIds || []).length > 0;
-    const hasPracticeLessons = (profile.practiceLessonIds || []).length > 0;
-    if (profile.membershipStatus === 'active' || hasCourses || hasLessons || hasPracticeCourses || hasPracticeLessons) {
-      if ((hasCourses && profile.membershipPlan !== 'practice_course') || profile.membershipPlan === 'course') return 'Course Active';
-      if (hasPracticeCourses || profile.membershipPlan === 'practice_course') return 'Practice Course';
-      if ((hasLessons && profile.membershipPlan !== 'practice_lesson') || profile.membershipPlan === 'per_lesson') return 'Lesson Pass';
-      if (hasPracticeLessons || profile.membershipPlan === 'practice_lesson') return 'Practice Pass';
+    const ent = getValidatedEntitlements(state, profile);
+    const hasCourses = ent.unlockedCourses.length > 0;
+    const hasPracticeCourses = ent.practiceCourses.length > 0;
+    const hasLessons = ent.unlockedLessons.length > 0;
+    const hasPracticeLessons = ent.practiceLessons.length > 0;
+    if (ent.isEffectivelyActive) {
+      if ((hasCourses && profile.membershipPlan !== 'practice_course') || (profile.membershipPlan === 'course' && hasCourses)) return 'Course Active';
+      if (hasPracticeCourses) return 'Practice Course';
+      if ((hasLessons && profile.membershipPlan !== 'practice_lesson') || (profile.membershipPlan === 'per_lesson' && hasLessons)) return 'Lesson Pass';
+      if (hasPracticeLessons) return 'Practice Pass';
       return 'Active';
     }
     if ((state.myRequests || []).some((r) => r.status === 'pending')) {
@@ -778,10 +843,13 @@
     const myRequests = state.myRequests || [];
     const pendingReq = myRequests.find((r) => r.status === 'pending');
 
-    const unlockedCourses = profile?.subscribedCourses || [];
-    const practiceCourses = profile?.practiceCourses || [];
-    const unlockedLessons = profile?.subscribedLessonIds || [];
-    const practiceLessons = profile?.practiceLessonIds || [];
+    const ent = getValidatedEntitlements(state, profile);
+    const unlockedCourses = ent.unlockedCourses;
+    const practiceCourses = ent.practiceCourses;
+    const unlockedLessons = ent.unlockedLessons;
+    const practiceLessons = ent.practiceLessons;
+    const unlockedLessonLabels = unlockedLessons.map(formatLessonLabelUI);
+    const practiceLessonLabels = practiceLessons.map(formatLessonLabelUI);
 
     let membershipHeadline = 'Free Learner Plan';
     let membershipSub = 'Access free starter lessons. Subscribe to individual lessons, courses, or the 55,000 Kyat Practice-Only tier anytime.';
@@ -791,24 +859,28 @@
       membershipHeadline = 'Administrator · Full Access';
       membershipSub = 'You have full access to all courses, lessons, pricing settings, and member approvals.';
       membershipTone = 'active';
-    } else if (unlockedCourses.length > 0 && profile?.membershipPlan !== 'practice_course') {
+    } else if (unlockedCourses.length > 0 && (profile?.membershipPlan !== 'practice_course' || practiceCourses.length === 0)) {
       membershipTone = 'active';
       membershipHeadline = `Active Course Access · ${unlockedCourses.join(', ')}`;
       membershipSub = `All lessons inside ${unlockedCourses.join(', ')} are unlocked (Video + Practice).`;
-    } else if (practiceCourses.length > 0 || (unlockedCourses.length > 0 && profile?.membershipPlan === 'practice_course')) {
-      const pList = practiceCourses.length > 0 ? practiceCourses : unlockedCourses;
+    } else if (practiceCourses.length > 0) {
       membershipTone = 'active';
-      membershipHeadline = `Practice-Only Course · ${pList.join(', ')}`;
-      membershipSub = `Exercises, Writing & Pronunciation unlocked for ${pList.join(', ')} (No Video). Upgrade anytime for Video Lessons.`;
-    } else if (unlockedLessons.length > 0 && profile?.membershipPlan !== 'practice_lesson') {
+      membershipHeadline = `Practice-Only Course · ${practiceCourses.join(', ')}`;
+      membershipSub = `Exercises, Writing & Pronunciation unlocked for ${practiceCourses.join(', ')} (No Video). Upgrade anytime for Video Lessons.`;
+    } else if (unlockedLessons.length > 0) {
       membershipTone = 'active';
       membershipHeadline = `Active · ${unlockedLessons.length} Lesson${unlockedLessons.length > 1 ? 's' : ''} Unlocked`;
-      membershipSub = `Unlocked Lesson IDs: ${unlockedLessons.join(', ')}`;
-    } else if (practiceLessons.length > 0 || (unlockedLessons.length > 0 && profile?.membershipPlan === 'practice_lesson')) {
-      const plList = practiceLessons.length > 0 ? practiceLessons : unlockedLessons;
+      membershipSub = `Unlocked Lessons: ${unlockedLessonLabels.join(', ')}`;
+    } else if (practiceLessons.length > 0) {
       membershipTone = 'active';
-      membershipHeadline = `Practice-Only · ${plList.length} Lesson${plList.length > 1 ? 's' : ''} Unlocked`;
-      membershipSub = `Exercises, Writing & Pronunciation unlocked (No Video) for: ${plList.join(', ')}`;
+      membershipHeadline = `Practice-Only · ${practiceLessons.length} Lesson${practiceLessons.length > 1 ? 's' : ''} Unlocked`;
+      membershipSub = `Exercises, Writing & Pronunciation unlocked (No Video) for: ${practiceLessonLabels.join(', ')}`;
+    } else if (ent.hasTimePass) {
+      membershipTone = 'active';
+      membershipHeadline = 'Active All-Access Pass';
+      membershipSub = profile?.membershipExpiresAt
+        ? `All curriculum lessons unlocked through ${profile.membershipExpiresAt}.`
+        : 'All curriculum lessons unlocked.';
     } else if (pendingReq) {
       membershipTone = 'pending';
       membershipHeadline = `Pending QR Verification · ${pendingReq.lessonTitle}`;
@@ -822,9 +894,7 @@
     const canUpgradeMore =
       !state.isAdmin &&
       (membershipTone !== 'active' ||
-        profile?.membershipPlan === 'per_lesson' ||
-        profile?.membershipPlan === 'practice_lesson' ||
-        profile?.membershipPlan === 'practice_course' ||
+        (unlockedCourses.length === 0 && !ent.hasTimePass) ||
         practiceCourses.length > 0 ||
         practiceLessons.length > 0);
 
@@ -855,7 +925,7 @@
         </div>
         ${
           unlockedLessons.length > 0 && unlockedCourses.length > 0
-            ? `<div class="lp-membership-extra">Full Lesson Passes: ${escapeHTML(unlockedLessons.join(', '))}</div>`
+            ? `<div class="lp-membership-extra">Full Lesson Passes: ${escapeHTML(unlockedLessonLabels.join(', '))}</div>`
             : ''
         }
         ${
@@ -865,7 +935,7 @@
         }
         ${
           practiceLessons.length > 0 && (unlockedLessons.length > 0 || unlockedCourses.length > 0 || practiceCourses.length > 0)
-            ? `<div class="lp-membership-extra">Practice-Only Lessons (No Video): ${escapeHTML(practiceLessons.join(', '))}</div>`
+            ? `<div class="lp-membership-extra">Practice-Only Lessons (No Video): ${escapeHTML(practiceLessonLabels.join(', '))}</div>`
             : ''
         }
       </div>

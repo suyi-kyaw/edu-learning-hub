@@ -25,9 +25,20 @@ export interface UserProfile {
   dob: string;
   role: 'student' | 'admin';
   membershipStatus: 'free' | 'pending' | 'active' | 'expired';
-  membershipPlan: 'none' | 'monthly' | 'annual' | 'per_lesson';
+  membershipPlan:
+    | 'none'
+    | 'monthly'
+    | 'annual'
+    | 'per_lesson'
+    | 'course'
+    | 'practice_lesson'
+    | 'practice_course';
   membershipExpiresAt: string;
   subscribedLessonIds: string[];
+  subscribedCourses?: string[];
+  practiceLessonIds?: string[];
+  practiceCourses?: string[];
+  coursePasses?: string[];
   linkedProviders: string[];
   mustChangePassword?: boolean;
   createdAt?: unknown;
@@ -40,8 +51,9 @@ export interface SubscriptionRequest {
   username: string;
   userEmail: string;
   userPhone: string;
-  planType: 'monthly' | 'annual' | 'per_lesson';
+  planType: 'monthly' | 'annual' | 'per_lesson' | 'course' | 'practice_lesson' | 'practice_course';
   lessonId: string;
+  courseName?: string;
   lessonTitle: string;
   amountLabel: string;
   contactChannel: 'email' | 'viber';
@@ -56,7 +68,8 @@ export interface SubscriptionRequest {
 export interface LessonCatalogItem {
   lessonId: string;
   title: string;
-  audience: 'Adult' | 'Kids';
+  course?: string;
+  audience: 'Adult' | 'Kids' | string;
   accessType: 'free' | 'paid';
   price: number;
   updatedBy: string;
@@ -303,6 +316,48 @@ export function calculateAge(dobString?: string | null): number | null {
 function sanitizeDocId(raw: string): string {
   const cleaned = String(raw || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-');
   return cleaned.slice(0, 128) || 'item-' + Date.now();
+}
+
+function normalizeCourseName(raw?: unknown): string {
+  const str = String(raw || '').trim();
+  if (!str) return 'HSK 2';
+  const compact = str.toLowerCase().replace(/[\s_-]+/g, '');
+  if (compact === 'hsk1') return 'HSK 1';
+  if (compact === 'hsk2') return 'HSK 2';
+  if (compact === 'hsk3') return 'HSK 3';
+  if (compact === 'hsk4') return 'HSK 4';
+  return str.slice(0, 80);
+}
+
+function courseSlug(raw?: unknown): string {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '');
+}
+
+function getLessonCourseName(lesson?: { course?: string; courseName?: string; category?: string } | null): string {
+  if (!lesson || typeof lesson !== 'object') return 'HSK 2';
+  const raw = String(lesson.course || lesson.courseName || lesson.category || '').trim();
+  return raw ? normalizeCourseName(raw) : 'HSK 2';
+}
+
+function normalizePlan(raw?: unknown): UserProfile['membershipPlan'] {
+  const p = String(raw || 'none').trim().toLowerCase();
+  if (p === 'practice_lesson' || p === 'practice-lesson') return 'practice_lesson';
+  if (p === 'practice_course' || p === 'practice-course') return 'practice_course';
+  if (p === 'per_lesson' || p === 'lesson') return 'per_lesson';
+  if (p === 'course' || p === 'hsk') return 'course';
+  if (p === 'monthly') return 'monthly';
+  if (p === 'annual') return 'annual';
+  return 'none';
+}
+
+function normalizeLessonIdKey(raw?: unknown): string {
+  return String(raw || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_\-]+/g, '-')
+    .toLowerCase();
 }
 
 function generateRandomHex(bytes = 16): string {
@@ -687,9 +742,7 @@ function parseWorkbookToDataset(wb: { SheetNames: string[]; Sheets: Record<strin
       const membershipStatus: UserProfile['membershipStatus'] =
         rawStatus === 'active' || rawStatus === 'pending' || rawStatus === 'expired' ? rawStatus : 'free';
 
-      const rawPlan = String(row.membershipPlan || 'none').trim().toLowerCase();
-      const membershipPlan: UserProfile['membershipPlan'] =
-        rawPlan === 'monthly' || rawPlan === 'annual' || rawPlan === 'per_lesson' ? rawPlan : 'none';
+      const membershipPlan = normalizePlan(row.membershipPlan);
 
       const profile: UserProfile = {
         uid,
@@ -701,7 +754,10 @@ function parseWorkbookToDataset(wb: { SheetNames: string[]; Sheets: Record<strin
         membershipStatus,
         membershipPlan,
         membershipExpiresAt: normalizeExcelDob(row.membershipExpiresAt),
-        subscribedLessonIds: parseCommaList(row.subscribedLessonIds),
+        subscribedLessonIds: parseCommaList(row.subscribedLessonIds).map((id) => sanitizeDocId(id)),
+        subscribedCourses: parseCommaList(row.subscribedCourses || row.SubscribedCourses).map((c) => normalizeCourseName(c)),
+        practiceLessonIds: parseCommaList(row.practiceLessonIds || row.PracticeLessonIds).map((id) => sanitizeDocId(id)),
+        practiceCourses: parseCommaList(row.practiceCourses || row.PracticeCourses).map((c) => normalizeCourseName(c)),
         linkedProviders: ['password'],
         mustChangePassword: normalizeBool(row.mustChangePassword, false),
         createdAt: String(row.createdAt || '').trim(),
@@ -720,9 +776,16 @@ function parseWorkbookToDataset(wb: { SheetNames: string[]; Sheets: Record<strin
       const requestId = String(row.requestId || '').trim();
       const userId = String(row.userId || '').trim();
       if (!requestId || !userId) continue;
-      const planRaw = String(row.planType || 'monthly').trim().toLowerCase();
+      const planRaw = String(row.planType || 'course').trim().toLowerCase();
       const planType: SubscriptionRequest['planType'] =
-        planRaw === 'annual' || planRaw === 'per_lesson' ? planRaw : 'monthly';
+        planRaw === 'annual' ||
+        planRaw === 'monthly' ||
+        planRaw === 'per_lesson' ||
+        planRaw === 'practice_lesson' ||
+        planRaw === 'course' ||
+        planRaw === 'practice_course'
+          ? planRaw
+          : 'course';
       const statusRaw = String(row.status || 'pending').trim().toLowerCase();
       const status: SubscriptionRequest['status'] =
         statusRaw === 'approved' || statusRaw === 'rejected' ? statusRaw : 'pending';
@@ -733,7 +796,8 @@ function parseWorkbookToDataset(wb: { SheetNames: string[]; Sheets: Record<strin
         userEmail: String(row.userEmail || '').trim().toLowerCase(),
         userPhone: String(row.userPhone || '').trim(),
         planType,
-        lessonId: String(row.lessonId || '').trim(),
+        lessonId: row.lessonId ? sanitizeDocId(String(row.lessonId)) : '',
+        courseName: row.courseName ? normalizeCourseName(row.courseName) : '',
         lessonTitle: String(row.lessonTitle || '').trim(),
         amountLabel: String(row.amountLabel || '').trim(),
         contactChannel: String(row.contactChannel || '').trim().toLowerCase() === 'email' ? 'email' : 'viber',
@@ -779,6 +843,7 @@ function parseWorkbookToDataset(wb: { SheetNames: string[]; Sheets: Record<strin
       dataset.lessonCatalog[lessonId] = {
         lessonId,
         title: String(row.title || lessonId).trim(),
+        course: row.course ? normalizeCourseName(row.course) : undefined,
         audience: String(row.audience || '').trim().toLowerCase() === 'kids' ? 'Kids' : 'Adult',
         accessType: String(row.accessType || '').trim().toLowerCase() === 'paid' ? 'paid' : 'free',
         price: Math.max(0, Number(row.price) || 0),
@@ -1224,7 +1289,526 @@ if (typeof window !== 'undefined') {
         }
       } catch (_) {}
     }
+    if (e.key === 'linguapath_cms_lessons_v2') {
+      try {
+        const draftRaw = localStorage.getItem('linguapath_cms_lessons_v2');
+        if (draftRaw) {
+          const parsed = JSON.parse(draftRaw) as { sheets?: { Lessons?: unknown[] } };
+          if (Array.isArray(parsed?.sheets?.Lessons)) {
+            updateActiveLessonsRegistry(parsed.sheets.Lessons, { allowEmpty: true });
+          }
+        }
+      } catch (_) {}
+    }
+    if (e.key === OVERLAY_STORAGE_KEY || e.key === 'linguapath_sync_timestamp') {
+      try {
+        const merged = getMergedDataset();
+        reconcileDatasetWithLessons(merged);
+        syncMemoryFromDataset(merged);
+        emitState();
+      } catch (_) {}
+    }
   });
+
+  window.addEventListener('linguapath-content-change', (e: Event) => {
+    const detail = (e as CustomEvent)?.detail as { domain?: string; sheets?: { Lessons?: unknown[] } } | undefined;
+    if (detail?.domain === 'lessons' && Array.isArray(detail?.sheets?.Lessons)) {
+      updateActiveLessonsRegistry(detail.sheets.Lessons, { allowEmpty: true });
+    }
+  });
+}
+
+// --- Active Curriculum Lesson Registry & Deleted-Lesson Reconciliation ---
+
+let validLessonIdsLoaded = false;
+const validLessonIdMap = new Map<string, string>(); // normalized lower key -> canonical id
+const validLessonTitleMap = new Map<string, string>(); // normalized lower key -> display title
+let validStoryIdSet: Set<string> | null = null;
+
+function isLessonIdActive(lessonId: string): boolean {
+  const key = normalizeLessonIdKey(lessonId);
+  if (!key) return false;
+  if (!validLessonIdsLoaded) return true;
+  return validLessonIdMap.has(key);
+}
+
+function getValidLessonIds(): string[] | null {
+  if (!validLessonIdsLoaded) return null;
+  return Array.from(validLessonIdMap.values());
+}
+
+function getLessonTitle(lessonId: string): string {
+  const key = normalizeLessonIdKey(lessonId);
+  if (!key) return '';
+  if (validLessonTitleMap.has(key)) {
+    return validLessonTitleMap.get(key) || '';
+  }
+  const cat = state.lessonCatalog[sanitizeDocId(lessonId)] || state.lessonCatalog[lessonId];
+  return cat?.title ? String(cat.title) : '';
+}
+
+function isTimePassActive(profile: UserProfile): boolean {
+  if (profile.membershipPlan !== 'monthly' && profile.membershipPlan !== 'annual') return false;
+  if (!profile.membershipExpiresAt) return true;
+  const expTime = Date.parse(profile.membershipExpiresAt + 'T23:59:59Z');
+  return Number.isNaN(expTime) || expTime >= Date.now();
+}
+
+function arraysEqualStr(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function reconcileProfileEntitlements(
+  profile: UserProfile,
+  explicitDeletedSet: Set<string>
+): { profile: UserProfile; changed: boolean } {
+  const origLessons = Array.isArray(profile.subscribedLessonIds) ? profile.subscribedLessonIds : [];
+  const origPracticeLessons = Array.isArray(profile.practiceLessonIds) ? profile.practiceLessonIds : [];
+  const origCourses = Array.isArray(profile.subscribedCourses) ? profile.subscribedCourses : [];
+  const origPracticeCourses = Array.isArray(profile.practiceCourses) ? profile.practiceCourses : [];
+
+  const filterLessonArr = (arr: string[]): string[] => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const rawId of arr) {
+      const cleanId = String(rawId || '').trim();
+      const key = normalizeLessonIdKey(cleanId);
+      if (!key) continue;
+      if (explicitDeletedSet.has(key)) continue;
+      if (validLessonIdsLoaded && !validLessonIdMap.has(key)) continue;
+      const canonical = validLessonIdMap.get(key) || sanitizeDocId(cleanId);
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(canonical);
+      }
+    }
+    return out;
+  };
+
+  const dedupeCourses = (arr: string[]): string[] => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const c of arr) {
+      const norm = normalizeCourseName(c);
+      const slug = courseSlug(norm);
+      if (!slug || seen.has(slug)) continue;
+      seen.add(slug);
+      out.push(norm);
+    }
+    return out;
+  };
+
+  const nextLessons = filterLessonArr(origLessons);
+  const nextPracticeLessons = filterLessonArr(origPracticeLessons);
+  const nextCourses = dedupeCourses(origCourses);
+  const nextPracticeCourses = dedupeCourses(origPracticeCourses);
+
+  let changed =
+    !arraysEqualStr(nextLessons, origLessons) ||
+    !arraysEqualStr(nextPracticeLessons, origPracticeLessons) ||
+    !arraysEqualStr(nextCourses, origCourses) ||
+    !arraysEqualStr(nextPracticeCourses, origPracticeCourses);
+
+  let nextStatus = profile.membershipStatus || 'free';
+  let nextPlan = normalizePlan(profile.membershipPlan);
+
+  const isAdm = profile.role === 'admin' || String(profile.email || '').trim().toLowerCase() === ADMIN_EMAIL;
+  if (!isAdm) {
+    const hasFullCourses = nextCourses.length > 0;
+    const hasPracCourses = nextPracticeCourses.length > 0;
+    const hasFullLessons = nextLessons.length > 0;
+    const hasPracLessons = nextPracticeLessons.length > 0;
+    const hasAnyEntitlement = hasFullCourses || hasPracCourses || hasFullLessons || hasPracLessons;
+    const hasTimePass = isTimePassActive({ ...profile, membershipPlan: nextPlan });
+
+    if (!hasAnyEntitlement && !hasTimePass) {
+      if (nextStatus === 'active') {
+        nextStatus = 'free';
+        changed = true;
+      }
+      if (nextPlan !== 'none' && nextStatus === 'free') {
+        nextPlan = 'none';
+        changed = true;
+      }
+    } else if (hasAnyEntitlement && nextStatus === 'active') {
+      const matchesCurrent =
+        (nextPlan === 'course' && hasFullCourses) ||
+        (nextPlan === 'practice_course' && hasPracCourses) ||
+        (nextPlan === 'per_lesson' && hasFullLessons) ||
+        (nextPlan === 'practice_lesson' && hasPracLessons) ||
+        hasTimePass;
+      if (!matchesCurrent) {
+        nextPlan = hasFullCourses
+          ? 'course'
+          : hasPracCourses
+          ? 'practice_course'
+          : hasFullLessons
+          ? 'per_lesson'
+          : 'practice_lesson';
+        changed = true;
+      }
+    }
+  }
+
+  if (nextPlan !== profile.membershipPlan || nextStatus !== profile.membershipStatus) {
+    changed = true;
+  }
+
+  const nextProfile: UserProfile = {
+    ...profile,
+    membershipStatus: nextStatus,
+    membershipPlan: nextPlan,
+    subscribedLessonIds: nextLessons,
+    subscribedCourses: nextCourses,
+    practiceLessonIds: nextPracticeLessons,
+    practiceCourses: nextPracticeCourses
+  };
+
+  return { profile: nextProfile, changed };
+}
+
+function cleanLocalLessonArtifacts(explicitDeletedSet: Set<string>): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const pricingRaw = localStorage.getItem('linguapath_local_lesson_pricing');
+    if (pricingRaw) {
+      const pricingMap = JSON.parse(pricingRaw) as Record<string, unknown>;
+      if (pricingMap && typeof pricingMap === 'object') {
+        let mapChanged = false;
+        for (const key of Object.keys(pricingMap)) {
+          const normKey = normalizeLessonIdKey(key);
+          if (explicitDeletedSet.has(normKey) || (validLessonIdsLoaded && !validLessonIdMap.has(normKey))) {
+            delete pricingMap[key];
+            mapChanged = true;
+          }
+        }
+        if (mapChanged) {
+          localStorage.setItem('linguapath_local_lesson_pricing', JSON.stringify(pricingMap));
+        }
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  try {
+    const activeRaw = localStorage.getItem('linguapath_active_lesson');
+    if (activeRaw) {
+      const parsed = JSON.parse(activeRaw) as { id?: string; lessonId?: string };
+      const activeKey = normalizeLessonIdKey(parsed?.id || parsed?.lessonId || '');
+      if (activeKey && (explicitDeletedSet.has(activeKey) || (validLessonIdsLoaded && !validLessonIdMap.has(activeKey)))) {
+        localStorage.removeItem('linguapath_active_lesson');
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function reconcileDatasetWithLessons(
+  dataset: ExcelDataset,
+  explicitDeletedIds: string[] = []
+): { dataset: ExcelDataset; changed: boolean } {
+  const explicitDeletedSet = new Set(
+    (explicitDeletedIds || []).map((id) => normalizeLessonIdKey(id)).filter(Boolean)
+  );
+  if (!validLessonIdsLoaded && explicitDeletedSet.size === 0) {
+    return { dataset, changed: false };
+  }
+
+  const nowIso = new Date().toISOString();
+  const overlay = readOverlayStore();
+  let overlayDirty = false;
+  let datasetDirty = false;
+
+  // 1. Prune lessonCatalog
+  for (const catKey of Object.keys(dataset.lessonCatalog || {})) {
+    const normKey = normalizeLessonIdKey(catKey);
+    if (explicitDeletedSet.has(normKey) || (validLessonIdsLoaded && !validLessonIdMap.has(normKey))) {
+      delete dataset.lessonCatalog[catKey];
+      datasetDirty = true;
+    }
+  }
+  for (const catKey of Object.keys(overlay.lessonCatalog || {})) {
+    const normKey = normalizeLessonIdKey(catKey);
+    if (explicitDeletedSet.has(normKey) || (validLessonIdsLoaded && !validLessonIdMap.has(normKey))) {
+      delete overlay.lessonCatalog[catKey];
+      overlayDirty = true;
+    }
+  }
+  for (const catKey of Object.keys(baseWorkbookStore.lessonCatalog || {})) {
+    const normKey = normalizeLessonIdKey(catKey);
+    if (explicitDeletedSet.has(normKey) || (validLessonIdsLoaded && !validLessonIdMap.has(normKey))) {
+      delete baseWorkbookStore.lessonCatalog[catKey];
+    }
+  }
+
+  // 2. Reconcile user accounts in merged dataset & overlay
+  for (const [uid, rec] of Object.entries(dataset.users || {})) {
+    if (!rec?.profile) continue;
+    const { profile: cleaned, changed } = reconcileProfileEntitlements(rec.profile, explicitDeletedSet);
+    if (changed) {
+      cleaned.updatedAt = nowIso;
+      dataset.users[uid] = { ...rec, profile: cleaned };
+      overlay.users[uid] = { profile: cleaned, passwordHash: rec.passwordHash };
+      overlayDirty = true;
+      datasetDirty = true;
+    }
+  }
+  for (const [uid, ovRec] of Object.entries(overlay.users || {})) {
+    if (!ovRec?.profile) continue;
+    const { profile: cleaned, changed } = reconcileProfileEntitlements(ovRec.profile, explicitDeletedSet);
+    if (changed) {
+      cleaned.updatedAt = nowIso;
+      overlay.users[uid] = { ...ovRec, profile: cleaned };
+      overlayDirty = true;
+    }
+  }
+
+  // 3. Prune deleted lessons from userProgress.completedLessonIds (preserve story IDs!)
+  const pruneCompleted = (ids: string[] | undefined): { next: string[]; changed: boolean } => {
+    const orig = Array.isArray(ids) ? ids : [];
+    const next = orig.filter((id) => {
+      const key = normalizeLessonIdKey(id);
+      if (!key) return false;
+      if (explicitDeletedSet.has(key)) return false;
+      if (validLessonIdsLoaded && validStoryIdSet && !validLessonIdMap.has(key) && !validStoryIdSet.has(key)) {
+        return false;
+      }
+      return true;
+    });
+    return { next, changed: !arraysEqualStr(next, orig) };
+  };
+
+  for (const [uid, prog] of Object.entries(dataset.progress || {})) {
+    if (!prog) continue;
+    const { next, changed } = pruneCompleted(prog.completedLessonIds);
+    if (changed) {
+      const updated = { ...prog, completedLessonIds: next, updatedAt: nowIso };
+      dataset.progress[uid] = updated;
+      overlay.progress[uid] = updated;
+      overlayDirty = true;
+      datasetDirty = true;
+    }
+  }
+  for (const [uid, prog] of Object.entries(overlay.progress || {})) {
+    if (!prog) continue;
+    const { next, changed } = pruneCompleted(prog.completedLessonIds);
+    if (changed) {
+      overlay.progress[uid] = { ...prog, completedLessonIds: next, updatedAt: nowIso };
+      overlayDirty = true;
+    }
+  }
+
+  // 4. Mark pending lesson-specific requests for deleted lessons as rejected
+  const checkReqDeleted = (req: SubscriptionRequest | undefined): SubscriptionRequest | null => {
+    if (!req || req.status !== 'pending') return null;
+    if (req.planType !== 'per_lesson' && req.planType !== 'practice_lesson') return null;
+    const key = normalizeLessonIdKey(req.lessonId);
+    if (!key) return null;
+    if (explicitDeletedSet.has(key) || (validLessonIdsLoaded && !validLessonIdMap.has(key))) {
+      return {
+        ...req,
+        status: 'rejected',
+        adminNote: 'Lesson removed from curriculum',
+        updatedAt: nowIso
+      };
+    }
+    return null;
+  };
+
+  for (const [reqId, req] of Object.entries(dataset.requests || {})) {
+    const updatedReq = checkReqDeleted(req);
+    if (updatedReq) {
+      dataset.requests[reqId] = updatedReq;
+      overlay.requests[reqId] = updatedReq;
+      overlayDirty = true;
+      datasetDirty = true;
+    }
+  }
+  for (const [reqId, req] of Object.entries(overlay.requests || {})) {
+    const updatedReq = checkReqDeleted(req);
+    if (updatedReq) {
+      overlay.requests[reqId] = updatedReq;
+      overlayDirty = true;
+    }
+  }
+
+  cleanLocalLessonArtifacts(explicitDeletedSet);
+
+  if (overlayDirty) {
+    writeOverlayStore(overlay);
+  }
+
+  return { dataset, changed: datasetDirty || overlayDirty };
+}
+
+function updateActiveLessonsRegistry(
+  lessonsOrIds: unknown[],
+  options?: { allowEmpty?: boolean; explicitDeletedIds?: string[] }
+): boolean {
+  if (!Array.isArray(lessonsOrIds)) return false;
+  if (lessonsOrIds.length === 0 && !options?.allowEmpty) {
+    if (options?.explicitDeletedIds?.length) {
+      const merged = getMergedDataset();
+      const { changed } = reconcileDatasetWithLessons(merged, options.explicitDeletedIds);
+      if (changed) {
+        syncMemoryFromDataset(merged);
+        emitState();
+      }
+      return changed;
+    }
+    return false;
+  }
+
+  const prevKeys = validLessonIdsLoaded ? new Set(validLessonIdMap.keys()) : new Set<string>();
+  const nextIdMap = new Map<string, string>();
+  const nextTitleMap = new Map<string, string>();
+
+  for (const entry of lessonsOrIds) {
+    if (typeof entry === 'string') {
+      const rawId = entry.trim();
+      const key = normalizeLessonIdKey(rawId);
+      if (key) nextIdMap.set(key, rawId);
+    } else if (entry && typeof entry === 'object') {
+      const obj = entry as { id?: string; lessonId?: string; title?: string };
+      const rawId = String(obj.id || obj.lessonId || '').trim();
+      const key = normalizeLessonIdKey(rawId);
+      if (key) {
+        nextIdMap.set(key, rawId);
+        if (obj.title) {
+          nextTitleMap.set(key, String(obj.title).trim());
+        }
+      }
+    }
+  }
+
+  const newlyMissing: string[] = [...(options?.explicitDeletedIds || [])];
+  if (validLessonIdsLoaded) {
+    for (const oldKey of prevKeys) {
+      if (!nextIdMap.has(oldKey)) {
+        newlyMissing.push(oldKey);
+      }
+    }
+  }
+
+  validLessonIdMap.clear();
+  for (const [k, v] of nextIdMap.entries()) validLessonIdMap.set(k, v);
+  validLessonTitleMap.clear();
+  for (const [k, v] of nextTitleMap.entries()) validLessonTitleMap.set(k, v);
+  validLessonIdsLoaded = true;
+
+  const merged = getMergedDataset();
+  const { changed } = reconcileDatasetWithLessons(merged, newlyMissing);
+  if (changed) {
+    syncMemoryFromDataset(merged);
+    emitState();
+  }
+  return changed;
+}
+
+async function resolveActiveCurriculumForHydration(): Promise<void> {
+  const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
+  const hasBackend = lb && typeof lb.hasBackend === 'function' ? lb.hasBackend() : false;
+  let loadedLessons: unknown[] | null = null;
+  let authoritativeEmptyAllowed = false;
+
+  // Fetch story IDs lightly in parallel so completedLessonIds keeps valid Story IDs
+  const storiesPromise = (async () => {
+    try {
+      const sRes = await fetch(`data/stories.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (sRes.ok) {
+        const sJson = (await sRes.json().catch(() => null)) as { sheets?: { Lessons?: Array<{ id?: string }> } } | null;
+        if (Array.isArray(sJson?.sheets?.Lessons)) {
+          validStoryIdSet = new Set(
+            sJson!.sheets!.Lessons.map((s) => normalizeLessonIdKey(s?.id)).filter(Boolean)
+          );
+        }
+      }
+    } catch {
+      // ignore story preload error
+    }
+  })();
+
+  // 1. Live D1 / Express backend lessons bundle when backend exists
+  if (hasBackend) {
+    try {
+      const apiPath = `/api/database/bundle?domain=lessons&t=${Date.now()}`;
+      const apiUrl = lb?.apiUrl ? lb.apiUrl(apiPath) : apiPath;
+      const res = await fetch(apiUrl, { cache: 'no-store' });
+      if (res.ok) {
+        const data = (await res.json().catch(() => null)) as { success?: boolean; sheets?: { Lessons?: unknown[] } } | null;
+        if (data?.success && Array.isArray(data?.sheets?.Lessons)) {
+          loadedLessons = data.sheets.Lessons;
+          authoritativeEmptyAllowed = true;
+        }
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  // 2. Pending or static local draft if no live server data
+  if (!loadedLessons) {
+    try {
+      const draftRaw = localStorage.getItem('linguapath_cms_lessons_v2');
+      if (draftRaw) {
+        const draft = JSON.parse(draftRaw) as { sheets?: { Lessons?: unknown[] }; pendingSync?: boolean };
+        if (Array.isArray(draft?.sheets?.Lessons) && (!hasBackend || draft?.pendingSync)) {
+          loadedLessons = draft.sheets.Lessons;
+          authoritativeEmptyAllowed = true;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Express /api/lessons-data or static data/lessons.json
+  if (!loadedLessons) {
+    try {
+      const res = await fetch(`data/lessons.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = (await res.json().catch(() => null)) as { sheets?: { Lessons?: unknown[] } } | null;
+        if (Array.isArray(data?.sheets?.Lessons)) {
+          loadedLessons = data.sheets.Lessons;
+          authoritativeEmptyAllowed = true;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 4. Fallback to data/lessons.xlsx if SheetJS is present
+  if (!loadedLessons) {
+    try {
+      const xlsx = getXlsxGlobal();
+      if (xlsx) {
+        const res = await fetch(`data/lessons.xlsx?t=${Date.now()}`, { cache: 'no-store' });
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          const wb = xlsx.read(buf, { type: 'array' });
+          const sheetName = wb.SheetNames.find((n) => n.toLowerCase() === 'lessons');
+          if (sheetName) {
+            loadedLessons = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+            authoritativeEmptyAllowed = true;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  await storiesPromise;
+
+  if (loadedLessons && (loadedLessons.length > 0 || authoritativeEmptyAllowed)) {
+    updateActiveLessonsRegistry(loadedLessons, { allowEmpty: authoritativeEmptyAllowed });
+  }
 }
 
 function applySessionPayload(data: Record<string, unknown>): void {
@@ -1307,13 +1891,18 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
 
   // 2. Load data/users.xlsx and merge browser overlay
   await loadBaseWorkbookFromExcel(forceExcelReload);
-  const dataset = getMergedDataset();
+  const initialOverlay = readOverlayStore();
 
   const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
-  const candidateWorkerBase = String(dataset.siteConfig?.workerApiBaseUrl || baseCfg?.workerApiBaseUrl || '').trim();
+  const candidateWorkerBase = String(initialOverlay.siteConfig?.workerApiBaseUrl || baseCfg?.workerApiBaseUrl || '').trim();
   if (candidateWorkerBase && lb && typeof lb.setSiteWorkerBase === 'function') {
     lb.setSiteWorkerBase(candidateWorkerBase);
   }
+
+  // 3. Resolve active lessons catalog across ALL pages before finalizing session state
+  await resolveActiveCurriculumForHydration();
+  const dataset = getMergedDataset();
+  reconcileDatasetWithLessons(dataset);
 
   const canReachBackend = !lb || typeof lb.hasBackend !== 'function' || lb.hasBackend();
   if (canReachBackend) {
@@ -1422,9 +2011,12 @@ async function registerWithEmail(params: {
     dob: cleanDob,
     role: shouldClaimAdmin ? 'admin' : 'student',
     membershipStatus: shouldClaimAdmin ? 'active' : 'free',
-    membershipPlan: shouldClaimAdmin ? 'annual' : 'none',
+    membershipPlan: shouldClaimAdmin ? 'course' : 'none',
     membershipExpiresAt: '',
     subscribedLessonIds: [],
+    subscribedCourses: [],
+    practiceLessonIds: [],
+    practiceCourses: [],
     linkedProviders: ['password'],
     mustChangePassword: false,
     createdAt: nowIso,
@@ -1453,7 +2045,12 @@ async function loginWithEmail(email: string, password: string): Promise<AuthUser
 
   // Always check fresh data/users.xlsx merged with browser registrations
   await loadBaseWorkbookFromExcel(true);
+  if (!validLessonIdsLoaded) {
+    await resolveActiveCurriculumForHydration().catch(() => {});
+  }
   const dataset = getMergedDataset();
+  reconcileDatasetWithLessons(dataset);
+
   const matchedEntry = Object.values(dataset.users).find(
     (entry) => entry.profile.email.toLowerCase() === cleanEmail
   );
@@ -1602,6 +2199,10 @@ async function adminUpdateUserDetails(
     membershipStatus?: UserProfile['membershipStatus'];
     membershipPlan?: UserProfile['membershipPlan'];
     membershipExpiresAt?: string;
+    subscribedLessonIds?: string[];
+    subscribedCourses?: string[];
+    practiceLessonIds?: string[];
+    practiceCourses?: string[];
   }
 ): Promise<void> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
@@ -1610,18 +2211,56 @@ async function adminUpdateUserDetails(
   if (!entry) throw new Error('User not found.');
 
   const nowIso = new Date().toISOString();
-  const nextProfile: UserProfile = {
+  const filterLessons = (ids: string[] | undefined, fb: string[] | undefined): string[] => {
+    const raw = Array.isArray(ids) ? ids : Array.isArray(fb) ? fb : [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const id of raw) {
+      const clean = sanitizeDocId(id);
+      const key = normalizeLessonIdKey(clean);
+      if (!key || !isLessonIdActive(clean) || seen.has(key)) continue;
+      seen.add(key);
+      out.push(validLessonIdMap.get(key) || clean);
+    }
+    return out;
+  };
+  const dedupeCoursesList = (courses: string[] | undefined, fb: string[] | undefined): string[] => {
+    const raw = Array.isArray(courses) ? courses : Array.isArray(fb) ? fb : [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const c of raw) {
+      const norm = normalizeCourseName(c);
+      const slug = courseSlug(norm);
+      if (!slug || seen.has(slug)) continue;
+      seen.add(slug);
+      out.push(norm);
+    }
+    return out;
+  };
+
+  let nextStatus = updates.membershipStatus !== undefined ? updates.membershipStatus : entry.profile.membershipStatus;
+  let nextPlan = updates.membershipPlan !== undefined ? normalizePlan(updates.membershipPlan) : normalizePlan(entry.profile.membershipPlan);
+  if (nextStatus === 'free') {
+    nextPlan = 'none';
+  }
+
+  let nextProfile: UserProfile = {
     ...entry.profile,
     username: updates.username !== undefined ? String(updates.username).trim().slice(0, 60) : entry.profile.username,
     email: updates.email !== undefined ? String(updates.email).trim().toLowerCase().slice(0, 160) : entry.profile.email,
     phoneNumber: updates.phoneNumber !== undefined ? String(updates.phoneNumber).trim().slice(0, 32) : entry.profile.phoneNumber,
     dob: updates.dob !== undefined ? normalizeExcelDob(updates.dob) : entry.profile.dob,
     role: updates.role === 'admin' || updates.role === 'student' ? updates.role : entry.profile.role,
-    membershipStatus: updates.membershipStatus !== undefined ? updates.membershipStatus : entry.profile.membershipStatus,
-    membershipPlan: updates.membershipPlan !== undefined ? updates.membershipPlan : entry.profile.membershipPlan,
+    membershipStatus: nextStatus,
+    membershipPlan: nextPlan,
     membershipExpiresAt: updates.membershipExpiresAt !== undefined ? normalizeExcelDob(updates.membershipExpiresAt) : entry.profile.membershipExpiresAt,
+    subscribedLessonIds: filterLessons(updates.subscribedLessonIds, entry.profile.subscribedLessonIds),
+    subscribedCourses: dedupeCoursesList(updates.subscribedCourses, entry.profile.subscribedCourses),
+    practiceLessonIds: filterLessons(updates.practiceLessonIds, entry.profile.practiceLessonIds),
+    practiceCourses: dedupeCoursesList(updates.practiceCourses, entry.profile.practiceCourses),
     updatedAt: nowIso
   };
+  nextProfile = reconcileProfileEntitlements(nextProfile, new Set()).profile;
 
   const overlay = readOverlayStore();
   overlay.users[userId] = { profile: nextProfile, passwordHash: entry.passwordHash };
@@ -1664,8 +2303,9 @@ async function updateProfileDetails(params: {
 }
 
 async function submitSubscriptionRequest(params: {
-  planType: 'monthly' | 'annual' | 'per_lesson';
+  planType: 'monthly' | 'annual' | 'per_lesson' | 'course' | 'practice_lesson' | 'practice_course';
   lessonId?: string;
+  courseName?: string;
   lessonTitle?: string;
   amountLabel?: string;
   contactChannel: 'email' | 'viber';
@@ -1674,7 +2314,39 @@ async function submitSubscriptionRequest(params: {
 }): Promise<SubscriptionRequest> {
   if (!state.user || !state.profile) throw new Error('Please sign in first.');
   const nowIso = new Date().toISOString();
-  const planType = params.planType === 'annual' || params.planType === 'per_lesson' ? params.planType : 'monthly';
+  const rawPlan = String(params.planType || 'course').trim().toLowerCase();
+  const planType: SubscriptionRequest['planType'] =
+    rawPlan === 'annual' ||
+    rawPlan === 'monthly' ||
+    rawPlan === 'per_lesson' ||
+    rawPlan === 'practice_lesson' ||
+    rawPlan === 'practice_course' ||
+    rawPlan === 'course'
+      ? rawPlan
+      : 'course';
+  const cleanCourse = params.courseName ? normalizeCourseName(params.courseName) : 'HSK 2';
+  const defaultTitle =
+    planType === 'course'
+      ? `${cleanCourse} Full Course`
+      : planType === 'practice_course'
+      ? `${cleanCourse} Course (Practice Only)`
+      : planType === 'practice_lesson'
+      ? 'Single Lesson (Practice Only)'
+      : planType === 'per_lesson'
+      ? 'Single Lesson Pass'
+      : planType === 'annual'
+      ? 'Annual All-Access'
+      : 'Monthly All-Access';
+  const defaultAmt =
+    planType === 'course'
+      ? `${Number(getCoursePrice(cleanCourse)).toLocaleString('en-US')} Kyat`
+      : planType === 'practice_course' || planType === 'practice_lesson'
+      ? `${Number(getPracticePrice()).toLocaleString('en-US')} Kyat`
+      : planType === 'per_lesson'
+      ? '75,000 Kyat'
+      : planType === 'annual'
+      ? '$149 / yr'
+      : '$19 / mo';
   const request: SubscriptionRequest = {
     requestId: `req_${Date.now().toString(36)}_${generateRandomHex(3)}`,
     userId: state.user.uid,
@@ -1683,16 +2355,9 @@ async function submitSubscriptionRequest(params: {
     userPhone: state.profile.phoneNumber || '',
     planType,
     lessonId: params.lessonId ? sanitizeDocId(params.lessonId) : '',
-    lessonTitle:
-      String(params.lessonTitle || '').trim() ||
-      (planType === 'annual'
-        ? 'Annual All-Access'
-        : planType === 'per_lesson'
-        ? 'Single Lesson Pass'
-        : 'Monthly All-Access'),
-    amountLabel:
-      String(params.amountLabel || '').trim() ||
-      (planType === 'annual' ? '$149 / yr' : planType === 'per_lesson' ? '9 Kyat' : '$19 / mo'),
+    courseName: cleanCourse,
+    lessonTitle: String(params.lessonTitle || '').trim() || defaultTitle,
+    amountLabel: String(params.amountLabel || '').trim() || defaultAmt,
     contactChannel: params.contactChannel === 'email' ? 'email' : 'viber',
     contactHandle: String(params.contactHandle || '').trim(),
     note: String(params.note || '').trim().slice(0, 400),
@@ -1752,21 +2417,67 @@ async function approveSubscriptionRequest(
 
   const userEntry = dataset.users[targetReq.userId];
   if (userEntry) {
-    const nextProfile: UserProfile = {
-      ...userEntry.profile,
-      membershipStatus: 'active',
-      membershipPlan: targetReq.planType,
-      updatedAt: nowIso
-    };
+    const nextCourses = [...(userEntry.profile.subscribedCourses || [])];
+    const nextPracticeCourses = [...(userEntry.profile.practiceCourses || [])];
+    const nextLessons = [...(userEntry.profile.subscribedLessonIds || [])];
+    const nextPracticeLessons = [...(userEntry.profile.practiceLessonIds || [])];
+    let nextPlan = normalizePlan(userEntry.profile.membershipPlan);
+    let nextExpiry = userEntry.profile.membershipExpiresAt || '';
+
     if (targetReq.planType === 'per_lesson' && targetReq.lessonId) {
-      const set = new Set(nextProfile.subscribedLessonIds || []);
-      set.add(targetReq.lessonId);
-      nextProfile.subscribedLessonIds = Array.from(set);
+      if (!isLessonIdActive(targetReq.lessonId)) {
+        throw new Error(`Lesson "${targetReq.lessonId}" is no longer in the curriculum.`);
+      }
+      const key = normalizeLessonIdKey(targetReq.lessonId);
+      const canonical = validLessonIdMap.get(key) || sanitizeDocId(targetReq.lessonId);
+      if (!nextLessons.some((x) => normalizeLessonIdKey(x) === key)) {
+        nextLessons.push(canonical);
+      }
+      if (nextPlan !== 'course') nextPlan = 'per_lesson';
+    } else if (targetReq.planType === 'practice_lesson' && targetReq.lessonId) {
+      if (!isLessonIdActive(targetReq.lessonId)) {
+        throw new Error(`Lesson "${targetReq.lessonId}" is no longer in the curriculum.`);
+      }
+      const key = normalizeLessonIdKey(targetReq.lessonId);
+      const canonical = validLessonIdMap.get(key) || sanitizeDocId(targetReq.lessonId);
+      if (!nextPracticeLessons.some((x) => normalizeLessonIdKey(x) === key)) {
+        nextPracticeLessons.push(canonical);
+      }
+      if (nextPlan !== 'course' && nextPlan !== 'per_lesson' && nextPlan !== 'practice_course') {
+        nextPlan = 'practice_lesson';
+      }
+    } else if (targetReq.planType === 'practice_course') {
+      const targetCourse = normalizeCourseName(targetReq.courseName || targetReq.lessonTitle || 'HSK 2');
+      const slug = courseSlug(targetCourse);
+      if (slug && !nextPracticeCourses.some((c) => courseSlug(c) === slug)) {
+        nextPracticeCourses.push(targetCourse);
+      }
+      if (nextPlan !== 'course') nextPlan = 'practice_course';
+    } else if (targetReq.planType === 'course') {
+      const targetCourse = normalizeCourseName(targetReq.courseName || targetReq.lessonTitle || 'HSK 2');
+      const slug = courseSlug(targetCourse);
+      if (slug && !nextCourses.some((c) => courseSlug(c) === slug)) {
+        nextCourses.push(targetCourse);
+      }
+      nextPlan = 'course';
     } else {
       const d = new Date();
       d.setDate(d.getDate() + (targetReq.planType === 'annual' ? 365 : 30));
-      nextProfile.membershipExpiresAt = d.toISOString().slice(0, 10);
+      nextExpiry = d.toISOString().slice(0, 10);
+      nextPlan = targetReq.planType === 'annual' ? 'annual' : 'monthly';
     }
+
+    const nextProfile: UserProfile = {
+      ...userEntry.profile,
+      membershipStatus: 'active',
+      membershipPlan: nextPlan,
+      membershipExpiresAt: nextExpiry,
+      subscribedLessonIds: nextLessons,
+      subscribedCourses: nextCourses,
+      practiceLessonIds: nextPracticeLessons,
+      practiceCourses: nextPracticeCourses,
+      updatedAt: nowIso
+    };
     overlay.users[targetReq.userId] = {
       profile: nextProfile,
       passwordHash: userEntry.passwordHash
@@ -1799,6 +2510,35 @@ async function rejectSubscriptionRequest(
   emitState();
 }
 
+async function syncMembershipToBackend(uid: string, profile: UserProfile): Promise<void> {
+  try {
+    const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
+    if (!lb || typeof lb.hasBackend !== 'function' || !lb.hasBackend()) return;
+    const apiPath = `/api/admin/users/${encodeURIComponent(uid)}/membership`;
+    const apiUrl = lb.apiUrl ? lb.apiUrl(apiPath) : apiPath;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (state.user?.uid) {
+      headers['X-Admin-Uid'] = state.user.uid;
+      headers['X-User-Uid'] = state.user.uid;
+    }
+    await fetch(apiUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        membershipStatus: profile.membershipStatus,
+        membershipPlan: profile.membershipPlan,
+        membershipExpiresAt: profile.membershipExpiresAt || '',
+        subscribedLessonIds: profile.subscribedLessonIds || [],
+        subscribedCourses: profile.subscribedCourses || [],
+        practiceLessonIds: profile.practiceLessonIds || [],
+        practiceCourses: profile.practiceCourses || []
+      })
+    }).catch(() => {});
+  } catch {
+    // non-fatal best-effort server mirror
+  }
+}
+
 async function updateUserMembershipAdmin(
   userId: string,
   updates: {
@@ -1806,6 +2546,9 @@ async function updateUserMembershipAdmin(
     membershipPlan: UserProfile['membershipPlan'];
     membershipExpiresAt?: string;
     subscribedLessonIds?: string[];
+    subscribedCourses?: string[];
+    practiceLessonIds?: string[];
+    practiceCourses?: string[];
   }
 ): Promise<void> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
@@ -1813,19 +2556,80 @@ async function updateUserMembershipAdmin(
   const entry = dataset.users[userId];
   if (!entry) throw new Error('User not found.');
 
-  const nextProfile: UserProfile = {
+  const filterLessonList = (rawArr: string[] | undefined, fallback: string[] | undefined): string[] => {
+    const src = Array.isArray(rawArr) ? rawArr : Array.isArray(fallback) ? fallback : [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const x of src) {
+      const clean = sanitizeDocId(x);
+      const key = normalizeLessonIdKey(clean);
+      if (!key || !isLessonIdActive(clean) || seen.has(key)) continue;
+      seen.add(key);
+      out.push(validLessonIdMap.get(key) || clean);
+    }
+    return out;
+  };
+  const dedupeCourseList = (rawArr: string[] | undefined, fallback: string[] | undefined): string[] => {
+    const src = Array.isArray(rawArr) ? rawArr : Array.isArray(fallback) ? fallback : [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const c of src) {
+      const norm = normalizeCourseName(c);
+      const slug = courseSlug(norm);
+      if (!slug || seen.has(slug)) continue;
+      seen.add(slug);
+      out.push(norm);
+    }
+    return out;
+  };
+
+  const nextLessons = filterLessonList(updates.subscribedLessonIds, entry.profile.subscribedLessonIds);
+  const nextCourses = dedupeCourseList(updates.subscribedCourses, entry.profile.subscribedCourses);
+  const nextPracticeLessons = filterLessonList(updates.practiceLessonIds, entry.profile.practiceLessonIds);
+  const nextPracticeCourses = dedupeCourseList(updates.practiceCourses, entry.profile.practiceCourses);
+
+  let nextStatus = updates.membershipStatus || 'free';
+  let nextPlan = normalizePlan(updates.membershipPlan);
+  const isAdm = entry.profile.role === 'admin' || String(entry.profile.email || '').toLowerCase() === ADMIN_EMAIL;
+
+  if (!isAdm) {
+    const hasAny =
+      nextLessons.length > 0 ||
+      nextCourses.length > 0 ||
+      nextPracticeLessons.length > 0 ||
+      nextPracticeCourses.length > 0;
+    const hasTimePass = isTimePassActive({
+      ...entry.profile,
+      membershipPlan: nextPlan,
+      membershipExpiresAt:
+        updates.membershipExpiresAt !== undefined
+          ? normalizeExcelDob(updates.membershipExpiresAt)
+          : entry.profile.membershipExpiresAt
+    });
+    if (!hasAny && !hasTimePass && nextStatus === 'active') {
+      nextStatus = 'free';
+      nextPlan = 'none';
+    }
+    if (nextStatus === 'free') {
+      nextPlan = 'none';
+    }
+  }
+
+  let nextProfile: UserProfile = {
     ...entry.profile,
-    membershipStatus: updates.membershipStatus,
-    membershipPlan: updates.membershipPlan,
+    membershipStatus: nextStatus,
+    membershipPlan: nextPlan,
     membershipExpiresAt:
       updates.membershipExpiresAt !== undefined
         ? normalizeExcelDob(updates.membershipExpiresAt)
         : entry.profile.membershipExpiresAt,
-    subscribedLessonIds: Array.isArray(updates.subscribedLessonIds)
-      ? updates.subscribedLessonIds.map((x) => sanitizeDocId(x))
-      : entry.profile.subscribedLessonIds,
+    subscribedLessonIds: nextLessons,
+    subscribedCourses: nextCourses,
+    practiceLessonIds: nextPracticeLessons,
+    practiceCourses: nextPracticeCourses,
     updatedAt: new Date().toISOString()
   };
+  nextProfile = reconcileProfileEntitlements(nextProfile, new Set()).profile;
 
   const overlay = readOverlayStore();
   overlay.users[userId] = { profile: nextProfile, passwordHash: entry.passwordHash };
@@ -1833,6 +2637,7 @@ async function updateUserMembershipAdmin(
 
   syncMemoryFromDataset(getMergedDataset(), state.user.uid);
   emitState();
+  await syncMembershipToBackend(userId, nextProfile);
 }
 
 function generateTempPassword(): string {
@@ -1889,11 +2694,33 @@ async function adminResetUserPassword(
   };
 }
 
+async function syncCatalogToBackend(payload: { items?: unknown[]; removeIds?: string[] }): Promise<void> {
+  try {
+    const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
+    if (!lb || typeof lb.hasBackend !== 'function' || !lb.hasBackend()) return;
+    const apiPath = '/api/admin/catalog';
+    const apiUrl = lb.apiUrl ? lb.apiUrl(apiPath) : apiPath;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (state.user?.uid) {
+      headers['X-Admin-Uid'] = state.user.uid;
+      headers['X-User-Uid'] = state.user.uid;
+    }
+    await fetch(apiUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(payload)
+    }).catch(() => {});
+  } catch {
+    // non-fatal best-effort mirror
+  }
+}
+
 async function saveLessonCatalogItems(
   items: Array<{
     lessonId: string;
     title: string;
-    audience: 'Adult' | 'Kids' | string;
+    course?: string;
+    audience?: 'Adult' | 'Kids' | string;
     accessType: 'free' | 'paid' | string;
     price: number;
   }>
@@ -1901,21 +2728,56 @@ async function saveLessonCatalogItems(
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
   const overlay = readOverlayStore();
   const nowIso = new Date().toISOString();
+  const cleanItems: LessonCatalogItem[] = [];
   for (const item of items || []) {
     const id = sanitizeDocId(item.lessonId);
-    overlay.lessonCatalog[id] = {
+    const entry: LessonCatalogItem = {
       lessonId: id,
       title: String(item.title || id).trim(),
+      course: item.course ? normalizeCourseName(item.course) : undefined,
       audience: item.audience === 'Kids' ? 'Kids' : 'Adult',
       accessType: item.accessType === 'paid' ? 'paid' : 'free',
       price: Math.max(0, Number(item.price) || 0),
       updatedBy: state.user.email,
       updatedAt: nowIso
     };
+    overlay.lessonCatalog[id] = entry;
+    if (validLessonIdsLoaded) {
+      const key = normalizeLessonIdKey(id);
+      if (key) {
+        validLessonIdMap.set(key, id);
+        if (entry.title) validLessonTitleMap.set(key, entry.title);
+      }
+    }
+    cleanItems.push(entry);
   }
   writeOverlayStore(overlay);
   syncMemoryFromDataset(getMergedDataset(), state.user.uid);
   emitState();
+  await syncCatalogToBackend({ items: cleanItems });
+}
+
+async function removeLessonCatalogItems(lessonIds: string[]): Promise<void> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const cleanIds = Array.from(
+    new Set((lessonIds || []).map((id) => sanitizeDocId(String(id || ''))).filter(Boolean))
+  );
+  if (!cleanIds.length) return;
+
+  for (const id of cleanIds) {
+    const key = normalizeLessonIdKey(id);
+    if (key) {
+      validLessonIdMap.delete(key);
+      validLessonTitleMap.delete(key);
+    }
+  }
+
+  const merged = getMergedDataset();
+  reconcileDatasetWithLessons(merged, cleanIds);
+  syncMemoryFromDataset(merged, state.user.uid);
+  emitState();
+
+  await syncCatalogToBackend({ removeIds: cleanIds });
 }
 
 async function getIdToken(): Promise<string | null> {
@@ -2154,16 +3016,21 @@ async function renameCourseAdmin(
   if (oldSlug !== newSlug) {
     Object.keys(overlay.users || {}).forEach((uid) => {
       const u = overlay.users[uid];
-      if (u?.profile?.coursePasses && Array.isArray(u.profile.coursePasses)) {
-        u.profile.coursePasses = u.profile.coursePasses.map((cp: string) => {
-          const cpSlug = String(cp || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-          if (cpSlug === oldSlug) {
-            overlayChanged = true;
-            return newTrimmed;
-          }
-          return cp;
-        });
-      }
+      if (!u?.profile) return;
+      const mapCourseArr = (arr?: string[]) =>
+        Array.isArray(arr)
+          ? arr.map((cp: string) => {
+              const cpSlug = courseSlug(cp);
+              if (cpSlug === oldSlug) {
+                overlayChanged = true;
+                return newTrimmed;
+              }
+              return cp;
+            })
+          : arr;
+      u.profile.coursePasses = mapCourseArr(u.profile.coursePasses);
+      u.profile.subscribedCourses = mapCourseArr(u.profile.subscribedCourses);
+      u.profile.practiceCourses = mapCourseArr(u.profile.practiceCourses);
     });
   }
   if (overlayChanged) {
@@ -2235,6 +3102,7 @@ async function exportUsersWorkbook(): Promise<{
   if (!xlsx) throw new Error('SheetJS library is not loaded.');
 
   const dataset = getMergedDataset();
+  reconcileDatasetWithLessons(dataset);
   const userRows = Object.values(dataset.users).map(({ profile, passwordHash }) => ({
     uid: profile.uid,
     username: profile.username || '',
@@ -2247,6 +3115,9 @@ async function exportUsersWorkbook(): Promise<{
     membershipPlan: profile.membershipPlan || 'none',
     membershipExpiresAt: profile.membershipExpiresAt || '',
     subscribedLessonIds: (profile.subscribedLessonIds || []).join(','),
+    subscribedCourses: (profile.subscribedCourses || []).join(','),
+    practiceLessonIds: (profile.practiceLessonIds || []).join(','),
+    practiceCourses: (profile.practiceCourses || []).join(','),
     mustChangePassword: profile.mustChangePassword ? 'true' : 'false',
     createdAt: String(profile.createdAt || ''),
     updatedAt: String(profile.updatedAt || '')
@@ -2260,6 +3131,7 @@ async function exportUsersWorkbook(): Promise<{
     userPhone: r.userPhone,
     planType: r.planType,
     lessonId: r.lessonId,
+    courseName: r.courseName || '',
     lessonTitle: r.lessonTitle,
     amountLabel: r.amountLabel,
     contactChannel: r.contactChannel,
@@ -2287,6 +3159,7 @@ async function exportUsersWorkbook(): Promise<{
   const catRows = Object.values(dataset.lessonCatalog).map((c) => ({
     lessonId: c.lessonId,
     title: c.title,
+    course: c.course || '',
     audience: c.audience,
     accessType: c.accessType,
     price: Number(c.price) || 0,
@@ -2300,7 +3173,7 @@ async function exportUsersWorkbook(): Promise<{
     userRows.length
       ? xlsx.utils.json_to_sheet(userRows)
       : xlsx.utils.aoa_to_sheet([
-          ['uid', 'username', 'email', 'phoneNumber', 'dob', 'passwordHash', 'role', 'membershipStatus', 'membershipPlan', 'membershipExpiresAt', 'subscribedLessonIds', 'mustChangePassword', 'createdAt', 'updatedAt']
+          ['uid', 'username', 'email', 'phoneNumber', 'dob', 'passwordHash', 'role', 'membershipStatus', 'membershipPlan', 'membershipExpiresAt', 'subscribedLessonIds', 'subscribedCourses', 'practiceLessonIds', 'practiceCourses', 'mustChangePassword', 'createdAt', 'updatedAt']
         ]),
     'Users'
   );
@@ -2309,7 +3182,7 @@ async function exportUsersWorkbook(): Promise<{
     reqRows.length
       ? xlsx.utils.json_to_sheet(reqRows)
       : xlsx.utils.aoa_to_sheet([
-          ['requestId', 'userId', 'username', 'userEmail', 'userPhone', 'planType', 'lessonId', 'lessonTitle', 'amountLabel', 'contactChannel', 'contactHandle', 'note', 'status', 'adminNote', 'createdAt', 'updatedAt']
+          ['requestId', 'userId', 'username', 'userEmail', 'userPhone', 'planType', 'lessonId', 'courseName', 'lessonTitle', 'amountLabel', 'contactChannel', 'contactHandle', 'note', 'status', 'adminNote', 'createdAt', 'updatedAt']
         ]),
     'Requests'
   );
@@ -2327,7 +3200,7 @@ async function exportUsersWorkbook(): Promise<{
     catRows.length
       ? xlsx.utils.json_to_sheet(catRows)
       : xlsx.utils.aoa_to_sheet([
-          ['lessonId', 'title', 'audience', 'accessType', 'price', 'updatedBy', 'updatedAt']
+          ['lessonId', 'title', 'course', 'audience', 'accessType', 'price', 'updatedBy', 'updatedAt']
         ]),
     'Catalog'
   );
@@ -2391,6 +3264,7 @@ async function importUsersWorkbook(arrayBuffer: ArrayBuffer): Promise<{
   writeOverlayStore(overlay);
 
   const merged = getMergedDataset();
+  reconcileDatasetWithLessons(merged);
   syncMemoryFromDataset(merged, state.user.uid);
   emitState();
 
@@ -2405,6 +3279,7 @@ async function importUsersWorkbook(arrayBuffer: ArrayBuffer): Promise<{
 async function reloadUsersWorkbookFromRepo(): Promise<ExcelSyncSummary> {
   await loadBaseWorkbookFromExcel(true);
   const merged = getMergedDataset();
+  reconcileDatasetWithLessons(merged);
   syncMemoryFromDataset(merged);
   emitState();
   return getExcelSyncSummary();
@@ -2461,27 +3336,78 @@ function hasActiveMembership(): boolean {
   return false;
 }
 
+function getCourseAccessMode(courseName: string): 'full' | 'practice' | 'none' {
+  const profile = state.profile;
+  if (!profile) return 'none';
+  if (getComputedAdmin() || hasActiveMembership()) return 'full';
+
+  const targetSlug = courseSlug(normalizeCourseName(courseName));
+  if (!targetSlug) return 'none';
+
+  const fullCourses = [...(profile.subscribedCourses || []), ...(profile.coursePasses || [])];
+  if (fullCourses.some((c) => courseSlug(normalizeCourseName(c)) === targetSlug)) {
+    return 'full';
+  }
+  if ((profile.practiceCourses || []).some((c) => courseSlug(normalizeCourseName(c)) === targetSlug)) {
+    return 'practice';
+  }
+  return 'none';
+}
+
+function hasCourseAccess(courseName: string): boolean {
+  return getCourseAccessMode(courseName) === 'full';
+}
+
 function hasPendingRequest(): boolean {
   return state.myRequests.some((r) => r.status === 'pending');
+}
+
+function getLessonAccessMode(lesson: {
+  id?: string;
+  lessonId?: string;
+  course?: string;
+  category?: string;
+  categoryKey?: string;
+  accessType?: string;
+  access?: string;
+  isFree?: unknown;
+  price?: unknown;
+}): 'full' | 'practice' | 'none' {
+  const pricing = getLessonPricing(lesson);
+  if (pricing.accessType === 'free') return 'full';
+  if (getComputedAdmin() || hasActiveMembership()) return 'full';
+
+  const profile = state.profile;
+  if (!profile) return 'none';
+
+  const cMode = getCourseAccessMode(getLessonCourseName(lesson));
+  if (cMode === 'full') return 'full';
+
+  const idKey = normalizeLessonIdKey(lesson?.id || lesson?.lessonId || '');
+  if (idKey && !isLessonIdActive(idKey)) return 'none';
+
+  if (idKey && (profile.subscribedLessonIds || []).some((x) => normalizeLessonIdKey(x) === idKey)) {
+    return 'full';
+  }
+  if (cMode === 'practice') return 'practice';
+  if (idKey && (profile.practiceLessonIds || []).some((x) => normalizeLessonIdKey(x) === idKey)) {
+    return 'practice';
+  }
+  return 'none';
 }
 
 function canAccessLesson(lesson: {
   id?: string;
   lessonId?: string;
+  course?: string;
+  category?: string;
   categoryKey?: string;
   accessType?: string;
   access?: string;
   isFree?: unknown;
   price?: unknown;
 }): boolean {
-  const pricing = getLessonPricing(lesson);
-  if (pricing.accessType === 'free') return true;
-  if (getComputedAdmin()) return true;
-  if (hasActiveMembership()) return true;
-
-  const id = sanitizeDocId(lesson?.id || lesson?.lessonId || '');
-  const unlocked = state.profile?.subscribedLessonIds || [];
-  return unlocked.includes(id);
+  return getLessonAccessMode(lesson) !== 'none';
 }
 
 // --- Authenticated User Progress, Streak, Rank & Reminder Persistence ---
@@ -2686,6 +3612,8 @@ const LinguaAuth = {
   MEMBERSHIP_PLANS,
   DEFAULT_SITE_CONFIG,
   calculateAge,
+  normalizeCourseName,
+  getLessonCourseName,
   getState,
   subscribe,
   waitUntilReady,
@@ -2710,6 +3638,11 @@ const LinguaAuth = {
   adminUpdateUserDetails,
   adminResetUserPassword,
   saveLessonCatalogItems,
+  removeLessonCatalogItems,
+  syncValidLessonIds: updateActiveLessonsRegistry,
+  getValidLessonIds,
+  getLessonTitle,
+  isLessonIdActive,
   exportUsersWorkbook,
   importUsersWorkbook,
   reloadUsersWorkbookFromRepo,
@@ -2721,6 +3654,9 @@ const LinguaAuth = {
   renameCourseAdmin,
   deleteCourseAdmin,
   hasActiveMembership,
+  hasCourseAccess,
+  getCourseAccessMode,
+  getLessonAccessMode,
   hasPendingRequest,
   canAccessLesson,
   getUserProgress,

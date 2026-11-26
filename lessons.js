@@ -685,6 +685,11 @@
 
     // Apply any saved local pricing overrides onto in-memory lessons
     applyLocalPricingOverrides(allLessons);
+
+    // Sync active lessons registry with LinguaAuth so deleted lesson passes/artifacts get pruned
+    if (loadedFromStoreOrRepo && window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+      window.LinguaAuth.syncValidLessonIds(allLessons, { allowEmpty: true });
+    }
   }
 
   function getLocalPricingOverrides() {
@@ -5528,7 +5533,15 @@
 
     if (!activeLessonState || !activeLessonState.id) return;
 
-    const lessonObj = allLessons.find(l => String(l.id) === String(activeLessonState.id)) || activeLessonState;
+    const lessonObj = allLessons.find((l) => isSameLessonId(l.id, activeLessonState.id));
+    if (!lessonObj) {
+      if (loadedFromStoreOrRepo) {
+        try {
+          localStorage.removeItem('linguapath_active_lesson');
+        } catch (_) {}
+      }
+      return;
+    }
 
     const banner = document.createElement('div');
     banner.id = 'continueLessonBanner';
@@ -5977,6 +5990,10 @@
           localStorage.setItem('linguapath_custom_lessons', JSON.stringify(customPayload));
         }
 
+        if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+          window.LinguaAuth.syncValidLessonIds(allLessons, { allowEmpty: true });
+        }
+
         renderCourseSidebar();
         renderLessonGrid();
         renderContinueLessonBanner();
@@ -6103,19 +6120,27 @@
         if (Array.isArray(e.detail.sheets.Vocabulary)) allVocabulary = e.detail.sheets.Vocabulary.map(normalizeVocabularyRow);
         if (Array.isArray(e.detail.sheets.Pronunciation)) allPronunciation = e.detail.sheets.Pronunciation.map(normalizePronunciationRow);
         if (Array.isArray(e.detail.sheets.Exercises)) allExercises = e.detail.sheets.Exercises.map(normalizeExerciseRow);
+        if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+          window.LinguaAuth.syncValidLessonIds(allLessons, { allowEmpty: true });
+        }
         renderCourseSidebar();
         renderLessonGrid();
+        renderContinueLessonBanner();
         if (activeLesson) {
           const fresh = allLessons.find(l => isSameLessonId(l.id, activeLesson.id));
-          if (fresh) activeLesson = fresh;
-          const allowVideo = applyWorkspaceVideoTabVisibility(activeLesson);
-          renderWorkspaceHeader(activeLesson);
-          renderVideoSection(activeLesson);
-          renderExercisesSection(activeLesson);
-          renderWritingSection(activeLesson);
-          renderPronunciationSection(activeLesson);
-          if (!allowVideo && activeWorkspaceTab === 'video') {
-            switchWorkspaceTab('exercises');
+          if (fresh) {
+            activeLesson = fresh;
+            const allowVideo = applyWorkspaceVideoTabVisibility(activeLesson);
+            renderWorkspaceHeader(activeLesson);
+            renderVideoSection(activeLesson);
+            renderExercisesSection(activeLesson);
+            renderWritingSection(activeLesson);
+            renderPronunciationSection(activeLesson);
+            if (!allowVideo && activeWorkspaceTab === 'video') {
+              switchWorkspaceTab('exercises');
+            }
+          } else {
+            closeLessonWorkspace(false);
           }
         }
       }
@@ -6128,6 +6153,7 @@
     switchCourse,
     switchCategory: switchCourse,
     getAllCourses: computeCoursesList,
+    getAllLessonIds: () => allLessons.map((l) => l.id).filter(Boolean),
     openLessonWorkspace,
     closeLessonWorkspace,
     switchWorkspaceTab,

@@ -502,7 +502,12 @@
           const res = await store.forceSyncRepoToD1(domain);
           if (domain === 'stories' && res.sheets) state.storiesData = res.sheets;
           else if (domain === 'reels' && res.sheets) state.reelsData = res.sheets;
-          else if (domain === 'lessons' && res.sheets) state.lessonsData = res.sheets;
+          else if (domain === 'lessons' && res.sheets) {
+            state.lessonsData = res.sheets;
+            if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+              window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+            }
+          }
           state.lastSyncNotice = null;
           updateNavCounts();
           renderActiveTab();
@@ -569,7 +574,12 @@
           const res = await getContentStore().importWorkbookFile(domain, buf);
           if (domain === 'stories') state.storiesData = res.sheets;
           else if (domain === 'reels') state.reelsData = res.sheets;
-          else if (domain === 'lessons') state.lessonsData = res.sheets;
+          else if (domain === 'lessons') {
+            state.lessonsData = res.sheets;
+            if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+              window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+            }
+          }
           updateNavCounts();
           applySyncFeedback(
             res,
@@ -597,7 +607,12 @@
               const res = await getContentStore().clearDraft(domain);
               if (domain === 'stories') state.storiesData = res.sheets;
               else if (domain === 'reels') state.reelsData = res.sheets;
-              else if (domain === 'lessons') state.lessonsData = res.sheets;
+              else if (domain === 'lessons') {
+                state.lessonsData = res.sheets;
+                if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+                  window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+                }
+              }
               state.lastSyncNotice = null;
               updateNavCounts();
               renderActiveTab();
@@ -662,6 +677,9 @@
           Games: Array.isArray(lessonsRes.sheets.Games) ? lessonsRes.sheets.Games : [],
           Pronunciation: Array.isArray(lessonsRes.sheets.Pronunciation) ? lessonsRes.sheets.Pronunciation : []
         };
+        if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+          window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+        }
       }
 
       state.loadedOnce = true;
@@ -4445,6 +4463,9 @@
               Pronunciation: [...(state.lessonsData.Pronunciation || []), ...copiedPron]
             });
             state.lessonsData = { ...state.lessonsData, ...res.sheets };
+            if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+              window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+            }
             const cName = getLessonCourse(copiedLesson);
             if (window.LinguaAuth && typeof window.LinguaAuth.saveLessonCatalogItems === 'function') {
               await window.LinguaAuth.saveLessonCatalogItems([
@@ -4482,7 +4503,7 @@
         const id = btn.getAttribute('data-del-lesson');
         openConfirmDialog({
           title: `Delete lesson "${id}"?`,
-          message: 'This permanently deletes the lesson, its exercises, vocabulary, writing, and pronunciation entries from Excel and the database.',
+          message: 'This permanently deletes the lesson, its exercises, vocabulary, writing, and pronunciation entries from Excel, the database, and any user lesson passes.',
           confirmLabel: 'Delete Lesson',
           onConfirm: async () => {
             const nextLessons = lessons.filter((x) => !isSameId(x.id, id));
@@ -4502,6 +4523,12 @@
               if (window.LinguaAuth && typeof window.LinguaAuth.removeLessonCatalogItems === 'function') {
                 await window.LinguaAuth.removeLessonCatalogItems([id]);
               }
+              if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+                window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], {
+                  allowEmpty: true,
+                  explicitDeletedIds: [id]
+                });
+              }
               try {
                 const pricingRaw = localStorage.getItem('linguapath_local_lesson_pricing');
                 if (pricingRaw) {
@@ -4509,13 +4536,20 @@
                   delete pricingMap[id];
                   localStorage.setItem('linguapath_local_lesson_pricing', JSON.stringify(pricingMap));
                 }
+                const activeRaw = localStorage.getItem('linguapath_active_lesson');
+                if (activeRaw) {
+                  const activeParsed = JSON.parse(activeRaw);
+                  if (activeParsed && isSameId(activeParsed.id, id)) {
+                    localStorage.removeItem('linguapath_active_lesson');
+                  }
+                }
                 localStorage.removeItem('linguapath_custom_lessons');
               } catch (_) {}
               updateNavCounts();
               applySyncFeedback(
                 res,
-                `Deleted lesson ${id} and synced to Excel & DB.`,
-                `Deleted lesson ${id} locally.`
+                `Deleted lesson ${id}, pruned user passes & synced to Excel & DB.`,
+                `Deleted lesson ${id} and cleaned user passes locally.`
               );
               renderActiveTab();
             } catch (err) {
@@ -5036,6 +5070,9 @@
           Writing: [...keptWriting, ...cleanWriting]
         });
         state.lessonsData = { ...state.lessonsData, ...res.sheets };
+        if (window.LinguaAuth && typeof window.LinguaAuth.syncValidLessonIds === 'function') {
+          window.LinguaAuth.syncValidLessonIds(state.lessonsData.Lessons || [], { allowEmpty: true });
+        }
         // Ensure any custom course typed in the Lesson Editor is registered in Courses Manager
         const knownCourses = getAdminCoursesList();
         if (!knownCourses.some((c) => courseSlug(c) === courseSlug(courseName))) {
@@ -6092,9 +6129,19 @@
                 filteredUsers.length
                   ? filteredUsers
                       .map((u) => {
-                        const unlockedCount = Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds.length : 0;
+                        const activeKeySet = new Set(
+                          (state.lessonsData.Lessons || [])
+                            .map((l) => String(l?.id || l?.lessonId || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').toLowerCase())
+                            .filter(Boolean)
+                        );
+                        const filterActiveArr = (arr) => {
+                          if (!Array.isArray(arr)) return [];
+                          if (!state.loadedOnce) return arr;
+                          return arr.filter((id) => activeKeySet.has(String(id || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').toLowerCase()));
+                        };
+                        const unlockedCount = filterActiveArr(u.subscribedLessonIds).length;
                         const unlockedCoursesCount = Array.isArray(u.subscribedCourses) ? u.subscribedCourses.length : 0;
-                        const pracCount = Array.isArray(u.practiceLessonIds) ? u.practiceLessonIds.length : 0;
+                        const pracCount = filterActiveArr(u.practiceLessonIds).length;
                         const pracCoursesCount = Array.isArray(u.practiceCourses) ? u.practiceCourses.length : 0;
                         const roleTag = u.role === 'admin' ? ' · Admin' : '';
                         const tempTag = u.mustChangePassword ? ' · Temp PW active' : '';
@@ -6261,11 +6308,16 @@
         const uid = btn.getAttribute('data-u-lessons');
         const user = users.find((x) => x.uid === uid);
         if (!user) return;
-        const unlocked = new Set(user.subscribedLessonIds || []);
+        const normLessonKey = (val) => String(val || '').trim().replace(/[^a-zA-Z0-9_\-]+/g, '-').toLowerCase();
+        const unlocked = new Set((user.subscribedLessonIds || []).map(normLessonKey));
         const unlockedCourses = new Set((user.subscribedCourses || []).map((c) => courseSlug(c)));
-        const practiceLessons = new Set(user.practiceLessonIds || []);
+        const practiceLessons = new Set((user.practiceLessonIds || []).map(normLessonKey));
         const practiceCourses = new Set((user.practiceCourses || []).map((c) => courseSlug(c)));
         const allLessons = state.lessonsData.Lessons || [];
+        const activeLessonKeys = new Set(allLessons.map((l) => normLessonKey(l.id || l.lessonId)));
+        const staleCount = [...(user.subscribedLessonIds || []), ...(user.practiceLessonIds || [])].filter(
+          (id) => id && !activeLessonKeys.has(normLessonKey(id))
+        ).length;
         const coursesList = getAdminCoursesList();
 
         openModal(`
@@ -6276,6 +6328,11 @@
             </div>
             <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="ulCloseBtn">✕</button>
           </div>
+          ${
+            staleCount > 0
+              ? `<div class="admin-backend-status is-info" style="margin-bottom:12px;">${staleCount} deleted lesson reference(s) found on this profile will be cleaned automatically when you click Save Access.</div>`
+              : ''
+          }
 
           <strong style="display:block; font-size:0.84rem; margin-bottom:6px;">Full Course Pass (Video + Practice)</strong>
           <div class="admin-featured-checklist" style="margin-bottom:12px;">
@@ -6315,7 +6372,7 @@
               .map(
                 (l) => `
               <label class="admin-featured-item">
-                <input type="checkbox" name="ulLesson" value="${escapeHTML(l.id)}" ${unlocked.has(l.id) ? 'checked' : ''} />
+                <input type="checkbox" name="ulLesson" value="${escapeHTML(l.id)}" ${unlocked.has(normLessonKey(l.id)) ? 'checked' : ''} />
                 <span>${escapeHTML(l.title || l.id)} (${escapeHTML(getLessonCourse(l))})</span>
               </label>
             `
@@ -6330,7 +6387,7 @@
                 (l) => `
               <label class="admin-featured-item">
                 <input type="checkbox" name="ulPracticeLesson" value="${escapeHTML(l.id)}" ${
-                  practiceLessons.has(l.id) ? 'checked' : ''
+                  practiceLessons.has(normLessonKey(l.id)) ? 'checked' : ''
                 } />
                 <span>${escapeHTML(l.title || l.id)} (${escapeHTML(getLessonCourse(l))})</span>
               </label>
@@ -6347,9 +6404,13 @@
         document.getElementById('ulCloseBtn').onclick = closeModal;
         document.getElementById('ulCancelBtn').onclick = closeModal;
         document.getElementById('ulSaveBtn').onclick = async () => {
-          const checkedIds = Array.from(document.querySelectorAll('input[name="ulLesson"]:checked')).map((c) => c.value);
+          const checkedIds = Array.from(document.querySelectorAll('input[name="ulLesson"]:checked'))
+            .map((c) => c.value)
+            .filter((id) => activeLessonKeys.has(normLessonKey(id)));
           const checkedCourses = Array.from(document.querySelectorAll('input[name="ulCourse"]:checked')).map((c) => c.value);
-          const checkedPracticeIds = Array.from(document.querySelectorAll('input[name="ulPracticeLesson"]:checked')).map((c) => c.value);
+          const checkedPracticeIds = Array.from(document.querySelectorAll('input[name="ulPracticeLesson"]:checked'))
+            .map((c) => c.value)
+            .filter((id) => activeLessonKeys.has(normLessonKey(id)));
           const checkedPracticeCourses = Array.from(document.querySelectorAll('input[name="ulPracticeCourse"]:checked')).map((c) => c.value);
           const hasAny = checkedIds.length > 0 || checkedCourses.length > 0 || checkedPracticeIds.length > 0 || checkedPracticeCourses.length > 0;
           const nextPlan = checkedCourses.length
@@ -6361,10 +6422,18 @@
             : checkedPracticeIds.length
             ? 'practice_lesson'
             : 'none';
+          const isAdmUser = user.role === 'admin';
+          const hadValidCurPlan =
+            (user.membershipPlan === 'course' && checkedCourses.length > 0) ||
+            (user.membershipPlan === 'practice_course' && checkedPracticeCourses.length > 0) ||
+            (user.membershipPlan === 'per_lesson' && checkedIds.length > 0) ||
+            (user.membershipPlan === 'practice_lesson' && checkedPracticeIds.length > 0);
+          const finalStatus = isAdmUser ? 'active' : hasAny ? 'active' : 'free';
+          const finalPlan = hasAny ? (hadValidCurPlan ? user.membershipPlan : nextPlan) : isAdmUser ? 'course' : 'none';
           try {
             await window.LinguaAuth.updateUserMembershipAdmin(uid, {
-              membershipStatus: user.membershipStatus && user.membershipStatus !== 'free' ? user.membershipStatus : hasAny ? 'active' : 'free',
-              membershipPlan: user.membershipPlan && user.membershipPlan !== 'none' ? user.membershipPlan : nextPlan,
+              membershipStatus: finalStatus,
+              membershipPlan: finalPlan,
               membershipExpiresAt: user.membershipExpiresAt || '',
               subscribedLessonIds: checkedIds,
               subscribedCourses: checkedCourses,

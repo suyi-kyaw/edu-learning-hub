@@ -138,6 +138,217 @@ function normalizeServerPlan(plan) {
   return 'none';
 }
 
+function normalizeLessonIdKeyServer(raw) {
+  return String(raw || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_\-]+/g, '-')
+    .toLowerCase();
+}
+
+function getActiveLessonAndStorySetsFromWorkbooks() {
+  let validLessonIdMap = null;
+  let validStoryIdSet = null;
+  try {
+    const lessonsXlsxPath = path.join(__dirname, 'data', 'lessons.xlsx');
+    if (fs.existsSync(lessonsXlsxPath)) {
+      const wb = XLSX.read(fs.readFileSync(lessonsXlsxPath), { type: 'buffer' });
+      const sheetName = wb.SheetNames.find((s) => String(s).toLowerCase() === 'lessons');
+      const rows = sheetName ? XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' }) : [];
+      validLessonIdMap = new Map();
+      for (const r of rows) {
+        const rawId = String(r?.id || r?.lessonId || '').trim();
+        const key = normalizeLessonIdKeyServer(rawId);
+        if (key) validLessonIdMap.set(key, rawId);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not inspect data/lessons.xlsx for reconciliation:', err.message);
+  }
+  try {
+    const storiesXlsxPath = path.join(__dirname, 'data', 'stories.xlsx');
+    if (fs.existsSync(storiesXlsxPath)) {
+      const wb = XLSX.read(fs.readFileSync(storiesXlsxPath), { type: 'buffer' });
+      const sheetName = wb.SheetNames.find((s) => String(s).toLowerCase() === 'lessons');
+      const rows = sheetName ? XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' }) : [];
+      validStoryIdSet = new Set();
+      for (const r of rows) {
+        const key = normalizeLessonIdKeyServer(r?.id || r?.lessonId || '');
+        if (key) validStoryIdSet.add(key);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not inspect data/stories.xlsx for reconciliation:', err.message);
+  }
+  return { validLessonIdMap, validStoryIdSet };
+}
+
+function arraysEqualServer(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function isDatedPassActiveServer(user) {
+  const exp = String(user?.membershipExpiresAt || '').trim();
+  if (!exp) return false;
+  const expTime = Date.parse(exp + 'T23:59:59Z');
+  return !Number.isNaN(expTime) && expTime >= Date.now();
+}
+
+function reconcileAuthStoreWithLessons(store, validMapOverride = null, storySetOverride = null, explicitDeletedIds = []) {
+  if (!store || typeof store !== 'object') return { store, changed: false };
+  const wbSets = (validMapOverride && storySetOverride) ? null : getActiveLessonAndStorySetsFromWorkbooks();
+  const validLessonIdMap = validMapOverride || (wbSets ? wbSets.validLessonIdMap : null);
+  const validStoryIdSet = storySetOverride || (wbSets ? wbSets.validStoryIdSet : null);
+  const explicitDeletedSet = new Set(
+    (Array.isArray(explicitDeletedIds) ? explicitDeletedIds : []).map(normalizeLessonIdKeyServer).filter(Boolean)
+  );
+
+  if (!validLessonIdMap && explicitDeletedSet.size === 0) {
+    return { store, changed: false };
+  }
+
+  let changed = false;
+  const nowIso = new Date().toISOString();
+
+  // 1. Prune lessonCatalog
+  if (store.lessonCatalog && typeof store.lessonCatalog === 'object') {
+    for (const catKey of Object.keys(store.lessonCatalog)) {
+      const key = normalizeLessonIdKeyServer(catKey);
+      if (explicitDeletedSet.has(key) || (validLessonIdMap && !validLessonIdMap.has(key))) {
+        delete store.lessonCatalog[catKey];
+        changed = true;
+      }
+    }
+  }
+
+  const filterLessonIds = (arr) => {
+    const orig = Array.isArray(arr) ? arr : [];
+    const out = [];
+    const seen = new Set();
+    for (const rawId of orig) {
+      const key = normalizeLessonIdKeyServer(rawId);
+      if (!key) continue;
+      if (explicitDeletedSet.has(key)) continue;
+      if (validLessonIdMap && !validLessonIdMap.has(key)) continue;
+      const canonical = (validLessonIdMap && validLessonIdMap.get(key)) || String(rawId).trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(canonical);
+      }
+    }
+    return { next: out, diff: !arraysEqualServer(orig, out) };
+  };
+
+  // 2. Reconcile user entitlements & revert empty active learners to free
+  for (const uid of Object.keys(store.users || {})) {
+    const u = store.users[uid];
+    if (!u) continue;
+    let uChanged = false;
+
+    const fullLessonsRes = filterLessonIds(u.subscribedLessonIds);
+    const pracLessonsRes = filterLessonIds(u.practiceLessonIds);
+    if (fullLessonsRes.diff || !Array.isArray(u.subscribedLessonIds)) {
+      u.subscribedLessonIds = fullLessonsRes.next;
+      uChanged = true;
+    }
+    if (pracLessonsRes.diff || !Array.isArray(u.practiceLessonIds)) {
+      u.practiceLessonIds = pracLessonsRes.next;
+      uChanged = true;
+    }
+
+    const fullLessons = Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds : [];
+    const pracLessons = Array.isArray(u.practiceLessonIds) ? u.practiceLessonIds : [];
+    const courses = Array.isArray(u.subscribedCourses) ? u.subscribedCourses.filter(Boolean) : [];
+    const pracCourses = Array.isArray(u.practiceCourses) ? u.practiceCourses.filter(Boolean) : [];
+    const isAdminUser = u.role === 'admin' || String(u.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+    if (!isAdminUser) {
+      const hasAny =
+        fullLessons.length > 0 ||
+        pracLessons.length > 0 ||
+        courses.length > 0 ||
+        pracCourses.length > 0;
+      const hasDated = isDatedPassActiveServer(u);
+
+      if (!hasAny && !hasDated) {
+        if (u.membershipStatus === 'active') {
+          u.membershipStatus = 'free';
+          uChanged = true;
+        }
+        if (u.membershipStatus === 'free' && normalizeServerPlan(u.membershipPlan) !== 'none') {
+          u.membershipPlan = 'none';
+          uChanged = true;
+        }
+      } else if (hasAny && u.membershipStatus === 'active') {
+        const curPlan = normalizeServerPlan(u.membershipPlan);
+        const matches =
+          (curPlan === 'course' && courses.length > 0) ||
+          (curPlan === 'practice_course' && pracCourses.length > 0) ||
+          (curPlan === 'per_lesson' && fullLessons.length > 0) ||
+          (curPlan === 'practice_lesson' && pracLessons.length > 0) ||
+          hasDated;
+        if (!matches) {
+          u.membershipPlan = courses.length
+            ? 'course'
+            : pracCourses.length
+            ? 'practice_course'
+            : fullLessons.length
+            ? 'per_lesson'
+            : 'practice_lesson';
+          uChanged = true;
+        }
+      }
+    }
+
+    if (uChanged) {
+      u.updatedAt = nowIso;
+      changed = true;
+    }
+  }
+
+  // 3. Prune deleted lesson IDs from userProgress.completedLessonIds (preserve story IDs!)
+  for (const uid of Object.keys(store.userProgress || {})) {
+    const prog = store.userProgress[uid];
+    if (!prog || !Array.isArray(prog.completedLessonIds)) continue;
+    const orig = prog.completedLessonIds;
+    const next = orig.filter((id) => {
+      const key = normalizeLessonIdKeyServer(id);
+      if (!key) return false;
+      if (explicitDeletedSet.has(key)) return false;
+      if (validLessonIdMap && validStoryIdSet && !validLessonIdMap.has(key) && !validStoryIdSet.has(key)) {
+        return false;
+      }
+      return true;
+    });
+    if (!arraysEqualServer(orig, next)) {
+      prog.completedLessonIds = next;
+      prog.updatedAt = nowIso;
+      changed = true;
+    }
+  }
+
+  // 4. Reject pending lesson-specific requests targeting removed lessons
+  if (Array.isArray(store.subscriptionRequests)) {
+    for (const r of store.subscriptionRequests) {
+      if (!r || r.status !== 'pending') continue;
+      if (r.planType !== 'per_lesson' && r.planType !== 'practice_lesson') continue;
+      const key = normalizeLessonIdKeyServer(r.lessonId);
+      if (!key) continue;
+      if (explicitDeletedSet.has(key) || (validLessonIdMap && !validLessonIdMap.has(key))) {
+        r.status = 'rejected';
+        r.adminNote = 'Lesson removed from curriculum';
+        r.updatedAt = nowIso;
+        changed = true;
+      }
+    }
+  }
+
+  return { store, changed };
+}
+
 function sanitizeUserPublic(u) {
   if (!u) return null;
   return {
@@ -345,7 +556,8 @@ function syncAllExcelUsers(store) {
         changed = true;
       }
     }
-    if (changed) {
+    const reconciled = reconcileAuthStoreWithLessons(store);
+    if (changed || reconciled.changed) {
       writeAuthStore(store);
     }
   } catch (err) {
@@ -1265,13 +1477,15 @@ app.post('/api/database/force-sync', jsonParser, (req, res) => {
       }
       syncLessonsJson();
       const loaded = parseLessonsWorkbook().sheets;
+      const lessonCatalog = syncCatalogFromLessonsRows(loaded.Lessons || [], 'admin');
       return res.json({
         success: true,
         syncedToServer: true,
         forced: true,
         database: 'edu-hub-db',
         domain: 'lessons',
-        sheets: loaded
+        sheets: loaded,
+        lessonCatalog
       });
     }
     return res.status(400).json({ success: false, error: 'Unknown domain: ' + domain });
@@ -1556,6 +1770,12 @@ app.post('/api/auth/login', jsonParser, (req, res) => {
       }
     }
 
+    const reconciled = reconcileAuthStoreWithLessons(store);
+    if (reconciled.changed) {
+      writeAuthStore(store);
+      user = store.users[user.uid] || user;
+    }
+
     const token = signAuthToken(user);
     res.json(buildSessionResponse(store, user, token));
   } catch (err) {
@@ -1690,8 +1910,13 @@ app.post('/api/auth/change-password', requireAuthToken, jsonParser, (req, res) =
 
 app.get('/api/auth/me', requireAuthToken, (req, res) => {
   const store = readAuthStore();
+  const reconciled = reconcileAuthStoreWithLessons(store);
+  if (reconciled.changed) {
+    writeAuthStore(store);
+  }
+  const latestUser = store.users[req.authUser.uid] || req.authUser;
   res.setHeader('Cache-Control', 'no-cache');
-  res.json(buildSessionResponse(store, req.authUser, null));
+  res.json(buildSessionResponse(store, latestUser, null));
 });
 
 app.put('/api/auth/profile', requireAuthToken, jsonParser, (req, res) => {
@@ -1883,12 +2108,14 @@ app.post('/api/upload-excel', requireAdminToken, express.raw({ type: '*/*', limi
     fs.writeFileSync(excelPath, req.body);
     syncLessonsJson();
     const data = parseLessonsWorkbook();
+    const lessonCatalog = syncCatalogFromLessonsRows(data.sheets.Lessons || [], req.authUser?.uid || 'admin');
 
     res.json({
       success: true,
       message: 'data/lessons.xlsx updated successfully!',
       sheetNames: data.sheetNames,
-      sheets: data.sheets
+      sheets: data.sheets,
+      lessonCatalog
     });
   } catch (err) {
     console.error('API upload-excel error:', err);
@@ -2424,14 +2651,18 @@ app.get('/api/admin/media-library', (req, res) => {
 
 function syncCatalogFromLessonsRows(lessonRows, adminUid) {
   const store = readAuthStore();
+  const prevCatalogKeys = Object.keys(store.lessonCatalog || {});
   const nowIso = new Date().toISOString();
   const nextCatalog = {};
+  const validMap = new Map();
   for (const row of lessonRows || []) {
-    const lessonId = String(row?.id || row?.lessonId || '')
-      .trim()
+    const rawId = String(row?.id || row?.lessonId || '').trim();
+    const lessonId = rawId
       .replace(/[^a-zA-Z0-9_\-]+/g, '-')
       .slice(0, 128);
     if (!lessonId) continue;
+    const normKey = normalizeLessonIdKeyServer(lessonId);
+    if (normKey) validMap.set(normKey, lessonId);
     const accessType = String(row.accessType || '').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
     const rawPrice = Number(row.price);
     const price =
@@ -2448,9 +2679,11 @@ function syncCatalogFromLessonsRows(lessonRows, adminUid) {
       updatedAt: nowIso
     };
   }
+  const removedIds = prevCatalogKeys.filter((k) => !validMap.has(normalizeLessonIdKeyServer(k)));
   store.lessonCatalog = nextCatalog;
+  reconcileAuthStoreWithLessons(store, validMap, null, removedIds);
   writeAuthStore(store);
-  return nextCatalog;
+  return store.lessonCatalog;
 }
 
 // Atomic Full-Workbook Sync Endpoint (used by Admin auto-sync for lessons, stories, and reels)
@@ -2873,10 +3106,11 @@ app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, (req,
       ).slice(0, 50);
     }
     targetUser.updatedAt = new Date().toISOString();
+    reconcileAuthStoreWithLessons(store);
     writeAuthStore(store);
 
     const allUsers = Object.values(store.users).map(sanitizeUserPublic);
-    res.json({ success: true, user: sanitizeUserPublic(targetUser), allUsers });
+    res.json({ success: true, user: sanitizeUserPublic(store.users[uid] || targetUser), allUsers });
   } catch (err) {
     console.error('PUT /api/admin/users/:uid/membership error:', err);
     res.status(500).json({ success: false, error: 'Failed to update user membership.' });
@@ -2984,6 +3218,7 @@ app.put('/api/admin/catalog', requireAdminToken, jsonParser, (req, res) => {
       };
     }
 
+    reconcileAuthStoreWithLessons(store, null, null, removeIds);
     writeAuthStore(store);
     res.json({ success: true, lessonCatalog: store.lessonCatalog });
   } catch (err) {
