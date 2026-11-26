@@ -746,7 +746,7 @@
               >
                 <span class="course-nav-main">
                   <span class="course-nav-name">${escapeHTML(courseName)}</span>
-                  <span class="course-nav-meta">${cInfo.unlocked ? 'Unlocked' : cInfo.isPracticeOnly ? 'Practice Only' : `${cInfo.price} Kyat`}</span>
+                  <span class="course-nav-meta">${cInfo.unlocked ? 'Unlocked' : cInfo.isPracticeOnly ? 'Practice Only' : `${Number(cInfo.price || 0).toLocaleString('en-US')} Kyat`}</span>
                 </span>
                 <span class="course-nav-count">${count}</span>
               </button>
@@ -772,6 +772,7 @@
     const isUnlocked = info.unlocked || Boolean(authState.isAdmin);
     const isPractice = !isUnlocked && info.isPracticeOnly;
     const practicePriceFmt = Number(info.practicePrice || 55000).toLocaleString('en-US');
+    const fullPriceFmt = Number(info.price || 0).toLocaleString('en-US');
 
     header.innerHTML = `
       <div class="course-banner-info">
@@ -787,9 +788,9 @@
             ? `<span class="course-unlocked-badge">✓ Full Course Unlocked</span>`
             : isPractice
             ? `<span class="course-practice-badge">✓ Practice Only Active (No Video)</span>
-               <button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Upgrade for Video (${escapeHTML(info.price)} Kyat)</button>`
+               <button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Upgrade for Video (${escapeHTML(fullPriceFmt)} Kyat)</button>`
             : `<button type="button" class="btn btn-secondary" id="btnUnlockPracticeCourse">Practice Only (${practicePriceFmt} Kyat)</button>
-               <button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Unlock Full Course (${escapeHTML(info.price)} Kyat)</button>`
+               <button type="button" class="btn btn-primary" id="btnUnlockFullCourse">Unlock Full Course (${escapeHTML(fullPriceFmt)} Kyat)</button>`
         }
       </div>
     `;
@@ -5571,15 +5572,14 @@
               <div class="excel-price-input-wrap">
                 <span>Kyat</span>
                 <input
-                  type="number"
-                  min="0"
-                  max="10000000"
-                  step="1"
+                  type="text"
+                  inputmode="numeric"
                   class="lp-inline-price"
                   data-pricing-price="${escapeHTML(id)}"
-                  value="${pricing.accessType === 'free' ? 0 : pricing.price}"
+                  value="${pricing.accessType === 'free' ? 0 : Number(pricing.price).toLocaleString()}"
                   ${pricing.accessType === 'free' ? 'disabled' : ''}
                   aria-label="Price in Kyat for ${escapeHTML(l.title || id)}"
+                  placeholder="0"
                 />
               </div>
             </div>
@@ -5598,7 +5598,8 @@
             priceInput.disabled = true;
           } else {
             priceInput.disabled = false;
-            if (!Number(priceInput.value)) priceInput.value = '75000';
+            const parsed = Number(String(priceInput.value).replace(/[^0-9]/g, ''));
+            if (!parsed) priceInput.value = '75,000';
           }
         }
       };

@@ -66,6 +66,18 @@
       .replace(/'/g, '&#39;');
   }
 
+  function parsePriceInput(val, defaultVal = 0) {
+    if (typeof val === 'number') return Math.max(0, val);
+    const clean = String(val || '').replace(/,/g, '').replace(/[^0-9.]/g, '').trim();
+    const num = Number(clean);
+    return Number.isFinite(num) ? Math.max(0, Math.round(num)) : defaultVal;
+  }
+
+  function formatPriceInput(val) {
+    const num = parsePriceInput(val);
+    return num.toLocaleString();
+  }
+
   function toast(msg, type = 'success') {
     if (window.LinguaAuthUI && typeof window.LinguaAuthUI.showToast === 'function') {
       window.LinguaAuthUI.showToast(msg, type);
@@ -229,6 +241,86 @@
       pushCourse('HSK 2');
     }
     return out;
+  }
+
+  async function doCreateCourse(name, price, lessons) {
+    if (window.LinguaAuth && typeof window.LinguaAuth.createCourseAdmin === 'function') {
+      return await window.LinguaAuth.createCourseAdmin(name, price, lessons);
+    }
+    const cfg = state.siteConfig || (window.LinguaAuth && window.LinguaAuth.getSiteConfig ? window.LinguaAuth.getSiteConfig() : {});
+    const currentCourses = Array.isArray(cfg.courses) ? [...cfg.courses] : ['HSK 2'];
+    const trimmed = normalizeCourseName(name);
+    const nextCourses = currentCourses.some((c) => courseSlug(c) === courseSlug(trimmed))
+      ? currentCourses
+      : [...currentCourses, trimmed];
+    const nextPrices = Object.assign({}, cfg.coursePrices || {});
+    nextPrices[trimmed] = Math.max(0, Number(price) || 0);
+
+    let updatedConfig = Object.assign({}, cfg, { courses: nextCourses, coursePrices: nextPrices });
+    if (window.LinguaAuth && typeof window.LinguaAuth.saveSiteConfig === 'function') {
+      updatedConfig = await window.LinguaAuth.saveSiteConfig({ courses: nextCourses, coursePrices: nextPrices });
+    }
+    return { config: updatedConfig };
+  }
+
+  async function doRenameCourse(oldName, newName, price, lessons) {
+    if (window.LinguaAuth && typeof window.LinguaAuth.renameCourseAdmin === 'function') {
+      return await window.LinguaAuth.renameCourseAdmin(oldName, newName, price, lessons);
+    }
+    const cfg = state.siteConfig || (window.LinguaAuth && window.LinguaAuth.getSiteConfig ? window.LinguaAuth.getSiteConfig() : {});
+    const currentCourses = Array.isArray(cfg.courses) ? [...cfg.courses] : ['HSK 2'];
+    const oldTrimmed = String(oldName || '').trim();
+    const newTrimmed = normalizeCourseName(newName);
+    const nextCourses = currentCourses.map((c) => (courseSlug(c) === courseSlug(oldTrimmed) ? newTrimmed : c));
+    if (!nextCourses.some((c) => courseSlug(c) === courseSlug(newTrimmed))) {
+      nextCourses.push(newTrimmed);
+    }
+    const nextPrices = Object.assign({}, cfg.coursePrices || {});
+    if (courseSlug(oldTrimmed) !== courseSlug(newTrimmed) && nextPrices[oldTrimmed] !== undefined) {
+      delete nextPrices[oldTrimmed];
+    }
+    nextPrices[newTrimmed] = Math.max(0, Number(price) || 0);
+
+    let updatedConfig = Object.assign({}, cfg, { courses: nextCourses, coursePrices: nextPrices });
+    if (window.LinguaAuth && typeof window.LinguaAuth.saveSiteConfig === 'function') {
+      updatedConfig = await window.LinguaAuth.saveSiteConfig({ courses: nextCourses, coursePrices: nextPrices });
+    }
+
+    const oldSlug = courseSlug(oldTrimmed);
+    const newSlug = courseSlug(newTrimmed);
+    let updatedLessons;
+    if (Array.isArray(lessons) && oldSlug !== newSlug) {
+      updatedLessons = lessons.map((l) => {
+        if (courseSlug(getLessonCourse(l)) !== oldSlug) return l;
+        return Object.assign({}, l, {
+          course: newTrimmed,
+          category: newTrimmed,
+          categoryKey: newSlug || 'course',
+          categoryNum: newTrimmed,
+          level: (!l.level || courseSlug(l.level) === oldSlug) ? newTrimmed : l.level
+        });
+      });
+    }
+
+    return { config: updatedConfig, lessonsSheets: updatedLessons ? { Lessons: updatedLessons } : undefined };
+  }
+
+  async function doDeleteCourse(courseName, lessons) {
+    if (window.LinguaAuth && typeof window.LinguaAuth.deleteCourseAdmin === 'function') {
+      return await window.LinguaAuth.deleteCourseAdmin(courseName, lessons);
+    }
+    const cfg = state.siteConfig || (window.LinguaAuth && window.LinguaAuth.getSiteConfig ? window.LinguaAuth.getSiteConfig() : {});
+    const currentCourses = Array.isArray(cfg.courses) ? [...cfg.courses] : ['HSK 2'];
+    const trimmed = String(courseName || '').trim();
+    const nextCourses = currentCourses.filter((c) => courseSlug(c) !== courseSlug(trimmed));
+    const nextPrices = Object.assign({}, cfg.coursePrices || {});
+    delete nextPrices[trimmed];
+
+    let updatedConfig = Object.assign({}, cfg, { courses: nextCourses, coursePrices: nextPrices });
+    if (window.LinguaAuth && typeof window.LinguaAuth.saveSiteConfig === 'function') {
+      updatedConfig = await window.LinguaAuth.saveSiteConfig({ courses: nextCourses, coursePrices: nextPrices });
+    }
+    return { config: updatedConfig };
   }
 
   function parseCsvList(str) {
@@ -1907,9 +1999,9 @@
                       <div class="admin-field" style="display:grid; grid-template-columns: 1fr 140px; gap:10px; align-items:center;">
                         <label style="margin:0; font-weight:700;">${escapeHTML(cName)}</label>
                         <div style="display:flex; align-items:center; gap:6px;">
-                          <input type="number" min="0" max="9999999" class="admin-input" data-cfg-course-price="${escapeHTML(
+                          <input type="text" inputmode="numeric" class="admin-input" data-cfg-course-price="${escapeHTML(
                             cName
-                          )}" value="${escapeHTML(curPrice)}" />
+                          )}" value="${escapeHTML(Number(curPrice).toLocaleString())}" placeholder="0" />
                           <span style="font-size:0.82rem; color:#64748b; font-weight:600;">Kyat</span>
                         </div>
                       </div>
@@ -2165,7 +2257,7 @@
       form.querySelectorAll('[data-cfg-course-price]').forEach((inp) => {
         const cname = inp.getAttribute('data-cfg-course-price');
         if (cname) {
-          coursePrices[cname] = Math.max(0, Number(inp.value) || 0);
+          coursePrices[cname] = parsePriceInput(inp.value);
         }
       });
 
@@ -4052,9 +4144,9 @@
                             <td class="num">${countInCourse}</td>
                             <td class="num">
                               <div style="display:inline-flex; align-items:center; justify-content:flex-end; gap:6px;">
-                                <input type="number" min="0" max="9999999" class="admin-input" style="width:100px; text-align:right; padding:4px 8px;" data-ls-course-price="${escapeHTML(
+                                <input type="text" inputmode="numeric" class="admin-input" style="width:110px; text-align:right; padding:4px 8px;" data-ls-course-price="${escapeHTML(
                                   cName
-                                )}" value="${escapeHTML(priceVal)}" />
+                                )}" value="${escapeHTML(Number(priceVal).toLocaleString())}" placeholder="0" />
                                 <span style="color:#64748b; font-size:0.8rem;">Kyat</span>
                               </div>
                             </td>
@@ -4195,7 +4287,7 @@
         const nextPrices = Object.assign({}, cfgCoursePrices);
         viewport.querySelectorAll('[data-ls-course-price]').forEach((inp) => {
           const cname = inp.getAttribute('data-ls-course-price');
-          if (cname) nextPrices[cname] = Math.max(0, Number(inp.value) || 0);
+          if (cname) nextPrices[cname] = parsePriceInput(inp.value);
         });
         try {
           const saved = await window.LinguaAuth.saveSiteConfig({ courses: coursesList, coursePrices: nextPrices });
@@ -4236,7 +4328,7 @@
           confirmLabel: 'Delete Course',
           onConfirm: async () => {
             try {
-              const out = await window.LinguaAuth.deleteCourseAdmin(cname, state.lessonsData.Lessons || []);
+              const out = await doDeleteCourse(cname, state.lessonsData.Lessons || []);
               state.siteConfig = out.config;
               if (courseSlug(state.filters.lessonCourse) === courseSlug(cname)) {
                 state.filters.lessonCourse = 'all';
@@ -4401,7 +4493,7 @@
           </div>
           <div class="admin-field">
             <label for="ccPrice">Course Pass Price (Kyat) *</label>
-            <input type="number" class="admin-input" id="ccPrice" min="0" max="9999999" value="120" required />
+            <input type="text" inputmode="numeric" class="admin-input" id="ccPrice" value="120,000" placeholder="e.g. 120,000" required />
           </div>
         </div>
         <div id="ccErrorBox" class="admin-backend-status is-error" hidden style="margin-top:10px;"></div>
@@ -4419,12 +4511,12 @@
       const errBox = document.getElementById('ccErrorBox');
       const submitBtn = document.getElementById('ccSubmitBtn');
       const name = (document.getElementById('ccName').value || '').trim();
-      const price = Math.max(0, Number(document.getElementById('ccPrice').value) || 0);
+      const price = parsePriceInput(document.getElementById('ccPrice').value);
       submitBtn.disabled = true;
       submitBtn.textContent = 'Creating…';
       errBox.hidden = true;
       try {
-        const out = await window.LinguaAuth.createCourseAdmin(name, price, state.lessonsData.Lessons || []);
+        const out = await doCreateCourse(name, price, state.lessonsData.Lessons || []);
         state.siteConfig = out.config;
         closeModal();
         toast(`Created course "${normalizeCourseName(name)}" (${price.toLocaleString()} Kyat).`);
@@ -4459,7 +4551,7 @@
           </div>
           <div class="admin-field">
             <label for="ecPrice">Course Pass Price (Kyat) *</label>
-            <input type="number" class="admin-input" id="ecPrice" min="0" max="9999999" value="${escapeHTML(curPrice)}" required />
+            <input type="text" inputmode="numeric" class="admin-input" id="ecPrice" value="${escapeHTML(Number(curPrice).toLocaleString())}" placeholder="e.g. 120,000" required />
           </div>
         </div>
         <div id="ecErrorBox" class="admin-backend-status is-error" hidden style="margin-top:10px;"></div>
@@ -4477,14 +4569,14 @@
       const submitBtn = document.getElementById('ecSubmitBtn');
       const rawNewName = (document.getElementById('ecName').value || '').trim();
       const newName = normalizeCourseName(rawNewName);
-      const price = Math.max(0, Number(document.getElementById('ecPrice').value) || 0);
+      const price = parsePriceInput(document.getElementById('ecPrice').value);
       submitBtn.disabled = true;
       submitBtn.textContent = 'Saving…';
       errBox.hidden = true;
       try {
         const oldSlug = courseSlug(courseName);
         const newSlug = courseSlug(newName);
-        const out = await window.LinguaAuth.renameCourseAdmin(
+        const out = await doRenameCourse(
           courseName,
           newName,
           price,
@@ -4724,9 +4816,9 @@
           </div>
           <div class="admin-field">
             <label for="lsPrice">Single-Lesson Price (Kyat)</label>
-            <input type="number" class="admin-input" id="lsPrice" min="0" max="10000000" value="${escapeHTML(
-              pricing.accessType === 'free' ? 0 : (pricing.price ?? 75000)
-            )}" />
+            <input type="text" inputmode="numeric" class="admin-input" id="lsPrice" value="${escapeHTML(
+              Number(pricing.accessType === 'free' ? 0 : (pricing.price ?? 75000)).toLocaleString()
+            )}" placeholder="0" />
           </div>
           <div class="admin-field">
             <label for="lsMeaning">Meaning</label>
@@ -4819,12 +4911,30 @@
       renderSubLists();
     };
 
+    const lsAccessEl = document.getElementById('lsAccess');
+    const lsPriceEl = document.getElementById('lsPrice');
+    if (lsAccessEl && lsPriceEl) {
+      lsAccessEl.onchange = () => {
+        if (lsAccessEl.value === 'free') {
+          lsPriceEl.value = '0';
+        } else if (parsePriceInput(lsPriceEl.value) === 0) {
+          lsPriceEl.value = '75,000';
+        }
+      };
+      lsPriceEl.oninput = () => {
+        const val = parsePriceInput(lsPriceEl.value);
+        if (val > 0 && lsAccessEl.value === 'free') {
+          lsAccessEl.value = 'paid';
+        }
+      };
+    }
+
     document.getElementById('lessonEditForm').onsubmit = async (e) => {
       e.preventDefault();
       const id = document.getElementById('lsId').value.trim();
       const courseName = normalizeCourseName(document.getElementById('lsCourse').value);
       const accessType = document.getElementById('lsAccess').value === 'paid' ? 'paid' : 'free';
-      const price = accessType === 'free' ? 0 : Math.max(0, Number(document.getElementById('lsPrice').value) || 0);
+      const price = accessType === 'free' ? 0 : parsePriceInput(document.getElementById('lsPrice').value, 75000);
 
       const rec = {
         id,
@@ -4873,7 +4983,7 @@
         const knownCourses = getAdminCoursesList();
         if (!knownCourses.some((c) => courseSlug(c) === courseSlug(courseName))) {
           try {
-            const cOut = await window.LinguaAuth.createCourseAdmin(courseName, 120, state.lessonsData.Lessons || []);
+            const cOut = await doCreateCourse(courseName, 120, state.lessonsData.Lessons || []);
             if (cOut && cOut.config) state.siteConfig = cOut.config;
           } catch (_) {}
         }

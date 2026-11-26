@@ -1920,6 +1920,149 @@ function exportSiteConfigJson(): void {
   }, 150);
 }
 
+function getCoursePrice(courseName: string): number {
+  const cfg = getSiteConfig();
+  const target = String(courseName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  for (const [c, p] of Object.entries(cfg.coursePrices || {})) {
+    const cSlug = String(c || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (cSlug === target) return Number(p) || 0;
+  }
+  return target.includes('hsk2') ? 120 : 100;
+}
+
+function getPracticePrice(): number {
+  const cfg = getSiteConfig();
+  return typeof cfg.practicePrice === 'number' ? cfg.practicePrice : 55000;
+}
+
+async function createCourseAdmin(
+  courseName: string,
+  price: number,
+  _lessons?: any[]
+): Promise<{ config: SiteConfig }> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const trimmed = String(courseName || '').trim();
+  if (!trimmed) throw new Error('Course name cannot be empty.');
+  const newSlug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const cfg = getSiteConfig();
+  const currentCourses = Array.isArray(cfg.courses) ? [...cfg.courses] : ['HSK 2'];
+  const exists = currentCourses.some((c) => c.toLowerCase().replace(/[^a-z0-9]+/g, '') === newSlug);
+  const nextCourses = exists ? currentCourses : [...currentCourses, trimmed];
+  const nextPrices: Record<string, number> = { ...(cfg.coursePrices || {}) };
+  nextPrices[trimmed] = Math.max(0, Number(price) || 0);
+
+  const updatedConfig = await saveSiteConfig({
+    courses: nextCourses,
+    coursePrices: nextPrices
+  });
+  return { config: updatedConfig };
+}
+
+async function renameCourseAdmin(
+  oldCourseName: string,
+  newCourseName: string,
+  price: number,
+  lessons?: any[]
+): Promise<{ config: SiteConfig; lessonsSheets?: { Lessons: any[] } }> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const oldTrimmed = String(oldCourseName || '').trim();
+  const newTrimmed = String(newCourseName || '').trim();
+  if (!newTrimmed) throw new Error('Course name cannot be empty.');
+
+  const oldSlug = oldTrimmed.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const newSlug = newTrimmed.toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  const cfg = getSiteConfig();
+  const currentCourses = Array.isArray(cfg.courses) ? [...cfg.courses] : ['HSK 2'];
+  const nextCourses = currentCourses.map((c) => (c.toLowerCase().replace(/[^a-z0-9]+/g, '') === oldSlug ? newTrimmed : c));
+  if (!nextCourses.some((c) => c.toLowerCase().replace(/[^a-z0-9]+/g, '') === newSlug)) {
+    nextCourses.push(newTrimmed);
+  }
+  const nextPrices: Record<string, number> = { ...(cfg.coursePrices || {}) };
+  if (oldSlug !== newSlug) {
+    Object.keys(nextPrices).forEach((k) => {
+      if (k.toLowerCase().replace(/[^a-z0-9]+/g, '') === oldSlug) {
+        delete nextPrices[k];
+      }
+    });
+  }
+  nextPrices[newTrimmed] = Math.max(0, Number(price) || 0);
+
+  // If overlay user subscriptions or course passes have oldCourseName, rename them as well
+  const overlay = readOverlayStore();
+  let overlayChanged = false;
+  if (oldSlug !== newSlug) {
+    Object.keys(overlay.users || {}).forEach((uid) => {
+      const u = overlay.users[uid];
+      if (u?.profile?.coursePasses && Array.isArray(u.profile.coursePasses)) {
+        u.profile.coursePasses = u.profile.coursePasses.map((cp: string) => {
+          const cpSlug = String(cp || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+          if (cpSlug === oldSlug) {
+            overlayChanged = true;
+            return newTrimmed;
+          }
+          return cp;
+        });
+      }
+    });
+  }
+  if (overlayChanged) {
+    writeOverlayStore(overlay);
+  }
+
+  // Handle lesson updates if lessons list is provided
+  let updatedLessons: any[] | undefined = undefined;
+  if (Array.isArray(lessons) && oldSlug !== newSlug) {
+    updatedLessons = lessons.map((l: any) => {
+      const lCourse = String(l?.course || l?.category || '').trim();
+      const lSlug = lCourse.toLowerCase().replace(/[^a-z0-9]+/g, '');
+      if (lSlug !== oldSlug) return l;
+      return {
+        ...l,
+        course: newTrimmed,
+        category: newTrimmed,
+        categoryKey: newSlug || 'course',
+        categoryNum: newTrimmed,
+        level: (!l.level || l.level.toLowerCase().replace(/[^a-z0-9]+/g, '') === oldSlug) ? newTrimmed : l.level
+      };
+    });
+  }
+
+  const updatedConfig = await saveSiteConfig({
+    courses: nextCourses,
+    coursePrices: nextPrices
+  });
+
+  return {
+    config: updatedConfig,
+    ...(updatedLessons ? { lessonsSheets: { Lessons: updatedLessons } } : {})
+  };
+}
+
+async function deleteCourseAdmin(
+  courseName: string,
+  _lessons?: any[]
+): Promise<{ config: SiteConfig }> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const trimmed = String(courseName || '').trim();
+  const delSlug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const cfg = getSiteConfig();
+  const currentCourses = Array.isArray(cfg.courses) ? [...cfg.courses] : ['HSK 2'];
+  const nextCourses = currentCourses.filter((c) => c.toLowerCase().replace(/[^a-z0-9]+/g, '') !== delSlug);
+  const nextPrices: Record<string, number> = { ...(cfg.coursePrices || {}) };
+  Object.keys(nextPrices).forEach((k) => {
+    if (k.toLowerCase().replace(/[^a-z0-9]+/g, '') === delSlug) {
+      delete nextPrices[k];
+    }
+  });
+
+  const updatedConfig = await saveSiteConfig({
+    courses: nextCourses,
+    coursePrices: nextPrices
+  });
+  return { config: updatedConfig };
+}
+
 async function exportUsersWorkbook(): Promise<{
   fileName: string;
   userCount: number;
@@ -2412,6 +2555,11 @@ const LinguaAuth = {
   reloadUsersWorkbookFromRepo,
   getExcelSyncSummary,
   getLessonPricing,
+  getCoursePrice,
+  getPracticePrice,
+  createCourseAdmin,
+  renameCourseAdmin,
+  deleteCourseAdmin,
   hasActiveMembership,
   hasPendingRequest,
   canAccessLesson,
