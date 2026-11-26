@@ -925,7 +925,7 @@ const DEFAULT_SHEET_HEADERS = {
     'radical', 'strokeAnimationUrl', 'svgPath', 'strokeOrderSteps'
   ],
   Exercises: [
-    'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'pinyin', 'question', 'audioUrl',
+    'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'pinyin', 'question', 'audioUrl', 'audioText',
     'optionA', 'optionB', 'optionC', 'optionD', 'optionE',
     'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage', 'optionEImage',
     'answer', 'explanation'
@@ -3101,17 +3101,40 @@ app.post(
         .map((r, i) => {
           const lid = String(r.lessonId || r.LessonId || r['Lesson ID'] || scopeLessonId || '').trim();
           const question = String(r.question || r.Question || '').trim();
+          const audioUrl = String(r.audioUrl || r.AudioUrl || r.audio_url || r.audio || '').trim();
+          const audioText = String(
+            r.audioText ||
+              r.AudioText ||
+              r.audio_text ||
+              r.listeningSentence ||
+              r.listening_sentence ||
+              r.audioSentence ||
+              r['Audio Sentence'] ||
+              r['Listening Sentence'] ||
+              ''
+          ).trim();
           const answer = String(r.answer || r.Answer || r.correct || '').trim();
-          if (!question || !lid) return null;
+          if ((!question && !audioText && !audioUrl) || !lid) return null;
           return {
             lessonId: lid,
             order: Number(r.order || r.Order) || i + 1,
-            type: String(r.type || r.Type || 'choice').trim().toLowerCase() || 'choice',
+            type: String(r.type || r.Type || 'multiple-choice').trim().toLowerCase() || 'multiple-choice',
+            groupId: String(r.groupId || r.GroupId || r.group_id || '').trim(),
+            groupTitle: String(r.groupTitle || r.GroupTitle || r.group_title || '').trim(),
+            pinyin: String(r.pinyin || r.Pinyin || r.pinyinHint || r.pinyin_hint || '').trim(),
             question,
+            audioUrl,
+            audioText,
             optionA: String(r.optionA ?? r.OptionA ?? '').trim(),
             optionB: String(r.optionB ?? r.OptionB ?? '').trim(),
             optionC: String(r.optionC ?? r.OptionC ?? '').trim(),
             optionD: String(r.optionD ?? r.OptionD ?? '').trim(),
+            optionE: String(r.optionE ?? r.OptionE ?? '').trim(),
+            optionAImage: String(r.optionAImage || r.option_a_image || '').trim(),
+            optionBImage: String(r.optionBImage || r.option_b_image || '').trim(),
+            optionCImage: String(r.optionCImage || r.option_c_image || '').trim(),
+            optionDImage: String(r.optionDImage || r.option_d_image || '').trim(),
+            optionEImage: String(r.optionEImage || r.option_e_image || '').trim(),
             answer: answer || String(r.optionA ?? '').trim(),
             explanation: String(r.explanation || r.Explanation || '').trim()
           };

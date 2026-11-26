@@ -310,6 +310,17 @@
     const pinyin = String(r.pinyin || r.Pinyin || r.pinyinHint || r.pinyin_hint || '').trim();
     const question = String(r.question || r.Question || '').trim();
     const audioUrl = String(r.audioUrl || r.audio_url || r.AudioUrl || r.audio || '').trim();
+    const audioText = String(
+      r.audioText ||
+        r.audio_text ||
+        r.AudioText ||
+        r.listeningSentence ||
+        r.listening_sentence ||
+        r.audioSentence ||
+        r['Audio Sentence'] ||
+        r['Listening Sentence'] ||
+        ''
+    ).trim();
     const optionA = String(r.optionA ?? r.option_a ?? r.OptionA ?? '').trim();
     const optionB = String(r.optionB ?? r.option_b ?? r.OptionB ?? '').trim();
     const optionC = String(r.optionC ?? r.option_c ?? r.OptionC ?? '').trim();
@@ -336,6 +347,8 @@
       question,
       audioUrl,
       audio_url: audioUrl,
+      audioText,
+      audio_text: audioText,
       optionA,
       option_a: optionA,
       optionB,
@@ -615,16 +628,29 @@
   }
 
   // Speak Chinese speech synthesis
-  function speakChinese(text) {
-    if (!text || typeof window === 'undefined') return;
+  function speakChinese(text, rate = 0.85, onEnd = null) {
+    if (!text || typeof window === 'undefined') {
+      if (typeof onEnd === 'function') onEnd();
+      return;
+    }
+    const cleanRate = Number(rate) > 0 ? Number(rate) : 0.85;
+    if (window.LinguaAudio && typeof window.LinguaAudio.speak === 'function') {
+      window.LinguaAudio.speak(text, null, onEnd, cleanRate);
+      return;
+    }
     try {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'zh-CN';
-      utterance.rate = 0.85;
+      utterance.rate = cleanRate;
+      if (typeof onEnd === 'function') {
+        utterance.onend = onEnd;
+        utterance.onerror = onEnd;
+      }
       window.speechSynthesis.speak(utterance);
     } catch (e) {
       console.warn("TTS error:", e);
+      if (typeof onEnd === 'function') onEnd();
     }
   }
 
@@ -1692,6 +1718,15 @@
         pinyin: String(raw.pinyin || raw.pinyinHint || raw.pinyin_hint || '').trim(),
         question: String(raw.question || '').trim(),
         audioUrl: String(raw.audioUrl || raw.audio_url || raw.audio || '').trim(),
+        audioText: String(
+          raw.audioText ||
+            raw.audio_text ||
+            raw.AudioText ||
+            raw.listeningSentence ||
+            raw.listening_sentence ||
+            raw.audioSentence ||
+            ''
+        ).trim(),
         optionA: String(raw.optionA ?? raw.option_a ?? '').trim(),
         optionB: String(raw.optionB ?? raw.option_b ?? '').trim(),
         optionC: String(raw.optionC ?? raw.option_c ?? '').trim(),
@@ -1707,10 +1742,68 @@
       }))
       .sort((a, b) => a.order - b.order);
 
-    const buildExerciseAudioHTML = (ex) => {
+    const buildExerciseAudioHTML = (ex, qNum = '') => {
       const audioSrc = ex.audioUrl ? backendAssetUrl(ex.audioUrl) : '';
-      const hasChinese = /[\u4e00-\u9fa5]/.test(ex.question || '');
-      if (!audioSrc && !hasChinese) return '';
+      const audioSentence = String(ex.audioText || '').trim();
+      const isListening = ex.type === 'listening';
+      const fallbackChinese = /[\u4e00-\u9fa5]/.test(ex.question || '') ? ex.question : '';
+      const spokenSentence = audioSentence || fallbackChinese;
+
+      if (!audioSrc && !spokenSentence) return '';
+
+      if (isListening || audioSentence) {
+        return `
+          <div class="quiz-listening-card" id="quizListenBox-${qNum}">
+            <div class="quiz-listening-controls">
+              ${
+                spokenSentence || audioSrc
+                  ? `
+                <button
+                  type="button"
+                  class="quiz-listening-play-btn"
+                  data-listen-play="${qNum}"
+                  data-audio-url="${escapeHTML(audioSrc)}"
+                  data-speak-text="${escapeHTML(spokenSentence)}"
+                  data-rate="0.85"
+                >
+                  🔊 Play Listening Audio
+                </button>
+                <button
+                  type="button"
+                  class="quiz-tts-btn quiz-listening-slow-btn"
+                  data-listen-play="${qNum}"
+                  data-audio-url="${escapeHTML(audioSrc)}"
+                  data-speak-text="${escapeHTML(spokenSentence)}"
+                  data-rate="0.62"
+                  title="Listen slowly"
+                >
+                  🐢 Slow
+                </button>
+              `
+                  : ''
+              }
+              ${
+                audioSentence
+                  ? `<button type="button" class="quiz-transcript-toggle" data-toggle-transcript="${qNum}">👁 Show Sentence</button>`
+                  : ''
+              }
+            </div>
+            ${
+              audioSrc
+                ? `<audio src="${escapeHTML(audioSrc)}" controls preload="none" class="quiz-audio-player" id="quizAudioPlayer-${qNum}"></audio>`
+                : ''
+            }
+            ${
+              audioSentence
+                ? `<div class="quiz-listening-transcript" id="quizTranscript-${qNum}" hidden>
+                     <span class="quiz-transcript-kicker">Audio Sentence:</span>
+                     <span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(audioSentence)}</span>
+                   </div>`
+                : ''
+            }
+          </div>
+        `;
+      }
 
       return `
         <div class="quiz-audio-bar">
@@ -1720,8 +1813,8 @@
               : ''
           }
           ${
-            hasChinese
-              ? `<button type="button" class="quiz-tts-btn" data-speak-text="${escapeHTML(ex.question)}">🔊 Listen</button>`
+            spokenSentence
+              ? `<button type="button" class="quiz-tts-btn" data-speak-text="${escapeHTML(spokenSentence)}">🔊 Listen</button>`
               : ''
           }
         </div>
@@ -1874,7 +1967,7 @@
 
                   <div class="quiz-shared-questions-list">
                     ${block.items.map(({ ex, qNum }) => `
-                      <div class="quiz-shared-question-row" id="quizCard-${qNum}">
+                      <div class="quiz-shared-question-row" id="quizCard-${qNum}" data-audio-text="${escapeHTML(ex.audioText || '')}">
                         <div class="quiz-shared-row-main">
                           <div class="quiz-shared-row-prompt">
                             <span class="quiz-shared-row-num">${qNum}.</span>
@@ -1885,7 +1978,7 @@
                                   ? `<div class="quiz-shared-prompt-line">${formatBlankQuestionHTML(ex.question)}</div>`
                                   : `<div class="quiz-shared-prompt-line muted">Choose ${slots.map((s) => s.letter).join(', ')} for Question ${qNum}</div>`
                               }
-                              ${buildExerciseAudioHTML(ex)}
+                              ${buildExerciseAudioHTML(ex, qNum)}
                             </div>
                           </div>
                           <div class="quiz-letter-choices" role="group" aria-label="Choices for Question ${qNum}">
@@ -1919,18 +2012,24 @@
             const { ex, qNum } = block;
             const slots = getExerciseSlots(ex);
             const hasOptionImages = slots.some((s) => Boolean(s.image));
+            const isListening = ex.type === 'listening';
             const isFillBlank =
               ex.type === 'fill-blank' ||
               ex.type === 'pinyin-write' ||
               ex.type === 'write-hanzi' ||
-              (!hasOptionImages && !slots.length);
+              (!isListening && !hasOptionImages && !slots.length);
             const isImageChoice = !isFillBlank && (ex.type === 'image-choice' || hasOptionImages);
+            const questionPrompt = ex.question || (isListening ? 'Listen to the audio and choose the correct answer.' : '');
 
             return `
-              <div class="quiz-card-item" id="quizCard-${qNum}">
+              <div class="quiz-card-item" id="quizCard-${qNum}" data-audio-text="${escapeHTML(ex.audioText || '')}">
                 <div class="quiz-question-number">Question ${qNum} • ${
               isFillBlank
                 ? 'Write Chinese Character (Pinyin)'
+                : isListening && isImageChoice
+                ? 'Listening • Picture Multiple Choice'
+                : isListening
+                ? 'Listening • Multiple Choice'
                 : isImageChoice
                 ? 'Picture Multiple Choice'
                 : 'Multiple Choice'
@@ -1946,15 +2045,15 @@
                     : ''
                 }
                 ${
-                  ex.question
+                  questionPrompt
                     ? `<h4 class="quiz-question-text">${
                         isFillBlank
-                          ? formatBlankQuestionHTML(ex.question, ex.pinyin)
-                          : wrapChineseInKaiti(escapeHTML(ex.question))
+                          ? formatBlankQuestionHTML(questionPrompt, ex.pinyin)
+                          : wrapChineseInKaiti(escapeHTML(questionPrompt))
                       }</h4>`
                     : ''
                 }
-                ${buildExerciseAudioHTML(ex)}
+                ${buildExerciseAudioHTML(ex, qNum)}
 
                 ${
                   isFillBlank
@@ -2021,11 +2120,14 @@
                         class="quiz-option-btn"
                         data-question-index="${qNum}"
                         data-letter="${escapeHTML(slot.letter)}"
-                        data-option="${escapeHTML(slot.text)}"
+                        data-option="${escapeHTML(slot.text || slot.letter)}"
                         data-answer="${escapeHTML(ex.answer || '')}"
                         data-explanation="${escapeHTML(ex.explanation || '')}"
                       >
-                        <span>${wrapChineseInKaiti(escapeHTML(slot.text))}</span>
+                        <span class="quiz-opt-text-wrap">
+                          ${isListening ? `<span class="quiz-opt-letter">${escapeHTML(slot.letter)}</span>` : ''}
+                          <span>${wrapChineseInKaiti(escapeHTML(slot.text || slot.letter))}</span>
+                        </span>
                         <span class="quiz-opt-icon"></span>
                       </button>
                     `).join('')}
@@ -2049,8 +2151,70 @@
       </div>
     `;
 
+    // Attach listening play & slow controls (audio file or listening sentence TTS)
+    panel.querySelectorAll('[data-listen-play]').forEach((btn) => {
+      btn.onclick = () => {
+        const qNum = btn.getAttribute('data-listen-play');
+        const audioUrl = btn.getAttribute('data-audio-url') || '';
+        const speakTxt = btn.getAttribute('data-speak-text') || '';
+        const rate = Number(btn.getAttribute('data-rate')) || 0.85;
+
+        panel.querySelectorAll('.quiz-listening-play-btn, .quiz-listening-slow-btn').forEach((b) => {
+          b.classList.remove('is-playing');
+        });
+        btn.classList.add('is-playing');
+        const clearPlaying = () => btn.classList.remove('is-playing');
+
+        const cardPlayer = document.getElementById(`quizAudioPlayer-${qNum}`);
+        if (audioUrl && cardPlayer) {
+          try {
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+            cardPlayer.pause();
+            cardPlayer.currentTime = 0;
+            cardPlayer.playbackRate = rate;
+            cardPlayer.onended = clearPlaying;
+            cardPlayer.onerror = () => {
+              if (speakTxt) {
+                speakChinese(speakTxt, rate, clearPlaying);
+              } else {
+                clearPlaying();
+              }
+            };
+            const p = cardPlayer.play();
+            if (p && typeof p.catch === 'function') {
+              p.catch(() => {
+                if (speakTxt) {
+                  speakChinese(speakTxt, rate, clearPlaying);
+                } else {
+                  clearPlaying();
+                }
+              });
+            }
+            return;
+          } catch (_) {}
+        }
+
+        if (speakTxt) {
+          speakChinese(speakTxt, rate, clearPlaying);
+        } else {
+          clearPlaying();
+        }
+      };
+    });
+
+    panel.querySelectorAll('[data-toggle-transcript]').forEach((btn) => {
+      btn.onclick = () => {
+        const qNum = btn.getAttribute('data-toggle-transcript');
+        const box = document.getElementById(`quizTranscript-${qNum}`);
+        if (!box) return;
+        const nextHidden = !box.hidden;
+        box.hidden = nextHidden;
+        btn.textContent = nextHidden ? '👁 Show Sentence' : '🙈 Hide Sentence';
+      };
+    });
+
     // Attach TTS listen listeners for optional audio read-aloud
-    panel.querySelectorAll('.quiz-tts-btn').forEach((btn) => {
+    panel.querySelectorAll('.quiz-tts-btn:not([data-listen-play])').forEach((btn) => {
       btn.onclick = () => {
         const txt = btn.getAttribute('data-speak-text');
         if (txt) speakChinese(txt);
@@ -2233,7 +2397,11 @@
         statusEl.innerHTML = `<span>❌ Incorrect. The correct answer is: <strong>${wrapChineseInKaiti(escapeHTML(resolvedCorrectDisplay))}</strong></span>`;
         playSound('incorrect');
       }
-      textEl.innerHTML = wrapChineseInKaiti(escapeHTML(explanation || (isCorrect ? 'Well done!' : 'Keep practicing!')));
+      const transcript = card.dataset.audioText || '';
+      const baseExplanation = wrapChineseInKaiti(escapeHTML(explanation || (isCorrect ? 'Well done!' : 'Keep practicing!')));
+      textEl.innerHTML = transcript
+        ? `<div style="margin-bottom:4px;"><strong>🔊 Listening Sentence:</strong> ${wrapChineseInKaiti(escapeHTML(transcript))}</div>${baseExplanation}`
+        : baseExplanation;
     }
 
     exerciseAnswersState[qNum] = isCorrect;

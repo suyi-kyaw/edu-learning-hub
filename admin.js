@@ -2718,6 +2718,7 @@
               </select>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddListeningBtn">+ Listening Exercise</button>
               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddImgBtn">+ Image Choice</button>
               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddSharedBtn">+ Shared Top Bank</button>
               <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="exAddFillBtn">+ Write Character (Pinyin)</button>
@@ -2732,12 +2733,14 @@
                     .map((ex, idx) => {
                       const globalIndex = state.editingExercisesList.indexOf(ex);
                       const qType = String(ex.type || 'multiple-choice').trim().toLowerCase();
+                      const isListening = qType === 'listening';
                       const isImageChoice = qType === 'image-choice';
                       const isSharedImage = qType === 'shared-image-match';
                       const isSharedText = qType === 'shared-text-match';
                       const isSharedBank = isSharedImage || isSharedText;
                       const isFillBlank = qType === 'fill-blank' || qType === 'pinyin-write' || qType === 'write-hanzi';
                       const showImageControls =
+                        isListening ||
                         isImageChoice ||
                         isSharedImage ||
                         Boolean(
@@ -2748,11 +2751,19 @@
                             ex.optionEImage
                         );
                       const audioVal = String(ex.audioUrl || '').trim();
+                      const audioTextVal = String(
+                        ex.audioText ||
+                          ex.audio_text ||
+                          ex.listeningSentence ||
+                          ex.listening_sentence ||
+                          ex.audioSentence ||
+                          ''
+                      ).trim();
                       const ansVal = String(ex.answer || '').trim();
                       const ansUpper = ansVal.toUpperCase();
 
                       return `
-                        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px;">
+                        <div style="background:#f8fafc; border:1px solid ${isListening ? '#fdba74' : '#cbd5e1'}; border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px;">
                           <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
                             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                               <label style="font-size:0.78rem; font-weight:700; color:#475569;">#
@@ -2763,8 +2774,9 @@
                               <input type="text" class="admin-input" style="width:140px;" placeholder="Lesson ID" data-ex-field="${globalIndex}:lessonId" value="${escapeHTML(
                         ex.lessonId || activeLessonId || ''
                       )}" />
-                              <select class="admin-select" style="width:245px;" data-ex-type="${globalIndex}">
+                              <select class="admin-select" style="width:280px;" data-ex-type="${globalIndex}">
                                 <option value="multiple-choice" ${qType === 'multiple-choice' ? 'selected' : ''}>Multiple Choice (Text)</option>
+                                <option value="listening" ${isListening ? 'selected' : ''}>Listening Practice (Audio Sentence + Text/Image Choices)</option>
                                 <option value="image-choice" ${qType === 'image-choice' ? 'selected' : ''}>Image Choice (Per Question)</option>
                                 <option value="shared-image-match" ${qType === 'shared-image-match' ? 'selected' : ''}>Shared Top Bank (Images or Text)</option>
                                 <option value="shared-text-match" ${qType === 'shared-text-match' ? 'selected' : ''}>Shared Top Text Bank (Words / Sentences)</option>
@@ -2808,39 +2820,92 @@
                               : ''
                           }
 
-                          <div style="display:grid; grid-template-columns:1.3fr 1fr; gap:8px; align-items:start;">
-                            <div>
-                              <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:3px;">${
-                                isFillBlank
-                                  ? 'Sentence with Blank (use ( ) or ____ where character goes)'
-                                  : 'Question Text / Dialogue Prompt'
-                              }</label>
-                              <input type="text" class="admin-input" placeholder="${
-                                isFillBlank
-                                  ? 'e.g. 他 ( ) 时候 不 吃 晚饭。'
-                                  : 'Enter question text or dialogue prompt...'
-                              }" data-ex-field="${globalIndex}:question" value="${escapeHTML(
-                        ex.question || ''
-                      )}" />
-                            </div>
-                            <div>
-                              <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:3px;">Optional Audio (Listening Exercise)</label>
-                              <div style="display:flex; gap:6px; align-items:center;">
-                                <input type="text" class="admin-input" style="font-size:0.8rem;" placeholder="assets/audio/... or https://..." data-ex-field="${globalIndex}:audioUrl" value="${escapeHTML(
-                        audioVal
-                      )}" />
-                                <label class="admin-btn admin-btn-secondary admin-btn-sm" style="margin:0; cursor:pointer; white-space:nowrap;">
-                                  <span>Upload Audio</span>
-                                  <input type="file" accept="audio/*" data-ex-upload="${globalIndex}:audioUrl" hidden />
-                                </label>
+                          ${
+                            isListening
+                              ? `
+                            <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px;">
+                              <div>
+                                <label style="display:block; font-size:0.76rem; font-weight:700; color:#9a3412; margin-bottom:3px;">Question Prompt (shown to learner) *</label>
+                                <input type="text" class="admin-input" placeholder="e.g. Listen to the sentence and choose the matching picture / answer." data-ex-field="${globalIndex}:question" value="${escapeHTML(
+                                  ex.question || ''
+                                )}" />
                               </div>
-                              ${
-                                audioVal
-                                  ? `<audio src="${escapeHTML(assetUrl(audioVal))}" controls preload="none" style="height:28px; width:100%; margin-top:4px;"></audio>`
-                                  : ''
-                              }
+                              <div>
+                                <label style="display:block; font-size:0.76rem; font-weight:700; color:#9a3412; margin-bottom:3px;">Sentence for Audio Playback (Listening Practice) *</label>
+                                <div style="display:flex; gap:6px; align-items:center;">
+                                  <input type="text" class="admin-input" placeholder="e.g. 她请我们吃了北京烤鸭。(spoken aloud as listening audio)" data-ex-field="${globalIndex}:audioText" value="${escapeHTML(
+                                    audioTextVal
+                                  )}" />
+                                  <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-speak="${globalIndex}" title="Preview Chinese audio playback" style="white-space:nowrap;">▶ Test Play</button>
+                                </div>
+                                <div style="font-size:0.73rem; color:#9a3412; margin-top:3px;">
+                                  This sentence is played when the learner clicks Listen (transcript stays hidden until after answering). Optionally attach a recorded audio file below.
+                                </div>
+                              </div>
+                              <div>
+                                <label style="display:block; font-size:0.74rem; font-weight:700; color:#475569; margin-bottom:3px;">Optional Audio Recording File (overrides speech playback if provided)</label>
+                                <div style="display:flex; gap:6px; align-items:center;">
+                                  <input type="text" class="admin-input" style="font-size:0.8rem;" placeholder="assets/audio/... or https://... (optional)" data-ex-field="${globalIndex}:audioUrl" value="${escapeHTML(
+                                    audioVal
+                                  )}" />
+                                  <label class="admin-btn admin-btn-secondary admin-btn-sm" style="margin:0; cursor:pointer; white-space:nowrap;">
+                                    <span>Upload Audio</span>
+                                    <input type="file" accept="audio/*" data-ex-upload="${globalIndex}:audioUrl" hidden />
+                                  </label>
+                                </div>
+                                ${
+                                  audioVal
+                                    ? `<audio src="${escapeHTML(assetUrl(audioVal))}" controls preload="none" style="height:28px; width:100%; margin-top:4px;"></audio>`
+                                    : ''
+                                }
+                              </div>
+                              <div style="font-size:0.74rem; color:#475569;">
+                                Multiple Choice Options (A–E) below support <strong>Text choices</strong>, <strong>Image choices</strong>, or both together.
+                              </div>
                             </div>
-                          </div>
+                          `
+                              : `
+                            <div style="display:grid; grid-template-columns:1.3fr 1fr; gap:8px; align-items:start;">
+                              <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:3px;">${
+                                  isFillBlank
+                                    ? 'Sentence with Blank (use ( ) or ____ where character goes)'
+                                    : 'Question Text / Dialogue Prompt'
+                                }</label>
+                                <input type="text" class="admin-input" placeholder="${
+                                  isFillBlank
+                                    ? 'e.g. 他 ( ) 时候 不 吃 晚饭。'
+                                    : 'Enter question text or dialogue prompt...'
+                                }" data-ex-field="${globalIndex}:question" value="${escapeHTML(
+                          ex.question || ''
+                        )}" />
+                              </div>
+                              <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:3px;">Optional Audio File or Audio Sentence</label>
+                                <div style="display:flex; gap:6px; align-items:center; margin-bottom:4px;">
+                                  <input type="text" class="admin-input" style="font-size:0.8rem;" placeholder="Optional spoken Chinese sentence..." data-ex-field="${globalIndex}:audioText" value="${escapeHTML(
+                                    audioTextVal
+                                  )}" />
+                                  <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" data-ex-speak="${globalIndex}" title="Preview audio" style="white-space:nowrap;">▶</button>
+                                </div>
+                                <div style="display:flex; gap:6px; align-items:center;">
+                                  <input type="text" class="admin-input" style="font-size:0.8rem;" placeholder="assets/audio/... or https://..." data-ex-field="${globalIndex}:audioUrl" value="${escapeHTML(
+                          audioVal
+                        )}" />
+                                  <label class="admin-btn admin-btn-secondary admin-btn-sm" style="margin:0; cursor:pointer; white-space:nowrap;">
+                                    <span>Upload Audio</span>
+                                    <input type="file" accept="audio/*" data-ex-upload="${globalIndex}:audioUrl" hidden />
+                                  </label>
+                                </div>
+                                ${
+                                  audioVal
+                                    ? `<audio src="${escapeHTML(assetUrl(audioVal))}" controls preload="none" style="height:28px; width:100%; margin-top:4px;"></audio>`
+                                    : ''
+                                }
+                              </div>
+                            </div>
+                          `
+                          }
 
                           ${
                             isFillBlank || isSharedBank
@@ -2917,7 +2982,7 @@
                       `;
                     })
                     .join('')
-                : `<div style="text-align:center; color:#64748b; padding:28px; border:1px dashed #cbd5e1; border-radius:12px;">No exercises found for this lesson. Click <strong>+ Add Text Exercise</strong>, <strong>+ Image Choice</strong>, <strong>+ Shared Top Bank</strong>, or <strong>+ Write Character (Pinyin)</strong> above.</div>`
+                : `<div style="text-align:center; color:#64748b; padding:28px; border:1px dashed #cbd5e1; border-radius:12px;">No exercises found for this lesson. Click <strong>+ Listening Exercise</strong>, <strong>+ Add Text Exercise</strong>, <strong>+ Image Choice</strong>, <strong>+ Shared Top Bank</strong>, or <strong>+ Write Character (Pinyin)</strong> above.</div>`
             }
           </div>
         `;
@@ -2934,6 +2999,7 @@
           const targetLesson = state.editingExercisesLessonId || (lessonsList[0] ? lessonsList[0].id : 'lesson-01');
           const lessonCount = state.editingExercisesList.filter((x) => isSameId(x.lessonId, targetLesson)).length;
           const isSharedPreset = typePreset === 'shared-image-match' || typePreset === 'shared-text-match';
+          const isListeningPreset = typePreset === 'listening';
           state.editingExercisesList.push({
             lessonId: targetLesson,
             order: lessonCount + 1,
@@ -2943,8 +3009,14 @@
               ? 'Choose the matching option (A–E) from the choices above for each question.'
               : '',
             pinyin: '',
-            question: typePreset === 'fill-blank' ? '他 ( ) 时候 不 吃 晚饭。' : '',
+            question:
+              typePreset === 'fill-blank'
+                ? '他 ( ) 时候 不 吃 晚饭。'
+                : isListeningPreset
+                ? 'Listen to the audio and choose the correct answer.'
+                : '',
             audioUrl: '',
+            audioText: '',
             optionA: '',
             optionB: '',
             optionC: '',
@@ -2955,12 +3027,15 @@
             optionCImage: '',
             optionDImage: '',
             optionEImage: '',
-            answer: typePreset === 'image-choice' || isSharedPreset ? 'A' : '',
+            answer: isListeningPreset || typePreset === 'image-choice' || isSharedPreset ? 'A' : '',
             explanation: '',
             ...extra
           });
           renderEditorBody();
         };
+
+        const addListeningBtn = document.getElementById('exAddListeningBtn');
+        if (addListeningBtn) addListeningBtn.onclick = () => pushNewExercise('listening');
 
         const addBtn = document.getElementById('exAddRowBtn');
         if (addBtn) addBtn.onclick = () => pushNewExercise('multiple-choice');
@@ -2973,6 +3048,30 @@
 
         const addFillBtn = document.getElementById('exAddFillBtn');
         if (addFillBtn) addFillBtn.onclick = () => pushNewExercise('fill-blank');
+
+        container.querySelectorAll('[data-ex-speak]').forEach((btn) => {
+          btn.onclick = () => {
+            const gIdx = Number(btn.getAttribute('data-ex-speak'));
+            const exRow = state.editingExercisesList[gIdx];
+            if (!exRow) return;
+            const spoken = String(exRow.audioText || exRow.question || '').trim();
+            if (!spoken) {
+              toast('Enter a sentence in the Listening Sentence field first to preview audio.', 'info');
+              return;
+            }
+            if (window.LinguaAudio && typeof window.LinguaAudio.speak === 'function') {
+              window.LinguaAudio.speak(spoken);
+            } else if (typeof window !== 'undefined' && window.speechSynthesis) {
+              try {
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(spoken);
+                u.lang = 'zh-CN';
+                u.rate = 0.85;
+                window.speechSynthesis.speak(u);
+              } catch (_) {}
+            }
+          };
+        });
 
         container.querySelectorAll('[data-ex-clone-group]').forEach((btn) => {
           btn.onclick = () => {
@@ -3122,6 +3221,7 @@
                     pinyin: String(r.pinyin || '').trim(),
                     question: String(r.question || '').trim(),
                     audioUrl: String(r.audioUrl || '').trim(),
+                    audioText: String(r.audioText || r.audio_text || r.listeningSentence || r.listening_sentence || '').trim(),
                     optionA: String(r.optionA || '').trim(),
                     optionB: String(r.optionB || '').trim(),
                     optionC: String(r.optionC || '').trim(),
@@ -3140,6 +3240,7 @@
                       r.question ||
                       r.pinyin ||
                       r.audioUrl ||
+                      r.audioText ||
                       r.optionAImage ||
                       r.optionBImage ||
                       r.optionCImage ||
@@ -3211,6 +3312,17 @@
                 pinyin: String(r.pinyin || r.Pinyin || r.pinyinHint || r.pinyin_hint || '').trim(),
                 question: String(r.question || r.Question || '').trim(),
                 audioUrl: String(r.audioUrl || r.AudioUrl || r.audio_url || r.audio || '').trim(),
+                audioText: String(
+                  r.audioText ||
+                    r.AudioText ||
+                    r.audio_text ||
+                    r.listeningSentence ||
+                    r.listening_sentence ||
+                    r.audioSentence ||
+                    r['Audio Sentence'] ||
+                    r['Listening Sentence'] ||
+                    ''
+                ).trim(),
                 optionA: String(r.optionA ?? r.OptionA ?? '').trim(),
                 optionB: String(r.optionB ?? r.OptionB ?? '').trim(),
                 optionC: String(r.optionC ?? r.OptionC ?? '').trim(),
@@ -3246,12 +3358,13 @@
               {
                 lessonId: state.editingExercisesLessonId || 'lesson-01',
                 order: 1,
-                type: 'image-choice',
+                type: 'listening',
                 groupId: '',
                 groupTitle: '',
                 pinyin: '',
-                question: '我每天坐公交车去上班。(I take the bus to work every day.)',
+                question: 'Listen to the sentence and choose the matching picture.',
                 audioUrl: '',
+                audioText: '我每天坐公交车去上班。',
                 optionA: 'Bus',
                 optionB: 'Airplane',
                 optionC: 'Bicycle',
@@ -3274,6 +3387,7 @@
                 pinyin: 'yǒu',
                 question: '他 ( ) 时候 不 吃 晚饭。',
                 audioUrl: '',
+                audioText: '',
                 optionA: '',
                 optionB: '',
                 optionC: '',
@@ -3320,6 +3434,7 @@
                 pinyin: String(r.pinyin || '').trim(),
                 question: String(r.question || '').trim(),
                 audioUrl: String(r.audioUrl || '').trim(),
+                audioText: String(r.audioText || r.audio_text || r.listeningSentence || r.listening_sentence || '').trim(),
                 optionA: String(r.optionA || '').trim(),
                 optionB: String(r.optionB || '').trim(),
                 optionC: String(r.optionC || '').trim(),
@@ -3338,6 +3453,7 @@
                   r.question ||
                   r.pinyin ||
                   r.audioUrl ||
+                  r.audioText ||
                   r.optionAImage ||
                   r.optionBImage ||
                   r.optionCImage ||

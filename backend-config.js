@@ -243,7 +243,7 @@
         'radical', 'strokeAnimationUrl', 'svgPath', 'strokeOrderSteps'
       ],
       Exercises: [
-        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'pinyin', 'question', 'audioUrl',
+        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'pinyin', 'question', 'audioUrl', 'audioText',
         'optionA', 'optionB', 'optionC', 'optionD', 'optionE',
         'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage', 'optionEImage',
         'answer', 'explanation'
@@ -256,7 +256,7 @@
       Story: ['lessonId', 'order', 'chinese', 'pinyin', 'english', 'image', 'audio'],
       Vocabulary: ['lessonId', 'order', 'character', 'pinyin', 'meaning', 'audio'],
       Exercises: [
-        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'pinyin', 'question', 'audioUrl',
+        'lessonId', 'order', 'type', 'groupId', 'groupTitle', 'pinyin', 'question', 'audioUrl', 'audioText',
         'optionA', 'optionB', 'optionC', 'optionD', 'optionE',
         'optionAImage', 'optionBImage', 'optionCImage', 'optionDImage', 'optionEImage',
         'answer', 'explanation'
@@ -962,6 +962,9 @@
         pinyin: String(r.pinyin || r.Pinyin || r.pinyinHint || r.pinyin_hint || '').trim(),
         question: String(r.question || '').trim(),
         audioUrl: String(r.audioUrl || r.audio_url || r.audio || '').trim(),
+        audioText: String(
+          r.audioText || r.audio_text || r.AudioText || r.listeningSentence || r.listening_sentence || r.audioSentence || r['Audio Sentence'] || r['Listening Sentence'] || ''
+        ).trim(),
         optionA: optA,
         optionB: String(r.optionB || r.option_b || '').trim(),
         optionC: String(r.optionC || r.option_c || '').trim(),
