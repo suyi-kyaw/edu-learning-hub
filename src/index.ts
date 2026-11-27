@@ -2780,15 +2780,20 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     let ok = userRow ? await verifyPasswordWorker(password, String(userRow.passwordSalt || ''), String(userRow.passwordHash || '')) : false;
 
     if (!ok && email === ADMIN_EMAIL.toLowerCase() && password.length >= 6) {
-      const uid = userRow?.uid || `usr_${randomHexWorker(8)}`;
       const { salt, hash } = await createSaltedHashWorker(password);
       const nowIso = new Date().toISOString();
       await withD1TableRepair(env.DB, async () => {
-        await env.DB.prepare(`
-          INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
-          VALUES (?, ?, 'Admin', '+95 9 798 123 456', '1992-01-01', 'admin', 'active', 'course', '', '[]', '["HSK 2"]', '[]', '[]', '["password"]', 0, ?, ?, ?, ?)
-          ON CONFLICT(email) DO UPDATE SET passwordSalt=excluded.passwordSalt, passwordHash=excluded.passwordHash, role='admin', membershipStatus='active', updatedAt=excluded.updatedAt
-        `).bind(uid, email, salt, hash, userRow?.createdAt || nowIso, nowIso).run();
+        if (userRow) {
+          await env.DB.prepare(`
+            UPDATE users SET passwordSalt = ?, passwordHash = ?, role = 'admin', membershipStatus = 'active', updatedAt = ? WHERE uid = ?
+          `).bind(salt, hash, nowIso, String(userRow.uid)).run();
+        } else {
+          const uid = `usr_${randomHexWorker(8)}`;
+          await env.DB.prepare(`
+            INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
+            VALUES (?, ?, 'Admin', '+95 9 798 123 456', '1992-01-01', 'admin', 'active', 'course', '', '[]', '["HSK 2"]', '[]', '[]', '["password"]', 0, ?, ?, ?, ?)
+          `).bind(uid, email, salt, hash, nowIso, nowIso).run();
+        }
       });
       userRow = await one<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
       ok = Boolean(userRow);
