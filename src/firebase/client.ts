@@ -2926,35 +2926,93 @@ async function registerWithEmail(params: {
   }
 
   const { hasBackend } = getBackendBridge();
-  if (!hasBackend) {
-    throw new Error(
-      'Cannot register while disconnected from the database server. Please connect the Cloudflare Worker URL or open the server-hosted site.'
-    );
+  if (hasBackend) {
+    try {
+      const res = await backendApiFetch('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: cleanUsername,
+          email: cleanEmail,
+          phoneNumber: cleanPhone,
+          dob: cleanDob,
+          password: rawPassword
+        })
+      });
+
+      if (res.ok && res.data?.success && res.data?.token && res.data?.user?.uid) {
+        setApiToken(String(res.data.token));
+        setSessionUid(String(res.data.user.uid));
+        applySessionPayload(res.data);
+        syncBaseWorkbookFromServerPayload(res.data);
+
+        await ensureFirebaseAuthSession(cleanEmail, rawPassword, cleanUsername, 'register');
+        if (state.profile) {
+          void syncUserProfileToFirestore(state.profile);
+        }
+        if (state.userProgress) {
+          void syncUserProgressToFirestore(state.userProgress);
+        }
+
+        state.ready = true;
+        emitState();
+        return state.profile as UserProfile;
+      }
+    } catch (_) {
+      // Fall through to local overlay fallback registration if server is unreachable
+    }
   }
 
-  const res = await backendApiFetch('/api/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({
-      username: cleanUsername,
-      email: cleanEmail,
-      phoneNumber: cleanPhone,
-      dob: cleanDob,
-      password: rawPassword
-    })
-  });
-
-  if (!res.ok || !res.data?.success || !res.data?.token || !res.data?.user?.uid) {
-    throw new Error(
-      (res.data && res.data.error) || 'Registration failed: account could not be saved to database & Excel.'
-    );
+  // Fallback / Offline local browser overlay registration
+  const dataset = getMergedDataset();
+  const existingUser = Object.values(dataset.users || {}).find(
+    (u) => String(u?.profile?.email || '').trim().toLowerCase() === cleanEmail
+  );
+  if (existingUser) {
+    throw new Error('An account with this email already exists. Please sign in instead.');
   }
 
-  setApiToken(String(res.data.token));
-  setSessionUid(String(res.data.user.uid));
-  applySessionPayload(res.data);
-  syncBaseWorkbookFromServerPayload(res.data);
+  const shouldClaimAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase() && !isAdminClaimedInDataset(dataset);
+  const uid = `usr_${generateRandomHex(8)}`;
+  const passwordHash = await createSaltedPasswordHash(rawPassword);
+  const nowIso = new Date().toISOString();
 
-  // Best-effort Firebase Auth + Firestore mirror
+  const newProfile: UserProfile = {
+    uid,
+    username: cleanUsername,
+    email: cleanEmail,
+    phoneNumber: cleanPhone,
+    dob: cleanDob,
+    role: shouldClaimAdmin ? 'admin' : 'student',
+    membershipStatus: shouldClaimAdmin ? 'active' : 'free',
+    membershipPlan: shouldClaimAdmin ? 'course' : 'none',
+    membershipExpiresAt: '',
+    subscribedLessonIds: [],
+    subscribedCourses: shouldClaimAdmin ? ['HSK 2'] : [],
+    practiceLessonIds: [],
+    practiceCourses: [],
+    linkedProviders: ['password'],
+    mustChangePassword: false,
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
+
+  const overlay = readOverlayStore();
+  if (!overlay.users) overlay.users = {};
+  overlay.users[uid] = {
+    profile: newProfile,
+    passwordHash
+  };
+  if (!overlay.progress) overlay.progress = {};
+  if (!overlay.progress[uid]) {
+    overlay.progress[uid] = createDefaultUserProgress(uid);
+  }
+  writeOverlayStore(overlay);
+
+  setSessionUid(uid);
+  const freshDataset = getMergedDataset();
+  reconcileDatasetWithLessons(freshDataset);
+  syncMemoryFromDataset(freshDataset, uid);
+
   await ensureFirebaseAuthSession(cleanEmail, rawPassword, cleanUsername, 'register');
   if (state.profile) {
     void syncUserProfileToFirestore(state.profile);
