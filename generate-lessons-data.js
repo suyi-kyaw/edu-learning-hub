@@ -30,6 +30,60 @@ const rawExercises = [
   {
     lessonId: 'hsk2-01',
     order: 1,
+    type: 'listening',
+    audioText: '她请我们吃了北京烤鸭。',
+    question: 'Listen to the sentence and choose the matching picture.',
+    optionA: '北京烤鸭 (Peking Duck)',
+    optionB: '牛肉面 (Beef noodles)',
+    optionC: '冰茶 (Iced tea)',
+    optionAImage: 'assets/images/exercises/roast-duck.svg',
+    optionBImage: 'assets/images/exercises/noodles-bowl.svg',
+    optionCImage: 'assets/images/exercises/iced-tea-cup.svg',
+    answer: 'A',
+    explanation: '她请我们吃了北京烤鸭 (Tā qǐng wǒmen chī le Běijīng kǎoyā) means "She treated us to Peking Duck" (Picture A).'
+  },
+  {
+    lessonId: 'hsk2-01',
+    order: 2,
+    type: 'listening',
+    audioText: '昨天晚上她请我们去餐厅吃晚饭，点了一只北京烤鸭。',
+    question: 'Listen to the audio. What main dish did she treat us to last night?',
+    optionA: '北京烤鸭 (Peking Duck)',
+    optionB: '牛肉面 (Beef noodles)',
+    optionC: '菜单 (Menu)',
+    optionD: '冰茶 (Iced tea)',
+    answer: 'A',
+    explanation: 'The speaker says 点了一只北京烤鸭 ("ordered a Peking Duck"), so A is correct.'
+  },
+  {
+    lessonId: 'hsk2-01',
+    order: 3,
+    type: 'listening',
+    audioText: '服务员，请给我们一份北京烤鸭，再来两杯冰茶。',
+    question: 'Listen to the customer ordering. What drinks did they order with the Peking Duck?',
+    optionA: 'Two cups of hot coffee',
+    optionB: 'Two glasses of iced tea',
+    optionC: 'One bowl of beef noodles',
+    optionD: 'Three bottles of water',
+    answer: 'B',
+    explanation: '两杯冰茶 (liǎng bēi bīngchá) means "two glasses of iced tea".'
+  },
+  {
+    lessonId: 'hsk2-01',
+    order: 4,
+    type: 'listening',
+    audioText: '吃完北京烤鸭以后，她走去服务台买单了。',
+    question: 'Listen and choose what she did after eating Peking Duck.',
+    optionA: 'She ordered another roast duck',
+    optionB: 'She asked the waiter for the menu',
+    optionC: 'She went to the counter to pay the bill',
+    optionD: 'She went home by taxi',
+    answer: 'C',
+    explanation: '走去服务台买单了 (zǒu qù fúwùtái mǎidān le) means "walked to the service counter to pay the bill".'
+  },
+  {
+    lessonId: 'hsk2-01',
+    order: 5,
     type: 'multiple-choice',
     question: "What does '她请我们吃了北京烤鸭' (Tā qǐng wǒmen chī le Běijīng kǎoyā) mean?",
     optionA: 'She treated us to Peking Duck',
@@ -41,7 +95,7 @@ const rawExercises = [
   },
   {
     lessonId: 'hsk2-01',
-    order: 2,
+    order: 6,
     type: 'multiple-choice',
     question: "In the sentence '她请我们吃了北京烤鸭', what does the character 请 (qǐng) express?",
     optionA: 'To treat / pay for a meal for others',
@@ -53,7 +107,7 @@ const rawExercises = [
   },
   {
     lessonId: 'hsk2-01',
-    order: 3,
+    order: 7,
     type: 'image-choice',
     audioUrl: 'assets/audio/tian-haochi.mp3',
     question: '昨天晚上她请我们吃了香喷喷的北京烤鸭。(Last night she treated us to delicious Peking Duck.) Choose the matching picture.',
@@ -68,7 +122,7 @@ const rawExercises = [
   },
   {
     lessonId: 'hsk2-01',
-    order: 4,
+    order: 8,
     type: 'shared-image-match',
     groupId: 'hsk2-duck-pic',
     groupTitle: 'Part II: Match Picture A, B, C, or D to each HSK 2 dining sentence.',
@@ -87,7 +141,7 @@ const rawExercises = [
   },
   {
     lessonId: 'hsk2-01',
-    order: 5,
+    order: 9,
     type: 'shared-image-match',
     groupId: 'hsk2-duck-pic',
     groupTitle: 'Part II: Match Picture A, B, C, or D to each HSK 2 dining sentence.',
@@ -106,7 +160,7 @@ const rawExercises = [
   },
   {
     lessonId: 'hsk2-01',
-    order: 6,
+    order: 10,
     type: 'shared-text-match',
     groupId: 'hsk2-duck-bank',
     groupTitle: 'Sentence & Word Bank: Pick the best word (A–E) for each blank.',
@@ -122,7 +176,7 @@ const rawExercises = [
   },
   {
     lessonId: 'hsk2-01',
-    order: 7,
+    order: 11,
     type: 'shared-text-match',
     groupId: 'hsk2-duck-bank',
     groupTitle: 'Sentence & Word Bank: Pick the best word (A–E) for each blank.',
@@ -138,7 +192,7 @@ const rawExercises = [
   },
   {
     lessonId: 'hsk2-01',
-    order: 8,
+    order: 12,
     type: 'fill-blank',
     pinyin: 'qǐng',
     question: '昨天晚上她 (   ) 我们吃了北京烤鸭。',
@@ -147,7 +201,7 @@ const rawExercises = [
   },
   {
     lessonId: 'hsk2-01',
-    order: 9,
+    order: 13,
     type: 'fill-blank',
     pinyin: 'chī',
     question: '周末我们一起去北京餐厅 (   ) 烤鸭。',
@@ -165,6 +219,7 @@ const exercises = rawExercises.map((ex) => ({
   pinyin: ex.pinyin || '',
   question: ex.question || '',
   audioUrl: ex.audioUrl || '',
+  audioText: ex.audioText || '',
   optionA: ex.optionA || '',
   optionB: ex.optionB || '',
   optionC: ex.optionC || '',
@@ -349,7 +404,7 @@ const sqlLines = [
   '',
   ...exercises.map(
     (ex) =>
-      `INSERT INTO exercises (lessonId, "order", type, groupId, groupTitle, pinyin, question, audioUrl, optionA, optionB, optionC, optionD, optionE, optionAImage, optionBImage, optionCImage, optionDImage, optionEImage, answer, explanation) VALUES (${sqlEsc(ex.lessonId)}, ${Number(ex.order) || 1}, ${sqlEsc(ex.type)}, ${sqlEsc(ex.groupId)}, ${sqlEsc(ex.groupTitle)}, ${sqlEsc(ex.pinyin)}, ${sqlEsc(ex.question)}, ${sqlEsc(ex.audioUrl)}, ${sqlEsc(ex.optionA)}, ${sqlEsc(ex.optionB)}, ${sqlEsc(ex.optionC)}, ${sqlEsc(ex.optionD)}, ${sqlEsc(ex.optionE)}, ${sqlEsc(ex.optionAImage)}, ${sqlEsc(ex.optionBImage)}, ${sqlEsc(ex.optionCImage)}, ${sqlEsc(ex.optionDImage)}, ${sqlEsc(ex.optionEImage)}, ${sqlEsc(ex.answer)}, ${sqlEsc(ex.explanation)});`
+      `INSERT INTO exercises (lessonId, "order", type, groupId, groupTitle, pinyin, question, audioUrl, audioText, optionA, optionB, optionC, optionD, optionE, optionAImage, optionBImage, optionCImage, optionDImage, optionEImage, answer, explanation) VALUES (${sqlEsc(ex.lessonId)}, ${Number(ex.order) || 1}, ${sqlEsc(ex.type)}, ${sqlEsc(ex.groupId)}, ${sqlEsc(ex.groupTitle)}, ${sqlEsc(ex.pinyin)}, ${sqlEsc(ex.question)}, ${sqlEsc(ex.audioUrl)}, ${sqlEsc(ex.audioText)}, ${sqlEsc(ex.optionA)}, ${sqlEsc(ex.optionB)}, ${sqlEsc(ex.optionC)}, ${sqlEsc(ex.optionD)}, ${sqlEsc(ex.optionE)}, ${sqlEsc(ex.optionAImage)}, ${sqlEsc(ex.optionBImage)}, ${sqlEsc(ex.optionCImage)}, ${sqlEsc(ex.optionDImage)}, ${sqlEsc(ex.optionEImage)}, ${sqlEsc(ex.answer)}, ${sqlEsc(ex.explanation)});`
   ),
   ''
 ];

@@ -20,10 +20,9 @@
 
   let activeCourseName = 'HSK 2'; // 'HSK 2' or custom courses added in Admin
   let activeLesson = null;
-  let activeWorkspaceTab = 'video'; // 'video', 'exercises', 'writing', 'pronunciation'
-  let activeLessonExTab = 'reading'; // 'reading' or 'listening'
+  let activeWorkspaceTab = 'video'; // 'video', 'listening', 'reading', 'writing', 'speaking'
   let activeWritingCharIndex = 0;
-  let exerciseAnswersState = {}; // { questionIndex: { selectedOption, isCorrect } }
+  let exerciseAnswersState = { listening: {}, reading: {} }; // { listening: { qNum: bool }, reading: { qNum: bool } }
   const autoReviewedLessons = new Set();
 
   function backendApiUrl(path) {
@@ -100,75 +99,173 @@
       optionBImage: "assets/images/exercises/noodles-bowl.svg",
       optionCImage: "assets/images/exercises/iced-tea-cup.svg",
       answer: "A",
-      explanation: "The audio says 她请我们吃了北京烤鸭 (She treated us to Peking Duck), which matches picture A."
+      explanation: "她请我们吃了北京烤鸭 (Tā qǐng wǒmen chī le Běijīng kǎoyā) means 'She treated us to Peking Duck' (Picture A)."
     },
     {
       lessonId: "hsk2-01",
       order: 2,
       type: "listening",
-      question: "Listen to the dialogue and choose the correct English translation.",
-      audioText: "请问洗手间在哪里？",
-      optionA: "Where is the restroom?",
-      optionB: "How much does this cost?",
-      optionC: "I want an iced green tea.",
-      optionD: "Thank you very much.",
-      answer: "Where is the restroom?",
-      explanation: "请问洗手间在哪里？ (Qǐngwèn xǐshǒujiān zài nǎlǐ?) means 'Excuse me, where is the restroom?'"
+      question: "Listen to the audio. What main dish did she treat us to last night?",
+      audioText: "昨天晚上她请我们去餐厅吃晚饭，点了一只北京烤鸭。",
+      optionA: "北京烤鸭 (Peking Duck)",
+      optionB: "牛肉面 (Beef noodles)",
+      optionC: "菜单 (Menu)",
+      optionD: "冰茶 (Iced tea)",
+      answer: "A",
+      explanation: "The speaker says 点了一只北京烤鸭 ('ordered a Peking Duck'), so A is correct."
     },
     {
       lessonId: "hsk2-01",
       order: 3,
-      type: "multiple-choice",
-      question: "How do you say 'She treated us to Peking Duck' in Chinese?",
-      optionA: "她请我们吃了北京烤鸭。",
-      optionB: "我们每天去北京坐地铁。",
-      optionC: "请问洗手间在哪里？",
-      optionD: "我要一杯冰绿茶。",
-      answer: "她请我们吃了北京烤鸭。",
-      explanation: "请某人吃... (qǐng mǒurén chī...) means 'to treat someone to a meal', and 北京烤鸭 is Peking Duck."
+      type: "listening",
+      question: "Listen to the customer ordering. What drinks did they order with the Peking Duck?",
+      audioText: "服务员，请给我们一份北京烤鸭，再来两杯冰茶。",
+      optionA: "Two cups of hot coffee",
+      optionB: "Two glasses of iced tea",
+      optionC: "One bowl of beef noodles",
+      optionD: "Three bottles of water",
+      answer: "B",
+      explanation: "两杯冰茶 (liǎng bēi bīngchá) means 'two glasses of iced tea'."
     },
     {
       lessonId: "hsk2-01",
       order: 4,
-      type: "image-choice",
-      audioUrl: "assets/audio/tian-haochi.mp3",
-      question: "她请我们吃了香脆可口的北京烤鸭。(She treated us to crispy, delicious Peking Duck.) Choose the matching picture.",
-      optionA: "北京烤鸭 (Peking Duck)",
-      optionB: "牛肉面 (Beef noodles)",
-      optionC: "冰茶 (Iced tea)",
-      optionAImage: "assets/images/exercises/roast-duck.svg",
-      optionBImage: "assets/images/exercises/noodles-bowl.svg",
-      optionCImage: "assets/images/exercises/iced-tea-cup.svg",
-      answer: "A",
-      explanation: "北京烤鸭 (Běijīng kǎoyā / Peking Duck) matches the roast duck platter in picture A."
+      type: "listening",
+      question: "Listen and choose what she did after eating Peking Duck.",
+      audioText: "吃完北京烤鸭以后，她走去服务台买单了。",
+      optionA: "She ordered another roast duck",
+      optionB: "She asked the waiter for the menu",
+      optionC: "She went to the counter to pay the bill",
+      optionD: "She went home by taxi",
+      answer: "C",
+      explanation: "走去服务台买单了 (zǒu qù fúwùtái mǎidān le) means 'walked to the service counter to pay the bill'."
     },
     {
       lessonId: "hsk2-01",
       order: 5,
-      type: "shared-image-match",
-      groupId: "hsk2-duck-pic",
-      groupTitle: "Part II: Match Picture A, B, C, or D to each HSK 2 dining dialogue.",
-      pinyin: "Wǒmen zài Běijīng lǎodiàn diǎn le yì zhī kǎoyā.",
-      question: "我们在北京老店点了一只烤鸭。",
-      optionA: "北京烤鸭 (Peking Duck)",
-      optionB: "菜单 (Menu)",
-      optionC: "牛肉面 (Beef noodles)",
-      optionD: "冰茶 (Iced tea)",
-      optionAImage: "assets/images/exercises/roast-duck.svg",
-      optionBImage: "assets/images/exercises/menu-book.svg",
-      optionCImage: "assets/images/exercises/noodles-bowl.svg",
-      optionDImage: "assets/images/exercises/iced-tea-cup.svg",
-      answer: "A",
-      explanation: "烤鸭 (kǎoyā) means roast duck (Picture A)."
+      type: "multiple-choice",
+      question: "What does '她请我们吃了北京烤鸭' (Tā qǐng wǒmen chī le Běijīng kǎoyā) mean?",
+      optionA: "She treated us to Peking Duck",
+      optionB: "We invited her to cook noodles",
+      optionC: "She ordered two cups of green tea",
+      optionD: "We walked to a Beijing supermarket",
+      answer: "She treated us to Peking Duck",
+      explanation: "请 (qǐng) means to treat or invite, 吃了 (chī le) means ate, and 北京烤鸭 (Běijīng kǎoyā) is Peking Duck."
     },
     {
       lessonId: "hsk2-01",
       order: 6,
+      type: "multiple-choice",
+      question: "In the sentence '她请我们吃了北京烤鸭', what does the character 请 (qǐng) express?",
+      optionA: "To treat / pay for a meal for others",
+      optionB: "To ask for directions to the station",
+      optionC: "To arrive late for dinner",
+      optionD: "To return home by taxi",
+      answer: "To treat / pay for a meal for others",
+      explanation: "请 + someone + verb (e.g. 请我们吃饭) means to treat someone to food or drink."
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 7,
+      type: "image-choice",
+      audioUrl: "assets/audio/tian-haochi.mp3",
+      question: "昨天晚上她请我们吃了香喷喷的北京烤鸭。(Last night she treated us to delicious Peking Duck.) Choose the matching picture.",
+      optionA: "北京烤鸭 (Peking Duck)",
+      optionB: "冰茶 (Iced tea)",
+      optionC: "菜单 (Menu)",
+      optionAImage: "assets/images/exercises/roast-duck.svg",
+      optionBImage: "assets/images/exercises/iced-tea-cup.svg",
+      optionCImage: "assets/images/exercises/menu-book.svg",
+      answer: "A",
+      explanation: "北京烤鸭 (Běijīng kǎoyā) matches the roasted Peking Duck platter in picture A."
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 8,
+      type: "shared-image-match",
+      groupId: "hsk2-duck-pic",
+      groupTitle: "Part II: Match Picture A, B, C, or D to each HSK 2 dining sentence.",
+      pinyin: "Běijīng kǎoyā yòu xiāng yòu cuì, wǒmen dōu hěn xǐhuan chī.",
+      question: "北京烤鸭又香又脆，大家都非常喜欢吃。",
+      optionA: "北京烤鸭 (Peking Duck)",
+      optionB: "牛肉面 (Noodles)",
+      optionC: "菜单 (Menu)",
+      optionD: "买单 (Bill)",
+      optionAImage: "assets/images/exercises/roast-duck.svg",
+      optionBImage: "assets/images/exercises/noodles-bowl.svg",
+      optionCImage: "assets/images/exercises/menu-book.svg",
+      optionDImage: "assets/images/exercises/bill-receipt.svg",
+      answer: "A",
+      explanation: "北京烤鸭 (Běijīng kǎoyā) refers to roasted Peking Duck (A)."
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 9,
+      type: "shared-image-match",
+      groupId: "hsk2-duck-pic",
+      groupTitle: "Part II: Match Picture A, B, C, or D to each HSK 2 dining sentence.",
+      pinyin: "Chī wán kǎoyā yǐhòu, tā qù mǎidān le.",
+      question: "吃完烤鸭以后，她走去服务台买单了。",
+      optionA: "北京烤鸭 (Peking Duck)",
+      optionB: "牛肉面 (Noodles)",
+      optionC: "菜单 (Menu)",
+      optionD: "买单 (Bill)",
+      optionAImage: "assets/images/exercises/roast-duck.svg",
+      optionBImage: "assets/images/exercises/noodles-bowl.svg",
+      optionCImage: "assets/images/exercises/menu-book.svg",
+      optionDImage: "assets/images/exercises/bill-receipt.svg",
+      answer: "D",
+      explanation: "买单 (mǎidān) means to pay the check/bill (D)."
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 10,
+      type: "shared-text-match",
+      groupId: "hsk2-duck-bank",
+      groupTitle: "Sentence & Word Bank: Pick the best word (A–E) for each blank.",
+      pinyin: "Jīntiān shì tā de shēngrì, tā (   ) wǒmen chī wǎnfàn.",
+      question: "今天是她的生日，她 (   ) 我们去餐厅吃晚饭。",
+      optionA: "请 (qǐng)",
+      optionB: "吃 (chī)",
+      optionC: "烤鸭 (kǎoyā)",
+      optionD: "了 (le)",
+      optionE: "买单 (mǎidān)",
+      answer: "A",
+      explanation: "她请我们去餐厅吃晚饭 means \"She treated us to dinner at a restaurant.\""
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 11,
+      type: "shared-text-match",
+      groupId: "hsk2-duck-bank",
+      groupTitle: "Sentence & Word Bank: Pick the best word (A–E) for each blank.",
+      pinyin: "Zhuō shàng de Běijīng (   ) zhēn hǎochī!",
+      question: "桌上的北京 (   ) 又香又好吃！",
+      optionA: "请 (qǐng)",
+      optionB: "吃 (chī)",
+      optionC: "烤鸭 (kǎoyā)",
+      optionD: "了 (le)",
+      optionE: "买单 (mǎidān)",
+      answer: "C",
+      explanation: "北京烤鸭 (Běijīng kǎoyā) means Peking Duck (C)."
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 12,
       type: "fill-blank",
-      pinyin: "kǎoyā",
-      question: "去北京旅游的时候，大家都很想吃正宗的北京 (   )。",
-      answer: "烤鸭",
-      explanation: "北京烤鸭 (Běijīng kǎoyā) is Beijing's famous Peking Duck."
+      pinyin: "qǐng",
+      question: "昨天晚上她 (   ) 我们吃了北京烤鸭。",
+      answer: "请",
+      explanation: "请 (qǐng) means to treat or invite someone to eat."
+    },
+    {
+      lessonId: "hsk2-01",
+      order: 13,
+      type: "fill-blank",
+      pinyin: "chī",
+      question: "周末我们一起去北京餐厅 (   ) 烤鸭。",
+      answer: "吃",
+      explanation: "吃 (chī) means to eat."
     }
   ];
 
@@ -1152,16 +1249,16 @@
         : `${formattedPrice} Kyat`;
       const accessTagClass = !isPaid ? 'is-free' : isPracticeOnly ? 'is-practice' : isUnlocked ? 'is-unlocked' : 'is-paid';
       const featuresLine = isPracticeOnly
-        ? '✏️ Exercises · 🖌️ Stroke Writing · 🎤 Pronunciation (Video Excluded)'
+        ? '🎧 Listening · 📖 Reading · 🖌️ Writing · 🎤 Speaking (Video Excluded)'
         : lessonHasEx
         ? isLocked
-          ? `📺 Video · ✏️ Practice Only (${formattedPracticePrice} Kyat) · 🖌️ Writing · 🎤 Pronunciation`
-          : '📺 Video · ✏️ Exercises · 🖌️ Stroke Writing · 🎤 Pronunciation'
-        : '📺 Video · 🖌️ Stroke Writing · 🎤 Pronunciation';
+          ? `📺 Video · Practice Only (${formattedPracticePrice} Kyat) · 🎧 Listening · 📖 Reading · 🖌️ Writing · 🎤 Speaking`
+          : '📺 Video · 🎧 Listening · 📖 Reading · 🖌️ Writing · 🎤 Speaking'
+        : '📺 Video · 🎧 Listening · 📖 Reading · 🖌️ Writing · 🎤 Speaking';
       const btnText = isLocked
         ? `🔒 Unlock (${escapeHTML(formattedPrice)} Kyat) →`
         : isPracticeOnly
-        ? '✏️ Start Practice (3 Pages) →'
+        ? '✏️ Start Practice (4 Pages) →'
         : '🚀 Start Lesson →';
 
       return `
@@ -1258,10 +1355,10 @@
     activeLesson = lesson;
     activeCourseName = getLessonCourse(lesson);
     const allowVideo = applyWorkspaceVideoTabVisibility(lesson);
-    const initialTab = allowVideo ? 'video' : 'exercises';
+    const initialTab = allowVideo ? 'video' : 'listening';
     activeWorkspaceTab = initialTab;
     activeWritingCharIndex = 0;
-    exerciseAnswersState = {};
+    exerciseAnswersState = { listening: {}, reading: {} };
 
     try {
       localStorage.setItem('linguapath_active_lesson', JSON.stringify({
@@ -1289,7 +1386,8 @@
       if (allowVideo) {
         renderVideoSection(lesson);
       }
-      renderExercisesSection(lesson);
+      renderListeningSection(lesson);
+      renderReadingSection(lesson);
       renderWritingSection(lesson);
       renderPronunciationSection(lesson);
       switchWorkspaceTab(initialTab);
@@ -1384,7 +1482,7 @@
         isPracticeOnly
           ? `<div class="practice-only-workspace-banner" role="status">
                <div>
-                 <strong>Practice-Only Plan (${escapeHTML(lessonPracFmt)} Kyat):</strong> You have access to <strong>Exercises, Writing &amp; Pronunciation</strong>. Video lessons are excluded on this plan.
+                 <strong>Practice-Only Plan (${escapeHTML(lessonPracFmt)} Kyat):</strong> You have access to <strong>Listening, Reading, Writing &amp; Speaking</strong>. Video lessons are excluded on this plan.
                </div>
                <button type="button" class="btn-upgrade-video" id="btnUpgradeFromWorkspaceBanner">Unlock Full Video</button>
              </div>`
@@ -1429,13 +1527,15 @@
   }
 
   function switchWorkspaceTab(tabName) {
+    if (tabName === 'exercises') tabName = 'listening';
+    if (tabName === 'pronunciation') tabName = 'speaking';
     if (tabName === 'video' && activeLesson && getLessonAccessTier(activeLesson) !== 'full') {
-      tabName = 'exercises';
+      tabName = 'listening';
     }
     activeWorkspaceTab = tabName;
 
-    // Stop active speech recognition recording if user leaves pronunciation tab
-    if (tabName !== 'pronunciation') {
+    // Stop active speech recognition recording if user leaves speaking tab
+    if (tabName !== 'speaking') {
       stopPronunciationRecording();
     }
 
@@ -1469,8 +1569,8 @@
       setTimeout(() => renderWritingSection(activeLesson), 50);
     }
 
-    // If pronunciation tab is opened, render and initialize pronunciation workspace
-    if (tabName === 'pronunciation' && activeLesson) {
+    // If speaking tab is opened, render and initialize speaking / pronunciation workspace
+    if (tabName === 'speaking' && activeLesson) {
       setTimeout(() => renderPronunciationSection(activeLesson), 50);
     }
   }
@@ -1526,7 +1626,7 @@
               <button type="button" class="btn-video-control" id="btnTogglePlaybackSpeed">⚡ Speed: 1.0x</button>
             </div>
             <div class="video-quick-buttons">
-              <button type="button" class="btn-video-control" id="btnNextToQuiz">Continue to Practice Quiz ✏️ →</button>
+              <button type="button" class="btn-video-control" id="btnNextToQuiz">Continue to Listening 🎧 →</button>
             </div>
           </div>
         </div>
@@ -1563,7 +1663,7 @@
 
         <div class="video-bottom-nav-bar" style="display: flex; justify-content: flex-end; margin-top: 32px;">
           <button type="button" class="btn btn-primary btn-lg" id="btnBottomNextToExercises">
-            Continue to Practice Exercises ✏️ →
+            Continue to Listening 🎧 →
           </button>
         </div>
       </div>
@@ -1659,69 +1759,17 @@
 
     const nextQuizBtn = document.getElementById('btnNextToQuiz');
     if (nextQuizBtn) {
-      nextQuizBtn.onclick = () => switchWorkspaceTab('exercises');
+      nextQuizBtn.onclick = () => switchWorkspaceTab('listening');
     }
 
     const bottomNextQuizBtn = document.getElementById('btnBottomNextToExercises');
     if (bottomNextQuizBtn) {
-      bottomNextQuizBtn.onclick = () => switchWorkspaceTab('exercises');
+      bottomNextQuizBtn.onclick = () => switchWorkspaceTab('listening');
     }
   }
 
-  // --- SECTION 2: PRACTICE EXERCISES ---
-  function renderExercisesSection(lesson) {
-    const panel = document.getElementById('panel-exercises');
-    if (!panel) return;
-
-    let exercises = allExercises.filter(ex => isSameLessonId(ex.lessonId || ex.lesson_id, lesson.id));
-
-    if (!exercises.length) {
-      const lessonTitle = lesson.title || 'Mandarin Practice';
-      const cnTitle = lesson.chineseTitle || '汉语练习';
-      const pinyinStr = lesson.pinyin || 'Hànyǔ liànxí';
-
-      exercises = [
-        {
-          lessonId: lesson.id,
-          order: 1,
-          type: "multiple-choice",
-          question: `What is the correct Chinese expression for "${lessonTitle}"?`,
-          optionA: `${cnTitle} (${pinyinStr})`,
-          optionB: `你好 (Nǐ hǎo)`,
-          optionC: `谢谢 (Xièxie)`,
-          optionD: `再见 (Zàijiàn)`,
-          answer: `${cnTitle} (${pinyinStr})`,
-          explanation: `"${cnTitle}" is the authentic Chinese phrase for ${lessonTitle}.`
-        },
-        {
-          lessonId: lesson.id,
-          order: 2,
-          type: "multiple-choice",
-          question: `Which Pinyin pronunciation matches "${cnTitle}"?`,
-          optionA: pinyinStr,
-          optionB: "Zǎoshang hǎo",
-          optionC: "Mǎi shuǐguǒ",
-          optionD: "Wènlù dǎoháng",
-          answer: pinyinStr,
-          explanation: `The Pinyin for "${cnTitle}" is "${pinyinStr}".`
-        },
-        {
-          lessonId: lesson.id,
-          order: 3,
-          type: "multiple-choice",
-          question: `How do you express polite communication or greeting in this lesson topic?`,
-          optionA: "非常感谢 (Fēicháng gǎnxiè - Thank you very much)",
-          optionB: "不客气 (Bú kèqì - You're welcome)",
-          optionC: "对不起 (Duìbuqǐ - Sorry)",
-          optionD: "没关系 (Méi guānxi - No problem)",
-          answer: "非常感谢 (Fēicháng gǎnxiè - Thank you very much)",
-          explanation: "Polite expressions enrich natural Chinese conversations."
-        }
-      ];
-    }
-
-    // Normalize exercise records (supports camelCase or snake_case from Excel / D1)
-    const normalizedExercises = exercises
+  function normalizeLessonExercises(lesson, rawList) {
+    return (Array.isArray(rawList) ? rawList : [])
       .map((raw, idx) => ({
         lessonId: String(raw.lessonId || raw.lesson_id || lesson.id || '').trim(),
         order: Number(raw.order || raw.order_num) || idx + 1,
@@ -1754,6 +1802,113 @@
         explanation: String(raw.explanation || '').trim()
       }))
       .sort((a, b) => a.order - b.order);
+  }
+
+  // --- SECTION 2 & 3: LISTENING & READING PRACTICE ---
+  function renderListeningSection(lesson) {
+    const lessonEx = allExercises.filter(ex => isSameLessonId(ex.lessonId || ex.lesson_id, lesson.id));
+    let listeningEx = lessonEx.filter(ex => String(ex.type || '').trim().toLowerCase() === 'listening');
+
+    if (!listeningEx.length) {
+      const lessonTitle = lesson.title || 'Mandarin Listening Practice';
+      const cnTitle = lesson.chineseTitle || '她请我们吃了北京烤鸭。';
+      const pinyinStr = lesson.pinyin || 'Tā qǐng wǒmen chī le Běijīng kǎoyā.';
+      listeningEx = [
+        {
+          lessonId: lesson.id,
+          order: 1,
+          type: 'listening',
+          question: 'Listen to the Chinese sentence and choose the matching meaning.',
+          audioText: cnTitle,
+          optionA: lessonTitle,
+          optionB: 'I am going to the library tomorrow.',
+          optionC: 'How much is a bottle of water?',
+          optionD: 'Please speak a little slower.',
+          answer: 'A',
+          explanation: `"${cnTitle}" (${pinyinStr}) means "${lessonTitle}".`
+        }
+      ];
+    }
+
+    renderQuizSectionIntoPanel({
+      panelId: 'panel-listening',
+      sectionKey: 'listening',
+      heading: '🎧 Listening Comprehension Practice',
+      resetBtnId: 'btnResetListeningQuiz',
+      nextBtnId: 'btnNextToReading',
+      nextBtnLabel: 'Go to Reading 📖 →',
+      nextTab: 'reading',
+      exercisesList: normalizeLessonExercises(lesson, listeningEx),
+      lesson
+    });
+  }
+
+  function renderReadingSection(lesson) {
+    const lessonEx = allExercises.filter(ex => isSameLessonId(ex.lessonId || ex.lesson_id, lesson.id));
+    let readingEx = lessonEx.filter(ex => String(ex.type || '').trim().toLowerCase() !== 'listening');
+
+    if (!readingEx.length) {
+      const lessonTitle = lesson.title || 'Mandarin Practice';
+      const cnTitle = lesson.chineseTitle || '汉语练习';
+      const pinyinStr = lesson.pinyin || 'Hànyǔ liànxí';
+      readingEx = [
+        {
+          lessonId: lesson.id,
+          order: 1,
+          type: 'multiple-choice',
+          question: `What is the correct Chinese expression for "${lessonTitle}"?`,
+          optionA: `${cnTitle} (${pinyinStr})`,
+          optionB: '你好 (Nǐ hǎo)',
+          optionC: '谢谢 (Xièxie)',
+          optionD: '再见 (Zàijiàn)',
+          answer: `${cnTitle} (${pinyinStr})`,
+          explanation: `"${cnTitle}" is the authentic Chinese phrase for ${lessonTitle}.`
+        },
+        {
+          lessonId: lesson.id,
+          order: 2,
+          type: 'multiple-choice',
+          question: `Which Pinyin pronunciation matches "${cnTitle}"?`,
+          optionA: pinyinStr,
+          optionB: 'Zǎoshang hǎo',
+          optionC: 'Mǎi shuǐguǒ',
+          optionD: 'Wènlù dǎoháng',
+          answer: pinyinStr,
+          explanation: `The Pinyin for "${cnTitle}" is "${pinyinStr}".`
+        }
+      ];
+    }
+
+    renderQuizSectionIntoPanel({
+      panelId: 'panel-reading',
+      sectionKey: 'reading',
+      heading: '📖 Reading & Character Exercises',
+      resetBtnId: 'btnResetReadingQuiz',
+      nextBtnId: 'btnNextToWriting',
+      nextBtnLabel: 'Go to Writing 🖌️ →',
+      nextTab: 'writing',
+      exercisesList: normalizeLessonExercises(lesson, readingEx),
+      lesson
+    });
+  }
+
+  function renderQuizSectionIntoPanel({
+    panelId,
+    sectionKey,
+    heading,
+    resetBtnId,
+    nextBtnId,
+    nextBtnLabel,
+    nextTab,
+    exercisesList,
+    lesson
+  }) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    if (!exerciseAnswersState[sectionKey] || typeof exerciseAnswersState[sectionKey] !== 'object') {
+      exerciseAnswersState[sectionKey] = {};
+    }
 
     const buildExerciseAudioHTML = (ex, qNum = '') => {
       const audioSrc = ex.audioUrl ? backendAssetUrl(ex.audioUrl) : '';
@@ -1761,12 +1916,13 @@
       const isListening = ex.type === 'listening';
       const fallbackChinese = /[\u4e00-\u9fa5]/.test(ex.question || '') ? ex.question : '';
       const spokenSentence = audioSentence || fallbackChinese;
+      const domId = `${sectionKey}-${qNum}`;
 
       if (!audioSrc && !spokenSentence) return '';
 
       if (isListening || audioSentence) {
         return `
-          <div class="quiz-listening-card" id="quizListenBox-${qNum}">
+          <div class="quiz-listening-card" id="quizListenBox-${domId}">
             <div class="quiz-listening-controls">
               ${
                 spokenSentence || audioSrc
@@ -1774,7 +1930,7 @@
                 <button
                   type="button"
                   class="quiz-listening-play-btn"
-                  data-listen-play="${qNum}"
+                  data-listen-play="${domId}"
                   data-audio-url="${escapeHTML(audioSrc)}"
                   data-speak-text="${escapeHTML(spokenSentence)}"
                   data-rate="0.85"
@@ -1784,7 +1940,7 @@
                 <button
                   type="button"
                   class="quiz-tts-btn quiz-listening-slow-btn"
-                  data-listen-play="${qNum}"
+                  data-listen-play="${domId}"
                   data-audio-url="${escapeHTML(audioSrc)}"
                   data-speak-text="${escapeHTML(spokenSentence)}"
                   data-rate="0.62"
@@ -1797,18 +1953,18 @@
               }
               ${
                 audioSentence
-                  ? `<button type="button" class="quiz-transcript-toggle" data-toggle-transcript="${qNum}">👁 Show Sentence</button>`
+                  ? `<button type="button" class="quiz-transcript-toggle" data-toggle-transcript="${domId}">👁 Show Sentence</button>`
                   : ''
               }
             </div>
             ${
               audioSrc
-                ? `<audio src="${escapeHTML(audioSrc)}" controls preload="none" class="quiz-audio-player" id="quizAudioPlayer-${qNum}"></audio>`
+                ? `<audio src="${escapeHTML(audioSrc)}" controls preload="none" class="quiz-audio-player" id="quizAudioPlayer-${domId}"></audio>`
                 : ''
             }
             ${
               audioSentence
-                ? `<div class="quiz-listening-transcript" id="quizTranscript-${qNum}" hidden>
+                ? `<div class="quiz-listening-transcript" id="quizTranscript-${domId}" hidden>
                      <span class="quiz-transcript-kicker">Audio Sentence:</span>
                      <span class="chinese-kaiti" style="font-family: 'KaiTi', 'STKaiti', '楷体', 'Kaiti SC', 'Ma Shan Zheng', serif;">${escapeHTML(audioSentence)}</span>
                    </div>`
@@ -1851,14 +2007,10 @@
         .filter((slot) => slot.text || slot.image);
     };
 
-    const readingExercises = normalizedExercises.filter(ex => String(ex.type || '').trim().toLowerCase() !== 'listening');
-    const listeningExercises = normalizedExercises.filter(ex => String(ex.type || '').trim().toLowerCase() === 'listening');
-    const activeExercises = activeLessonExTab === 'listening' ? listeningExercises : readingExercises;
-
     // Build render blocks, grouping shared-image-match / shared-text-match rows sharing the same groupId
     const renderBlocks = [];
     const seenSharedGroups = new Map();
-    activeExercises.forEach((ex, idx) => {
+    exercisesList.forEach((ex, idx) => {
       const qNum = idx + 1;
       const isSharedMatch = ex.type === 'shared-image-match' || ex.type === 'shared-text-match';
       if (isSharedMatch) {
@@ -1878,7 +2030,6 @@
         if (!groupObj.groupTitle && ex.groupTitle) {
           groupObj.groupTitle = ex.groupTitle;
         }
-        // Populate sharedSlots from the first item that provides options/images, or merge missing slots
         const itemSlots = getExerciseSlots(ex);
         if (!groupObj.sharedSlots.length) {
           groupObj.sharedSlots = itemSlots;
@@ -1907,23 +2058,18 @@
       <div class="exercises-workspace">
         <div class="quiz-header-bar">
           <div>
-            <h3 style="margin: 0 0 4px; font-size: 1.3rem; font-weight: 800;">Interactive Practice Exercises</h3>
-            <span class="quiz-progress-counter">${normalizedExercises.length} Total Questions (${readingExercises.length} Reading, ${listeningExercises.length} Listening)</span>
+            <h3 style="margin: 0 0 4px; font-size: 1.3rem; font-weight: 800;">${escapeHTML(heading)}</h3>
+            <span class="quiz-progress-counter">${exercisesList.length} ${exercisesList.length === 1 ? 'Question' : 'Questions'}</span>
           </div>
-          <div class="quiz-score-badge" id="quizScoreBadge">
-            <span>⭐ Score: 0 / ${normalizedExercises.length}</span>
+          <div class="quiz-score-badge" id="quizScoreBadge-${sectionKey}">
+            <span>⭐ Score: 0 / ${exercisesList.length}</span>
           </div>
-        </div>
-
-        <div class="quiz-ex-subtabs">
-          <button type="button" class="quiz-ex-subtab ${activeLessonExTab === 'reading' ? 'active' : ''}" data-lesson-ex-tab="reading">📖 Reading Exercises (${readingExercises.length})</button>
-          <button type="button" class="quiz-ex-subtab ${activeLessonExTab === 'listening' ? 'active' : ''}" data-lesson-ex-tab="listening">🎧 Listening Exercises (${listeningExercises.length})</button>
         </div>
 
         <div class="quiz-questions-stack">
           ${
-            activeExercises.length === 0
-              ? `<div style="text-align:center; padding:36px; color:#64748b; font-size:0.95rem;">No ${activeLessonExTab} exercises in this lesson yet.</div>`
+            exercisesList.length === 0
+              ? `<div style="text-align:center; padding:36px; color:#64748b; font-size:0.95rem;">No ${escapeHTML(sectionKey)} exercises in this lesson yet.</div>`
               : renderBlocks.map((block) => {
             if (block.kind === 'shared-match') {
               const slots = block.sharedSlots.length
@@ -1991,8 +2137,10 @@
                   }
 
                   <div class="quiz-shared-questions-list">
-                    ${block.items.map(({ ex, qNum }) => `
-                      <div class="quiz-shared-question-row" id="quizCard-${qNum}" data-audio-text="${escapeHTML(ex.audioText || '')}">
+                    ${block.items.map(({ ex, qNum }) => {
+                      const domId = `${sectionKey}-${qNum}`;
+                      return `
+                      <div class="quiz-shared-question-row" id="quizCard-${domId}" data-audio-text="${escapeHTML(ex.audioText || '')}">
                         <div class="quiz-shared-row-main">
                           <div class="quiz-shared-row-prompt">
                             <span class="quiz-shared-row-num">${qNum}.</span>
@@ -2023,18 +2171,20 @@
                             `).join('')}
                           </div>
                         </div>
-                        <div class="quiz-feedback-box" id="quizFeedback-${qNum}">
-                          <div class="quiz-feedback-status" id="feedbackStatus-${qNum}"></div>
-                          <p class="quiz-explanation-text" id="feedbackText-${qNum}"></p>
+                        <div class="quiz-feedback-box" id="quizFeedback-${domId}">
+                          <div class="quiz-feedback-status" id="feedbackStatus-${domId}"></div>
+                          <p class="quiz-explanation-text" id="feedbackText-${domId}"></p>
                         </div>
                       </div>
-                    `).join('')}
+                    `;
+                    }).join('')}
                   </div>
                 </div>
               `;
             }
 
             const { ex, qNum } = block;
+            const domId = `${sectionKey}-${qNum}`;
             const slots = getExerciseSlots(ex);
             const hasOptionImages = slots.some((s) => Boolean(s.image));
             const isListening = ex.type === 'listening';
@@ -2047,7 +2197,7 @@
             const questionPrompt = ex.question || (isListening ? 'Listen to the audio and choose the correct answer.' : '');
 
             return `
-              <div class="quiz-card-item" id="quizCard-${qNum}" data-audio-text="${escapeHTML(ex.audioText || '')}">
+              <div class="quiz-card-item" id="quizCard-${domId}" data-audio-text="${escapeHTML(ex.audioText || '')}">
                 <div class="quiz-question-number">Question ${qNum} • ${
               isFillBlank
                 ? 'Write Chinese Character (Pinyin)'
@@ -2087,7 +2237,7 @@
                     <input
                       type="text"
                       class="quiz-fill-input chinese-kaiti"
-                      id="quizFillInput-${qNum}"
+                      id="quizFillInput-${domId}"
                       data-question-index="${qNum}"
                       data-answer="${escapeHTML(ex.answer || '')}"
                       data-explanation="${escapeHTML(ex.explanation || '')}"
@@ -2160,9 +2310,9 @@
                 `
                 }
 
-                <div class="quiz-feedback-box" id="quizFeedback-${qNum}">
-                  <div class="quiz-feedback-status" id="feedbackStatus-${qNum}"></div>
-                  <p class="quiz-explanation-text" id="feedbackText-${qNum}"></p>
+                <div class="quiz-feedback-box" id="quizFeedback-${domId}">
+                  <div class="quiz-feedback-status" id="feedbackStatus-${domId}"></div>
+                  <p class="quiz-explanation-text" id="feedbackText-${domId}"></p>
                 </div>
               </div>
             `;
@@ -2170,8 +2320,8 @@
         </div>
 
         <div class="quiz-reset-bar">
-          <button type="button" class="btn btn-secondary" id="btnResetQuiz" style="margin-right: 12px;">↺ Reset &amp; Retry Quiz</button>
-          <button type="button" class="btn btn-primary" id="btnNextToWriting">Go to Writing &amp; Stroke Order 🖌️ →</button>
+          <button type="button" class="btn btn-secondary" id="${escapeHTML(resetBtnId)}" style="margin-right: 12px;">↺ Reset &amp; Retry</button>
+          <button type="button" class="btn btn-primary" id="${escapeHTML(nextBtnId)}">${escapeHTML(nextBtnLabel)}</button>
         </div>
       </div>
     `;
@@ -2179,7 +2329,7 @@
     // Attach listening play & slow controls (audio file or listening sentence TTS)
     panel.querySelectorAll('[data-listen-play]').forEach((btn) => {
       btn.onclick = () => {
-        const qNum = btn.getAttribute('data-listen-play');
+        const domId = btn.getAttribute('data-listen-play');
         const audioUrl = btn.getAttribute('data-audio-url') || '';
         const speakTxt = btn.getAttribute('data-speak-text') || '';
         const rate = Number(btn.getAttribute('data-rate')) || 0.85;
@@ -2190,7 +2340,7 @@
         btn.classList.add('is-playing');
         const clearPlaying = () => btn.classList.remove('is-playing');
 
-        const cardPlayer = document.getElementById(`quizAudioPlayer-${qNum}`);
+        const cardPlayer = document.getElementById(`quizAudioPlayer-${domId}`);
         if (audioUrl && cardPlayer) {
           try {
             if (window.speechSynthesis) window.speechSynthesis.cancel();
@@ -2229,8 +2379,8 @@
 
     panel.querySelectorAll('[data-toggle-transcript]').forEach((btn) => {
       btn.onclick = () => {
-        const qNum = btn.getAttribute('data-toggle-transcript');
-        const box = document.getElementById(`quizTranscript-${qNum}`);
+        const domId = btn.getAttribute('data-toggle-transcript');
+        const box = document.getElementById(`quizTranscript-${domId}`);
         if (!box) return;
         const nextHidden = !box.hidden;
         box.hidden = nextHidden;
@@ -2255,7 +2405,7 @@
         const correct = btn.dataset.answer || '';
         const explanation = btn.dataset.explanation || '';
 
-        handleQuizSelection(qNum, selected, selectedLetter, correct, explanation, normalizedExercises.length);
+        handleQuizSelection(sectionKey, qNum, selected, selectedLetter, correct, explanation, exercisesList.length);
       };
     });
 
@@ -2263,14 +2413,15 @@
     panel.querySelectorAll('.quiz-fill-submit-btn').forEach((btn) => {
       btn.onclick = () => {
         const qNum = btn.dataset.questionIndex;
-        const inputEl = document.getElementById(`quizFillInput-${qNum}`);
+        const inputEl = document.getElementById(`quizFillInput-${sectionKey}-${qNum}`);
         if (!inputEl) return;
         handleFillBlankSubmit(
+          sectionKey,
           qNum,
           inputEl.value,
           btn.dataset.answer || '',
           btn.dataset.explanation || '',
-          normalizedExercises.length
+          exercisesList.length
         );
       };
     });
@@ -2281,40 +2432,39 @@
           e.preventDefault();
           const qNum = inp.dataset.questionIndex;
           handleFillBlankSubmit(
+            sectionKey,
             qNum,
             inp.value,
             inp.dataset.answer || '',
             inp.dataset.explanation || '',
-            normalizedExercises.length
+            exercisesList.length
           );
         }
       };
     });
 
-    panel.querySelectorAll('[data-lesson-ex-tab]').forEach((btn) => {
-      btn.onclick = () => {
-        activeLessonExTab = btn.getAttribute('data-lesson-ex-tab');
-        renderExercisesSection(lesson);
-      };
-    });
-
-    const resetBtn = document.getElementById('btnResetQuiz');
+    const resetBtn = document.getElementById(resetBtnId);
     if (resetBtn) {
       resetBtn.onclick = () => {
-        exerciseAnswersState = {};
-        renderExercisesSection(lesson);
+        exerciseAnswersState[sectionKey] = {};
+        if (sectionKey === 'listening') {
+          renderListeningSection(lesson);
+        } else {
+          renderReadingSection(lesson);
+        }
       };
     }
 
-    const nextWritingBtn = document.getElementById('btnNextToWriting');
-    if (nextWritingBtn) {
-      nextWritingBtn.onclick = () => switchWorkspaceTab('writing');
+    const nextBtn = document.getElementById(nextBtnId);
+    if (nextBtn) {
+      nextBtn.onclick = () => switchWorkspaceTab(nextTab);
     }
   }
 
-  function handleFillBlankSubmit(qNum, rawUserInput, correct, explanation, totalQuestions) {
-    const card = document.getElementById(`quizCard-${qNum}`);
-    const inputEl = document.getElementById(`quizFillInput-${qNum}`);
+  function handleFillBlankSubmit(sectionKey, qNum, rawUserInput, correct, explanation, totalQuestions) {
+    const domId = `${sectionKey}-${qNum}`;
+    const card = document.getElementById(`quizCard-${domId}`);
+    const inputEl = document.getElementById(`quizFillInput-${domId}`);
     if (!card || !inputEl) return;
 
     const userClean = String(rawUserInput || '').replace(/\s+/g, '').trim();
@@ -2336,9 +2486,9 @@
     const submitBtn = card.querySelector('.quiz-fill-submit-btn');
     if (submitBtn) submitBtn.disabled = true;
 
-    const feedbackBox = document.getElementById(`quizFeedback-${qNum}`);
-    const statusEl = document.getElementById(`feedbackStatus-${qNum}`);
-    const textEl = document.getElementById(`feedbackText-${qNum}`);
+    const feedbackBox = document.getElementById(`quizFeedback-${domId}`);
+    const statusEl = document.getElementById(`feedbackStatus-${domId}`);
+    const textEl = document.getElementById(`feedbackText-${domId}`);
 
     const displayCorrect = acceptedAnswers[0] || String(correct || '').trim();
     if (feedbackBox) {
@@ -2355,17 +2505,19 @@
       textEl.innerHTML = wrapChineseInKaiti(escapeHTML(explanation || (isCorrect ? 'Well done!' : 'Keep practicing!')));
     }
 
-    exerciseAnswersState[qNum] = isCorrect;
+    if (!exerciseAnswersState[sectionKey]) exerciseAnswersState[sectionKey] = {};
+    exerciseAnswersState[sectionKey][qNum] = isCorrect;
 
-    const correctCount = Object.values(exerciseAnswersState).filter(Boolean).length;
-    const scoreBadge = document.getElementById('quizScoreBadge');
+    const correctCount = Object.values(exerciseAnswersState[sectionKey]).filter(Boolean).length;
+    const scoreBadge = document.getElementById(`quizScoreBadge-${sectionKey}`);
     if (scoreBadge) {
       scoreBadge.innerHTML = `<span>⭐ Score: ${correctCount} / ${totalQuestions} (${Math.round((correctCount / totalQuestions) * 100)}%)</span>`;
     }
   }
 
-  function handleQuizSelection(qNum, selected, selectedLetter, correct, explanation, totalQuestions) {
-    const card = document.getElementById(`quizCard-${qNum}`);
+  function handleQuizSelection(sectionKey, qNum, selected, selectedLetter, correct, explanation, totalQuestions) {
+    const domId = `${sectionKey}-${qNum}`;
+    const card = document.getElementById(`quizCard-${domId}`);
     if (!card) return;
 
     const selNorm = String(selected || '').trim().toLowerCase();
@@ -2414,9 +2566,9 @@
     });
 
     // Update feedback box
-    const feedbackBox = document.getElementById(`quizFeedback-${qNum}`);
-    const statusEl = document.getElementById(`feedbackStatus-${qNum}`);
-    const textEl = document.getElementById(`feedbackText-${qNum}`);
+    const feedbackBox = document.getElementById(`quizFeedback-${domId}`);
+    const statusEl = document.getElementById(`feedbackStatus-${domId}`);
+    const textEl = document.getElementById(`feedbackText-${domId}`);
 
     if (feedbackBox) {
       feedbackBox.classList.add('active');
@@ -2436,11 +2588,12 @@
         : baseExplanation;
     }
 
-    exerciseAnswersState[qNum] = isCorrect;
+    if (!exerciseAnswersState[sectionKey]) exerciseAnswersState[sectionKey] = {};
+    exerciseAnswersState[sectionKey][qNum] = isCorrect;
 
     // Update score badge
-    const correctCount = Object.values(exerciseAnswersState).filter(Boolean).length;
-    const scoreBadge = document.getElementById('quizScoreBadge');
+    const correctCount = Object.values(exerciseAnswersState[sectionKey]).filter(Boolean).length;
+    const scoreBadge = document.getElementById(`quizScoreBadge-${sectionKey}`);
     if (scoreBadge) {
       scoreBadge.innerHTML = `<span>⭐ Score: ${correctCount} / ${totalQuestions} (${Math.round((correctCount / totalQuestions) * 100)}%)</span>`;
     }
@@ -2731,7 +2884,7 @@
 
         <div class="writing-bottom-nav-bar" style="display: flex; justify-content: flex-end; margin-top: 32px;">
           <button type="button" class="btn btn-primary btn-lg" id="btnBottomNextToPronunciation">
-            Go to Pronunciation Check 🎤 →
+            Go to Speaking 🎤 →
           </button>
         </div>
       </div>
@@ -2802,7 +2955,7 @@
 
     const bottomNextPronBtn = document.getElementById('btnBottomNextToPronunciation');
     if (bottomNextPronBtn) {
-      bottomNextPronBtn.onclick = () => switchWorkspaceTab('pronunciation');
+      bottomNextPronBtn.onclick = () => switchWorkspaceTab('speaking');
     }
 
     initWritingCanvas(currentChar, lesson, chars);
@@ -5423,7 +5576,7 @@
 
   // --- Main Pronunciation Section Renderer ---
   function renderPronunciationSection(lesson) {
-    const panel = document.getElementById('panel-pronunciation');
+    const panel = document.getElementById('panel-speaking') || document.getElementById('panel-pronunciation');
     if (!panel) return;
 
     activePronunciationLesson = lesson;
@@ -6501,11 +6654,12 @@
             const allowVideo = applyWorkspaceVideoTabVisibility(activeLesson);
             renderWorkspaceHeader(activeLesson);
             renderVideoSection(activeLesson);
-            renderExercisesSection(activeLesson);
+            renderListeningSection(activeLesson);
+            renderReadingSection(activeLesson);
             renderWritingSection(activeLesson);
             renderPronunciationSection(activeLesson);
             if (!allowVideo && activeWorkspaceTab === 'video') {
-              switchWorkspaceTab('exercises');
+              switchWorkspaceTab('listening');
             }
           } else {
             closeLessonWorkspace(false);

@@ -160,6 +160,7 @@ function normalizeExerciseRow(r: any, idx = 0) {
   const pinyin = String(r.pinyin || r.pinyinHint || r.pinyin_hint || '').trim();
   const question = String(r.question || '').trim();
   const audioUrl = String(r.audioUrl || r.audio_url || r.audio || '').trim();
+  const audioText = String(r.audioText || r.audio_text || r.AudioText || r.listeningSentence || r.listening_sentence || r.audioSentence || '').trim();
   const optionA = String(r.optionA ?? r.option_a ?? '').trim();
   const optionB = String(r.optionB ?? r.option_b ?? '').trim();
   const optionC = String(r.optionC ?? r.option_c ?? '').trim();
@@ -186,6 +187,8 @@ function normalizeExerciseRow(r: any, idx = 0) {
     question,
     audioUrl,
     audio_url: audioUrl,
+    audioText,
+    audio_text: audioText,
     optionA,
     option_a: optionA,
     optionB,
@@ -287,7 +290,7 @@ function normalizePronunciationRow(p: any, idx = 0) {
 
 const D1_TABLE_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY, course TEXT, category TEXT, categoryKey TEXT, categoryNum TEXT, title TEXT, chineseTitle TEXT, pinyin TEXT, meaning TEXT, level TEXT, description TEXT, videoUrl TEXT, posterUrl TEXT, fullAudio TEXT, keywords TEXT, accessType TEXT, price REAL, updated_at TEXT)`,
-  `CREATE TABLE IF NOT EXISTS exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
+  `CREATE TABLE IF NOT EXISTS exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, audioText TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
   `CREATE TABLE IF NOT EXISTS writing_characters (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, strokeCount INTEGER, radical TEXT, strokeAnimationUrl TEXT, svgPath TEXT, strokeOrderSteps TEXT)`,
   `CREATE TABLE IF NOT EXISTS vocabulary (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, audio TEXT)`,
   `CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, "order" INTEGER, title TEXT, category TEXT, badge TEXT, description TEXT, embed_code TEXT, embed_url TEXT, width INTEGER, height INTEGER, active TEXT)`,
@@ -295,7 +298,7 @@ const D1_TABLE_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS stories_lessons (id TEXT PRIMARY KEY, title TEXT, chineseTitle TEXT, pinyin TEXT, meaning TEXT, level TEXT, description TEXT, video TEXT, poster TEXT)`,
   `CREATE TABLE IF NOT EXISTS story_scenes (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, chinese TEXT, pinyin TEXT, english TEXT, image TEXT, audio TEXT)`,
   `CREATE TABLE IF NOT EXISTS stories_vocabulary (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, audio TEXT)`,
-  `CREATE TABLE IF NOT EXISTS stories_exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
+  `CREATE TABLE IF NOT EXISTS stories_exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, audioText TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
   `CREATE TABLE IF NOT EXISTS reels_videos (id TEXT PRIMARY KEY, type TEXT, holiday_id TEXT, title TEXT, video_path TEXT, thumbnail_path TEXT, duration_sec INTEGER, status TEXT, text_cn TEXT, text_pinyin TEXT, text_en TEXT, text_my TEXT)`,
   `CREATE TABLE IF NOT EXISTS media_files (id TEXT PRIMARY KEY, filename TEXT, mime_type TEXT, media_type TEXT, size_bytes INTEGER, chunk_size INTEGER, chunk_count INTEGER, storage_mode TEXT DEFAULT 'd1', object_key TEXT DEFAULT '', upload_id TEXT DEFAULT '', status TEXT DEFAULT 'ready', created_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS media_chunks (media_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, data_b64 TEXT NOT NULL, PRIMARY KEY (media_id, chunk_index))`,
@@ -307,7 +310,9 @@ const MEDIA_FILES_UPGRADE_COLUMNS: readonly string[] = [
   `ALTER TABLE media_files ADD COLUMN storage_mode TEXT DEFAULT 'd1'`,
   `ALTER TABLE media_files ADD COLUMN object_key TEXT DEFAULT ''`,
   `ALTER TABLE media_files ADD COLUMN upload_id TEXT DEFAULT ''`,
-  `ALTER TABLE media_files ADD COLUMN status TEXT DEFAULT 'ready'`
+  `ALTER TABLE media_files ADD COLUMN status TEXT DEFAULT 'ready'`,
+  `ALTER TABLE exercises ADD COLUMN audioText TEXT DEFAULT ''`,
+  `ALTER TABLE stories_exercises ADD COLUMN audioText TEXT DEFAULT ''`
 ];
 
 let d1SchemaReady = false;
@@ -1024,8 +1029,8 @@ async function syncLessonsSheetsToD1(db: D1Database, sheets: Record<string, any[
       const ex = sheets.Exercises[i];
       stmts.push(
         db.prepare(`
-          INSERT INTO exercises (lessonId, "order", type, groupId, groupTitle, pinyin, question, audioUrl, optionA, optionB, optionC, optionD, optionE, optionAImage, optionBImage, optionCImage, optionDImage, optionEImage, answer, explanation)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO exercises (lessonId, "order", type, groupId, groupTitle, pinyin, question, audioUrl, audioText, optionA, optionB, optionC, optionD, optionE, optionAImage, optionBImage, optionCImage, optionDImage, optionEImage, answer, explanation)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           ex.lessonId || ex.lesson_id || 'hsk2-01',
           Number(ex.order || ex.order_num) || i + 1,
@@ -1035,6 +1040,7 @@ async function syncLessonsSheetsToD1(db: D1Database, sheets: Record<string, any[
           ex.pinyin || '',
           ex.question || '',
           ex.audioUrl || ex.audio_url || '',
+          ex.audioText || ex.audio_text || ex.listeningSentence || ex.listening_sentence || '',
           ex.optionA ?? ex.option_a ?? '',
           ex.optionB ?? ex.option_b ?? '',
           ex.optionC ?? ex.option_c ?? '',
@@ -1235,8 +1241,8 @@ async function syncStoriesSheetsToD1(db: D1Database, sheets: Record<string, any[
       const ex = sheets.Exercises[i];
       stmts.push(
         db.prepare(`
-          INSERT INTO stories_exercises (lessonId, "order", type, groupId, groupTitle, pinyin, question, audioUrl, optionA, optionB, optionC, optionD, optionE, optionAImage, optionBImage, optionCImage, optionDImage, optionEImage, answer, explanation)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO stories_exercises (lessonId, "order", type, groupId, groupTitle, pinyin, question, audioUrl, audioText, optionA, optionB, optionC, optionD, optionE, optionAImage, optionBImage, optionCImage, optionDImage, optionEImage, answer, explanation)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           ex.lessonId || ex.lesson_id || 'lesson-01',
           Number(ex.order || ex.order_num) || i + 1,
@@ -1246,6 +1252,7 @@ async function syncStoriesSheetsToD1(db: D1Database, sheets: Record<string, any[
           ex.pinyin || '',
           ex.question || '',
           ex.audioUrl || ex.audio_url || '',
+          ex.audioText || ex.audio_text || ex.listeningSentence || ex.listening_sentence || '',
           ex.optionA ?? ex.option_a ?? '',
           ex.optionB ?? ex.option_b ?? '',
           ex.optionC ?? ex.option_c ?? '',

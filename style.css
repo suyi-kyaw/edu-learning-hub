@@ -8264,10 +8264,11 @@ a {
 }
 
 .workspace-tab-btn {
+  flex-shrink: 0;
   background: transparent;
   border: 1.5px solid transparent;
   color: #475569;
-  font-size: 0.95rem;
+  font-size: 0.94rem;
   font-weight: 800;
   padding: 10px 16px;
   border-radius: 12px;

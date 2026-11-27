@@ -2994,7 +2994,7 @@
                       `;
                     })
                     .join('')
-                : `<div style="text-align:center; color:#64748b; padding:28px; border:1px dashed #cbd5e1; border-radius:12px;">No exercises found for this lesson. Click <strong>+ Listening Exercise</strong>, <strong>+ Add Text Exercise</strong>, <strong>+ Image Choice</strong>, <strong>+ Shared Top Bank</strong>, or <strong>+ Write Character (Pinyin)</strong> above.</div>`
+                : `<div style="text-align:center; color:#64748b; padding:28px; border:1px dashed #cbd5e1; border-radius:12px;">No ${activeExEditorTab} exercises found for this lesson. Use the button above to add one.</div>`
             }
           </div>
         `;
@@ -4558,9 +4558,10 @@
                 <th>Course</th>
                 <th>Lesson Title</th>
                 <th>Access / Price</th>
-                <th class="num">Exercises</th>
+                <th class="num">Listening</th>
+                <th class="num">Reading</th>
                 <th class="num">Writing</th>
-                <th class="num">Pronunciation</th>
+                <th class="num">Speaking</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -4570,7 +4571,10 @@
                   ? filtered
                       .map((l) => {
                         const cName = getLessonCourse(l);
-                        const exCount = exercises.filter((x) => isSameId(x.lessonId, l.id)).length;
+                        const lessonEx = exercises.filter((x) => isSameId(x.lessonId, l.id));
+                        const exCount = lessonEx.length;
+                        const listeningCount = lessonEx.filter((x) => String(x.type || '').trim().toLowerCase() === 'listening').length;
+                        const readingCount = exCount - listeningCount;
                         const pricing = window.LinguaAuth
                           ? window.LinguaAuth.getLessonPricing({ ...l, course: cName, exerciseCount: exCount })
                           : { accessType: 'free', price: 0, practicePrice: getDefaultPracticePriceAdmin(), hasExercises: exCount > 0 };
@@ -4598,7 +4602,8 @@
                             </span>
                             ${pracLine}
                           </td>
-                          <td class="num">${exCount}</td>
+                          <td class="num">${listeningCount}</td>
+                          <td class="num">${readingCount}</td>
                           <td class="num">${writingCount}</td>
                           <td class="num">${pronCount}</td>
                           <td>
@@ -4630,7 +4635,7 @@
                       `;
                       })
                       .join('')
-                  : `<tr><td colspan="8" style="text-align:center; color:#64748b; padding:24px;">No matching lessons found.</td></tr>`
+                  : `<tr><td colspan="9" style="text-align:center; color:#64748b; padding:24px;">No matching lessons found.</td></tr>`
               }
             </tbody>
           </table>
