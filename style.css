@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap');
-
 /* =========================================================
    JIEDEEDU - VIBRANT EDUCATIONAL THEME
    Main Stylesheet
@@ -50,8 +48,9 @@
   --shadow-md: 0 10px 28px rgba(249, 115, 22, 0.09);
   --shadow-lg: 0 18px 45px rgba(249, 115, 22, 0.14);
   
-  /* Authentic 楷体 (KaiTi) Regular Script Font Stack */
-  --font-kaiti: "KaiTi", "STKaiti", "楷体", "Kaiti SC", "KaiTi_GB2312", "BiauKai", "Ma Shan Zheng", serif;
+  /* Prefer the requested system 楷体 fonts across the whole site. */
+  --font-kaiti: "KaiTi_GB2312", "KaiTi", "楷体", "STKaiti", "Kaiti SC", "BiauKai", serif;
+  --font-site: "KaiTi_GB2312", "KaiTi", "楷体", "STKaiti", "Kaiti SC", "BiauKai", serif;
 }
 
 /* =========================================================
@@ -152,13 +151,7 @@ html {
 }
 
 body {
-  font-family:
-    Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+  font-family: var(--font-site);
   background: var(--bg-page);
   color: var(--text-main);
   line-height: 1.6;
