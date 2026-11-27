@@ -64,7 +64,7 @@
   }
 
   function getApiBase() {
-    return getStoredOverride() || SITE_WORKER_BASE || normalizeBaseUrl(DEFAULT_PRODUCTION_BACKEND_URL) || '';
+    return getStoredOverride() || SITE_WORKER_BASE || (!isStaticGithubHost() ? normalizeBaseUrl(DEFAULT_PRODUCTION_BACKEND_URL) : '') || '';
   }
 
   function hasBackend() {

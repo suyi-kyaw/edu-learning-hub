@@ -323,153 +323,153 @@ const D1_TABLE_STATEMENTS: readonly string[] = [
 const EXPECTED_TABLE_COLUMNS: Record<string, Record<string, string>> = {
   lessons: {
     id: 'TEXT',
-    course: 'TEXT DEFAULT "HSK 2"',
-    category: 'TEXT DEFAULT ""',
-    categoryKey: 'TEXT DEFAULT ""',
-    categoryNum: 'TEXT DEFAULT "Course 1"',
-    title: 'TEXT DEFAULT ""',
-    chineseTitle: 'TEXT DEFAULT ""',
-    pinyin: 'TEXT DEFAULT ""',
-    meaning: 'TEXT DEFAULT ""',
-    level: 'TEXT DEFAULT "HSK 2"',
-    description: 'TEXT DEFAULT ""',
-    videoUrl: 'TEXT DEFAULT ""',
-    posterUrl: 'TEXT DEFAULT ""',
-    fullAudio: 'TEXT DEFAULT ""',
-    keywords: 'TEXT DEFAULT ""',
-    accessType: 'TEXT DEFAULT "paid"',
+    course: "TEXT DEFAULT 'HSK 2'",
+    category: "TEXT DEFAULT ''",
+    categoryKey: "TEXT DEFAULT ''",
+    categoryNum: "TEXT DEFAULT 'Course 1'",
+    title: "TEXT DEFAULT ''",
+    chineseTitle: "TEXT DEFAULT ''",
+    pinyin: "TEXT DEFAULT ''",
+    meaning: "TEXT DEFAULT ''",
+    level: "TEXT DEFAULT 'HSK 2'",
+    description: "TEXT DEFAULT ''",
+    videoUrl: "TEXT DEFAULT ''",
+    posterUrl: "TEXT DEFAULT ''",
+    fullAudio: "TEXT DEFAULT ''",
+    keywords: "TEXT DEFAULT ''",
+    accessType: "TEXT DEFAULT 'paid'",
     price: 'REAL DEFAULT 0',
     practicePrice: 'REAL DEFAULT 0',
-    updated_at: 'TEXT DEFAULT ""'
+    updated_at: "TEXT DEFAULT ''"
   },
   exercises: {
-    lessonId: 'TEXT DEFAULT ""',
+    lessonId: "TEXT DEFAULT ''",
     order: 'INTEGER DEFAULT 1',
-    type: 'TEXT DEFAULT "multiple-choice"',
-    groupId: 'TEXT DEFAULT ""',
-    groupTitle: 'TEXT DEFAULT ""',
-    pinyin: 'TEXT DEFAULT ""',
-    question: 'TEXT DEFAULT ""',
-    audioUrl: 'TEXT DEFAULT ""',
-    audioText: 'TEXT DEFAULT ""',
-    optionA: 'TEXT DEFAULT ""',
-    optionB: 'TEXT DEFAULT ""',
-    optionC: 'TEXT DEFAULT ""',
-    optionD: 'TEXT DEFAULT ""',
-    optionE: 'TEXT DEFAULT ""',
-    optionAImage: 'TEXT DEFAULT ""',
-    optionBImage: 'TEXT DEFAULT ""',
-    optionCImage: 'TEXT DEFAULT ""',
-    optionDImage: 'TEXT DEFAULT ""',
-    optionEImage: 'TEXT DEFAULT ""',
-    answer: 'TEXT DEFAULT ""',
-    explanation: 'TEXT DEFAULT ""'
+    type: "TEXT DEFAULT 'multiple-choice'",
+    groupId: "TEXT DEFAULT ''",
+    groupTitle: "TEXT DEFAULT ''",
+    pinyin: "TEXT DEFAULT ''",
+    question: "TEXT DEFAULT ''",
+    audioUrl: "TEXT DEFAULT ''",
+    audioText: "TEXT DEFAULT ''",
+    optionA: "TEXT DEFAULT ''",
+    optionB: "TEXT DEFAULT ''",
+    optionC: "TEXT DEFAULT ''",
+    optionD: "TEXT DEFAULT ''",
+    optionE: "TEXT DEFAULT ''",
+    optionAImage: "TEXT DEFAULT ''",
+    optionBImage: "TEXT DEFAULT ''",
+    optionCImage: "TEXT DEFAULT ''",
+    optionDImage: "TEXT DEFAULT ''",
+    optionEImage: "TEXT DEFAULT ''",
+    answer: "TEXT DEFAULT ''",
+    explanation: "TEXT DEFAULT ''"
   },
   writing_characters: {
-    lessonId: 'TEXT DEFAULT ""',
+    lessonId: "TEXT DEFAULT ''",
     order: 'INTEGER DEFAULT 1',
-    character: 'TEXT DEFAULT ""',
-    pinyin: 'TEXT DEFAULT ""',
-    meaning: 'TEXT DEFAULT ""',
+    character: "TEXT DEFAULT ''",
+    pinyin: "TEXT DEFAULT ''",
+    meaning: "TEXT DEFAULT ''",
     strokeCount: 'INTEGER DEFAULT 6',
-    radical: 'TEXT DEFAULT ""',
-    strokeAnimationUrl: 'TEXT DEFAULT ""',
-    svgPath: 'TEXT DEFAULT ""',
-    strokeOrderSteps: 'TEXT DEFAULT ""'
+    radical: "TEXT DEFAULT ''",
+    strokeAnimationUrl: "TEXT DEFAULT ''",
+    svgPath: "TEXT DEFAULT ''",
+    strokeOrderSteps: "TEXT DEFAULT ''"
   },
   vocabulary: {
-    lessonId: 'TEXT DEFAULT ""',
+    lessonId: "TEXT DEFAULT ''",
     order: 'INTEGER DEFAULT 1',
-    character: 'TEXT DEFAULT ""',
-    pinyin: 'TEXT DEFAULT ""',
-    meaning: 'TEXT DEFAULT ""',
-    audio: 'TEXT DEFAULT ""'
+    character: "TEXT DEFAULT ''",
+    pinyin: "TEXT DEFAULT ''",
+    meaning: "TEXT DEFAULT ''",
+    audio: "TEXT DEFAULT ''"
   },
   games: {
     id: 'TEXT',
     order: 'INTEGER DEFAULT 1',
-    title: 'TEXT DEFAULT ""',
-    category: 'TEXT DEFAULT ""',
-    badge: 'TEXT DEFAULT ""',
-    description: 'TEXT DEFAULT ""',
-    embed_code: 'TEXT DEFAULT ""',
-    embed_url: 'TEXT DEFAULT ""',
+    title: "TEXT DEFAULT ''",
+    category: "TEXT DEFAULT ''",
+    badge: "TEXT DEFAULT ''",
+    description: "TEXT DEFAULT ''",
+    embed_code: "TEXT DEFAULT ''",
+    embed_url: "TEXT DEFAULT ''",
     width: 'INTEGER DEFAULT 800',
     height: 'INTEGER DEFAULT 600',
-    active: 'TEXT DEFAULT "true"'
+    active: "TEXT DEFAULT 'true'"
   },
   pronunciation: {
-    lessonId: 'TEXT DEFAULT ""',
+    lessonId: "TEXT DEFAULT ''",
     order: 'INTEGER DEFAULT 1',
-    chinese: 'TEXT DEFAULT ""',
-    pinyin: 'TEXT DEFAULT ""',
-    meaning: 'TEXT DEFAULT ""',
-    focus: 'TEXT DEFAULT ""'
+    chinese: "TEXT DEFAULT ''",
+    pinyin: "TEXT DEFAULT ''",
+    meaning: "TEXT DEFAULT ''",
+    focus: "TEXT DEFAULT ''"
   },
   stories_lessons: {
     id: 'TEXT',
-    title: 'TEXT DEFAULT ""',
-    chineseTitle: 'TEXT DEFAULT ""',
-    pinyin: 'TEXT DEFAULT ""',
-    meaning: 'TEXT DEFAULT ""',
-    level: 'TEXT DEFAULT "Beginner"',
-    description: 'TEXT DEFAULT ""',
-    video: 'TEXT DEFAULT ""',
-    poster: 'TEXT DEFAULT ""'
+    title: "TEXT DEFAULT ''",
+    chineseTitle: "TEXT DEFAULT ''",
+    pinyin: "TEXT DEFAULT ''",
+    meaning: "TEXT DEFAULT ''",
+    level: "TEXT DEFAULT 'Beginner'",
+    description: "TEXT DEFAULT ''",
+    video: "TEXT DEFAULT ''",
+    poster: "TEXT DEFAULT ''"
   },
   story_scenes: {
-    lessonId: 'TEXT DEFAULT ""',
+    lessonId: "TEXT DEFAULT ''",
     order: 'INTEGER DEFAULT 1',
-    chinese: 'TEXT DEFAULT ""',
-    pinyin: 'TEXT DEFAULT ""',
-    english: 'TEXT DEFAULT ""',
-    image: 'TEXT DEFAULT ""',
-    audio: 'TEXT DEFAULT ""'
+    chinese: "TEXT DEFAULT ''",
+    pinyin: "TEXT DEFAULT ''",
+    english: "TEXT DEFAULT ''",
+    image: "TEXT DEFAULT ''",
+    audio: "TEXT DEFAULT ''"
   },
   stories_vocabulary: {
-    lessonId: 'TEXT DEFAULT ""',
+    lessonId: "TEXT DEFAULT ''",
     order: 'INTEGER DEFAULT 1',
-    character: 'TEXT DEFAULT ""',
-    pinyin: 'TEXT DEFAULT ""',
-    meaning: 'TEXT DEFAULT ""',
-    audio: 'TEXT DEFAULT ""'
+    character: "TEXT DEFAULT ''",
+    pinyin: "TEXT DEFAULT ''",
+    meaning: "TEXT DEFAULT ''",
+    audio: "TEXT DEFAULT ''"
   },
   stories_exercises: {
-    lessonId: 'TEXT DEFAULT ""',
+    lessonId: "TEXT DEFAULT ''",
     order: 'INTEGER DEFAULT 1',
-    type: 'TEXT DEFAULT "multiple-choice"',
-    groupId: 'TEXT DEFAULT ""',
-    groupTitle: 'TEXT DEFAULT ""',
-    pinyin: 'TEXT DEFAULT ""',
-    question: 'TEXT DEFAULT ""',
-    audioUrl: 'TEXT DEFAULT ""',
-    audioText: 'TEXT DEFAULT ""',
-    optionA: 'TEXT DEFAULT ""',
-    optionB: 'TEXT DEFAULT ""',
-    optionC: 'TEXT DEFAULT ""',
-    optionD: 'TEXT DEFAULT ""',
-    optionE: 'TEXT DEFAULT ""',
-    optionAImage: 'TEXT DEFAULT ""',
-    optionBImage: 'TEXT DEFAULT ""',
-    optionCImage: 'TEXT DEFAULT ""',
-    optionDImage: 'TEXT DEFAULT ""',
-    optionEImage: 'TEXT DEFAULT ""',
-    answer: 'TEXT DEFAULT ""',
-    explanation: 'TEXT DEFAULT ""'
+    type: "TEXT DEFAULT 'multiple-choice'",
+    groupId: "TEXT DEFAULT ''",
+    groupTitle: "TEXT DEFAULT ''",
+    pinyin: "TEXT DEFAULT ''",
+    question: "TEXT DEFAULT ''",
+    audioUrl: "TEXT DEFAULT ''",
+    audioText: "TEXT DEFAULT ''",
+    optionA: "TEXT DEFAULT ''",
+    optionB: "TEXT DEFAULT ''",
+    optionC: "TEXT DEFAULT ''",
+    optionD: "TEXT DEFAULT ''",
+    optionE: "TEXT DEFAULT ''",
+    optionAImage: "TEXT DEFAULT ''",
+    optionBImage: "TEXT DEFAULT ''",
+    optionCImage: "TEXT DEFAULT ''",
+    optionDImage: "TEXT DEFAULT ''",
+    optionEImage: "TEXT DEFAULT ''",
+    answer: "TEXT DEFAULT ''",
+    explanation: "TEXT DEFAULT ''"
   },
   reels_videos: {
     id: 'TEXT',
-    type: 'TEXT DEFAULT "daily"',
-    holiday_id: 'TEXT DEFAULT ""',
-    title: 'TEXT DEFAULT ""',
-    video_path: 'TEXT DEFAULT ""',
-    thumbnail_path: 'TEXT DEFAULT ""',
+    type: "TEXT DEFAULT 'daily'",
+    holiday_id: "TEXT DEFAULT ''",
+    title: "TEXT DEFAULT ''",
+    video_path: "TEXT DEFAULT ''",
+    thumbnail_path: "TEXT DEFAULT ''",
     duration_sec: 'INTEGER DEFAULT 0',
-    status: 'TEXT DEFAULT "published"',
-    text_cn: 'TEXT DEFAULT ""',
-    text_pinyin: 'TEXT DEFAULT ""',
-    text_en: 'TEXT DEFAULT ""',
-    text_my: 'TEXT DEFAULT ""'
+    status: "TEXT DEFAULT 'published'",
+    text_cn: "TEXT DEFAULT ''",
+    text_pinyin: "TEXT DEFAULT ''",
+    text_en: "TEXT DEFAULT ''",
+    text_my: "TEXT DEFAULT ''"
   },
   media_files: {
     storage_mode: "TEXT DEFAULT 'd1'",
@@ -480,66 +480,66 @@ const EXPECTED_TABLE_COLUMNS: Record<string, Record<string, string>> = {
   users: {
     uid: 'TEXT',
     email: 'TEXT',
-    username: 'TEXT DEFAULT "Learner"',
-    phoneNumber: 'TEXT DEFAULT ""',
-    dob: 'TEXT DEFAULT ""',
-    role: 'TEXT DEFAULT "student"',
-    membershipStatus: 'TEXT DEFAULT "free"',
-    membershipPlan: 'TEXT DEFAULT "none"',
-    membershipExpiresAt: 'TEXT DEFAULT ""',
-    subscribedLessonIds: 'TEXT DEFAULT "[]"',
-    subscribedCourses: 'TEXT DEFAULT "[]"',
-    practiceLessonIds: 'TEXT DEFAULT "[]"',
-    practiceCourses: 'TEXT DEFAULT "[]"',
-    linkedProviders: 'TEXT DEFAULT "[\'password\']"',
+    username: "TEXT DEFAULT 'Learner'",
+    phoneNumber: "TEXT DEFAULT ''",
+    dob: "TEXT DEFAULT ''",
+    role: "TEXT DEFAULT 'student'",
+    membershipStatus: "TEXT DEFAULT 'free'",
+    membershipPlan: "TEXT DEFAULT 'none'",
+    membershipExpiresAt: "TEXT DEFAULT ''",
+    subscribedLessonIds: "TEXT DEFAULT '[]'",
+    subscribedCourses: "TEXT DEFAULT '[]'",
+    practiceLessonIds: "TEXT DEFAULT '[]'",
+    practiceCourses: "TEXT DEFAULT '[]'",
+    linkedProviders: 'TEXT DEFAULT \'["password"]\'',
     mustChangePassword: 'INTEGER DEFAULT 0',
-    passwordSalt: 'TEXT DEFAULT ""',
-    passwordHash: 'TEXT DEFAULT ""',
-    createdAt: 'TEXT DEFAULT ""',
-    updatedAt: 'TEXT DEFAULT ""'
+    passwordSalt: "TEXT DEFAULT ''",
+    passwordHash: "TEXT DEFAULT ''",
+    createdAt: "TEXT DEFAULT ''",
+    updatedAt: "TEXT DEFAULT ''"
   },
   subscription_requests: {
     requestId: 'TEXT',
     userId: 'TEXT',
-    username: 'TEXT DEFAULT ""',
-    userEmail: 'TEXT DEFAULT ""',
-    userPhone: 'TEXT DEFAULT ""',
-    planType: 'TEXT DEFAULT "course"',
-    lessonId: 'TEXT DEFAULT ""',
-    courseName: 'TEXT DEFAULT ""',
-    lessonTitle: 'TEXT DEFAULT ""',
-    amountLabel: 'TEXT DEFAULT ""',
-    contactChannel: 'TEXT DEFAULT "viber"',
-    contactHandle: 'TEXT DEFAULT ""',
-    note: 'TEXT DEFAULT ""',
-    status: 'TEXT DEFAULT "pending"',
-    adminNote: 'TEXT DEFAULT ""',
-    createdAt: 'TEXT DEFAULT ""',
-    updatedAt: 'TEXT DEFAULT ""'
+    username: "TEXT DEFAULT ''",
+    userEmail: "TEXT DEFAULT ''",
+    userPhone: "TEXT DEFAULT ''",
+    planType: "TEXT DEFAULT 'course'",
+    lessonId: "TEXT DEFAULT ''",
+    courseName: "TEXT DEFAULT ''",
+    lessonTitle: "TEXT DEFAULT ''",
+    amountLabel: "TEXT DEFAULT ''",
+    contactChannel: "TEXT DEFAULT 'viber'",
+    contactHandle: "TEXT DEFAULT ''",
+    note: "TEXT DEFAULT ''",
+    status: "TEXT DEFAULT 'pending'",
+    adminNote: "TEXT DEFAULT ''",
+    createdAt: "TEXT DEFAULT ''",
+    updatedAt: "TEXT DEFAULT ''"
   },
   user_progress: {
     uid: 'TEXT',
     currentStreak: 'INTEGER DEFAULT 0',
     bestStreak: 'INTEGER DEFAULT 0',
-    lastCompletedDate: 'TEXT DEFAULT ""',
-    streakDates: 'TEXT DEFAULT "[]"',
-    completedLessonIds: 'TEXT DEFAULT "[]"',
+    lastCompletedDate: "TEXT DEFAULT ''",
+    streakDates: "TEXT DEFAULT '[]'",
+    completedLessonIds: "TEXT DEFAULT '[]'",
     reminderEnabled: 'INTEGER DEFAULT 1',
-    reminderTime: 'TEXT DEFAULT "18:00"',
-    lastNotifiedDate: 'TEXT DEFAULT ""',
-    updatedAt: 'TEXT DEFAULT ""'
+    reminderTime: "TEXT DEFAULT '18:00'",
+    lastNotifiedDate: "TEXT DEFAULT ''",
+    updatedAt: "TEXT DEFAULT ''"
   },
   lesson_catalog: {
     lessonId: 'TEXT',
-    title: 'TEXT DEFAULT ""',
-    course: 'TEXT DEFAULT "HSK 2"',
-    audience: 'TEXT DEFAULT "Adult"',
-    accessType: 'TEXT DEFAULT "free"',
+    title: "TEXT DEFAULT ''",
+    course: "TEXT DEFAULT 'HSK 2'",
+    audience: "TEXT DEFAULT 'Adult'",
+    accessType: "TEXT DEFAULT 'free'",
     price: 'REAL DEFAULT 0',
     practicePrice: 'REAL DEFAULT 0',
     hasExercises: 'INTEGER DEFAULT 1',
-    updatedBy: 'TEXT DEFAULT ""',
-    updatedAt: 'TEXT DEFAULT ""'
+    updatedBy: "TEXT DEFAULT ''",
+    updatedAt: "TEXT DEFAULT ''"
   }
 };
 
@@ -557,7 +557,9 @@ async function ensureD1Tables(db: D1Database, force = false): Promise<void> {
       await db.batch(stmts);
     } catch (_) {
       for (const sql of D1_TABLE_STATEMENTS) {
-        await db.prepare(sql).run();
+        try {
+          await db.prepare(sql).run();
+        } catch (_) {}
       }
     }
     for (const [tableName, columns] of Object.entries(EXPECTED_TABLE_COLUMNS)) {
@@ -569,11 +571,16 @@ async function ensureD1Tables(db: D1Database, force = false): Promise<void> {
         for (const [colName, colDef] of Object.entries(columns)) {
           if (!existingCols.has(colName.toLowerCase())) {
             try {
-              await db.prepare(`ALTER TABLE "${tableName}" ADD COLUMN "${colName}" ${colDef}`).run();
-            } catch (_) {}
+              const safeDef = colDef.replace(/DEFAULT\s+"([^"]*)"/g, "DEFAULT '$1'");
+              await db.prepare(`ALTER TABLE "${tableName}" ADD COLUMN "${colName}" ${safeDef}`).run();
+            } catch (colErr) {
+              console.warn(`[ensureD1Tables] Warning adding column ${tableName}.${colName}:`, colErr);
+            }
           }
         }
-      } catch (_) {}
+      } catch (tableErr) {
+        console.warn(`[ensureD1Tables] Warning inspecting table ${tableName}:`, tableErr);
+      }
     }
     d1SchemaReady = true;
   };
@@ -2606,7 +2613,25 @@ async function ensureD1UsersSeeded(env: Env, origin: string): Promise<void> {
 }
 
 async function buildWorkerSessionResponse(env: Env, userRow: any, token: string | null) {
-  const pubUser = sanitizeWorkerUserRow(userRow)!;
+  const pubUser = sanitizeWorkerUserRow(userRow) || {
+    uid: String(userRow?.uid || `usr_${randomHexWorker(8)}`),
+    username: String(userRow?.username || 'Learner'),
+    email: String(userRow?.email || ''),
+    phoneNumber: String(userRow?.phoneNumber || ''),
+    dob: String(userRow?.dob || ''),
+    role: String(userRow?.role || 'student'),
+    membershipStatus: String(userRow?.membershipStatus || 'free'),
+    membershipPlan: String(userRow?.membershipPlan || 'none'),
+    membershipExpiresAt: String(userRow?.membershipExpiresAt || ''),
+    subscribedLessonIds: [],
+    subscribedCourses: [],
+    practiceLessonIds: [],
+    practiceCourses: [],
+    linkedProviders: ['password'],
+    mustChangePassword: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
   const isAdmin = pubUser.role === 'admin';
   const [progRow, myReqRows, catRows, adminRow] = await Promise.all([
     one<any>(env.DB, `SELECT * FROM user_progress WHERE uid = ?`, pubUser.uid),
@@ -2715,56 +2740,83 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api/auth/register' && method === 'POST') {
-    await ensureD1UsersSeeded(env, url.origin);
-    const body = (await request.json().catch(() => ({}))) as any;
-    const email = String(body.email || '').trim().toLowerCase().slice(0, 160);
-    const password = String(body.password || '');
-    const username = String(body.username || '').trim().slice(0, 60) || (email.includes('@') ? email.split('@')[0] : 'Learner');
-    const phoneNumber = String(body.phoneNumber || '').trim().slice(0, 32);
-    const rawDob = String(body.dob || '').trim();
-    const dob = /^\d{4}-\d{2}-\d{2}$/.test(rawDob) ? rawDob : '';
+    try {
+      await ensureD1UsersSeeded(env, url.origin);
+      const body = (await request.json().catch(() => ({}))) as any;
+      const email = String(body.email || '').trim().toLowerCase().slice(0, 160);
+      const password = String(body.password || '');
+      const username = String(body.username || '').trim().slice(0, 60) || (email.includes('@') ? email.split('@')[0] : 'Learner');
+      const phoneNumber = String(body.phoneNumber || '').trim().slice(0, 32);
+      const rawDob = String(body.dob || '').trim();
+      const dob = /^\d{4}-\d{2}-\d{2}$/.test(rawDob) ? rawDob : '';
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return fail('Please enter a valid email address.', 400);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return fail('Please enter a valid email address.', 400);
+      }
+      if (password.length < 6 || password.length > 128) {
+        return fail('Password must be between 6 and 128 characters.', 400);
+      }
+      if (rawDob && !dob) {
+        return fail('Date of Birth must be in YYYY-MM-DD format.', 400);
+      }
+
+      const existing = await one<any>(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
+      if (existing) {
+        return fail('An account with this email already exists. Please sign in instead.', 409, { code: 'email-already-in-use' });
+      }
+
+      const adminRow = await one<any>(env.DB, `SELECT uid FROM users WHERE role = 'admin' LIMIT 1`);
+      const shouldClaimAdmin = email === ADMIN_EMAIL && !adminRow;
+      const uid = `usr_${randomHexWorker(8)}`;
+      const { salt, hash } = await createSaltedHashWorker(password);
+      const nowIso = new Date().toISOString();
+
+      await withD1TableRepair(env.DB, async () => {
+        await env.DB.prepare(`
+          INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '[]', '[]', '[]', '[]', '["password"]', 0, ?, ?, ?, ?)
+        `).bind(
+          uid, email, username, phoneNumber, dob,
+          shouldClaimAdmin ? 'admin' : 'student',
+          shouldClaimAdmin ? 'active' : 'free',
+          shouldClaimAdmin ? 'course' : 'none',
+          salt, hash, nowIso, nowIso
+        ).run();
+        await env.DB.prepare(`
+          INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+          VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
+          ON CONFLICT(uid) DO UPDATE SET updatedAt = excluded.updatedAt
+        `).bind(uid, nowIso).run();
+      });
+
+      let userRow = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid);
+      if (!userRow) {
+        userRow = {
+          uid,
+          email,
+          username,
+          phoneNumber,
+          dob,
+          role: shouldClaimAdmin ? 'admin' : 'student',
+          membershipStatus: shouldClaimAdmin ? 'active' : 'free',
+          membershipPlan: shouldClaimAdmin ? 'course' : 'none',
+          membershipExpiresAt: '',
+          subscribedLessonIds: '[]',
+          subscribedCourses: shouldClaimAdmin ? '["HSK 2"]' : '[]',
+          practiceLessonIds: '[]',
+          practiceCourses: '[]',
+          linkedProviders: '["password"]',
+          mustChangePassword: 0,
+          createdAt: nowIso,
+          updatedAt: nowIso
+        };
+      }
+      const token = await signWorkerToken(env, { uid, email, role: shouldClaimAdmin ? 'admin' : 'student' });
+      return json(await buildWorkerSessionResponse(env, userRow, token), 201);
+    } catch (err: any) {
+      console.error('Registration worker error:', err);
+      return fail(err?.message || 'Unable to create account. Please try again.', 500);
     }
-    if (password.length < 6 || password.length > 128) {
-      return fail('Password must be between 6 and 128 characters.', 400);
-    }
-    if (rawDob && !dob) {
-      return fail('Date of Birth must be in YYYY-MM-DD format.', 400);
-    }
-
-    const existing = await one<any>(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
-    if (existing) {
-      return fail('An account with this email already exists. Please sign in instead.', 409, { code: 'email-already-in-use' });
-    }
-
-    const adminRow = await one<any>(env.DB, `SELECT uid FROM users WHERE role = 'admin' LIMIT 1`);
-    const shouldClaimAdmin = email === ADMIN_EMAIL && !adminRow;
-    const uid = `usr_${randomHexWorker(8)}`;
-    const { salt, hash } = await createSaltedHashWorker(password);
-    const nowIso = new Date().toISOString();
-
-    await withD1TableRepair(env.DB, async () => {
-      await env.DB.prepare(`
-        INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '[]', '[]', '[]', '[]', '["password"]', 0, ?, ?, ?, ?)
-      `).bind(
-        uid, email, username, phoneNumber, dob,
-        shouldClaimAdmin ? 'admin' : 'student',
-        shouldClaimAdmin ? 'active' : 'free',
-        shouldClaimAdmin ? 'course' : 'none',
-        salt, hash, nowIso, nowIso
-      ).run();
-      await env.DB.prepare(`
-        INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
-        VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
-      `).bind(uid, nowIso).run();
-    });
-
-    const userRow = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid);
-    const token = await signWorkerToken(env, { uid, email, role: shouldClaimAdmin ? 'admin' : 'student' });
-    return json(await buildWorkerSessionResponse(env, userRow, token), 201);
   }
 
   if (path === '/api/auth/login' && method === 'POST') {
@@ -3613,9 +3665,9 @@ export default {
     if (url.pathname.startsWith('/api')) {
       try {
         return await handleApi(request, env, url);
-      } catch (err) {
+      } catch (err: any) {
         console.error('API error', err);
-        return fail('Internal server error', 500);
+        return fail(err?.message || 'Internal server error', 500);
       }
     }
 

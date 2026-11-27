@@ -2957,8 +2957,18 @@ async function registerWithEmail(params: {
         emitState();
         return state.profile as UserProfile;
       }
-    } catch (_) {
-      // Fall through to local overlay fallback registration if server is unreachable
+
+      if (!res.ok) {
+        if (res.status === 409 || res.status === 400 || (res.data && res.data.code === 'email-already-in-use')) {
+          throw new Error(res.data?.error || 'An account with this email already exists. Please sign in instead.');
+        }
+        console.warn('Backend registration returned error, falling back to local overlay registration:', res.status, res.data);
+      }
+    } catch (err: any) {
+      if (err?.message && (err.message.includes('already exists') || err.message.includes('valid email') || err.message.includes('Password') || err.message.includes('Date of Birth'))) {
+        throw err;
+      }
+      console.warn('Backend registration exception, using local overlay fallback:', err);
     }
   }
 
@@ -3023,6 +3033,10 @@ async function registerWithEmail(params: {
 
   state.ready = true;
   emitState();
+
+  // Auto-sync local registration to backend database if connected
+  void syncLocalDataToDatabase({ silent: true }).catch(() => {});
+
   return state.profile as UserProfile;
 }
 
