@@ -1,0 +1,113 @@
+{
+  "users": {
+    "usr_99505b831dfb2780349f": {
+      "uid": "usr_99505b831dfb2780349f",
+      "username": "Admin",
+      "email": "syndkyaw@gmail.com",
+      "phoneNumber": "+95 9 798 123 456",
+      "dob": "",
+      "role": "admin",
+      "membershipStatus": "active",
+      "membershipPlan": "course",
+      "membershipExpiresAt": "",
+      "subscribedLessonIds": [],
+      "subscribedCourses": [],
+      "practiceLessonIds": [],
+      "practiceCourses": [],
+      "linkedProviders": [
+        "password"
+      ],
+      "mustChangePassword": false,
+      "passwordSalt": "b0105f8c1c0deeea1c0b92e3f7f9fb06",
+      "passwordHash": "sha256$b0105f8c1c0deeea1c0b92e3f7f9fb06$b203c3444d568c20ebf8a0c0a5354685c8e7e9b65276f180b2a02602d621dbe9",
+      "createdAt": "2026-11-19T11:03:31.983Z",
+      "updatedAt": "2026-11-19T11:03:31.983Z"
+    },
+    "usr_mwni0pey_0c6d": {
+      "uid": "usr_mwni0pey_0c6d",
+      "username": "Suyi April",
+      "email": "suyi.april14@gmail.com",
+      "phoneNumber": "+95 9 987 654 321",
+      "dob": "2001-04-14",
+      "role": "student",
+      "membershipStatus": "free",
+      "membershipPlan": "none",
+      "membershipExpiresAt": "",
+      "subscribedLessonIds": [],
+      "subscribedCourses": [],
+      "practiceLessonIds": [],
+      "practiceCourses": [],
+      "linkedProviders": [
+        "password"
+      ],
+      "mustChangePassword": false,
+      "passwordSalt": "8450d49f9bbab10816ab1455caa5bd1f",
+      "passwordHash": "sha256$8450d49f9bbab10816ab1455caa5bd1f$a52a61d8f1b13fa65484b72f46acf53d719f293b8f9dae51c4995b76ea6702b1",
+      "createdAt": "2026-11-19T12:00:32.939Z",
+      "updatedAt": "2026-11-19T12:00:32.939Z"
+    },
+    "usr_mwnid6b9_2e02": {
+      "uid": "usr_mwnid6b9_2e02",
+      "username": "Suyin & Dar Kyaw",
+      "email": "suyinandarkyaw@gmail.com",
+      "phoneNumber": "+95 9 555 888 999",
+      "dob": "1999-12-12",
+      "role": "student",
+      "membershipStatus": "expired",
+      "membershipPlan": "course",
+      "membershipExpiresAt": "2026-12-31",
+      "subscribedLessonIds": [],
+      "subscribedCourses": [],
+      "practiceLessonIds": [],
+      "practiceCourses": [],
+      "linkedProviders": [
+        "password"
+      ],
+      "mustChangePassword": false,
+      "passwordSalt": "ff8e6156e9b34c184dd348e07f786931",
+      "passwordHash": "sha256$ff8e6156e9b34c184dd348e07f786931$02c5db068b0b33ee1dfe9361c4c3b6d17fb62fb9c1458041f3e73c8de65402b2",
+      "createdAt": "2026-11-19T12:10:14.709Z",
+      "updatedAt": "2026-11-19T12:10:14.709Z"
+    }
+  },
+  "userProgress": {
+    "usr_99505b831dfb2780349f": {
+      "uid": "usr_99505b831dfb2780349f",
+      "currentStreak": 0,
+      "bestStreak": 0,
+      "lastCompletedDate": "",
+      "streakDates": [],
+      "completedLessonIds": [],
+      "reminderEnabled": true,
+      "reminderTime": "18:00",
+      "lastNotifiedDate": "",
+      "updatedAt": "2026-11-27T09:50:26.270Z"
+    },
+    "usr_mwni0pey_0c6d": {
+      "uid": "usr_mwni0pey_0c6d",
+      "currentStreak": 0,
+      "bestStreak": 0,
+      "lastCompletedDate": "",
+      "streakDates": [],
+      "completedLessonIds": [],
+      "reminderEnabled": true,
+      "reminderTime": "18:00",
+      "lastNotifiedDate": "",
+      "updatedAt": "2026-11-27T09:50:26.270Z"
+    },
+    "usr_mwnid6b9_2e02": {
+      "uid": "usr_mwnid6b9_2e02",
+      "currentStreak": 0,
+      "bestStreak": 0,
+      "lastCompletedDate": "",
+      "streakDates": [],
+      "completedLessonIds": [],
+      "reminderEnabled": true,
+      "reminderTime": "18:00",
+      "lastNotifiedDate": "",
+      "updatedAt": "2026-11-27T09:50:26.270Z"
+    }
+  },
+  "subscriptionRequests": [],
+  "lessonCatalog": {}
+}

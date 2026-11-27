@@ -1,3 +1,5 @@
+const ADMIN_EMAIL = "syndkyaw@gmail.com";
+const TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, HEAD, POST, PUT, DELETE, OPTIONS",
@@ -13,12 +15,12 @@ const JSON_HEADERS = {
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
 }
-function fail(message, status = 400) {
-  return json({ ok: false, success: false, error: message }, status);
+function fail(message, status = 400, extra) {
+  return json({ ok: false, success: false, error: message, ...extra || {} }, status);
 }
 function isMissingTableError(err) {
   const msg = String(err?.message || err || "").toLowerCase();
-  return msg.includes("no such table") || msg.includes("no such column");
+  return msg.includes("no such table") || msg.includes("no such column") || msg.includes("has no column named");
 }
 async function one(db, sql, ...params) {
   if (!db) return null;
@@ -68,6 +70,7 @@ function normalizeLessonRow(l) {
   const keywords = String(l.keywords || l.Keywords || "").trim();
   const accessType = String(l.accessType || l.access_type || "paid").toLowerCase() === "free" ? "free" : "paid";
   const price = Number(l.price) || (accessType === "paid" ? 75e3 : 0);
+  const practicePrice = Number(l.practicePrice) || 0;
   return {
     ...l,
     id,
@@ -95,7 +98,8 @@ function normalizeLessonRow(l) {
     keywords,
     accessType,
     access_type: accessType,
-    price
+    price,
+    practicePrice
   };
 }
 function normalizeExerciseRow(r, idx = 0) {
@@ -233,7 +237,7 @@ function normalizePronunciationRow(p, idx = 0) {
   };
 }
 const D1_TABLE_STATEMENTS = [
-  `CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY, course TEXT, category TEXT, categoryKey TEXT, categoryNum TEXT, title TEXT, chineseTitle TEXT, pinyin TEXT, meaning TEXT, level TEXT, description TEXT, videoUrl TEXT, posterUrl TEXT, fullAudio TEXT, keywords TEXT, accessType TEXT, price REAL, updated_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY, course TEXT, category TEXT, categoryKey TEXT, categoryNum TEXT, title TEXT, chineseTitle TEXT, pinyin TEXT, meaning TEXT, level TEXT, description TEXT, videoUrl TEXT, posterUrl TEXT, fullAudio TEXT, keywords TEXT, accessType TEXT, price REAL, practicePrice REAL, updated_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, type TEXT, groupId TEXT, groupTitle TEXT, pinyin TEXT, question TEXT, audioUrl TEXT, audioText TEXT, optionA TEXT, optionB TEXT, optionC TEXT, optionD TEXT, optionE TEXT, optionAImage TEXT, optionBImage TEXT, optionCImage TEXT, optionDImage TEXT, optionEImage TEXT, answer TEXT, explanation TEXT)`,
   `CREATE TABLE IF NOT EXISTS writing_characters (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, strokeCount INTEGER, radical TEXT, strokeAnimationUrl TEXT, svgPath TEXT, strokeOrderSteps TEXT)`,
   `CREATE TABLE IF NOT EXISTS vocabulary (id INTEGER PRIMARY KEY AUTOINCREMENT, lessonId TEXT, "order" INTEGER, character TEXT, pinyin TEXT, meaning TEXT, audio TEXT)`,
@@ -247,16 +251,234 @@ const D1_TABLE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS media_files (id TEXT PRIMARY KEY, filename TEXT, mime_type TEXT, media_type TEXT, size_bytes INTEGER, chunk_size INTEGER, chunk_count INTEGER, storage_mode TEXT DEFAULT 'd1', object_key TEXT DEFAULT '', upload_id TEXT DEFAULT '', status TEXT DEFAULT 'ready', created_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS media_chunks (media_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, data_b64 TEXT NOT NULL, PRIMARY KEY (media_id, chunk_index))`,
   `CREATE TABLE IF NOT EXISTS site_config (id TEXT PRIMARY KEY, config_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS d1_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`
+  `CREATE TABLE IF NOT EXISTS d1_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, username TEXT NOT NULL, phoneNumber TEXT DEFAULT '', dob TEXT DEFAULT '', role TEXT DEFAULT 'student', membershipStatus TEXT DEFAULT 'free', membershipPlan TEXT DEFAULT 'none', membershipExpiresAt TEXT DEFAULT '', subscribedLessonIds TEXT DEFAULT '[]', subscribedCourses TEXT DEFAULT '[]', practiceLessonIds TEXT DEFAULT '[]', practiceCourses TEXT DEFAULT '[]', linkedProviders TEXT DEFAULT '["password"]', mustChangePassword INTEGER DEFAULT 0, passwordSalt TEXT DEFAULT '', passwordHash TEXT DEFAULT '', createdAt TEXT, updatedAt TEXT)`,
+  `CREATE TABLE IF NOT EXISTS subscription_requests (requestId TEXT PRIMARY KEY, userId TEXT NOT NULL, username TEXT, userEmail TEXT, userPhone TEXT, planType TEXT, lessonId TEXT DEFAULT '', courseName TEXT DEFAULT '', lessonTitle TEXT DEFAULT '', amountLabel TEXT DEFAULT '', contactChannel TEXT DEFAULT 'viber', contactHandle TEXT DEFAULT '', note TEXT DEFAULT '', status TEXT DEFAULT 'pending', adminNote TEXT DEFAULT '', createdAt TEXT, updatedAt TEXT)`,
+  `CREATE TABLE IF NOT EXISTS user_progress (uid TEXT PRIMARY KEY, currentStreak INTEGER DEFAULT 0, bestStreak INTEGER DEFAULT 0, lastCompletedDate TEXT DEFAULT '', streakDates TEXT DEFAULT '[]', completedLessonIds TEXT DEFAULT '[]', reminderEnabled INTEGER DEFAULT 1, reminderTime TEXT DEFAULT '18:00', lastNotifiedDate TEXT DEFAULT '', updatedAt TEXT)`,
+  `CREATE TABLE IF NOT EXISTS lesson_catalog (lessonId TEXT PRIMARY KEY, title TEXT, course TEXT, audience TEXT DEFAULT 'Adult', accessType TEXT DEFAULT 'free', price REAL DEFAULT 0, practicePrice REAL DEFAULT 0, hasExercises INTEGER DEFAULT 1, updatedBy TEXT DEFAULT '', updatedAt TEXT)`
 ];
-const MEDIA_FILES_UPGRADE_COLUMNS = [
-  `ALTER TABLE media_files ADD COLUMN storage_mode TEXT DEFAULT 'd1'`,
-  `ALTER TABLE media_files ADD COLUMN object_key TEXT DEFAULT ''`,
-  `ALTER TABLE media_files ADD COLUMN upload_id TEXT DEFAULT ''`,
-  `ALTER TABLE media_files ADD COLUMN status TEXT DEFAULT 'ready'`,
-  `ALTER TABLE exercises ADD COLUMN audioText TEXT DEFAULT ''`,
-  `ALTER TABLE stories_exercises ADD COLUMN audioText TEXT DEFAULT ''`
-];
+const EXPECTED_TABLE_COLUMNS = {
+  lessons: {
+    id: "TEXT",
+    course: 'TEXT DEFAULT "HSK 2"',
+    category: 'TEXT DEFAULT ""',
+    categoryKey: 'TEXT DEFAULT ""',
+    categoryNum: 'TEXT DEFAULT "Course 1"',
+    title: 'TEXT DEFAULT ""',
+    chineseTitle: 'TEXT DEFAULT ""',
+    pinyin: 'TEXT DEFAULT ""',
+    meaning: 'TEXT DEFAULT ""',
+    level: 'TEXT DEFAULT "HSK 2"',
+    description: 'TEXT DEFAULT ""',
+    videoUrl: 'TEXT DEFAULT ""',
+    posterUrl: 'TEXT DEFAULT ""',
+    fullAudio: 'TEXT DEFAULT ""',
+    keywords: 'TEXT DEFAULT ""',
+    accessType: 'TEXT DEFAULT "paid"',
+    price: "REAL DEFAULT 0",
+    practicePrice: "REAL DEFAULT 0",
+    updated_at: 'TEXT DEFAULT ""'
+  },
+  exercises: {
+    lessonId: 'TEXT DEFAULT ""',
+    order: "INTEGER DEFAULT 1",
+    type: 'TEXT DEFAULT "multiple-choice"',
+    groupId: 'TEXT DEFAULT ""',
+    groupTitle: 'TEXT DEFAULT ""',
+    pinyin: 'TEXT DEFAULT ""',
+    question: 'TEXT DEFAULT ""',
+    audioUrl: 'TEXT DEFAULT ""',
+    audioText: 'TEXT DEFAULT ""',
+    optionA: 'TEXT DEFAULT ""',
+    optionB: 'TEXT DEFAULT ""',
+    optionC: 'TEXT DEFAULT ""',
+    optionD: 'TEXT DEFAULT ""',
+    optionE: 'TEXT DEFAULT ""',
+    optionAImage: 'TEXT DEFAULT ""',
+    optionBImage: 'TEXT DEFAULT ""',
+    optionCImage: 'TEXT DEFAULT ""',
+    optionDImage: 'TEXT DEFAULT ""',
+    optionEImage: 'TEXT DEFAULT ""',
+    answer: 'TEXT DEFAULT ""',
+    explanation: 'TEXT DEFAULT ""'
+  },
+  writing_characters: {
+    lessonId: 'TEXT DEFAULT ""',
+    order: "INTEGER DEFAULT 1",
+    character: 'TEXT DEFAULT ""',
+    pinyin: 'TEXT DEFAULT ""',
+    meaning: 'TEXT DEFAULT ""',
+    strokeCount: "INTEGER DEFAULT 6",
+    radical: 'TEXT DEFAULT ""',
+    strokeAnimationUrl: 'TEXT DEFAULT ""',
+    svgPath: 'TEXT DEFAULT ""',
+    strokeOrderSteps: 'TEXT DEFAULT ""'
+  },
+  vocabulary: {
+    lessonId: 'TEXT DEFAULT ""',
+    order: "INTEGER DEFAULT 1",
+    character: 'TEXT DEFAULT ""',
+    pinyin: 'TEXT DEFAULT ""',
+    meaning: 'TEXT DEFAULT ""',
+    audio: 'TEXT DEFAULT ""'
+  },
+  games: {
+    id: "TEXT",
+    order: "INTEGER DEFAULT 1",
+    title: 'TEXT DEFAULT ""',
+    category: 'TEXT DEFAULT ""',
+    badge: 'TEXT DEFAULT ""',
+    description: 'TEXT DEFAULT ""',
+    embed_code: 'TEXT DEFAULT ""',
+    embed_url: 'TEXT DEFAULT ""',
+    width: "INTEGER DEFAULT 800",
+    height: "INTEGER DEFAULT 600",
+    active: 'TEXT DEFAULT "true"'
+  },
+  pronunciation: {
+    lessonId: 'TEXT DEFAULT ""',
+    order: "INTEGER DEFAULT 1",
+    chinese: 'TEXT DEFAULT ""',
+    pinyin: 'TEXT DEFAULT ""',
+    meaning: 'TEXT DEFAULT ""',
+    focus: 'TEXT DEFAULT ""'
+  },
+  stories_lessons: {
+    id: "TEXT",
+    title: 'TEXT DEFAULT ""',
+    chineseTitle: 'TEXT DEFAULT ""',
+    pinyin: 'TEXT DEFAULT ""',
+    meaning: 'TEXT DEFAULT ""',
+    level: 'TEXT DEFAULT "Beginner"',
+    description: 'TEXT DEFAULT ""',
+    video: 'TEXT DEFAULT ""',
+    poster: 'TEXT DEFAULT ""'
+  },
+  story_scenes: {
+    lessonId: 'TEXT DEFAULT ""',
+    order: "INTEGER DEFAULT 1",
+    chinese: 'TEXT DEFAULT ""',
+    pinyin: 'TEXT DEFAULT ""',
+    english: 'TEXT DEFAULT ""',
+    image: 'TEXT DEFAULT ""',
+    audio: 'TEXT DEFAULT ""'
+  },
+  stories_vocabulary: {
+    lessonId: 'TEXT DEFAULT ""',
+    order: "INTEGER DEFAULT 1",
+    character: 'TEXT DEFAULT ""',
+    pinyin: 'TEXT DEFAULT ""',
+    meaning: 'TEXT DEFAULT ""',
+    audio: 'TEXT DEFAULT ""'
+  },
+  stories_exercises: {
+    lessonId: 'TEXT DEFAULT ""',
+    order: "INTEGER DEFAULT 1",
+    type: 'TEXT DEFAULT "multiple-choice"',
+    groupId: 'TEXT DEFAULT ""',
+    groupTitle: 'TEXT DEFAULT ""',
+    pinyin: 'TEXT DEFAULT ""',
+    question: 'TEXT DEFAULT ""',
+    audioUrl: 'TEXT DEFAULT ""',
+    audioText: 'TEXT DEFAULT ""',
+    optionA: 'TEXT DEFAULT ""',
+    optionB: 'TEXT DEFAULT ""',
+    optionC: 'TEXT DEFAULT ""',
+    optionD: 'TEXT DEFAULT ""',
+    optionE: 'TEXT DEFAULT ""',
+    optionAImage: 'TEXT DEFAULT ""',
+    optionBImage: 'TEXT DEFAULT ""',
+    optionCImage: 'TEXT DEFAULT ""',
+    optionDImage: 'TEXT DEFAULT ""',
+    optionEImage: 'TEXT DEFAULT ""',
+    answer: 'TEXT DEFAULT ""',
+    explanation: 'TEXT DEFAULT ""'
+  },
+  reels_videos: {
+    id: "TEXT",
+    type: 'TEXT DEFAULT "daily"',
+    holiday_id: 'TEXT DEFAULT ""',
+    title: 'TEXT DEFAULT ""',
+    video_path: 'TEXT DEFAULT ""',
+    thumbnail_path: 'TEXT DEFAULT ""',
+    duration_sec: "INTEGER DEFAULT 0",
+    status: 'TEXT DEFAULT "published"',
+    text_cn: 'TEXT DEFAULT ""',
+    text_pinyin: 'TEXT DEFAULT ""',
+    text_en: 'TEXT DEFAULT ""',
+    text_my: 'TEXT DEFAULT ""'
+  },
+  media_files: {
+    storage_mode: "TEXT DEFAULT 'd1'",
+    object_key: "TEXT DEFAULT ''",
+    upload_id: "TEXT DEFAULT ''",
+    status: "TEXT DEFAULT 'ready'"
+  },
+  users: {
+    uid: "TEXT",
+    email: "TEXT",
+    username: 'TEXT DEFAULT "Learner"',
+    phoneNumber: 'TEXT DEFAULT ""',
+    dob: 'TEXT DEFAULT ""',
+    role: 'TEXT DEFAULT "student"',
+    membershipStatus: 'TEXT DEFAULT "free"',
+    membershipPlan: 'TEXT DEFAULT "none"',
+    membershipExpiresAt: 'TEXT DEFAULT ""',
+    subscribedLessonIds: 'TEXT DEFAULT "[]"',
+    subscribedCourses: 'TEXT DEFAULT "[]"',
+    practiceLessonIds: 'TEXT DEFAULT "[]"',
+    practiceCourses: 'TEXT DEFAULT "[]"',
+    linkedProviders: `TEXT DEFAULT "['password']"`,
+    mustChangePassword: "INTEGER DEFAULT 0",
+    passwordSalt: 'TEXT DEFAULT ""',
+    passwordHash: 'TEXT DEFAULT ""',
+    createdAt: 'TEXT DEFAULT ""',
+    updatedAt: 'TEXT DEFAULT ""'
+  },
+  subscription_requests: {
+    requestId: "TEXT",
+    userId: "TEXT",
+    username: 'TEXT DEFAULT ""',
+    userEmail: 'TEXT DEFAULT ""',
+    userPhone: 'TEXT DEFAULT ""',
+    planType: 'TEXT DEFAULT "course"',
+    lessonId: 'TEXT DEFAULT ""',
+    courseName: 'TEXT DEFAULT ""',
+    lessonTitle: 'TEXT DEFAULT ""',
+    amountLabel: 'TEXT DEFAULT ""',
+    contactChannel: 'TEXT DEFAULT "viber"',
+    contactHandle: 'TEXT DEFAULT ""',
+    note: 'TEXT DEFAULT ""',
+    status: 'TEXT DEFAULT "pending"',
+    adminNote: 'TEXT DEFAULT ""',
+    createdAt: 'TEXT DEFAULT ""',
+    updatedAt: 'TEXT DEFAULT ""'
+  },
+  user_progress: {
+    uid: "TEXT",
+    currentStreak: "INTEGER DEFAULT 0",
+    bestStreak: "INTEGER DEFAULT 0",
+    lastCompletedDate: 'TEXT DEFAULT ""',
+    streakDates: 'TEXT DEFAULT "[]"',
+    completedLessonIds: 'TEXT DEFAULT "[]"',
+    reminderEnabled: "INTEGER DEFAULT 1",
+    reminderTime: 'TEXT DEFAULT "18:00"',
+    lastNotifiedDate: 'TEXT DEFAULT ""',
+    updatedAt: 'TEXT DEFAULT ""'
+  },
+  lesson_catalog: {
+    lessonId: "TEXT",
+    title: 'TEXT DEFAULT ""',
+    course: 'TEXT DEFAULT "HSK 2"',
+    audience: 'TEXT DEFAULT "Adult"',
+    accessType: 'TEXT DEFAULT "free"',
+    price: "REAL DEFAULT 0",
+    practicePrice: "REAL DEFAULT 0",
+    hasExercises: "INTEGER DEFAULT 1",
+    updatedBy: 'TEXT DEFAULT ""',
+    updatedAt: 'TEXT DEFAULT ""'
+  }
+};
 let d1SchemaReady = false;
 let d1SchemaPromise = null;
 async function ensureD1Tables(db, force = false) {
@@ -272,9 +494,20 @@ async function ensureD1Tables(db, force = false) {
         await db.prepare(sql).run();
       }
     }
-    for (const alterSql of MEDIA_FILES_UPGRADE_COLUMNS) {
+    for (const [tableName, columns] of Object.entries(EXPECTED_TABLE_COLUMNS)) {
       try {
-        await db.prepare(alterSql).run();
+        const info = await db.prepare(`PRAGMA table_info("${tableName}")`).all();
+        const existingCols = new Set(
+          (info?.results || []).map((c) => String(c.name || "").trim().toLowerCase())
+        );
+        for (const [colName, colDef] of Object.entries(columns)) {
+          if (!existingCols.has(colName.toLowerCase())) {
+            try {
+              await db.prepare(`ALTER TABLE "${tableName}" ADD COLUMN "${colName}" ${colDef}`).run();
+            } catch (_) {
+            }
+          }
+        }
       } catch (_) {
       }
     }
@@ -300,6 +533,15 @@ async function withD1TableRepair(db, fn) {
     }
     throw err;
   }
+}
+async function executeD1Batch(db, stmts) {
+  if (!stmts.length) return;
+  await withD1TableRepair(db, async () => {
+    const CHUNK = 60;
+    for (let i = 0; i < stmts.length; i += CHUNK) {
+      await db.batch(stmts.slice(i, i + CHUNK));
+    }
+  });
 }
 function isDeprecatedD1MediaPath(val) {
   if (typeof val !== "string") return false;
@@ -835,144 +1077,195 @@ async function serveWorkerMedia(request, env, mediaId) {
     }
   });
 }
+function bindStr(v, fallback = "") {
+  if (v === void 0 || v === null) return fallback;
+  return String(v);
+}
+function bindNum(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
 async function syncLessonsSheetsToD1(db, sheets) {
   if (!db || !sheets) return;
   await ensureD1Tables(db);
   const stmts = [];
-  if (Array.isArray(sheets.Lessons) && sheets.Lessons.length > 0) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  if (Array.isArray(sheets.Lessons)) {
+    const incomingIds = /* @__PURE__ */ new Set();
     for (const l of sheets.Lessons) {
-      const id = String(l.id || l.lessonId || "").trim();
+      const id = bindStr(l?.id || l?.lessonId).trim();
       if (!id) continue;
+      incomingIds.add(id);
+      const course = bindStr(l.course || l.category || "HSK 2").trim() || "HSK 2";
       stmts.push(
         db.prepare(`
-          INSERT INTO lessons (id, course, category, categoryKey, categoryNum, title, chineseTitle, pinyin, meaning, level, description, videoUrl, posterUrl, fullAudio, keywords, accessType, price, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO lessons (id, course, category, categoryKey, categoryNum, title, chineseTitle, pinyin, meaning, level, description, videoUrl, posterUrl, fullAudio, keywords, accessType, price, practicePrice, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             course=excluded.course, category=excluded.category, categoryKey=excluded.categoryKey,
             categoryNum=excluded.categoryNum, title=excluded.title, chineseTitle=excluded.chineseTitle,
             pinyin=excluded.pinyin, meaning=excluded.meaning, level=excluded.level, description=excluded.description,
             videoUrl=excluded.videoUrl, posterUrl=excluded.posterUrl, fullAudio=excluded.fullAudio,
-            keywords=excluded.keywords, accessType=excluded.accessType, price=excluded.price, updated_at=excluded.updated_at
+            keywords=excluded.keywords, accessType=excluded.accessType, price=excluded.price, practicePrice=excluded.practicePrice, updated_at=excluded.updated_at
         `).bind(
           id,
-          l.course || "HSK 2",
-          l.category || l.course || "HSK 2",
-          l.categoryKey || l.category_key || "hsk2",
-          l.categoryNum || l.category_num || "Course 1",
-          l.title || id,
-          l.chineseTitle || l.chinese_title || "",
-          l.pinyin || "",
-          l.meaning || "",
-          l.level || "HSK 2",
-          l.description || "",
-          l.videoUrl || l.video_url || "",
-          l.posterUrl || l.poster_url || "",
-          l.fullAudio || l.full_audio || "",
-          l.keywords || "",
-          l.accessType || l.access_type || "paid",
-          Number(l.price) || 0,
-          (/* @__PURE__ */ new Date()).toISOString()
+          course,
+          bindStr(l.category || course, course),
+          bindStr(l.categoryKey || l.category_key, "hsk2"),
+          bindStr(l.categoryNum || l.category_num, "Course 1"),
+          bindStr(l.title, id),
+          bindStr(l.chineseTitle || l.chinese_title),
+          bindStr(l.pinyin),
+          bindStr(l.meaning),
+          bindStr(l.level, course),
+          bindStr(l.description),
+          bindStr(l.videoUrl || l.video_url),
+          bindStr(l.posterUrl || l.poster_url),
+          bindStr(l.fullAudio || l.full_audio),
+          bindStr(l.keywords),
+          bindStr(l.accessType || l.access_type, "paid"),
+          bindNum(l.price, 0),
+          bindNum(l.practicePrice, 0),
+          nowIso
         )
       );
     }
+    if (incomingIds.size > 0) {
+      const existingRows = await all(db, `SELECT id FROM lessons`);
+      for (const row of existingRows) {
+        if (row?.id && !incomingIds.has(String(row.id))) {
+          stmts.push(db.prepare(`DELETE FROM lessons WHERE id = ?`).bind(String(row.id)));
+        }
+      }
+    }
   }
-  if (Array.isArray(sheets.Exercises) && sheets.Exercises.length > 0) {
+  if (Array.isArray(sheets.Exercises)) {
     stmts.push(db.prepare(`DELETE FROM exercises`));
     for (let i = 0; i < sheets.Exercises.length; i++) {
       const ex = sheets.Exercises[i];
+      if (!ex || typeof ex !== "object") continue;
       stmts.push(
         db.prepare(`
           INSERT INTO exercises (lessonId, "order", type, groupId, groupTitle, pinyin, question, audioUrl, audioText, optionA, optionB, optionC, optionD, optionE, optionAImage, optionBImage, optionCImage, optionDImage, optionEImage, answer, explanation)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          ex.lessonId || ex.lesson_id || "hsk2-01",
-          Number(ex.order || ex.order_num) || i + 1,
-          ex.type || "multiple-choice",
-          ex.groupId || ex.group_id || "",
-          ex.groupTitle || ex.group_title || "",
-          ex.pinyin || "",
-          ex.question || "",
-          ex.audioUrl || ex.audio_url || "",
-          ex.audioText || ex.audio_text || ex.listeningSentence || ex.listening_sentence || "",
-          ex.optionA ?? ex.option_a ?? "",
-          ex.optionB ?? ex.option_b ?? "",
-          ex.optionC ?? ex.option_c ?? "",
-          ex.optionD ?? ex.option_d ?? "",
-          ex.optionE ?? ex.option_e ?? "",
-          ex.optionAImage || ex.option_a_image || "",
-          ex.optionBImage || ex.option_b_image || "",
-          ex.optionCImage || ex.option_c_image || "",
-          ex.optionDImage || ex.option_d_image || "",
-          ex.optionEImage || ex.option_e_image || "",
-          ex.answer || "",
-          ex.explanation || ""
+          bindStr(ex.lessonId || ex.lesson_id, "hsk2-01"),
+          bindNum(ex.order || ex.order_num, i + 1),
+          bindStr(ex.type, "multiple-choice"),
+          bindStr(ex.groupId || ex.group_id),
+          bindStr(ex.groupTitle || ex.group_title),
+          bindStr(ex.pinyin),
+          bindStr(ex.question),
+          bindStr(ex.audioUrl || ex.audio_url),
+          bindStr(ex.audioText || ex.audio_text || ex.listeningSentence || ex.listening_sentence),
+          bindStr(ex.optionA ?? ex.option_a),
+          bindStr(ex.optionB ?? ex.option_b),
+          bindStr(ex.optionC ?? ex.option_c),
+          bindStr(ex.optionD ?? ex.option_d),
+          bindStr(ex.optionE ?? ex.option_e),
+          bindStr(ex.optionAImage || ex.option_a_image),
+          bindStr(ex.optionBImage || ex.option_b_image),
+          bindStr(ex.optionCImage || ex.option_c_image),
+          bindStr(ex.optionDImage || ex.option_d_image),
+          bindStr(ex.optionEImage || ex.option_e_image),
+          bindStr(ex.answer),
+          bindStr(ex.explanation)
         )
       );
     }
   }
-  if (Array.isArray(sheets.Writing) && sheets.Writing.length > 0) {
+  if (Array.isArray(sheets.Writing)) {
     stmts.push(db.prepare(`DELETE FROM writing_characters`));
     for (let i = 0; i < sheets.Writing.length; i++) {
       const w = sheets.Writing[i];
+      if (!w || typeof w !== "object") continue;
       stmts.push(
         db.prepare(`
           INSERT INTO writing_characters (lessonId, "order", character, pinyin, meaning, strokeCount, radical, strokeAnimationUrl, svgPath, strokeOrderSteps)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          w.lessonId || w.lesson_id || "hsk2-01",
-          Number(w.order || w.order_num) || i + 1,
-          w.character || "",
-          w.pinyin || "",
-          w.meaning || "",
-          Number(w.strokeCount || w.stroke_count) || 6,
-          w.radical || "",
-          w.strokeAnimationUrl || w.stroke_animation_url || "",
-          w.svgPath || w.svg_path || "",
-          w.strokeOrderSteps || w.stroke_order_steps || ""
+          bindStr(w.lessonId || w.lesson_id, "hsk2-01"),
+          bindNum(w.order || w.order_num, i + 1),
+          bindStr(w.character),
+          bindStr(w.pinyin),
+          bindStr(w.meaning),
+          bindNum(w.strokeCount || w.stroke_count, 6),
+          bindStr(w.radical),
+          bindStr(w.strokeAnimationUrl || w.stroke_animation_url),
+          bindStr(w.svgPath || w.svg_path),
+          bindStr(w.strokeOrderSteps || w.stroke_order_steps)
         )
       );
     }
   }
-  if (Array.isArray(sheets.Vocabulary) && sheets.Vocabulary.length > 0) {
+  if (Array.isArray(sheets.Vocabulary)) {
     stmts.push(db.prepare(`DELETE FROM vocabulary`));
     for (let i = 0; i < sheets.Vocabulary.length; i++) {
       const v = sheets.Vocabulary[i];
+      if (!v || typeof v !== "object") continue;
       stmts.push(
         db.prepare(`
           INSERT INTO vocabulary (lessonId, "order", character, pinyin, meaning, audio)
           VALUES (?, ?, ?, ?, ?, ?)
         `).bind(
-          v.lessonId || v.lesson_id || "hsk2-01",
-          Number(v.order || v.order_num) || i + 1,
-          v.character || "",
-          v.pinyin || "",
-          v.meaning || "",
-          v.audio || v.audio_url || ""
+          bindStr(v.lessonId || v.lesson_id, "hsk2-01"),
+          bindNum(v.order || v.order_num, i + 1),
+          bindStr(v.character),
+          bindStr(v.pinyin),
+          bindStr(v.meaning),
+          bindStr(v.audio || v.audio_url)
         )
       );
     }
   }
-  if (Array.isArray(sheets.Pronunciation) && sheets.Pronunciation.length > 0) {
+  if (Array.isArray(sheets.Games)) {
+    stmts.push(db.prepare(`DELETE FROM games`));
+    for (let i = 0; i < sheets.Games.length; i++) {
+      const g = sheets.Games[i];
+      if (!g || typeof g !== "object") continue;
+      const gid = bindStr(g.id).trim() || `game-${i + 1}`;
+      stmts.push(
+        db.prepare(`
+          INSERT INTO games (id, "order", title, category, badge, description, embed_code, embed_url, width, height, active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          gid,
+          bindNum(g.order || g.order_num, i + 1),
+          bindStr(g.title, gid),
+          bindStr(g.category),
+          bindStr(g.badge),
+          bindStr(g.description),
+          bindStr(g.embed_code),
+          bindStr(g.embed_url),
+          bindNum(g.width, 800),
+          bindNum(g.height, 600),
+          bindStr(g.active, "true")
+        )
+      );
+    }
+  }
+  if (Array.isArray(sheets.Pronunciation)) {
     stmts.push(db.prepare(`DELETE FROM pronunciation`));
     for (let i = 0; i < sheets.Pronunciation.length; i++) {
       const p = sheets.Pronunciation[i];
+      if (!p || typeof p !== "object") continue;
       stmts.push(
         db.prepare(`
           INSERT INTO pronunciation (lessonId, "order", chinese, pinyin, meaning, focus)
           VALUES (?, ?, ?, ?, ?, ?)
         `).bind(
-          p.lessonId || p.lesson_id || "hsk2-01",
-          Number(p.order || p.order_num) || i + 1,
-          p.chinese || "",
-          p.pinyin || "",
-          p.meaning || "",
-          p.focus || ""
+          bindStr(p.lessonId || p.lesson_id, "hsk2-01"),
+          bindNum(p.order || p.order_num, i + 1),
+          bindStr(p.chinese),
+          bindStr(p.pinyin),
+          bindStr(p.meaning),
+          bindStr(p.focus)
         )
       );
     }
   }
   if (stmts.length > 0) {
-    await withD1TableRepair(db, () => db.batch(stmts));
+    await executeD1Batch(db, stmts);
   }
 }
 function assertSafeD1WorkbookSheets(sheets) {
@@ -1111,7 +1404,7 @@ async function syncStoriesSheetsToD1(db, sheets) {
     }
   }
   if (stmts.length > 0) {
-    await withD1TableRepair(db, () => db.batch(stmts));
+    await executeD1Batch(db, stmts);
   }
 }
 async function syncReelsSheetsToD1(db, sheets) {
@@ -1147,7 +1440,7 @@ async function syncReelsSheetsToD1(db, sheets) {
     }
   }
   if (stmts.length > 0) {
-    await withD1TableRepair(db, () => db.batch(stmts));
+    await executeD1Batch(db, stmts);
   }
 }
 async function getLessons(env, url) {
@@ -1718,6 +2011,10 @@ async function handleWorkerSaveSiteConfig(request, env) {
       } else if (/^\/?public\/assets\/aistudio\//i.test(nextCfg.siteLogoUrl)) {
         nextCfg.siteLogoUrl = "assets/images/logo.svg";
       }
+      if (typeof body.workerApiBaseUrl === "string") {
+        const cleanW = body.workerApiBaseUrl.trim().replace(/\/+$/, "").slice(0, 300);
+        nextCfg.workerApiBaseUrl = /^https?:\/\/[^/\s]+/i.test(cleanW) ? cleanW : "";
+      }
       const nowIso = (/* @__PURE__ */ new Date()).toISOString();
       nextCfg.updatedAt = nowIso;
       nextCfg.configId = "homepage";
@@ -1732,14 +2029,1024 @@ async function handleWorkerSaveSiteConfig(request, env) {
     return fail(err?.message || "Failed to save site configuration.", 500);
   }
 }
+function randomHexWorker(bytes = 16) {
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function sha256HexWorker(text) {
+  const data = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function createSaltedHashWorker(password) {
+  const salt = randomHexWorker(16);
+  const hex = await sha256HexWorker(`${salt}:${password}`);
+  return { salt, hash: `sha256$${salt}$${hex}` };
+}
+function constantTimeEq(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+async function verifyPasswordWorker(candidatePassword, salt, storedHash) {
+  const expected = String(storedHash || "").trim();
+  if (!expected) return false;
+  const shaMatch = expected.match(/^sha256\$([^$]+)\$([a-f0-9]{64})$/i);
+  if (shaMatch) {
+    const computed = await sha256HexWorker(`${shaMatch[1]}:${candidatePassword}`);
+    return constantTimeEq(computed.toLowerCase(), shaMatch[2].toLowerCase());
+  }
+  if (salt && /^[a-f0-9]{64}$/i.test(expected)) {
+    const computed = await sha256HexWorker(`${salt}:${candidatePassword}`);
+    return constantTimeEq(computed.toLowerCase(), expected.toLowerCase());
+  }
+  return constantTimeEq(candidatePassword, expected);
+}
+function toB64UrlBytes(bytes) {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+function toB64UrlStr(str) {
+  return toB64UrlBytes(new TextEncoder().encode(str));
+}
+function fromB64UrlStr(b64u) {
+  const norm = String(b64u).replace(/-/g, "+").replace(/_/g, "/");
+  const pad = (4 - norm.length % 4) % 4;
+  const bin = atob(norm + "=".repeat(pad));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+let cachedWorkerSecret = "";
+async function getWorkerTokenSecret(env) {
+  const fromEnv = String(env.AUTH_TOKEN_SECRET || "").trim();
+  if (fromEnv.length >= 16) return fromEnv;
+  if (cachedWorkerSecret) return cachedWorkerSecret;
+  await ensureD1Tables(env.DB);
+  const existing = await getD1Meta(env.DB, "worker_auth_secret");
+  if (existing && existing.length >= 32) {
+    cachedWorkerSecret = existing;
+    return cachedWorkerSecret;
+  }
+  const generated = randomHexWorker(32);
+  await setD1Meta(env.DB, "worker_auth_secret", generated);
+  cachedWorkerSecret = generated;
+  return cachedWorkerSecret;
+}
+async function importHmacKey(secret) {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"]
+  );
+}
+async function signWorkerToken(env, user) {
+  const secret = await getWorkerTokenSecret(env);
+  const key = await importHmacKey(secret);
+  const header = toB64UrlStr(JSON.stringify({ alg: "HS256", typ: "LP" }));
+  const now = Date.now();
+  const payload = toB64UrlStr(
+    JSON.stringify({
+      uid: user.uid,
+      email: user.email,
+      role: user.role === "admin" ? "admin" : "student",
+      iat: now,
+      exp: now + TOKEN_TTL_MS
+    })
+  );
+  const sigBuf = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${header}.${payload}`));
+  const sig = toB64UrlBytes(new Uint8Array(sigBuf));
+  return `${header}.${payload}.${sig}`;
+}
+async function verifyWorkerToken(env, token) {
+  const parts = String(token || "").trim().split(".");
+  if (parts.length !== 3) throw new Error("Malformed session token.");
+  const [header, payloadB64, sigB64] = parts;
+  const secret = await getWorkerTokenSecret(env);
+  const key = await importHmacKey(secret);
+  const expectedSigBuf = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${header}.${payloadB64}`));
+  const expectedSig = toB64UrlBytes(new Uint8Array(expectedSigBuf));
+  if (!constantTimeEq(sigB64, expectedSig)) {
+    throw new Error("Invalid session signature.");
+  }
+  const decoded = JSON.parse(fromB64UrlStr(payloadB64));
+  if (!decoded || !decoded.uid || !decoded.exp || Number(decoded.exp) < Date.now()) {
+    throw new Error("Session expired. Please sign in again.");
+  }
+  return decoded;
+}
+function parseJsonStrArray(val) {
+  if (Array.isArray(val)) return val.map((x) => String(x || "").trim()).filter(Boolean);
+  const raw = String(val || "").trim();
+  if (!raw) return [];
+  if (raw.startsWith("[")) {
+    try {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.map((x) => String(x || "").trim()).filter(Boolean) : [];
+    } catch (_) {
+    }
+  }
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+function normalizeWorkerCourseName(val) {
+  const raw = String(val || "").trim();
+  if (!raw) return "HSK 2";
+  const compact = raw.toLowerCase().replace(/[\s_-]+/g, "");
+  if (compact === "hsk1") return "HSK 1";
+  if (compact === "hsk2") return "HSK 2";
+  if (compact === "hsk3") return "HSK 3";
+  if (compact === "hsk4") return "HSK 4";
+  return raw.slice(0, 80);
+}
+function normalizeWorkerPlan(plan) {
+  const p = String(plan || "none").trim().toLowerCase();
+  if (p === "practice_lesson" || p === "practice-lesson") return "practice_lesson";
+  if (p === "practice_course" || p === "practice-course") return "practice_course";
+  if (p === "per_lesson" || p === "lesson") return "per_lesson";
+  if (p === "course" || p === "hsk" || p === "monthly" || p === "annual") {
+    return p === "monthly" || p === "annual" ? p : "course";
+  }
+  return "none";
+}
+function sanitizeWorkerUserRow(row) {
+  if (!row) return null;
+  const email = String(row.email || "").trim().toLowerCase();
+  const isAdm = String(row.role || "").toLowerCase() === "admin" || email === ADMIN_EMAIL;
+  return {
+    uid: String(row.uid || ""),
+    username: String(row.username || email.split("@")[0] || "Learner"),
+    email,
+    phoneNumber: String(row.phoneNumber || ""),
+    dob: String(row.dob || ""),
+    role: isAdm ? "admin" : "student",
+    membershipStatus: ["free", "pending", "active", "expired"].includes(String(row.membershipStatus || "").toLowerCase()) ? String(row.membershipStatus).toLowerCase() : "free",
+    membershipPlan: normalizeWorkerPlan(row.membershipPlan),
+    membershipExpiresAt: String(row.membershipExpiresAt || ""),
+    subscribedLessonIds: parseJsonStrArray(row.subscribedLessonIds).slice(0, 100),
+    subscribedCourses: Array.from(new Set(parseJsonStrArray(row.subscribedCourses).map(normalizeWorkerCourseName))).slice(0, 50),
+    practiceLessonIds: parseJsonStrArray(row.practiceLessonIds).slice(0, 100),
+    practiceCourses: Array.from(new Set(parseJsonStrArray(row.practiceCourses).map(normalizeWorkerCourseName))).slice(0, 50),
+    linkedProviders: ["password"],
+    mustChangePassword: Boolean(Number(row.mustChangePassword) || row.mustChangePassword === true || row.mustChangePassword === "true"),
+    createdAt: row.createdAt || null,
+    updatedAt: row.updatedAt || null
+  };
+}
+function sanitizeWorkerProgressRow(row, uid) {
+  const cleanDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || "").trim()) ? String(v).trim() : "";
+  const cleanTime = (v) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v || "").trim()) ? String(v).trim() : "18:00";
+  return {
+    uid: String(uid),
+    currentStreak: Math.min(1e4, Math.max(0, Math.round(Number(row?.currentStreak) || 0))),
+    bestStreak: Math.min(1e4, Math.max(0, Math.round(Number(row?.bestStreak) || 0))),
+    lastCompletedDate: cleanDate(row?.lastCompletedDate),
+    streakDates: Array.from(new Set(parseJsonStrArray(row?.streakDates).map(cleanDate).filter(Boolean))).slice(-366),
+    completedLessonIds: Array.from(new Set(parseJsonStrArray(row?.completedLessonIds))).slice(-200),
+    reminderEnabled: row ? Boolean(Number(row.reminderEnabled ?? 1)) : true,
+    reminderTime: cleanTime(row?.reminderTime),
+    lastNotifiedDate: cleanDate(row?.lastNotifiedDate),
+    updatedAt: row?.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function normalizePhoneWorker(raw) {
+  return String(raw ?? "").trim().replace(/[\s\-().+]+/g, "");
+}
+function phonesMatchWorker(a, b) {
+  const na = normalizePhoneWorker(a);
+  const nb = normalizePhoneWorker(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const da = String(a ?? "").replace(/\D+/g, "");
+  const db = String(b ?? "").replace(/\D+/g, "");
+  const variants = (d) => {
+    const s = /* @__PURE__ */ new Set([d]);
+    if (d.startsWith("950") && d.length >= 10) {
+      s.add("0" + d.slice(3));
+      s.add(d.slice(4));
+    } else if (d.startsWith("95") && d.length >= 10) {
+      s.add("0" + d.slice(2));
+      s.add(d.slice(2));
+    } else if (d.startsWith("0") && d.length >= 8) {
+      s.add(d.slice(1));
+      s.add("95" + d.slice(1));
+    }
+    return s;
+  };
+  const va = variants(da);
+  const vb = variants(db);
+  for (const x of va) if (vb.has(x)) return true;
+  return false;
+}
+async function ensureD1UsersSeeded(env, origin) {
+  await ensureD1Tables(env.DB);
+  const cntRow = await one(env.DB, `SELECT COUNT(*) AS c FROM users`);
+  if ((cntRow?.c || 0) > 0) return;
+  try {
+    const assetRes = await env.ASSETS.fetch(new Request(new URL("/data/users.json", origin)));
+    if (!assetRes.ok) return;
+    const data = await assetRes.json();
+    const stmts = [];
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    if (data?.users && typeof data.users === "object") {
+      for (const u of Object.values(data.users)) {
+        const email = String(u?.email || "").trim().toLowerCase();
+        const uid = String(u?.uid || "").trim();
+        if (!email || !uid) continue;
+        const isAdm = String(u.role || "").toLowerCase() === "admin" || email === ADMIN_EMAIL;
+        stmts.push(
+          env.DB.prepare(`
+            INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(email) DO NOTHING
+          `).bind(
+            uid,
+            email,
+            bindStr(u.username, email.split("@")[0]),
+            bindStr(u.phoneNumber),
+            bindStr(u.dob),
+            isAdm ? "admin" : "student",
+            bindStr(u.membershipStatus, isAdm ? "active" : "free"),
+            bindStr(u.membershipPlan, isAdm ? "course" : "none"),
+            bindStr(u.membershipExpiresAt),
+            JSON.stringify(parseJsonStrArray(u.subscribedLessonIds)),
+            JSON.stringify(parseJsonStrArray(u.subscribedCourses)),
+            JSON.stringify(parseJsonStrArray(u.practiceLessonIds)),
+            JSON.stringify(parseJsonStrArray(u.practiceCourses)),
+            JSON.stringify(["password"]),
+            u.mustChangePassword ? 1 : 0,
+            bindStr(u.passwordSalt),
+            bindStr(u.passwordHash),
+            bindStr(u.createdAt, nowIso),
+            bindStr(u.updatedAt, nowIso)
+          )
+        );
+      }
+    }
+    if (data?.lessonCatalog && typeof data.lessonCatalog === "object") {
+      for (const cat of Object.values(data.lessonCatalog)) {
+        const lessonId = String(cat?.lessonId || "").trim();
+        if (!lessonId) continue;
+        stmts.push(
+          env.DB.prepare(`
+            INSERT INTO lesson_catalog (lessonId, title, course, audience, accessType, price, practicePrice, hasExercises, updatedBy, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(lessonId) DO NOTHING
+          `).bind(
+            lessonId,
+            bindStr(cat.title, lessonId),
+            bindStr(cat.course, "HSK 2"),
+            bindStr(cat.audience, "Adult"),
+            bindStr(cat.accessType, "free"),
+            bindNum(cat.price, 0),
+            bindNum(cat.practicePrice, 0),
+            cat.hasExercises === false ? 0 : 1,
+            bindStr(cat.updatedBy, "seed"),
+            bindStr(cat.updatedAt, nowIso)
+          )
+        );
+      }
+    }
+    if (stmts.length > 0) {
+      await executeD1Batch(env.DB, stmts);
+    }
+  } catch (_) {
+  }
+}
+async function buildWorkerSessionResponse(env, userRow, token) {
+  const pubUser = sanitizeWorkerUserRow(userRow);
+  const isAdmin = pubUser.role === "admin";
+  const [progRow, myReqRows, catRows, adminRow] = await Promise.all([
+    one(env.DB, `SELECT * FROM user_progress WHERE uid = ?`, pubUser.uid),
+    all(env.DB, `SELECT * FROM subscription_requests WHERE userId = ? ORDER BY createdAt DESC`, pubUser.uid),
+    all(env.DB, `SELECT * FROM lesson_catalog`),
+    one(env.DB, `SELECT uid FROM users WHERE role = 'admin' LIMIT 1`)
+  ]);
+  const lessonCatalog = {};
+  for (const c of catRows) {
+    if (c?.lessonId) {
+      lessonCatalog[c.lessonId] = {
+        lessonId: c.lessonId,
+        title: c.title || c.lessonId,
+        course: c.course || "HSK 2",
+        audience: c.audience || "Adult",
+        accessType: c.accessType === "paid" ? "paid" : "free",
+        price: Number(c.price) || 0,
+        practicePrice: Number(c.practicePrice) || 0,
+        hasExercises: Boolean(Number(c.hasExercises ?? 1)),
+        updatedBy: c.updatedBy || "",
+        updatedAt: c.updatedAt || ""
+      };
+    }
+  }
+  const payload = {
+    success: true,
+    user: {
+      uid: pubUser.uid,
+      email: pubUser.email,
+      displayName: pubUser.username,
+      role: pubUser.role,
+      mustChangePassword: pubUser.mustChangePassword
+    },
+    profile: pubUser,
+    userProgress: sanitizeWorkerProgressRow(progRow, pubUser.uid),
+    myRequests: myReqRows,
+    lessonCatalog,
+    adminClaimed: Boolean(adminRow),
+    smtpConfigured: false
+  };
+  if (token) payload.token = token;
+  if (isAdmin) {
+    const [allUserRows, allReqRows] = await Promise.all([
+      all(env.DB, `SELECT * FROM users ORDER BY username ASC`),
+      all(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`)
+    ]);
+    payload.allUsers = allUserRows.map(sanitizeWorkerUserRow).filter(Boolean);
+    payload.allRequests = allReqRows;
+  }
+  return payload;
+}
+async function requireAuthWorker(request, env) {
+  const authHeader = String(request.headers.get("Authorization") || "");
+  if (!authHeader.startsWith("Bearer ")) {
+    return fail("Please sign in first.", 401);
+  }
+  const token = authHeader.slice(7).trim();
+  if (!token) {
+    return fail("Empty authentication token.", 401);
+  }
+  try {
+    const decoded = await verifyWorkerToken(env, token);
+    await ensureD1Tables(env.DB);
+    const userRow = await one(env.DB, `SELECT * FROM users WHERE uid = ?`, decoded.uid);
+    if (!userRow) {
+      return fail("Account no longer exists. Please sign in again.", 401);
+    }
+    return { user: userRow };
+  } catch (err) {
+    return fail(err?.message || "Invalid or expired session.", 401);
+  }
+}
+async function requireAdminWorker(request, env) {
+  const authResult = await requireAuthWorker(request, env);
+  if (authResult instanceof Response) return authResult;
+  const email = String(authResult.user.email || "").trim().toLowerCase();
+  if (String(authResult.user.role || "").toLowerCase() !== "admin" && email !== ADMIN_EMAIL) {
+    return fail("Administrator privileges required.", 403);
+  }
+  return authResult;
+}
 async function handleApi(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/api";
   const method = request.method;
   if (method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
+  if (path === "/api/auth/status" && method === "GET") {
+    await ensureD1UsersSeeded(env, url.origin);
+    const adminRow = await one(env.DB, `SELECT uid FROM users WHERE role = 'admin' LIMIT 1`);
+    const cntRow = await one(env.DB, `SELECT COUNT(*) AS c FROM users`);
+    return json({
+      success: true,
+      adminClaimed: Boolean(adminRow),
+      userCount: cntRow?.c || 0,
+      smtpConfigured: false
+    });
+  }
+  if (path === "/api/auth/register" && method === "POST") {
+    await ensureD1UsersSeeded(env, url.origin);
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || "").trim().toLowerCase().slice(0, 160);
+    const password = String(body.password || "");
+    const username = String(body.username || "").trim().slice(0, 60) || (email.includes("@") ? email.split("@")[0] : "Learner");
+    const phoneNumber = String(body.phoneNumber || "").trim().slice(0, 32);
+    const rawDob = String(body.dob || "").trim();
+    const dob = /^\d{4}-\d{2}-\d{2}$/.test(rawDob) ? rawDob : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return fail("Please enter a valid email address.", 400);
+    }
+    if (password.length < 6 || password.length > 128) {
+      return fail("Password must be between 6 and 128 characters.", 400);
+    }
+    if (rawDob && !dob) {
+      return fail("Date of Birth must be in YYYY-MM-DD format.", 400);
+    }
+    const existing = await one(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
+    if (existing) {
+      return fail("An account with this email already exists. Please sign in instead.", 409, { code: "email-already-in-use" });
+    }
+    const adminRow = await one(env.DB, `SELECT uid FROM users WHERE role = 'admin' LIMIT 1`);
+    const shouldClaimAdmin = email === ADMIN_EMAIL && !adminRow;
+    const uid = `usr_${randomHexWorker(8)}`;
+    const { salt, hash } = await createSaltedHashWorker(password);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    await withD1TableRepair(env.DB, async () => {
+      await env.DB.prepare(`
+        INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '[]', '[]', '[]', '[]', '["password"]', 0, ?, ?, ?, ?)
+      `).bind(
+        uid,
+        email,
+        username,
+        phoneNumber,
+        dob,
+        shouldClaimAdmin ? "admin" : "student",
+        shouldClaimAdmin ? "active" : "free",
+        shouldClaimAdmin ? "course" : "none",
+        salt,
+        hash,
+        nowIso,
+        nowIso
+      ).run();
+      await env.DB.prepare(`
+        INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+        VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
+      `).bind(uid, nowIso).run();
+    });
+    const userRow = await one(env.DB, `SELECT * FROM users WHERE uid = ?`, uid);
+    const token = await signWorkerToken(env, { uid, email, role: shouldClaimAdmin ? "admin" : "student" });
+    return json(await buildWorkerSessionResponse(env, userRow, token), 201);
+  }
+  if (path === "/api/auth/login" && method === "POST") {
+    await ensureD1UsersSeeded(env, url.origin);
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
+    if (!email || !password) {
+      return fail("Please enter both your email and password.", 400);
+    }
+    const userRow = await one(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
+    if (!userRow) {
+      return fail("Invalid email or password. Account is not registered in the database.", 401, { code: "user-not-found" });
+    }
+    const ok = await verifyPasswordWorker(password, String(userRow.passwordSalt || ""), String(userRow.passwordHash || ""));
+    if (!ok) {
+      return fail("Invalid email or password. Please check your credentials and try again.", 401, { code: "invalid-credentials" });
+    }
+    const token = await signWorkerToken(env, {
+      uid: String(userRow.uid),
+      email: String(userRow.email),
+      role: String(userRow.role || "student")
+    });
+    return json(await buildWorkerSessionResponse(env, userRow, token));
+  }
+  if (path === "/api/auth/reset-password" && method === "POST") {
+    await ensureD1UsersSeeded(env, url.origin);
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || "").trim().toLowerCase();
+    const dob = String(body.dob || "").trim().slice(0, 10);
+    const phoneNumber = String(body.phoneNumber || "").trim();
+    const newPassword = String(body.newPassword || "");
+    if (!email || !dob || !phoneNumber) {
+      return fail("Please enter your Email, Date of Birth, and Phone / Viber Number to verify your identity.", 400);
+    }
+    if (newPassword.length < 6 || newPassword.length > 128) {
+      return fail("New password must be between 6 and 128 characters.", 400);
+    }
+    const userRow = await one(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
+    if (!userRow) {
+      return fail(`No account found in database for ${email}.`, 404);
+    }
+    const storedDob = String(userRow.dob || "").trim().slice(0, 10);
+    if (!storedDob || !String(userRow.phoneNumber || "").trim()) {
+      return fail("This account cannot be self-reset without Date of Birth and Phone saved. Contact the site Admin.", 400);
+    }
+    if (storedDob !== dob || !phonesMatchWorker(userRow.phoneNumber, phoneNumber)) {
+      return fail("Verification details did not match our records.", 403);
+    }
+    const { salt, hash } = await createSaltedHashWorker(newPassword);
+    await env.DB.prepare(
+      `UPDATE users SET passwordSalt = ?, passwordHash = ?, mustChangePassword = 0, updatedAt = ? WHERE uid = ?`
+    ).bind(salt, hash, (/* @__PURE__ */ new Date()).toISOString(), String(userRow.uid)).run();
+    return json({ success: true, message: "Password reset successfully! Sign in now with your new password." });
+  }
+  if (path === "/api/auth/migrate-browser-users" && method === "POST") {
+    await ensureD1UsersSeeded(env, url.origin);
+    const body = await request.json().catch(() => ({}));
+    const incomingUsers = Array.isArray(body?.users) ? body.users : [];
+    const migrated = [];
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    for (const raw of incomingUsers.slice(0, 100)) {
+      const email = String(raw?.email || "").trim().toLowerCase().slice(0, 160);
+      const pwHash = String(raw?.passwordHash || "").trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
+      if (!/^sha256\$[a-f0-9]+\$[a-f0-9]{64}$/i.test(pwHash)) continue;
+      const existing = await one(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
+      if (existing) continue;
+      const uid = String(raw?.uid || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || `usr_${randomHexWorker(8)}`;
+      const username = String(raw?.username || email.split("@")[0] || "Learner").trim().slice(0, 60);
+      const phoneNumber = String(raw?.phoneNumber || "").trim().slice(0, 32);
+      const dob = /^\d{4}-\d{2}-\d{2}$/.test(String(raw?.dob || "").trim()) ? String(raw.dob).trim() : "";
+      await env.DB.prepare(`
+        INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, 'student', 'free', 'none', '', '[]', '[]', '[]', '[]', '["password"]', 0, '', ?, ?, ?)
+        ON CONFLICT(email) DO NOTHING
+      `).bind(
+        uid,
+        email,
+        username,
+        phoneNumber,
+        dob,
+        pwHash,
+        bindStr(raw?.createdAt, nowIso),
+        bindStr(raw?.updatedAt, nowIso)
+      ).run();
+      await env.DB.prepare(`
+        INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+        VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
+        ON CONFLICT(uid) DO NOTHING
+      `).bind(uid, nowIso).run();
+      migrated.push(email);
+    }
+    return json({ success: true, migratedCount: migrated.length, migratedEmails: migrated });
+  }
+  if (path === "/api/auth/me" && method === "GET") {
+    await ensureD1UsersSeeded(env, url.origin);
+    const auth = await requireAuthWorker(request, env);
+    if (auth instanceof Response) return auth;
+    return json(await buildWorkerSessionResponse(env, auth.user, null));
+  }
+  if (path === "/api/auth/profile" && method === "PUT") {
+    const auth = await requireAuthWorker(request, env);
+    if (auth instanceof Response) return auth;
+    const body = await request.json().catch(() => ({}));
+    const username = String(body.username || "").trim().slice(0, 60);
+    const phoneNumber = String(body.phoneNumber || "").trim().slice(0, 32);
+    const rawDob = String(body.dob || "").trim();
+    const dob = /^\d{4}-\d{2}-\d{2}$/.test(rawDob) ? rawDob : "";
+    if (!username) return fail("User Name cannot be empty.", 400);
+    if (rawDob && !dob) return fail("Date of Birth must be YYYY-MM-DD.", 400);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    await env.DB.prepare(`UPDATE users SET username = ?, phoneNumber = ?, dob = ?, updatedAt = ? WHERE uid = ?`).bind(username, phoneNumber, dob, nowIso, String(auth.user.uid)).run();
+    const updated = await one(env.DB, `SELECT * FROM users WHERE uid = ?`, String(auth.user.uid));
+    return json({ success: true, profile: sanitizeWorkerUserRow(updated) });
+  }
+  if (path === "/api/auth/change-password" && method === "POST") {
+    const auth = await requireAuthWorker(request, env);
+    if (auth instanceof Response) return auth;
+    const body = await request.json().catch(() => ({}));
+    const currentPassword = String(body.currentPassword || "");
+    const newPassword = String(body.newPassword || "");
+    if (!currentPassword || newPassword.length < 6 || newPassword.length > 128) {
+      return fail("Enter your current password and a new password (6\u2013128 characters).", 400);
+    }
+    const ok = await verifyPasswordWorker(currentPassword, String(auth.user.passwordSalt || ""), String(auth.user.passwordHash || ""));
+    if (!ok) return fail("Current password is incorrect.", 400);
+    const { salt, hash } = await createSaltedHashWorker(newPassword);
+    await env.DB.prepare(`UPDATE users SET passwordSalt = ?, passwordHash = ?, mustChangePassword = 0, updatedAt = ? WHERE uid = ?`).bind(salt, hash, (/* @__PURE__ */ new Date()).toISOString(), String(auth.user.uid)).run();
+    const updated = await one(env.DB, `SELECT * FROM users WHERE uid = ?`, String(auth.user.uid));
+    return json({ success: true, profile: sanitizeWorkerUserRow(updated) });
+  }
+  if (path === "/api/progress" && method === "PUT") {
+    const auth = await requireAuthWorker(request, env);
+    if (auth instanceof Response) return auth;
+    const body = await request.json().catch(() => ({}));
+    const clean = sanitizeWorkerProgressRow(body, String(auth.user.uid));
+    await env.DB.prepare(`
+      INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(uid) DO UPDATE SET
+        currentStreak=excluded.currentStreak, bestStreak=excluded.bestStreak, lastCompletedDate=excluded.lastCompletedDate,
+        streakDates=excluded.streakDates, completedLessonIds=excluded.completedLessonIds,
+        reminderEnabled=excluded.reminderEnabled, reminderTime=excluded.reminderTime, lastNotifiedDate=excluded.lastNotifiedDate,
+        updatedAt=excluded.updatedAt
+    `).bind(
+      clean.uid,
+      clean.currentStreak,
+      clean.bestStreak,
+      clean.lastCompletedDate,
+      JSON.stringify(clean.streakDates),
+      JSON.stringify(clean.completedLessonIds),
+      clean.reminderEnabled ? 1 : 0,
+      clean.reminderTime,
+      clean.lastNotifiedDate,
+      String(clean.updatedAt)
+    ).run();
+    return json({ success: true, userProgress: clean });
+  }
+  if (path === "/api/requests" && method === "POST") {
+    const auth = await requireAuthWorker(request, env);
+    if (auth instanceof Response) return auth;
+    const body = await request.json().catch(() => ({}));
+    const rawPlan = String(body.planType || "course").trim().toLowerCase();
+    const planType = ["per_lesson", "practice_lesson", "practice_course", "course", "monthly", "annual"].includes(rawPlan) ? rawPlan : "course";
+    const requestId = `req_${randomHexWorker(6)}`;
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    await env.DB.prepare(`
+      INSERT INTO subscription_requests (requestId, userId, username, userEmail, userPhone, planType, lessonId, courseName, lessonTitle, amountLabel, contactChannel, contactHandle, note, status, adminNote, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?)
+    `).bind(
+      requestId,
+      String(auth.user.uid),
+      String(auth.user.username || "Learner"),
+      String(auth.user.email || ""),
+      String(auth.user.phoneNumber || ""),
+      planType,
+      String(body.lessonId || "").trim().slice(0, 128),
+      String(body.courseName || "HSK 2").trim().slice(0, 80),
+      String(body.lessonTitle || planType).trim().slice(0, 160),
+      String(body.amountLabel || "").trim().slice(0, 60),
+      body.contactChannel === "email" ? "email" : "viber",
+      String(body.contactHandle || "").trim().slice(0, 120),
+      String(body.note || "").trim().slice(0, 400),
+      nowIso,
+      nowIso
+    ).run();
+    const created = await one(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId);
+    const myRequests = await all(env.DB, `SELECT * FROM subscription_requests WHERE userId = ? ORDER BY createdAt DESC`, String(auth.user.uid));
+    return json({ success: true, request: created, myRequests }, 201);
+  }
+  const reqDeleteMatch = path.match(/^\/api\/requests\/([^/]+)$/);
+  if (reqDeleteMatch && method === "DELETE") {
+    const auth = await requireAuthWorker(request, env);
+    if (auth instanceof Response) return auth;
+    const requestId = decodeURIComponent(reqDeleteMatch[1]);
+    const target = await one(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId);
+    if (!target) return fail("Subscription request not found.", 404);
+    const isAdmin = String(auth.user.role || "").toLowerCase() === "admin";
+    if (target.userId !== auth.user.uid && !isAdmin) return fail("Not authorized to cancel this request.", 403);
+    if (target.status !== "pending" && !isAdmin) return fail("Only pending requests can be cancelled.", 400);
+    await env.DB.prepare(`DELETE FROM subscription_requests WHERE requestId = ?`).bind(requestId).run();
+    const myRequests = await all(env.DB, `SELECT * FROM subscription_requests WHERE userId = ? ORDER BY createdAt DESC`, String(auth.user.uid));
+    return json({ success: true, myRequests });
+  }
+  if (path === "/api/admin/users" && method === "GET") {
+    await ensureD1UsersSeeded(env, url.origin);
+    const admin = await requireAdminWorker(request, env);
+    if (admin instanceof Response) return admin;
+    const [userRows, reqRows, progRows, catRows] = await Promise.all([
+      all(env.DB, `SELECT * FROM users ORDER BY username ASC`),
+      all(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`),
+      all(env.DB, `SELECT * FROM user_progress`),
+      all(env.DB, `SELECT * FROM lesson_catalog`)
+    ]);
+    return json({
+      success: true,
+      allUsers: userRows.map(sanitizeWorkerUserRow).filter(Boolean),
+      allRequests: reqRows,
+      progress: progRows.map((p) => sanitizeWorkerProgressRow(p, p.uid)),
+      lessonCatalog: catRows
+    });
+  }
+  if (path === "/api/admin/users/sync" && method === "POST") {
+    await ensureD1UsersSeeded(env, url.origin);
+    const admin = await requireAdminWorker(request, env);
+    if (admin instanceof Response) return admin;
+    const body = await request.json().catch(() => ({}));
+    const inUsers = Array.isArray(body.users) ? body.users : [];
+    const inRequests = Array.isArray(body.requests) ? body.requests : [];
+    const inProgress = Array.isArray(body.progress) ? body.progress : [];
+    const inCatalog = Array.isArray(body.lessonCatalog) ? body.lessonCatalog : [];
+    const stmts = [];
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    for (const u of inUsers) {
+      const email = String(u?.email || "").trim().toLowerCase();
+      const uid = String(u?.uid || "").trim();
+      if (!email || !uid) continue;
+      const existing = await one(env.DB, `SELECT uid, updatedAt, passwordSalt, passwordHash FROM users WHERE uid = ? OR LOWER(email) = ?`, uid, email);
+      const exTs = Date.parse(String(existing?.updatedAt || "")) || 0;
+      const inTs = Date.parse(String(u.updatedAt || "")) || 0;
+      if (!existing || inTs >= exTs) {
+        const isAdm = String(u.role || "").toLowerCase() === "admin" || email === ADMIN_EMAIL;
+        const pwHash = bindStr(u.passwordHash, bindStr(existing?.passwordHash));
+        const pwSalt = bindStr(u.passwordSalt, bindStr(existing?.passwordSalt));
+        stmts.push(
+          env.DB.prepare(`
+            INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(uid) DO UPDATE SET
+              username=excluded.username, phoneNumber=excluded.phoneNumber, dob=excluded.dob, role=excluded.role,
+              membershipStatus=excluded.membershipStatus, membershipPlan=excluded.membershipPlan, membershipExpiresAt=excluded.membershipExpiresAt,
+              subscribedLessonIds=excluded.subscribedLessonIds, subscribedCourses=excluded.subscribedCourses,
+              practiceLessonIds=excluded.practiceLessonIds, practiceCourses=excluded.practiceCourses,
+              mustChangePassword=excluded.mustChangePassword,
+              passwordSalt=CASE WHEN excluded.passwordSalt != '' THEN excluded.passwordSalt ELSE users.passwordSalt END,
+              passwordHash=CASE WHEN excluded.passwordHash != '' THEN excluded.passwordHash ELSE users.passwordHash END,
+              updatedAt=excluded.updatedAt
+          `).bind(
+            existing?.uid || uid,
+            email,
+            bindStr(u.username, email.split("@")[0]),
+            bindStr(u.phoneNumber),
+            bindStr(u.dob),
+            isAdm ? "admin" : "student",
+            bindStr(u.membershipStatus, isAdm ? "active" : "free"),
+            normalizeWorkerPlan(u.membershipPlan),
+            bindStr(u.membershipExpiresAt),
+            JSON.stringify(parseJsonStrArray(u.subscribedLessonIds)),
+            JSON.stringify(parseJsonStrArray(u.subscribedCourses).map(normalizeWorkerCourseName)),
+            JSON.stringify(parseJsonStrArray(u.practiceLessonIds)),
+            JSON.stringify(parseJsonStrArray(u.practiceCourses).map(normalizeWorkerCourseName)),
+            JSON.stringify(["password"]),
+            u.mustChangePassword ? 1 : 0,
+            pwSalt,
+            pwHash,
+            bindStr(u.createdAt, nowIso),
+            bindStr(u.updatedAt, nowIso)
+          )
+        );
+      }
+    }
+    for (const r of inRequests) {
+      if (!r?.requestId || !r?.userId) continue;
+      stmts.push(
+        env.DB.prepare(`
+          INSERT INTO subscription_requests (requestId, userId, username, userEmail, userPhone, planType, lessonId, courseName, lessonTitle, amountLabel, contactChannel, contactHandle, note, status, adminNote, createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(requestId) DO UPDATE SET status=excluded.status, adminNote=excluded.adminNote, updatedAt=excluded.updatedAt
+        `).bind(
+          String(r.requestId),
+          String(r.userId),
+          bindStr(r.username),
+          bindStr(r.userEmail),
+          bindStr(r.userPhone),
+          bindStr(r.planType, "course"),
+          bindStr(r.lessonId),
+          bindStr(r.courseName),
+          bindStr(r.lessonTitle),
+          bindStr(r.amountLabel),
+          bindStr(r.contactChannel, "viber"),
+          bindStr(r.contactHandle),
+          bindStr(r.note),
+          bindStr(r.status, "pending"),
+          bindStr(r.adminNote),
+          bindStr(r.createdAt, nowIso),
+          bindStr(r.updatedAt, nowIso)
+        )
+      );
+    }
+    for (const p of inProgress) {
+      if (!p?.uid) continue;
+      const clean = sanitizeWorkerProgressRow(p, String(p.uid));
+      stmts.push(
+        env.DB.prepare(`
+          INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(uid) DO UPDATE SET
+            currentStreak=excluded.currentStreak, bestStreak=excluded.bestStreak, lastCompletedDate=excluded.lastCompletedDate,
+            streakDates=excluded.streakDates, completedLessonIds=excluded.completedLessonIds,
+            reminderEnabled=excluded.reminderEnabled, reminderTime=excluded.reminderTime, lastNotifiedDate=excluded.lastNotifiedDate,
+            updatedAt=excluded.updatedAt
+        `).bind(
+          clean.uid,
+          clean.currentStreak,
+          clean.bestStreak,
+          clean.lastCompletedDate,
+          JSON.stringify(clean.streakDates),
+          JSON.stringify(clean.completedLessonIds),
+          clean.reminderEnabled ? 1 : 0,
+          clean.reminderTime,
+          clean.lastNotifiedDate,
+          bindStr(clean.updatedAt, nowIso)
+        )
+      );
+    }
+    for (const c of inCatalog) {
+      if (!c?.lessonId) continue;
+      stmts.push(
+        env.DB.prepare(`
+          INSERT INTO lesson_catalog (lessonId, title, course, audience, accessType, price, practicePrice, hasExercises, updatedBy, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(lessonId) DO UPDATE SET
+            title=excluded.title, course=excluded.course, audience=excluded.audience, accessType=excluded.accessType,
+            price=excluded.price, practicePrice=excluded.practicePrice, hasExercises=excluded.hasExercises,
+            updatedBy=excluded.updatedBy, updatedAt=excluded.updatedAt
+        `).bind(
+          String(c.lessonId),
+          bindStr(c.title, c.lessonId),
+          bindStr(c.course, "HSK 2"),
+          bindStr(c.audience, "Adult"),
+          c.accessType === "paid" ? "paid" : "free",
+          bindNum(c.price, 0),
+          bindNum(c.practicePrice, 0),
+          c.hasExercises === false ? 0 : 1,
+          bindStr(c.updatedBy, admin.user.uid),
+          bindStr(c.updatedAt, nowIso)
+        )
+      );
+    }
+    if (stmts.length > 0) await executeD1Batch(env.DB, stmts);
+    const [allUserRows, allReqRows] = await Promise.all([
+      all(env.DB, `SELECT * FROM users ORDER BY username ASC`),
+      all(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`)
+    ]);
+    return json({
+      success: true,
+      allUsers: allUserRows.map(sanitizeWorkerUserRow).filter(Boolean),
+      allRequests: allReqRows
+    });
+  }
+  const adminUserUpdateMatch = path.match(/^\/api\/admin\/users\/([^/]+)(?:\/(membership|reset-password))?$/);
+  if (adminUserUpdateMatch && (method === "PUT" || method === "POST")) {
+    const admin = await requireAdminWorker(request, env);
+    if (admin instanceof Response) return admin;
+    const uid = decodeURIComponent(adminUserUpdateMatch[1]);
+    const subAction = adminUserUpdateMatch[2] || "";
+    const targetUser = await one(env.DB, `SELECT * FROM users WHERE uid = ?`, uid);
+    if (!targetUser) return fail("User account not found.", 404);
+    const body = await request.json().catch(() => ({}));
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    if (subAction === "reset-password") {
+      const tempPw = typeof body.newPassword === "string" && body.newPassword.trim() ? body.newPassword.trim() : randomHexWorker(6);
+      if (tempPw.length < 6 || tempPw.length > 128) return fail("Password must be 6\u2013128 characters.", 400);
+      const { salt, hash } = await createSaltedHashWorker(tempPw);
+      await env.DB.prepare(`UPDATE users SET passwordSalt = ?, passwordHash = ?, mustChangePassword = 1, updatedAt = ? WHERE uid = ?`).bind(salt, hash, nowIso, uid).run();
+      const [updated2, allUserRows2] = await Promise.all([
+        one(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
+        all(env.DB, `SELECT * FROM users ORDER BY username ASC`)
+      ]);
+      return json({
+        success: true,
+        temporaryPassword: tempPw,
+        user: sanitizeWorkerUserRow(updated2),
+        allUsers: allUserRows2.map(sanitizeWorkerUserRow).filter(Boolean)
+      });
+    }
+    const nextUsername = body.username !== void 0 ? String(body.username).trim().slice(0, 60) : String(targetUser.username || "Learner");
+    const nextEmail = body.email !== void 0 ? String(body.email).trim().toLowerCase().slice(0, 160) : String(targetUser.email || "");
+    const nextPhone = body.phoneNumber !== void 0 ? String(body.phoneNumber).trim().slice(0, 32) : String(targetUser.phoneNumber || "");
+    const nextDob = body.dob !== void 0 ? String(body.dob).trim().slice(0, 10) : String(targetUser.dob || "");
+    const nextRole = body.role === "admin" || body.role === "student" ? body.role : String(targetUser.role || "student");
+    const nextStatus = ["free", "pending", "active", "expired"].includes(body.membershipStatus) ? body.membershipStatus : String(targetUser.membershipStatus || "free");
+    const nextPlan = body.membershipPlan !== void 0 ? normalizeWorkerPlan(body.membershipPlan) : normalizeWorkerPlan(targetUser.membershipPlan);
+    const nextExpiry = typeof body.membershipExpiresAt === "string" ? body.membershipExpiresAt.trim().slice(0, 40) : String(targetUser.membershipExpiresAt || "");
+    const nextLessons = Array.isArray(body.subscribedLessonIds) ? body.subscribedLessonIds.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 100) : parseJsonStrArray(targetUser.subscribedLessonIds);
+    const nextCourses = Array.isArray(body.subscribedCourses) ? Array.from(new Set(body.subscribedCourses.map(normalizeWorkerCourseName))).slice(0, 50) : parseJsonStrArray(targetUser.subscribedCourses);
+    const nextPracLessons = Array.isArray(body.practiceLessonIds) ? body.practiceLessonIds.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 100) : parseJsonStrArray(targetUser.practiceLessonIds);
+    const nextPracCourses = Array.isArray(body.practiceCourses) ? Array.from(new Set(body.practiceCourses.map(normalizeWorkerCourseName))).slice(0, 50) : parseJsonStrArray(targetUser.practiceCourses);
+    await env.DB.prepare(`
+      UPDATE users SET username=?, email=?, phoneNumber=?, dob=?, role=?, membershipStatus=?, membershipPlan=?, membershipExpiresAt=?, subscribedLessonIds=?, subscribedCourses=?, practiceLessonIds=?, practiceCourses=?, updatedAt=? WHERE uid=?
+    `).bind(
+      nextUsername,
+      nextEmail,
+      nextPhone,
+      nextDob,
+      nextRole,
+      nextStatus,
+      nextPlan,
+      nextExpiry,
+      JSON.stringify(nextLessons),
+      JSON.stringify(nextCourses),
+      JSON.stringify(nextPracLessons),
+      JSON.stringify(nextPracCourses),
+      nowIso,
+      uid
+    ).run();
+    const [updated, allUserRows] = await Promise.all([
+      one(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
+      all(env.DB, `SELECT * FROM users ORDER BY username ASC`)
+    ]);
+    return json({
+      success: true,
+      user: sanitizeWorkerUserRow(updated),
+      allUsers: allUserRows.map(sanitizeWorkerUserRow).filter(Boolean)
+    });
+  }
+  const adminReqMatch = path.match(/^\/api\/admin\/requests\/([^/]+)\/(approve|reject)$/);
+  if (adminReqMatch && method === "POST") {
+    const admin = await requireAdminWorker(request, env);
+    if (admin instanceof Response) return admin;
+    const requestId = decodeURIComponent(adminReqMatch[1]);
+    const action = adminReqMatch[2];
+    const body = await request.json().catch(() => ({}));
+    const reqDoc = await one(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId);
+    if (!reqDoc) return fail("Subscription request not found.", 404);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    if (action === "reject") {
+      const adminNote2 = String(body.adminNote || "Payment could not be verified").trim().slice(0, 300);
+      await env.DB.prepare(`UPDATE subscription_requests SET status = 'rejected', adminNote = ?, updatedAt = ? WHERE requestId = ?`).bind(adminNote2, nowIso, requestId).run();
+      const [updatedReq2, allRequests2] = await Promise.all([
+        one(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId),
+        all(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`)
+      ]);
+      return json({ success: true, request: updatedReq2, allRequests: allRequests2 });
+    }
+    const targetUser = await one(env.DB, `SELECT * FROM users WHERE uid = ?`, String(reqDoc.userId));
+    if (!targetUser) return fail("Target user profile could not be found.", 404);
+    const nextLessons = parseJsonStrArray(targetUser.subscribedLessonIds);
+    const nextCourses = parseJsonStrArray(targetUser.subscribedCourses).map(normalizeWorkerCourseName);
+    const nextPracLessons = parseJsonStrArray(targetUser.practiceLessonIds);
+    const nextPracCourses = parseJsonStrArray(targetUser.practiceCourses).map(normalizeWorkerCourseName);
+    let nextPlan = normalizeWorkerPlan(targetUser.membershipPlan);
+    if (reqDoc.planType === "per_lesson" && reqDoc.lessonId) {
+      if (!nextLessons.includes(reqDoc.lessonId)) nextLessons.push(reqDoc.lessonId);
+      if (nextPlan !== "course") nextPlan = "per_lesson";
+    } else if (reqDoc.planType === "practice_lesson" && reqDoc.lessonId) {
+      if (!nextPracLessons.includes(reqDoc.lessonId)) nextPracLessons.push(reqDoc.lessonId);
+      if (nextPlan !== "course" && nextPlan !== "per_lesson" && nextPlan !== "practice_course") nextPlan = "practice_lesson";
+    } else if (reqDoc.planType === "practice_course") {
+      const c = normalizeWorkerCourseName(reqDoc.courseName || reqDoc.lessonTitle || "HSK 2");
+      if (c && !nextPracCourses.includes(c)) nextPracCourses.push(c);
+      if (nextPlan !== "course") nextPlan = "practice_course";
+    } else {
+      const c = normalizeWorkerCourseName(reqDoc.courseName || reqDoc.lessonTitle || "HSK 2");
+      if (c && !nextCourses.includes(c)) nextCourses.push(c);
+      nextPlan = "course";
+    }
+    const adminNote = String(body.adminNote || "Verified via QR payment").trim().slice(0, 300);
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE subscription_requests SET status = 'approved', adminNote = ?, updatedAt = ? WHERE requestId = ?`).bind(adminNote, nowIso, requestId),
+      env.DB.prepare(`UPDATE users SET membershipStatus = 'active', membershipPlan = ?, subscribedLessonIds = ?, subscribedCourses = ?, practiceLessonIds = ?, practiceCourses = ?, updatedAt = ? WHERE uid = ?`).bind(
+        nextPlan,
+        JSON.stringify(nextLessons),
+        JSON.stringify(nextCourses),
+        JSON.stringify(nextPracLessons),
+        JSON.stringify(nextPracCourses),
+        nowIso,
+        String(targetUser.uid)
+      )
+    ]);
+    const [updatedReq, updatedUser, allRequests, allUsers] = await Promise.all([
+      one(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId),
+      one(env.DB, `SELECT * FROM users WHERE uid = ?`, String(targetUser.uid)),
+      all(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`),
+      all(env.DB, `SELECT * FROM users ORDER BY username ASC`)
+    ]);
+    return json({
+      success: true,
+      request: updatedReq,
+      user: sanitizeWorkerUserRow(updatedUser),
+      allRequests,
+      allUsers: allUsers.map(sanitizeWorkerUserRow).filter(Boolean)
+    });
+  }
+  if (path === "/api/catalog" && method === "GET") {
+    const catRows = await all(env.DB, `SELECT * FROM lesson_catalog`);
+    const lessonCatalog = {};
+    for (const c of catRows) {
+      if (c?.lessonId) {
+        lessonCatalog[c.lessonId] = {
+          lessonId: c.lessonId,
+          title: c.title || c.lessonId,
+          course: c.course || "HSK 2",
+          audience: c.audience || "Adult",
+          accessType: c.accessType === "paid" ? "paid" : "free",
+          price: Number(c.price) || 0,
+          practicePrice: Number(c.practicePrice) || 0,
+          hasExercises: Boolean(Number(c.hasExercises ?? 1)),
+          updatedBy: c.updatedBy || "",
+          updatedAt: c.updatedAt || ""
+        };
+      }
+    }
+    return json({ success: true, lessonCatalog });
+  }
+  if (path === "/api/admin/catalog" && (method === "PUT" || method === "POST")) {
+    const admin = await requireAdminWorker(request, env);
+    if (admin instanceof Response) return admin;
+    const body = await request.json().catch(() => ({}));
+    const items = Array.isArray(body.items) ? body.items : [];
+    const removeIds = Array.isArray(body.removeIds) ? body.removeIds : [];
+    const stmts = [];
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    if (body.replaceAll) {
+      stmts.push(env.DB.prepare(`DELETE FROM lesson_catalog`));
+    }
+    for (const rid of removeIds) {
+      const cleanRid = String(rid || "").trim();
+      if (cleanRid) stmts.push(env.DB.prepare(`DELETE FROM lesson_catalog WHERE lessonId = ?`).bind(cleanRid));
+    }
+    for (const it of items) {
+      const lessonId = String(it?.lessonId || "").trim();
+      if (!lessonId) continue;
+      stmts.push(
+        env.DB.prepare(`
+          INSERT INTO lesson_catalog (lessonId, title, course, audience, accessType, price, practicePrice, hasExercises, updatedBy, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(lessonId) DO UPDATE SET
+            title=excluded.title, course=excluded.course, audience=excluded.audience, accessType=excluded.accessType,
+            price=excluded.price, practicePrice=excluded.practicePrice, hasExercises=excluded.hasExercises,
+            updatedBy=excluded.updatedBy, updatedAt=excluded.updatedAt
+        `).bind(
+          lessonId,
+          bindStr(it.title, lessonId),
+          normalizeWorkerCourseName(it.course || "HSK 2"),
+          it.audience === "Kids" ? "Kids" : "Adult",
+          it.accessType === "paid" ? "paid" : "free",
+          bindNum(it.price, 0),
+          bindNum(it.practicePrice, 0),
+          it.hasExercises === false ? 0 : 1,
+          String(admin.user.uid),
+          nowIso
+        )
+      );
+    }
+    if (stmts.length > 0) await executeD1Batch(env.DB, stmts);
+    const catRows = await all(env.DB, `SELECT * FROM lesson_catalog`);
+    const lessonCatalog = {};
+    for (const c of catRows) lessonCatalog[c.lessonId] = c;
+    return json({ success: true, lessonCatalog });
+  }
   if (method === "POST" || method === "PUT" || method === "DELETE") {
     if (path === "/api/admin/upload-media/chunk") {
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
       try {
         return await handleWorkerChunkUploadPart(request, env, url);
       } catch (err) {
@@ -1747,6 +3054,8 @@ async function handleApi(request, env, url) {
       }
     }
     if (path === "/api/admin/upload-media/abort") {
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
       try {
         return await handleWorkerChunkUploadAbort(request, env, url);
       } catch (err) {
@@ -1757,6 +3066,8 @@ async function handleApi(request, env, url) {
       return fail("Method not allowed for this route", 405);
     }
     if (path === "/api/admin/upload-media/init") {
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
       try {
         return await handleWorkerChunkUploadInit(request, env);
       } catch (err) {
@@ -1764,6 +3075,8 @@ async function handleApi(request, env, url) {
       }
     }
     if (path === "/api/admin/upload-media/complete") {
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
       try {
         return await handleWorkerChunkUploadComplete(request, env);
       } catch (err) {
@@ -1771,12 +3084,18 @@ async function handleApi(request, env, url) {
       }
     }
     if (path === "/api/database/force-sync") {
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
       return handleForceDatabaseSync(request, env, url);
     }
     if (path === "/api/database/sync") {
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
       return handleDatabaseSync(request, env);
     }
     if (path === "/api/admin/upload-media") {
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
       try {
         return await handleWorkerMediaUpload(request, env);
       } catch (err) {
@@ -1784,10 +3103,14 @@ async function handleApi(request, env, url) {
       }
     }
     if (path === "/api/admin/site-config" || path === "/api/site-config") {
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
       return handleWorkerSaveSiteConfig(request, env);
     }
     const adminWorkbookMatch = path.match(/^\/api\/admin\/workbook\/([^/]+)$/);
     if (adminWorkbookMatch) {
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
       try {
         const domain = decodeURIComponent(adminWorkbookMatch[1]).toLowerCase();
         const body = await request.json();
@@ -1849,6 +3172,7 @@ async function handleApi(request, env, url) {
     });
   }
   if (path === "/api/database/status" || path === "/api/status") {
+    await ensureD1Tables(env.DB);
     return json({
       success: true,
       database: "edu-hub-db",
@@ -1870,7 +3194,11 @@ async function handleApi(request, env, url) {
         "media_files",
         "media_chunks",
         "site_config",
-        "d1_meta"
+        "d1_meta",
+        "users",
+        "subscription_requests",
+        "user_progress",
+        "lesson_catalog"
       ],
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });

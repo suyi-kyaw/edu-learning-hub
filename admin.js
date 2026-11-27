@@ -611,15 +611,27 @@
         btn.disabled = true;
         btn.textContent = 'Testing D1…';
         try {
-          const res = await fetch('/api/database/status?t=' + Date.now());
-          const json = await res.json();
-          if (json.success) {
-            toast(`Connected to Cloudflare D1 (${json.database})! Found ${json.tables ? json.tables.length : 12} tables.`);
+          const check =
+            window.LinguaBackend && typeof window.LinguaBackend.testConnection === 'function'
+              ? await window.LinguaBackend.testConnection()
+              : await fetch(apiUrl('/api/database/status?t=' + Date.now())).then(async (r) => {
+                  const txt = await r.text();
+                  if (/^<(?:!doctype|html)/i.test(txt.trim())) {
+                    return { ok: false, error: 'Worker API returned HTML instead of JSON.' };
+                  }
+                  const parsed = JSON.parse(txt);
+                  return { ok: Boolean(r.ok && parsed && parsed.success), ...parsed };
+                });
+          if (check && check.ok) {
+            const tblCount = Array.isArray(check.tables)
+              ? check.tables.length
+              : (Number(check.tableCount) || 12);
+            toast(`Connected to Cloudflare D1 (${check.database || 'edu-hub-db'})! Found ${tblCount} tables.`);
           } else {
-            toast(`D1 status: ${json.message || 'offline'}. Using Excel sheets fallback.`, 'info');
+            toast(`D1 status: ${(check && (check.error || check.message)) || 'offline'}. Using Excel fallback.`, 'info');
           }
         } catch (err) {
-          toast(`D1 test: ${err.message || 'Server error'}. Using Excel fallback.`, 'info');
+          toast(`D1 test: ${err && err.message ? err.message : 'Server error'}. Using Excel fallback.`, 'info');
         } finally {
           btn.disabled = false;
           btn.textContent = 'Test D1 DB';
@@ -2302,6 +2314,31 @@
       };
     }
 
+    const dataUrlToFile = (dataUrl, fallbackName = 'site-logo.png') => {
+      const str = String(dataUrl || '').trim();
+      const match = str.match(/^data:([^;,]+)?(?:;base64)?,(.*)$/i);
+      if (!match) return null;
+      const mime = match[1] || 'image/png';
+      const ext = (mime.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
+      const binStr = atob(match[2]);
+      const bytes = new Uint8Array(binStr.length);
+      for (let i = 0; i < binStr.length; i++) {
+        bytes[i] = binStr.charCodeAt(i);
+      }
+      return new File([bytes], fallbackName.replace(/\.[^.]+$/, '') + '.' + ext, { type: mime });
+    };
+
+    const ensureHostedLogoUrl = async (rawLogoUrl) => {
+      const valStr = String(rawLogoUrl || '').trim();
+      if (!valStr || !/^data:image\//i.test(valStr) || valStr.length <= 1950 || !hasBackend()) {
+        return valStr;
+      }
+      const file = dataUrlToFile(valStr, 'site-logo.png');
+      if (!file) return valStr;
+      const uploaded = await uploadAdminMediaFile(file, 'image');
+      return uploaded && uploaded.url ? uploaded.url : valStr;
+    };
+
     const saveLogoOnlyBtn = document.getElementById('btnSaveLogoOnly');
     if (saveLogoOnlyBtn && logoInput) {
       saveLogoOnlyBtn.onclick = async () => {
@@ -2309,13 +2346,21 @@
         saveLogoOnlyBtn.textContent = 'Saving…';
         try {
           setSyncStatus('Saving brand logo…');
-          const nextLogoUrl = getMediaInputValue(logoInput);
+          const nextLogoUrl = await ensureHostedLogoUrl(getMediaInputValue(logoInput));
           const saved = await window.LinguaAuth.saveSiteConfig({ siteLogoUrl: nextLogoUrl });
           state.siteConfig = saved;
           applyMediaInputValue(logoInput, saved.siteLogoUrl || '', 'image');
           syncLogoDualPreview();
-          setSyncStatus('Logo saved & synced');
-          toast(nextLogoUrl ? 'Custom site logo saved & applied sitewide.' : 'Restored default 语 JiedeEdu brand lockup.');
+          if (saved && saved._savedLocallyOnly) {
+            setSyncStatus('Saved locally (Offline)');
+            toast(
+              'Logo saved in this browser only — connect Worker or check Firestore permissions to publish across devices.',
+              'info'
+            );
+          } else {
+            setSyncStatus('Logo saved & synced');
+            toast(nextLogoUrl ? 'Custom site logo saved & synced sitewide.' : 'Restored default 语 JiedeEdu brand lockup.');
+          }
         } catch (err) {
           setSyncStatus('Save failed');
           toast(err instanceof Error ? err.message : 'Failed to save logo.', 'error');
@@ -2359,6 +2404,14 @@
           const limitMb = Math.round((Number(check.maxUploadBytes) || 50 * 1024 * 1024) / (1024 * 1024));
           if (workerStatusEl) {
             workerStatusEl.textContent = `Connected: ${check.url || 'same-origin'} (${modeTxt}, max ${limitMb} MB)`;
+          }
+          if (candidate && state.authState?.isAdmin && window.LinguaAuth?.saveSiteConfig) {
+            try {
+              const savedCfg = await window.LinguaAuth.saveSiteConfig({
+                workerApiBaseUrl: candidate.replace(/\/+$/, '')
+              });
+              state.siteConfig = savedCfg;
+            } catch (_) {}
           }
           toast(`Connected to Cloudflare Worker (${modeTxt}, up to ${limitMb} MB uploads).`);
         } catch (err) {
@@ -2482,8 +2535,13 @@
 
       try {
         setSyncStatus('Saving…');
+        nextPayload.siteLogoUrl = await ensureHostedLogoUrl(nextPayload.siteLogoUrl);
         const saved = await window.LinguaAuth.saveSiteConfig(nextPayload);
         state.siteConfig = saved;
+        if (logoInput) {
+          applyMediaInputValue(logoInput, saved.siteLogoUrl || '', 'image');
+          syncLogoDualPreview();
+        }
         refreshFeaturedCountBadges();
         if (saved && saved._savedLocallyOnly) {
           setSyncStatus('Saved locally (Static Host)');
@@ -6485,7 +6543,11 @@
             </p>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <button type="button" class="admin-btn admin-btn-primary btn-sm" id="btnExportUsersXlsx">Export users.xlsx</button>
+            <button type="button" class="admin-btn admin-btn-primary btn-sm" id="btnAddStudentAccount">+ Add Student Account</button>
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnVerifyAdminGoogle">Verify Admin with Google</button>
+            <button type="button" class="admin-btn admin-btn-primary btn-sm" id="btnSyncUsersToDb">Sync Local → DB &amp; Excel</button>
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnRefreshUsersDb">Refresh DB Users</button>
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="btnExportUsersXlsx">Export users.xlsx</button>
             <label class="admin-btn admin-btn-secondary admin-btn-sm" style="margin:0; cursor:pointer;">
               <span>Import users.xlsx</span>
               <input type="file" id="inputImportUsersXlsx" accept=".xlsx,.xls" hidden />
@@ -6494,9 +6556,9 @@
           </div>
         </div>
         <div class="admin-backend-status is-success" style="margin-top:0;">
-          Merged Users: <strong>${excelSummary.totalMergedUsers}</strong>
-          · Repo <code>data/users.xlsx</code> Rows: <strong>${excelSummary.baseUsersCount}</strong>
-          · Browser Edits / New Signups: <strong>${excelSummary.overlayDeltaCount}</strong>
+          Synced Users: <strong>${excelSummary.totalMergedUsers}</strong>
+          · DB / <code>data/users.xlsx</code> Rows: <strong>${excelSummary.baseUsersCount}</strong>
+          · Pending Local Accounts: <strong>${excelSummary.overlayDeltaCount}</strong>
         </div>
       </div>
 
@@ -6666,6 +6728,181 @@
         </div>
       </div>
     `;
+
+    const btnSyncUsersToDb = document.getElementById('btnSyncUsersToDb');
+    if (btnSyncUsersToDb) {
+      btnSyncUsersToDb.onclick = async () => {
+        btnSyncUsersToDb.disabled = true;
+        btnSyncUsersToDb.textContent = 'Syncing…';
+        try {
+          setSyncStatus('Syncing users & config to DB…');
+          const out = await window.LinguaAuth.syncLocalDataToDatabase();
+          setSyncStatus('Users synced to DB');
+          const syncedUsersCount = Number(out?.totalUsers ?? out?.mergedCount ?? state.authState?.allUsers?.length ?? 0);
+          const syncedReqsCount = Number(out?.requestsCount ?? state.authState?.allRequests?.length ?? 0);
+          toast(
+            `Synced! ${syncedUsersCount} accounts (${syncedReqsCount} requests) across Database & Excel.`
+          );
+          renderUsersTab(viewport);
+        } catch (err) {
+          setSyncStatus('User sync failed');
+          toast(err instanceof Error ? err.message : 'Failed to sync users to database.', 'error');
+        } finally {
+          btnSyncUsersToDb.disabled = false;
+          btnSyncUsersToDb.textContent = 'Sync Local → DB & Excel';
+        }
+      };
+    }
+
+    const btnAddStudentAccount = document.getElementById('btnAddStudentAccount');
+    if (btnAddStudentAccount) {
+      btnAddStudentAccount.onclick = () => {
+        openModal(`
+          <div class="admin-panel-head" style="margin-bottom:12px;">
+            <div>
+              <h2>Create Student Account</h2>
+              <p>Add a new registered student directly into the Database &amp; Excel store so they can sign in from any laptop or browser.</p>
+            </div>
+            <button type="button" class="admin-btn admin-btn-secondary admin-btn-sm" id="createAccCloseBtn">✕</button>
+          </div>
+          <form id="createStudentAccForm">
+            <div class="admin-field">
+              <label for="newAccUsername">Full Name / Username *</label>
+              <input type="text" class="admin-input" id="newAccUsername" required placeholder="e.g. Kay Zin Myint" />
+            </div>
+            <div class="admin-field">
+              <label for="newAccEmail">Email Address *</label>
+              <input type="email" class="admin-input" id="newAccEmail" required placeholder="learner@gmail.com" />
+            </div>
+            <div class="admin-grid-2">
+              <div class="admin-field">
+                <label for="newAccPhone">Phone / Viber Number</label>
+                <input type="text" class="admin-input" id="newAccPhone" placeholder="+95 9..." />
+              </div>
+              <div class="admin-field">
+                <label for="newAccDob">Date of Birth (YYYY-MM-DD)</label>
+                <input type="date" class="admin-input" id="newAccDob" />
+              </div>
+            </div>
+            <div class="admin-grid-2">
+              <div class="admin-field">
+                <label for="newAccPassword">Temporary Password (Optional)</label>
+                <input type="text" class="admin-input" id="newAccPassword" placeholder="Auto-generated if blank" />
+              </div>
+              <div class="admin-field">
+                <label for="newAccPlan">Initial Membership Plan</label>
+                <select class="admin-select" id="newAccPlan">
+                  <option value="none">Free (None)</option>
+                  <option value="per_lesson">Single Lesson Pass</option>
+                  <option value="course">Full Course Access</option>
+                  <option value="monthly">Monthly All-Access</option>
+                </select>
+              </div>
+            </div>
+            <div id="createAccResultBox" class="admin-backend-status" hidden></div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+              <button type="button" class="admin-btn admin-btn-secondary" id="createAccCancelBtn">Cancel</button>
+              <button type="submit" class="admin-btn admin-btn-primary" id="createAccSubmitBtn">Create Account</button>
+            </div>
+          </form>
+        `);
+        document.getElementById('createAccCloseBtn').onclick = closeModal;
+        document.getElementById('createAccCancelBtn').onclick = closeModal;
+        document.getElementById('createStudentAccForm').onsubmit = async (e) => {
+          e.preventDefault();
+          const username = (document.getElementById('newAccUsername')?.value || '').trim();
+          const email = (document.getElementById('newAccEmail')?.value || '').trim().toLowerCase();
+          const phoneNumber = (document.getElementById('newAccPhone')?.value || '').trim();
+          const dob = (document.getElementById('newAccDob')?.value || '').trim();
+          const password = (document.getElementById('newAccPassword')?.value || '').trim();
+          const membershipPlan = document.getElementById('newAccPlan')?.value || 'none';
+          const submitBtn = document.getElementById('createAccSubmitBtn');
+          const resBox = document.getElementById('createAccResultBox');
+
+          if (!username || !email) {
+            toast('Name and email are required.', 'error');
+            return;
+          }
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating…';
+          }
+          try {
+            const out = await window.LinguaAuth.adminCreateUserAccount({
+              username,
+              email,
+              phoneNumber,
+              dob,
+              password: password || undefined,
+              membershipPlan,
+              membershipStatus: membershipPlan !== 'none' ? 'active' : 'free'
+            });
+            if (resBox) {
+              resBox.hidden = false;
+              resBox.className = 'admin-backend-status is-success';
+              resBox.innerHTML = `
+                <div>Account created &amp; synced successfully! Temporary password:</div>
+                <code style="font-size:0.95rem; font-weight:800; padding:4px 8px; background:rgba(15,23,42,0.08); border-radius:6px; margin-top:6px; display:inline-block;">${escapeHTML(out.temporaryPassword)}</code>
+              `;
+            }
+            toast(`Created account for ${email}.`);
+            setTimeout(() => {
+              closeModal();
+              renderUsersTab(viewport);
+            }, 1800);
+          } catch (err) {
+            if (resBox) {
+              resBox.hidden = false;
+              resBox.className = 'admin-backend-status is-error';
+              resBox.textContent = err instanceof Error ? err.message : 'Failed to create account.';
+            }
+            toast(err instanceof Error ? err.message : 'Failed to create account.', 'error');
+          } finally {
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Create Account';
+            }
+          }
+        };
+      };
+    }
+
+    const btnVerifyAdminGoogle = document.getElementById('btnVerifyAdminGoogle');
+    if (btnVerifyAdminGoogle) {
+      btnVerifyAdminGoogle.onclick = async () => {
+        btnVerifyAdminGoogle.disabled = true;
+        btnVerifyAdminGoogle.textContent = 'Verifying…';
+        try {
+          await window.LinguaAuth.verifyAdminWithGoogle();
+          toast('Admin verified with Google and synced with Firestore & database!');
+          renderUsersTab(viewport);
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Google admin verification failed.', 'error');
+        } finally {
+          btnVerifyAdminGoogle.disabled = false;
+          btnVerifyAdminGoogle.textContent = 'Verify Admin with Google';
+        }
+      };
+    }
+
+    const btnRefreshUsersDb = document.getElementById('btnRefreshUsersDb');
+    if (btnRefreshUsersDb) {
+      btnRefreshUsersDb.onclick = async () => {
+        btnRefreshUsersDb.disabled = true;
+        btnRefreshUsersDb.textContent = 'Refreshing…';
+        try {
+          const usersList = await window.LinguaAuth.refreshUsersFromBackend();
+          const count = Array.isArray(usersList) ? usersList.length : (state.authState?.allUsers?.length || 0);
+          toast(`Loaded ${count} accounts from database.`);
+          renderUsersTab(viewport);
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Failed to refresh users from database.', 'error');
+        } finally {
+          btnRefreshUsersDb.disabled = false;
+          btnRefreshUsersDb.textContent = 'Refresh DB Users';
+        }
+      };
+    }
 
     const btnExportUsers = document.getElementById('btnExportUsersXlsx');
     if (btnExportUsers) {

@@ -125,12 +125,54 @@
     return cleaned;
   }
 
+  async function safeReadJsonResponse(res) {
+    if (!res) return { ok: false, isHtml: false, data: null, error: 'Empty network response.' };
+    var contentType = '';
+    try {
+      contentType = String((res.headers && res.headers.get && res.headers.get('content-type')) || '').toLowerCase();
+    } catch (_) {}
+    var text = '';
+    try {
+      text = await res.text();
+    } catch (_) {
+      return { ok: false, isHtml: false, data: null, error: 'Could not read server response.' };
+    }
+    var trimmed = String(text || '').trim();
+    if (!trimmed) {
+      return { ok: res.ok, isHtml: false, data: {}, error: res.ok ? '' : 'HTTP ' + res.status };
+    }
+    if (contentType.indexOf('text/html') !== -1 || /^<(?:!doctype|html)/i.test(trimmed)) {
+      return {
+        ok: false,
+        isHtml: true,
+        data: null,
+        error: 'No Worker API connected at this URL (received HTML page instead of JSON).'
+      };
+    }
+    try {
+      var parsed = JSON.parse(trimmed);
+      return {
+        ok: res.ok,
+        isHtml: false,
+        data: parsed,
+        error: (parsed && parsed.error) || (res.ok ? '' : 'HTTP ' + res.status)
+      };
+    } catch (_) {
+      return {
+        ok: false,
+        isHtml: false,
+        data: null,
+        error: 'Invalid JSON response from server (HTTP ' + res.status + ').'
+      };
+    }
+  }
+
   async function testConnection(candidateUrl) {
     var base = candidateUrl ? normalizeBaseUrl(candidateUrl) : getApiBase();
     if (!base && isStaticGithubHost()) {
       return {
         ok: false,
-        error: 'Enter your Cloudflare Worker https:// URL to upload videos directly from GitHub Pages.'
+        error: 'No Cloudflare Worker URL configured. Enter your Worker https:// URL or connect it in Site Settings.'
       };
     }
     if (candidateUrl && !isValidHttpUrl(base)) {
@@ -142,19 +184,21 @@
     var endpoint = (base ? base : '') + '/api/database/status?t=' + Date.now();
     try {
       var res = await fetch(endpoint, { cache: 'no-store' });
-      var data = await res.json().catch(function () {
-        return null;
-      });
+      var parsed = await safeReadJsonResponse(res);
+      var data = parsed.data;
       if (!res.ok || !data || !data.success) {
         return {
           ok: false,
-          error: (data && data.error) || 'Worker health check returned HTTP ' + res.status
+          error: parsed.error || (data && data.error) || 'Worker health check returned HTTP ' + res.status
         };
       }
+      var tables = Array.isArray(data.tables) ? data.tables : [];
       return {
         ok: true,
         url: base || '',
         database: data.database || 'edu-hub-db',
+        tables: tables,
+        tableCount: Number(data.tableCount || tables.length || 0),
         maxUploadBytes: Number(data.maxUploadBytes) || 50 * 1024 * 1024,
         storage: data.storage || { d1: true, r2: false }
       };
@@ -637,8 +681,8 @@
     if (!hasBackend()) return;
     try {
       var token = await getAuthBearerToken();
-      var headers = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = 'Bearer ' + token;
+      if (!token) return;
+      var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
       var syncEndpoint = apiUrl(forceFlag ? '/api/database/sync?force=1' : '/api/database/sync');
       await fetch(syncEndpoint, {
         method: 'POST',
@@ -678,9 +722,8 @@
           },
           body: JSON.stringify({ sheets: normalized })
         });
-        var data = await res.json().catch(function () {
-          return {};
-        });
+        var parsedAdmin = await safeReadJsonResponse(res);
+        var data = parsedAdmin.data || {};
         if (res.ok && data && data.success) {
           var serverSheets = data.sheets ? normalizeSheetsForDomain(domain, data.sheets) : normalized;
           try {
@@ -714,8 +757,8 @@
             lessonCatalog: data.lessonCatalog || null
           };
         }
-        if (data && data.error) {
-          lastServerError = String(data.error);
+        if (parsedAdmin.error) {
+          lastServerError = String(parsedAdmin.error);
         }
       } catch (_) {}
     }
@@ -730,9 +773,8 @@
         },
         body: JSON.stringify({ domain: domain, sheets: normalized })
       });
-      var syncData = await syncRes.json().catch(function () {
-        return {};
-      });
+      var parsedSync = await safeReadJsonResponse(syncRes);
+      var syncData = parsedSync.data || {};
       if (syncRes.ok && syncData && syncData.success) {
         try {
           if (global.localStorage) {
@@ -747,8 +789,8 @@
           counts: syncData.counts || {}
         };
       }
-      if (syncData && syncData.error) {
-        lastServerError = String(syncData.error);
+      if (parsedSync.error) {
+        lastServerError = String(parsedSync.error);
       }
     } catch (_) {}
 
@@ -773,15 +815,14 @@
       try {
         var d1Url = apiUrl('/api/database/bundle?domain=' + encodeURIComponent(domain) + '&t=' + Date.now());
         var d1Res = await fetch(d1Url, { cache: 'no-store' });
-        if (d1Res.ok) {
-          var d1Data = await d1Res.json();
-          if (d1Data && d1Data.success && d1Data.sheets) {
-            return {
-              sheets: normalizeSheetsForDomain(domain, d1Data.sheets),
-              database: d1Data.database || 'edu-hub-db',
-              syncedWithRepo: Boolean(d1Data.syncedWithRepo)
-            };
-          }
+        var parsedD1 = await safeReadJsonResponse(d1Res);
+        var d1Data = parsedD1.data;
+        if (d1Res.ok && d1Data && d1Data.success && d1Data.sheets) {
+          return {
+            sheets: normalizeSheetsForDomain(domain, d1Data.sheets),
+            database: d1Data.database || 'edu-hub-db',
+            syncedWithRepo: Boolean(d1Data.syncedWithRepo)
+          };
         }
       } catch (_) {}
       return null;
@@ -1155,9 +1196,8 @@
       headers: headers,
       body: JSON.stringify({ domain: domain, sheets: repoSheets, force: true })
     });
-    var forceData = await forceRes.json().catch(function () {
-      return {};
-    });
+    var parsedForce = await safeReadJsonResponse(forceRes);
+    var forceData = parsedForce.data || {};
 
     if (forceRes.ok && forceData && forceData.success) {
       var finalSheets = forceData.sheets ? normalizeSheetsForDomain(domain, forceData.sheets) : repoSheets;
@@ -1322,6 +1362,7 @@
     forceSyncRepoToD1: forceSyncRepoToD1,
     clearDraft: clearDraft,
     readFileAsInlineMedia: readFileAsInlineMedia,
+    getAuthBearerToken: getAuthBearerToken,
     cloneArray: cloneArray
   };
   global.cloneArray = cloneArray;

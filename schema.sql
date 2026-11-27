@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS lessons (
   keywords TEXT,
   accessType TEXT,
   price REAL,
+  practicePrice REAL,
   updated_at TEXT
 );
 
@@ -202,3 +203,72 @@ CREATE TABLE IF NOT EXISTS d1_meta (
   value TEXT,
   updated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS users (
+  uid TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  username TEXT NOT NULL,
+  phoneNumber TEXT DEFAULT '',
+  dob TEXT DEFAULT '',
+  role TEXT DEFAULT 'student',
+  membershipStatus TEXT DEFAULT 'free',
+  membershipPlan TEXT DEFAULT 'none',
+  membershipExpiresAt TEXT DEFAULT '',
+  subscribedLessonIds TEXT DEFAULT '[]',
+  subscribedCourses TEXT DEFAULT '[]',
+  practiceLessonIds TEXT DEFAULT '[]',
+  practiceCourses TEXT DEFAULT '[]',
+  linkedProviders TEXT DEFAULT '["password"]',
+  mustChangePassword INTEGER DEFAULT 0,
+  passwordSalt TEXT DEFAULT '',
+  passwordHash TEXT DEFAULT '',
+  createdAt TEXT,
+  updatedAt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS subscription_requests (
+  requestId TEXT PRIMARY KEY,
+  userId TEXT NOT NULL,
+  username TEXT,
+  userEmail TEXT,
+  userPhone TEXT,
+  planType TEXT,
+  lessonId TEXT DEFAULT '',
+  courseName TEXT DEFAULT '',
+  lessonTitle TEXT DEFAULT '',
+  amountLabel TEXT DEFAULT '',
+  contactChannel TEXT DEFAULT 'viber',
+  contactHandle TEXT DEFAULT '',
+  note TEXT DEFAULT '',
+  status TEXT DEFAULT 'pending',
+  adminNote TEXT DEFAULT '',
+  createdAt TEXT,
+  updatedAt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS user_progress (
+  uid TEXT PRIMARY KEY,
+  currentStreak INTEGER DEFAULT 0,
+  bestStreak INTEGER DEFAULT 0,
+  lastCompletedDate TEXT DEFAULT '',
+  streakDates TEXT DEFAULT '[]',
+  completedLessonIds TEXT DEFAULT '[]',
+  reminderEnabled INTEGER DEFAULT 1,
+  reminderTime TEXT DEFAULT '18:00',
+  lastNotifiedDate TEXT DEFAULT '',
+  updatedAt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS lesson_catalog (
+  lessonId TEXT PRIMARY KEY,
+  title TEXT,
+  course TEXT,
+  audience TEXT DEFAULT 'Adult',
+  accessType TEXT DEFAULT 'free',
+  price REAL DEFAULT 0,
+  practicePrice REAL DEFAULT 0,
+  hasExercises INTEGER DEFAULT 1,
+  updatedBy TEXT DEFAULT '',
+  updatedAt TEXT
+);
+

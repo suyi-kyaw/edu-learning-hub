@@ -48,6 +48,26 @@ service cloud.firestore {
     // Validation Blueprints
     // =========================================================
 
+    function isValidUserProfileArrays(data) {
+      return data.subscribedLessonIds is list && data.subscribedLessonIds.size() <= 100 &&
+        (data.subscribedLessonIds.size() == 0 || (data.subscribedLessonIds[0] is string && data.subscribedLessonIds[0].size() <= 128)) &&
+        (!('subscribedCourses' in data) || (
+          data.subscribedCourses is list && data.subscribedCourses.size() <= 50 &&
+          (data.subscribedCourses.size() == 0 || (data.subscribedCourses[0] is string && data.subscribedCourses[0].size() <= 80))
+        )) &&
+        (!('practiceLessonIds' in data) || (
+          data.practiceLessonIds is list && data.practiceLessonIds.size() <= 100 &&
+          (data.practiceLessonIds.size() == 0 || (data.practiceLessonIds[0] is string && data.practiceLessonIds[0].size() <= 128))
+        )) &&
+        (!('practiceCourses' in data) || (
+          data.practiceCourses is list && data.practiceCourses.size() <= 50 &&
+          (data.practiceCourses.size() == 0 || (data.practiceCourses[0] is string && data.practiceCourses[0].size() <= 80))
+        )) &&
+        data.linkedProviders is list && data.linkedProviders.size() <= 5 &&
+        (data.linkedProviders.size() == 0 || (data.linkedProviders[0] is string && data.linkedProviders[0].size() <= 40)) &&
+        (!('mustChangePassword' in data) || data.mustChangePassword is bool);
+    }
+
     function isValidUserProfile(data) {
       return data.keys().hasAll([
           'uid', 'username', 'email', 'phoneNumber', 'dob',
@@ -59,7 +79,8 @@ service cloud.firestore {
           'uid', 'username', 'email', 'phoneNumber', 'dob',
           'role', 'membershipStatus', 'membershipPlan',
           'membershipExpiresAt', 'subscribedLessonIds',
-          'linkedProviders', 'createdAt', 'updatedAt'
+          'subscribedCourses', 'practiceLessonIds', 'practiceCourses',
+          'linkedProviders', 'mustChangePassword', 'createdAt', 'updatedAt'
         ]) &&
         isValidId(data.uid) &&
         data.username is string && data.username.size() >= 1 && data.username.size() <= 60 &&
@@ -69,12 +90,9 @@ service cloud.firestore {
         data.dob.matches('^(\\d{4}-\\d{2}-\\d{2})?$') &&
         data.role in ['student', 'admin'] &&
         data.membershipStatus in ['free', 'pending', 'active', 'expired'] &&
-        data.membershipPlan in ['none', 'monthly', 'annual', 'per_lesson', 'course'] &&
+        data.membershipPlan in ['none', 'monthly', 'annual', 'per_lesson', 'course', 'practice_lesson', 'practice_course'] &&
         data.membershipExpiresAt is string && data.membershipExpiresAt.size() <= 40 &&
-        data.subscribedLessonIds is list && data.subscribedLessonIds.size() <= 100 &&
-        (data.subscribedLessonIds.size() == 0 || (data.subscribedLessonIds[0] is string && data.subscribedLessonIds[0].size() <= 128)) &&
-        data.linkedProviders is list && data.linkedProviders.size() <= 5 &&
-        (data.linkedProviders.size() == 0 || (data.linkedProviders[0] is string && data.linkedProviders[0].size() <= 40)) &&
+        isValidUserProfileArrays(data) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -116,7 +134,7 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'requestId', 'userId', 'username', 'userEmail', 'userPhone',
-          'planType', 'lessonId', 'lessonTitle', 'amountLabel',
+          'planType', 'lessonId', 'courseName', 'lessonTitle', 'amountLabel',
           'contactChannel', 'contactHandle', 'note', 'status', 'adminNote',
           'createdAt', 'updatedAt'
         ]) &&
@@ -125,8 +143,9 @@ service cloud.firestore {
         data.username is string && data.username.size() <= 60 &&
         data.userEmail is string && data.userEmail.size() <= 160 &&
         data.userPhone is string && data.userPhone.size() <= 32 &&
-        data.planType in ['monthly', 'annual', 'per_lesson', 'course'] &&
+        data.planType in ['monthly', 'annual', 'per_lesson', 'course', 'practice_lesson', 'practice_course'] &&
         data.lessonId is string && data.lessonId.size() <= 128 &&
+        (!('courseName' in data) || (data.courseName is string && data.courseName.size() <= 80)) &&
         data.lessonTitle is string && data.lessonTitle.size() <= 160 &&
         data.amountLabel is string && data.amountLabel.size() <= 40 &&
         data.contactChannel in ['email', 'viber'] &&
@@ -143,7 +162,8 @@ service cloud.firestore {
           'lessonId', 'title', 'accessType', 'price', 'updatedBy', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
-          'lessonId', 'title', 'audience', 'course', 'accessType', 'price', 'updatedBy', 'updatedAt'
+          'lessonId', 'title', 'audience', 'course', 'accessType', 'price',
+          'practicePrice', 'hasExercises', 'updatedBy', 'updatedAt'
         ]) &&
         isValidId(data.lessonId) &&
         data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
@@ -151,6 +171,8 @@ service cloud.firestore {
         (!('course' in data) || (data.course is string && data.course.size() >= 1 && data.course.size() <= 80)) &&
         data.accessType in ['free', 'paid'] &&
         data.price is number && data.price >= 0 && data.price <= 10000000 &&
+        (!('practicePrice' in data) || (data.practicePrice is number && data.practicePrice >= 0 && data.practicePrice <= 10000000)) &&
+        (!('hasExercises' in data) || data.hasExercises is bool) &&
         isValidId(data.updatedBy) &&
         data.updatedAt is timestamp;
     }
@@ -158,21 +180,28 @@ service cloud.firestore {
     function isValidSiteConfigKeys(data) {
       return data.keys().hasAll([
           'configId', 'heroEyebrow', 'heroTitleLine1', 'heroTitleHighlight', 'heroSubtitle',
-          'heroPrimaryCta', 'heroSecondaryCta', 'heroBannerUrl', 'storiesLabel', 'storiesTitle',
-          'storiesSubtitle', 'gamesLabel', 'gamesTitle', 'gamesSubtitle', 'lessonsLabel',
-          'lessonsTitle', 'lessonsSubtitle', 'adultBadge', 'adultTitle', 'adultSubtitle',
-          'adultDesc', 'adultBullets', 'adultCta', 'kidsBadge', 'kidsTitle', 'kidsSubtitle',
-          'kidsDesc', 'kidsBullets', 'kidsCta', 'contactEmail', 'contactPhone', 'contactViber',
-          'featuredReelIds', 'featuredStoryIds', 'featuredGameIds', 'updatedBy', 'updatedAt'
+          'heroPrimaryCta', 'heroSecondaryCta', 'heroBannerUrl', 'siteLogoUrl',
+          'storiesLabel', 'storiesTitle', 'storiesSubtitle',
+          'gamesLabel', 'gamesTitle', 'gamesSubtitle',
+          'lessonsLabel', 'lessonsTitle', 'lessonsSubtitle',
+          'contactEmail', 'contactPhone', 'contactViber',
+          'featuredReelIds', 'featuredStoryIds', 'featuredGameIds',
+          'updatedBy', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
           'configId', 'heroEyebrow', 'heroTitleLine1', 'heroTitleHighlight', 'heroSubtitle',
-          'heroPrimaryCta', 'heroSecondaryCta', 'heroBannerUrl', 'storiesLabel', 'storiesTitle',
-          'storiesSubtitle', 'gamesLabel', 'gamesTitle', 'gamesSubtitle', 'lessonsLabel',
-          'lessonsTitle', 'lessonsSubtitle', 'adultBadge', 'adultTitle', 'adultSubtitle',
-          'adultDesc', 'adultBullets', 'adultCta', 'kidsBadge', 'kidsTitle', 'kidsSubtitle',
-          'kidsDesc', 'kidsBullets', 'kidsCta', 'contactEmail', 'contactPhone', 'contactViber',
-          'featuredReelIds', 'featuredStoryIds', 'featuredGameIds', 'updatedBy', 'updatedAt'
+          'heroPrimaryCta', 'heroSecondaryCta', 'heroBannerUrl', 'siteLogoUrl', 'workerApiBaseUrl',
+          'storiesLabel', 'storiesTitle', 'storiesSubtitle',
+          'reelsLabel', 'reelsTitle', 'reelsSubtitle',
+          'gamesLabel', 'gamesTitle', 'gamesSubtitle',
+          'lessonsLabel', 'lessonsTitle', 'lessonsSubtitle',
+          'lessonsBadge', 'lessonsCardTitle', 'lessonsCardSubtitle', 'lessonsCardDesc', 'lessonsBullets', 'lessonsCta',
+          'courses', 'coursePrices', 'coursePracticePrices', 'practicePrice',
+          'adultBadge', 'adultTitle', 'adultSubtitle', 'adultDesc', 'adultBullets', 'adultCta',
+          'kidsBadge', 'kidsTitle', 'kidsSubtitle', 'kidsDesc', 'kidsBullets', 'kidsCta',
+          'contactEmail', 'contactPhone', 'contactViber',
+          'featuredReelIds', 'featuredStoryIds', 'featuredGameIds',
+          'updatedBy', 'updatedAt'
         ]);
     }
 
@@ -186,9 +215,14 @@ service cloud.firestore {
         data.heroPrimaryCta is string && data.heroPrimaryCta.size() <= 60 &&
         data.heroSecondaryCta is string && data.heroSecondaryCta.size() <= 60 &&
         data.heroBannerUrl is string && data.heroBannerUrl.size() <= 500 &&
+        data.siteLogoUrl is string && data.siteLogoUrl.size() <= 2000 &&
+        (!('workerApiBaseUrl' in data) || (data.workerApiBaseUrl is string && data.workerApiBaseUrl.size() <= 300)) &&
         data.storiesLabel is string && data.storiesLabel.size() <= 100 &&
         data.storiesTitle is string && data.storiesTitle.size() <= 120 &&
         data.storiesSubtitle is string && data.storiesSubtitle.size() <= 400 &&
+        (!('reelsLabel' in data) || (data.reelsLabel is string && data.reelsLabel.size() <= 100)) &&
+        (!('reelsTitle' in data) || (data.reelsTitle is string && data.reelsTitle.size() <= 120)) &&
+        (!('reelsSubtitle' in data) || (data.reelsSubtitle is string && data.reelsSubtitle.size() <= 400)) &&
         data.gamesLabel is string && data.gamesLabel.size() <= 100 &&
         data.gamesTitle is string && data.gamesTitle.size() <= 120 &&
         data.gamesSubtitle is string && data.gamesSubtitle.size() <= 400 &&
@@ -197,29 +231,40 @@ service cloud.firestore {
         data.lessonsSubtitle is string && data.lessonsSubtitle.size() <= 400;
     }
 
-    function isValidSiteConfigTracksAndContact(data) {
-      return data.adultBadge is string && data.adultBadge.size() <= 80 &&
-        data.adultTitle is string && data.adultTitle.size() <= 140 &&
-        data.adultSubtitle is string && data.adultSubtitle.size() <= 140 &&
-        data.adultDesc is string && data.adultDesc.size() <= 400 &&
-        data.adultBullets is list && data.adultBullets.size() <= 6 &&
-        (data.adultBullets.size() == 0 || (data.adultBullets[0] is string && data.adultBullets[0].size() <= 140)) &&
-        data.adultCta is string && data.adultCta.size() <= 80 &&
-        data.kidsBadge is string && data.kidsBadge.size() <= 80 &&
-        data.kidsTitle is string && data.kidsTitle.size() <= 140 &&
-        data.kidsSubtitle is string && data.kidsSubtitle.size() <= 140 &&
-        data.kidsDesc is string && data.kidsDesc.size() <= 400 &&
-        data.kidsBullets is list && data.kidsBullets.size() <= 6 &&
-        (data.kidsBullets.size() == 0 || (data.kidsBullets[0] is string && data.kidsBullets[0].size() <= 140)) &&
-        data.kidsCta is string && data.kidsCta.size() <= 80 &&
-        data.contactEmail is string && data.contactEmail.size() <= 160 &&
+    function isValidSiteConfigCoursesAndTracks(data) {
+      return (!('lessonsBadge' in data) || (data.lessonsBadge is string && data.lessonsBadge.size() <= 100)) &&
+        (!('lessonsCardTitle' in data) || (data.lessonsCardTitle is string && data.lessonsCardTitle.size() <= 140)) &&
+        (!('lessonsCardSubtitle' in data) || (data.lessonsCardSubtitle is string && data.lessonsCardSubtitle.size() <= 140)) &&
+        (!('lessonsCardDesc' in data) || (data.lessonsCardDesc is string && data.lessonsCardDesc.size() <= 400)) &&
+        (!('lessonsBullets' in data) || (data.lessonsBullets is list && data.lessonsBullets.size() <= 6)) &&
+        (!('lessonsCta' in data) || (data.lessonsCta is string && data.lessonsCta.size() <= 80)) &&
+        (!('courses' in data) || (data.courses is list && data.courses.size() <= 50)) &&
+        (!('coursePrices' in data) || (data.coursePrices is map && data.coursePrices.size() <= 50)) &&
+        (!('coursePracticePrices' in data) || (data.coursePracticePrices is map && data.coursePracticePrices.size() <= 50)) &&
+        (!('practicePrice' in data) || (data.practicePrice is number && data.practicePrice >= 0 && data.practicePrice <= 10000000)) &&
+        (!('adultBadge' in data) || (data.adultBadge is string && data.adultBadge.size() <= 80)) &&
+        (!('adultTitle' in data) || (data.adultTitle is string && data.adultTitle.size() <= 140)) &&
+        (!('adultSubtitle' in data) || (data.adultSubtitle is string && data.adultSubtitle.size() <= 140)) &&
+        (!('adultDesc' in data) || (data.adultDesc is string && data.adultDesc.size() <= 400)) &&
+        (!('adultBullets' in data) || (data.adultBullets is list && data.adultBullets.size() <= 6)) &&
+        (!('adultCta' in data) || (data.adultCta is string && data.adultCta.size() <= 80)) &&
+        (!('kidsBadge' in data) || (data.kidsBadge is string && data.kidsBadge.size() <= 80)) &&
+        (!('kidsTitle' in data) || (data.kidsTitle is string && data.kidsTitle.size() <= 140)) &&
+        (!('kidsSubtitle' in data) || (data.kidsSubtitle is string && data.kidsSubtitle.size() <= 140)) &&
+        (!('kidsDesc' in data) || (data.kidsDesc is string && data.kidsDesc.size() <= 400)) &&
+        (!('kidsBullets' in data) || (data.kidsBullets is list && data.kidsBullets.size() <= 6)) &&
+        (!('kidsCta' in data) || (data.kidsCta is string && data.kidsCta.size() <= 80));
+    }
+
+    function isValidSiteConfigContactAndFeatured(data) {
+      return data.contactEmail is string && data.contactEmail.size() <= 160 &&
         data.contactPhone is string && data.contactPhone.size() <= 40 &&
         data.contactViber is string && data.contactViber.size() <= 40 &&
-        data.featuredReelIds is list && data.featuredReelIds.size() <= 12 &&
+        data.featuredReelIds is list && data.featuredReelIds.size() <= 24 &&
         (data.featuredReelIds.size() == 0 || (data.featuredReelIds[0] is string && data.featuredReelIds[0].size() <= 128)) &&
-        data.featuredStoryIds is list && data.featuredStoryIds.size() <= 12 &&
+        data.featuredStoryIds is list && data.featuredStoryIds.size() <= 24 &&
         (data.featuredStoryIds.size() == 0 || (data.featuredStoryIds[0] is string && data.featuredStoryIds[0].size() <= 128)) &&
-        data.featuredGameIds is list && data.featuredGameIds.size() <= 12 &&
+        data.featuredGameIds is list && data.featuredGameIds.size() <= 24 &&
         (data.featuredGameIds.size() == 0 || (data.featuredGameIds[0] is string && data.featuredGameIds[0].size() <= 128)) &&
         isValidId(data.updatedBy) &&
         data.updatedAt is timestamp;
@@ -228,7 +273,8 @@ service cloud.firestore {
     function isValidSiteConfig(data) {
       return isValidSiteConfigKeys(data) &&
         isValidSiteConfigSections(data) &&
-        isValidSiteConfigTracksAndContact(data);
+        isValidSiteConfigCoursesAndTracks(data) &&
+        isValidSiteConfigContactAndFeatured(data);
     }
 
     function isValidAdminUser(data) {
@@ -262,7 +308,10 @@ service cloud.firestore {
             incoming().membershipStatus == 'free' &&
             incoming().membershipPlan == 'none' &&
             incoming().membershipExpiresAt == '' &&
-            incoming().subscribedLessonIds.size() == 0
+            incoming().subscribedLessonIds.size() == 0 &&
+            (!('subscribedCourses' in incoming()) || incoming().subscribedCourses.size() == 0) &&
+            (!('practiceLessonIds' in incoming()) || incoming().practiceLessonIds.size() == 0) &&
+            (!('practiceCourses' in incoming()) || incoming().practiceCourses.size() == 0)
           )
         );
 
@@ -277,13 +326,16 @@ service cloud.firestore {
           (
             isOwner(userId) &&
             incoming().diff(existing()).affectedKeys().hasOnly([
-              'username', 'email', 'phoneNumber', 'dob', 'linkedProviders', 'updatedAt'
+              'username', 'email', 'phoneNumber', 'dob', 'linkedProviders', 'mustChangePassword', 'updatedAt'
             ]) &&
             incoming().role == existing().role &&
             incoming().membershipStatus == existing().membershipStatus &&
             incoming().membershipPlan == existing().membershipPlan &&
             incoming().membershipExpiresAt == existing().membershipExpiresAt &&
-            incoming().subscribedLessonIds == existing().subscribedLessonIds
+            incoming().subscribedLessonIds == existing().subscribedLessonIds &&
+            (!('subscribedCourses' in existing()) || incoming().subscribedCourses == existing().subscribedCourses) &&
+            (!('practiceLessonIds' in existing()) || incoming().practiceLessonIds == existing().practiceLessonIds) &&
+            (!('practiceCourses' in existing()) || incoming().practiceCourses == existing().practiceCourses)
           )
         );
 
@@ -309,16 +361,13 @@ service cloud.firestore {
         incoming().uid == existing().uid &&
         incoming().updatedAt == request.time &&
         (
-          // Action: Record lesson completion, streak & rank update
           incoming().diff(existing()).affectedKeys().hasOnly([
             'currentStreak', 'bestStreak', 'lastCompletedDate',
             'streakDates', 'completedLessonIds', 'updatedAt'
           ]) ||
-          // Action: Update daily reminder settings or last notified date
           incoming().diff(existing()).affectedKeys().hasOnly([
             'reminderEnabled', 'reminderTime', 'lastNotifiedDate', 'updatedAt'
           ]) ||
-          // Action: Sync full progress snapshot
           incoming().diff(existing()).affectedKeys().hasOnly([
             'currentStreak', 'bestStreak', 'lastCompletedDate',
             'streakDates', 'completedLessonIds',
@@ -396,7 +445,7 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(lessonId);
     }
 
-    // 5. Public Site Config & Homepage Settings (Publicly readable, Admin writable)
+    // 5. Public Site Config, Branding & Homepage Settings (Publicly readable, Admin writable)
     match /siteConfig/{configId} {
       allow get: if isValidId(configId);
       allow list: if false;

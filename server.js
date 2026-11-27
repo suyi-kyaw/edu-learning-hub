@@ -72,6 +72,9 @@ function getTokenSecret() {
 
 const TOKEN_SECRET = getTokenSecret();
 
+const USERS_XLSX_PATH = path.join(DATA_DIR, 'users.xlsx');
+const USERS_JSON_PATH = path.join(DATA_DIR, 'users.json');
+
 function readAuthStore() {
   const empty = { users: {}, userProgress: {}, subscriptionRequests: [], lessonCatalog: {} };
   try {
@@ -89,10 +92,180 @@ function readAuthStore() {
   }
 }
 
+function formatPortablePasswordHash(u) {
+  if (!u) return '';
+  const rawHash = String(u.passwordHash || '').trim();
+  if (/^sha256\$[^$]+\$[a-f0-9]{64}$/i.test(rawHash)) return rawHash;
+  const rawSalt = String(u.passwordSalt || '').trim();
+  if (rawSalt && /^[a-f0-9]{64}$/i.test(rawHash)) {
+    return `sha256$${rawSalt}$${rawHash}`;
+  }
+  return rawHash;
+}
+
+function syncUsersFilesFromStore(store) {
+  try {
+    if (!store || typeof store !== 'object') return;
+    const usersList = Object.values(store.users || {}).filter((u) => u && u.email && u.uid);
+    const jsonUsers = {};
+    const userSheetRows = usersList.map((u) => {
+      const portableHash = formatPortablePasswordHash(u);
+      const isAdm = u.role === 'admin' || String(u.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      jsonUsers[u.uid] = {
+        uid: String(u.uid),
+        username: String(u.username || 'Learner'),
+        email: String(u.email || '').trim().toLowerCase(),
+        phoneNumber: String(u.phoneNumber || ''),
+        dob: String(u.dob || ''),
+        role: isAdm ? 'admin' : 'student',
+        membershipStatus: ['free', 'pending', 'active', 'expired'].includes(u.membershipStatus) ? u.membershipStatus : 'free',
+        membershipPlan: normalizeServerPlan(u.membershipPlan),
+        membershipExpiresAt: String(u.membershipExpiresAt || ''),
+        subscribedLessonIds: Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds : [],
+        subscribedCourses: Array.isArray(u.subscribedCourses) ? u.subscribedCourses : [],
+        practiceLessonIds: Array.isArray(u.practiceLessonIds) ? u.practiceLessonIds : [],
+        practiceCourses: Array.isArray(u.practiceCourses) ? u.practiceCourses : [],
+        linkedProviders: ['password'],
+        mustChangePassword: Boolean(u.mustChangePassword),
+        passwordSalt: String(u.passwordSalt || ''),
+        passwordHash: portableHash,
+        createdAt: u.createdAt || new Date().toISOString(),
+        updatedAt: u.updatedAt || new Date().toISOString()
+      };
+      return {
+        uid: String(u.uid),
+        username: String(u.username || 'Learner'),
+        email: String(u.email || '').trim().toLowerCase(),
+        phoneNumber: String(u.phoneNumber || ''),
+        dob: String(u.dob || ''),
+        passwordHash: portableHash,
+        role: isAdm ? 'admin' : 'student',
+        membershipStatus: ['free', 'pending', 'active', 'expired'].includes(u.membershipStatus) ? u.membershipStatus : 'free',
+        membershipPlan: normalizeServerPlan(u.membershipPlan),
+        membershipExpiresAt: String(u.membershipExpiresAt || ''),
+        subscribedLessonIds: Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds.join(',') : '',
+        subscribedCourses: Array.isArray(u.subscribedCourses) ? u.subscribedCourses.join(',') : '',
+        practiceLessonIds: Array.isArray(u.practiceLessonIds) ? u.practiceLessonIds.join(',') : '',
+        practiceCourses: Array.isArray(u.practiceCourses) ? u.practiceCourses.join(',') : '',
+        mustChangePassword: u.mustChangePassword ? 'true' : 'false',
+        createdAt: u.createdAt || '',
+        updatedAt: u.updatedAt || ''
+      };
+    });
+
+    const reqRows = (Array.isArray(store.subscriptionRequests) ? store.subscriptionRequests : []).map((r) => ({
+      requestId: String(r.requestId || ''),
+      userId: String(r.userId || ''),
+      username: String(r.username || ''),
+      userEmail: String(r.userEmail || ''),
+      userPhone: String(r.userPhone || ''),
+      planType: String(r.planType || ''),
+      lessonId: String(r.lessonId || ''),
+      courseName: String(r.courseName || ''),
+      lessonTitle: String(r.lessonTitle || ''),
+      amountLabel: String(r.amountLabel || ''),
+      contactChannel: String(r.contactChannel || ''),
+      contactHandle: String(r.contactHandle || ''),
+      note: String(r.note || ''),
+      status: String(r.status || 'pending'),
+      adminNote: String(r.adminNote || ''),
+      createdAt: String(r.createdAt || ''),
+      updatedAt: String(r.updatedAt || '')
+    }));
+
+    const progRows = Object.values(store.userProgress || {}).map((p) => ({
+      uid: String(p.uid || ''),
+      currentStreak: Number(p.currentStreak) || 0,
+      bestStreak: Number(p.bestStreak) || 0,
+      lastCompletedDate: String(p.lastCompletedDate || ''),
+      streakDates: Array.isArray(p.streakDates) ? p.streakDates.join(',') : '',
+      completedLessonIds: Array.isArray(p.completedLessonIds) ? p.completedLessonIds.join(',') : '',
+      reminderEnabled: p.reminderEnabled !== false ? 'true' : 'false',
+      reminderTime: String(p.reminderTime || '18:00'),
+      lastNotifiedDate: String(p.lastNotifiedDate || ''),
+      updatedAt: String(p.updatedAt || '')
+    }));
+
+    const catRows = Object.values(store.lessonCatalog || {}).map((c) => ({
+      lessonId: String(c.lessonId || ''),
+      title: String(c.title || ''),
+      course: String(c.course || ''),
+      accessType: String(c.accessType || 'free'),
+      price: Number(c.price) || 0,
+      practicePrice: Number(c.practicePrice) || 0,
+      hasExercises: c.hasExercises === false ? 'false' : 'true',
+      updatedBy: String(c.updatedBy || ''),
+      updatedAt: String(c.updatedAt || '')
+    }));
+
+    // Write data/users.json atomically
+    const jsonPayload = {
+      users: jsonUsers,
+      userProgress: store.userProgress || {},
+      subscriptionRequests: store.subscriptionRequests || [],
+      lessonCatalog: store.lessonCatalog || {}
+    };
+    const jsonTmp = `${USERS_JSON_PATH}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
+    fs.writeFileSync(jsonTmp, JSON.stringify(jsonPayload, null, 2), 'utf8');
+    fs.renameSync(jsonTmp, USERS_JSON_PATH);
+
+    // Write data/users.xlsx atomically
+    const wb = XLSX.utils.book_new();
+    const sheetSpecs = [
+      {
+        name: 'Users',
+        rows: userSheetRows,
+        headers: [
+          'uid', 'username', 'email', 'phoneNumber', 'dob', 'passwordHash', 'role',
+          'membershipStatus', 'membershipPlan', 'membershipExpiresAt',
+          'subscribedLessonIds', 'subscribedCourses', 'practiceLessonIds', 'practiceCourses',
+          'mustChangePassword', 'createdAt', 'updatedAt'
+        ]
+      },
+      {
+        name: 'Requests',
+        rows: reqRows,
+        headers: [
+          'requestId', 'userId', 'username', 'userEmail', 'userPhone', 'planType', 'lessonId',
+          'courseName', 'lessonTitle', 'amountLabel', 'contactChannel', 'contactHandle',
+          'note', 'status', 'adminNote', 'createdAt', 'updatedAt'
+        ]
+      },
+      {
+        name: 'Progress',
+        rows: progRows,
+        headers: [
+          'uid', 'currentStreak', 'bestStreak', 'lastCompletedDate', 'streakDates',
+          'completedLessonIds', 'reminderEnabled', 'reminderTime', 'lastNotifiedDate', 'updatedAt'
+        ]
+      },
+      {
+        name: 'Catalog',
+        rows: catRows,
+        headers: ['lessonId', 'title', 'course', 'accessType', 'price', 'practicePrice', 'hasExercises', 'updatedBy', 'updatedAt']
+      }
+    ];
+    for (const spec of sheetSpecs) {
+      const ws =
+        spec.rows.length > 0
+          ? XLSX.utils.json_to_sheet(spec.rows, { header: spec.headers })
+          : XLSX.utils.aoa_to_sheet([spec.headers]);
+      XLSX.utils.book_append_sheet(wb, ws, spec.name);
+    }
+    const xlsxBuf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const xlsxTmp = `${USERS_XLSX_PATH}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
+    fs.writeFileSync(xlsxTmp, xlsxBuf);
+    fs.renameSync(xlsxTmp, USERS_XLSX_PATH);
+  } catch (err) {
+    console.warn('Could not sync users.xlsx / users.json:', err.message);
+  }
+}
+
 function writeAuthStore(store) {
   const tmpPath = `${AUTH_STORE_PATH}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
   fs.writeFileSync(tmpPath, JSON.stringify(store, null, 2), { encoding: 'utf8', mode: 0o600 });
   fs.renameSync(tmpPath, AUTH_STORE_PATH);
+  syncUsersFilesFromStore(store);
 }
 
 function isAdminClaimed(store = readAuthStore()) {
@@ -378,8 +551,8 @@ function sanitizeUserPublic(u) {
 
 function hashPassword(password, existingSalt = null) {
   const salt = existingSalt || crypto.randomBytes(16).toString('hex');
-  const derived = crypto.scryptSync(String(password), salt, 64).toString('hex');
-  return { salt, hash: derived };
+  const hex = crypto.createHash('sha256').update(`${salt}:${String(password)}`, 'utf8').digest('hex');
+  return { salt, hash: `sha256$${salt}$${hex}` };
 }
 
 function verifyPassword(password, salt, expectedHash) {
@@ -399,6 +572,19 @@ function verifyPassword(password, salt, expectedHash) {
       return false;
     }
   }
+  if (salt && /^[a-f0-9]{64}$/i.test(expectedStr)) {
+    try {
+      const candidateHex = crypto
+        .createHash('sha256')
+        .update(`${String(salt)}:${String(password)}`, 'utf8')
+        .digest('hex');
+      const a = Buffer.from(candidateHex.toLowerCase(), 'utf8');
+      const b = Buffer.from(expectedStr.toLowerCase(), 'utf8');
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch (_) {
+      return false;
+    }
+  }
   if (!salt) return false;
   try {
     const derivedBuf = crypto.scryptSync(String(password), String(salt), 64);
@@ -408,6 +594,30 @@ function verifyPassword(password, salt, expectedHash) {
   } catch (_) {
     return false;
   }
+}
+
+function normalizePhoneServer(raw) {
+  return String(raw || '').trim().replace(/[\s\-().+]+/g, '');
+}
+
+function phonesMatchServer(a, b) {
+  const na = normalizePhoneServer(a);
+  const nb = normalizePhoneServer(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const da = String(a || '').replace(/\D+/g, '');
+  const db = String(b || '').replace(/\D+/g, '');
+  const variants = (d) => {
+    const s = new Set([d]);
+    if (d.startsWith('950') && d.length >= 10) { s.add('0' + d.slice(3)); s.add(d.slice(4)); }
+    else if (d.startsWith('95') && d.length >= 10) { s.add('0' + d.slice(2)); s.add(d.slice(2)); }
+    else if (d.startsWith('0') && d.length >= 8) { s.add(d.slice(1)); s.add('95' + d.slice(1)); }
+    return s;
+  };
+  const va = variants(da);
+  const vb = variants(db);
+  for (const x of va) if (vb.has(x)) return true;
+  return false;
 }
 
 function findAndSyncExcelUser(store, email, password) {
@@ -435,7 +645,9 @@ function findAndSyncExcelUser(store, email, password) {
     const uid =
       String(row.uid || row.UID || '').trim() ||
       `usr_${targetEmail.replace(/[^a-z0-9]/g, '_')}`;
-    const { salt, hash } = hashPassword(password);
+    const { salt, hash } = storedPw.startsWith('sha256$')
+      ? { salt: storedPw.split('$')[1] || '', hash: storedPw }
+      : hashPassword(password);
     const rawPlan = String(row.membershipPlan || 'none').trim().toLowerCase();
     const rawCourses = String(row.subscribedCourses || row.SubscribedCourses || '')
       .split(',')
@@ -504,61 +716,67 @@ function findAndSyncExcelUser(store, email, password) {
 function syncAllExcelUsers(store) {
   try {
     const usersXlsxPath = path.join(__dirname, 'data', 'users.xlsx');
-    if (!fs.existsSync(usersXlsxPath)) return store;
-    const wb = XLSX.read(fs.readFileSync(usersXlsxPath), { type: 'buffer' });
-    const sheetName =
-      wb.SheetNames.find((s) => String(s).toLowerCase() === 'users') || wb.SheetNames[0];
-    if (!sheetName) return store;
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
-    let changed = false;
-    for (const row of rows) {
-      const email = String(row.email || row.Email || '').trim().toLowerCase();
-      if (!email) continue;
-      const uid = String(row.uid || row.UID || '').trim() || `usr_${email.replace(/[^a-z0-9]/g, '_')}`;
-      if (!store.users[uid]) {
-        const isAdminRow = String(row.role || '').trim().toLowerCase() === 'admin' || email === ADMIN_EMAIL.toLowerCase();
-        const storedPw = String(row.passwordHash || row.password || row.Password || '').trim();
-        let salt = '';
-        let hash = '';
-        if (storedPw.startsWith('sha256$')) {
-          const parts = storedPw.split('$');
-          salt = parts[1] || '';
-          hash = parts[2] || '';
-        } else if (storedPw) {
-          const res = hashPassword(storedPw);
-          salt = res.salt;
-          hash = res.hash;
+    if (fs.existsSync(usersXlsxPath)) {
+      const wb = XLSX.read(fs.readFileSync(usersXlsxPath), { type: 'buffer' });
+      const sheetName =
+        wb.SheetNames.find((s) => String(s).toLowerCase() === 'users') || wb.SheetNames[0];
+      if (sheetName) {
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+        let changed = false;
+        for (const row of rows) {
+          const email = String(row.email || row.Email || '').trim().toLowerCase();
+          if (!email) continue;
+          const uid = String(row.uid || row.UID || '').trim() || `usr_${email.replace(/[^a-z0-9]/g, '_')}`;
+          if (!store.users[uid]) {
+            const isAdminRow = String(row.role || '').trim().toLowerCase() === 'admin' || email === ADMIN_EMAIL.toLowerCase();
+            const storedPw = String(row.passwordHash || row.password || row.Password || '').trim();
+            let salt = '';
+            let hash = '';
+            if (storedPw.startsWith('sha256$')) {
+              const parts = storedPw.split('$');
+              salt = parts[1] || '';
+              hash = storedPw;
+            } else if (storedPw) {
+              const res = hashPassword(storedPw);
+              salt = res.salt;
+              hash = res.hash;
+            }
+            store.users[uid] = {
+              uid,
+              username: String(row.username || row.Username || email.split('@')[0]).trim(),
+              email,
+              phoneNumber: String(row.phoneNumber || row.PhoneNumber || '').trim(),
+              dob: String(row.dob || row.DOB || '').trim(),
+              role: isAdminRow ? 'admin' : 'student',
+              membershipStatus: String(row.membershipStatus || (isAdminRow ? 'active' : 'free')).trim(),
+              membershipPlan: String(row.membershipPlan || (isAdminRow ? 'course' : 'none')).trim(),
+              membershipExpiresAt: String(row.membershipExpiresAt || '').trim(),
+              subscribedLessonIds: String(row.subscribedLessonIds || '').split(',').map((s) => s.trim()).filter(Boolean),
+              subscribedCourses: String(row.subscribedCourses || '').split(',').map((s) => s.trim()).filter(Boolean),
+              practiceLessonIds: String(row.practiceLessonIds || '').split(',').map((s) => s.trim()).filter(Boolean),
+              practiceCourses: String(row.practiceCourses || '').split(',').map((s) => s.trim()).filter(Boolean),
+              linkedProviders: ['password'],
+              mustChangePassword: String(row.mustChangePassword || '').toLowerCase() === 'true',
+              passwordSalt: salt,
+              passwordHash: hash,
+              createdAt: String(row.createdAt || new Date().toISOString()),
+              updatedAt: String(row.updatedAt || new Date().toISOString())
+            };
+            if (!store.userProgress[uid]) {
+              store.userProgress[uid] = sanitizeProgressInput(null, uid);
+            }
+            changed = true;
+          }
         }
-        store.users[uid] = {
-          uid,
-          username: String(row.username || row.Username || email.split('@')[0]).trim(),
-          email,
-          phoneNumber: String(row.phoneNumber || row.PhoneNumber || '').trim(),
-          dob: String(row.dob || row.DOB || '').trim(),
-          role: isAdminRow ? 'admin' : 'student',
-          membershipStatus: String(row.membershipStatus || (isAdminRow ? 'active' : 'free')).trim(),
-          membershipPlan: String(row.membershipPlan || (isAdminRow ? 'course' : 'none')).trim(),
-          membershipExpiresAt: String(row.membershipExpiresAt || '').trim(),
-          subscribedLessonIds: String(row.subscribedLessonIds || '').split(',').map((s) => s.trim()).filter(Boolean),
-          subscribedCourses: String(row.subscribedCourses || '').split(',').map((s) => s.trim()).filter(Boolean),
-          practiceLessonIds: String(row.practiceLessonIds || '').split(',').map((s) => s.trim()).filter(Boolean),
-          practiceCourses: String(row.practiceCourses || '').split(',').map((s) => s.trim()).filter(Boolean),
-          linkedProviders: ['password'],
-          mustChangePassword: false,
-          passwordSalt: salt,
-          passwordHash: hash,
-          createdAt: String(row.createdAt || new Date().toISOString()),
-          updatedAt: String(row.updatedAt || new Date().toISOString())
-        };
-        if (!store.userProgress[uid]) {
-          store.userProgress[uid] = sanitizeProgressInput(null, uid);
+        const reconciled = reconcileAuthStoreWithLessons(store);
+        if (changed || reconciled.changed || !fs.existsSync(USERS_JSON_PATH)) {
+          writeAuthStore(store);
         }
-        changed = true;
+        return store;
       }
     }
-    const reconciled = reconcileAuthStoreWithLessons(store);
-    if (changed || reconciled.changed) {
-      writeAuthStore(store);
+    if (!fs.existsSync(USERS_JSON_PATH)) {
+      syncUsersFilesFromStore(store);
     }
   } catch (err) {
     console.warn('Could not sync users from users.xlsx:', err.message);
@@ -566,7 +784,7 @@ function syncAllExcelUsers(store) {
   return store;
 }
 
-// Initial sync of all Excel users into store on launch
+// Initial sync of all Excel users into store & users.json on launch
 syncAllExcelUsers(readAuthStore());
 
 function generateTempPassword(length = 12) {
@@ -736,7 +954,8 @@ const DEFAULT_SITE_CONFIG = {
   contactViber: '+95 9 798 123 456',
   featuredReelIds: ['cny_01', 'daily_01', 'kids_01'],
   featuredStoryIds: ['lesson-01', 'lesson-02'],
-  featuredGameIds: ['game-01']
+  featuredGameIds: ['game-01'],
+  workerApiBaseUrl: ''
 };
 
 // Enable CORS, Cross-Origin Resource Sharing for assets, and preflight handling
@@ -848,39 +1067,31 @@ function requireAuthToken(req, res, next) {
 // Admin Authentication Middleware (Bearer token + verified admin role in store)
 function requireAdminToken(req, res, next) {
   const authHeader = String(req.headers.authorization || '');
-  if (authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7).trim();
-    if (token) {
-      try {
-        const decoded = verifyAuthToken(token);
-        const store = readAuthStore();
-        const user = store.users[decoded.uid];
-        if (user && user.role === 'admin') {
-          req.authDecoded = decoded;
-          req.authUser = user;
-          req.adminUser = user;
-          return next();
-        }
-      } catch (_) {}
+  if (!authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'Please sign in as an administrator first.' });
+  }
+  const token = authHeader.slice(7).trim();
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Empty authentication token.' });
+  }
+  try {
+    const decoded = verifyAuthToken(token);
+    const store = readAuthStore();
+    const user = store.users[decoded.uid];
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Account no longer exists. Please sign in again.' });
     }
-  }
-
-  const uid = String(req.headers['x-admin-uid'] || req.headers['x-user-uid'] || '').trim();
-  const store = readAuthStore();
-  if (uid && store.users[uid] && store.users[uid].role === 'admin') {
-    req.authUser = store.users[uid];
-    req.adminUser = store.users[uid];
+    const email = String(user.email || '').trim().toLowerCase();
+    if (user.role !== 'admin' && email !== ADMIN_EMAIL.toLowerCase()) {
+      return res.status(403).json({ success: false, error: 'Administrator privileges required.' });
+    }
+    req.authDecoded = decoded;
+    req.authUser = user;
+    req.adminUser = user;
     return next();
+  } catch (err) {
+    return res.status(401).json({ success: false, error: err.message || 'Invalid or expired session.' });
   }
-
-  const adminUser = Object.values(store.users).find((u) => u && u.role === 'admin');
-  if (adminUser) {
-    req.authUser = adminUser;
-    req.adminUser = adminUser;
-    return next();
-  }
-
-  return res.status(403).json({ success: false, error: 'Administrator privileges required.' });
 }
 
 // Helper to parse workbooks
@@ -1217,6 +1428,10 @@ function sanitizeSiteConfigInput(raw) {
     featuredReelIds: strList('featuredReelIds', 24, 128, !('featuredReelIds' in input), true),
     featuredStoryIds: strList('featuredStoryIds', 24, 128, !('featuredStoryIds' in input), true),
     featuredGameIds: strList('featuredGameIds', 24, 128, !('featuredGameIds' in input), true),
+    workerApiBaseUrl: (() => {
+      const cleanW = typeof input.workerApiBaseUrl === 'string' ? input.workerApiBaseUrl.trim().replace(/\/+$/, '').slice(0, 300) : '';
+      return /^https?:\/\/[^/\s]+/i.test(cleanW) ? cleanW : '';
+    })(),
     updatedAt: typeof input.updatedAt === 'string' && input.updatedAt.trim() ? input.updatedAt.trim().slice(0, 64) : undefined
   };
 }
@@ -1270,15 +1485,19 @@ app.get(['/api/database/status', '/api/status'], (req, res) => {
       'exercises',
       'vocabulary',
       'writing_characters',
-      'story_segments',
+      'pronunciation',
+      'stories_lessons',
+      'story_scenes',
+      'stories_vocabulary',
+      'stories_exercises',
       'games',
       'reels_videos',
       'users',
       'subscription_requests',
-      'user_subscriptions',
       'user_progress',
+      'lesson_catalog',
       'site_config',
-      'sqlite_sequence'
+      'd1_meta'
     ],
     timestamp: new Date().toISOString()
   });
@@ -1375,7 +1594,7 @@ app.get(['/api/database/bundle', '/api/bundle'], (req, res) => {
 });
 
 // Database Sync Endpoint (Parity with Cloudflare Worker API)
-app.post('/api/database/sync', jsonParser, (req, res) => {
+app.post('/api/database/sync', requireAdminToken, jsonParser, (req, res) => {
   try {
     const domain = String(req.body?.domain || 'lessons').toLowerCase();
     const sheets = req.body?.sheets;
@@ -1469,7 +1688,7 @@ app.post('/api/database/sync', jsonParser, (req, res) => {
   }
 });
 
-app.post('/api/database/force-sync', jsonParser, (req, res) => {
+app.post('/api/database/force-sync', requireAdminToken, jsonParser, (req, res) => {
   try {
     const domain = String(req.body?.domain || 'stories').toLowerCase();
     const sheets = req.body?.sheets;
@@ -1833,26 +2052,143 @@ app.post('/api/auth/login', jsonParser, (req, res) => {
   }
 });
 
-// Token refresh / session exchange endpoint
+// Authenticated token refresh / credential exchange endpoint
 app.post('/api/auth/token', jsonParser, (req, res) => {
   try {
-    const { uid, email } = req.body || {};
+    const authHeader = String(req.headers.authorization || '');
     const store = readAuthStore();
     let user = null;
-    if (uid && store.users[uid]) {
-      user = store.users[uid];
-    } else if (email) {
-      user = findUserByEmail(store, email);
-    } else {
-      user = Object.values(store.users).find((u) => u && u.role === 'admin');
+    if (authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = verifyAuthToken(authHeader.slice(7).trim());
+        user = store.users[decoded.uid] || null;
+      } catch (_) {}
     }
     if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found.' });
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const password = String(req.body?.password || '');
+      if (email && password) {
+        const candidate = findUserByEmail(store, email);
+        if (candidate && verifyPassword(password, candidate.passwordSalt, candidate.passwordHash)) {
+          user = candidate;
+        }
+      }
+    }
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Authentication required to issue a session token.' });
     }
     const token = signAuthToken(user);
     res.json({ success: true, token, user: sanitizeUserPublic(user) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Self-service password reset verified by Email + DOB + Phone Number (Parity with Worker)
+app.post('/api/auth/reset-password', jsonParser, (req, res) => {
+  try {
+    const body = req.body || {};
+    const email = String(body.email || '').trim().toLowerCase();
+    const dob = String(body.dob || '').trim().slice(0, 10);
+    const phoneNumber = String(body.phoneNumber || '').trim();
+    const newPassword = String(body.newPassword || '');
+
+    if (!email || !dob || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please enter your Email, Date of Birth, and Phone / Viber Number to verify your identity.'
+      });
+    }
+    if (newPassword.length < 6 || newPassword.length > 128) {
+      return res.status(400).json({ success: false, error: 'New password must be between 6 and 128 characters.' });
+    }
+
+    const store = readAuthStore();
+    const user = findUserByEmail(store, email);
+    if (!user) {
+      return res.status(404).json({ success: false, error: `No account found in database for ${email}.` });
+    }
+    const storedDob = String(user.dob || '').trim().slice(0, 10);
+    if (!storedDob || !String(user.phoneNumber || '').trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'This account cannot be self-reset without Date of Birth and Phone saved. Contact the site Admin.'
+      });
+    }
+    if (storedDob !== dob || !phonesMatchServer(user.phoneNumber, phoneNumber)) {
+      return res.status(403).json({ success: false, error: 'Verification details did not match our records.' });
+    }
+
+    const { salt, hash } = hashPassword(newPassword);
+    user.passwordSalt = salt;
+    user.passwordHash = hash;
+    user.mustChangePassword = false;
+    user.updatedAt = new Date().toISOString();
+    writeAuthStore(store);
+
+    res.json({ success: true, message: 'Password reset successfully! Sign in now with your new password.' });
+  } catch (err) {
+    console.error('POST /api/auth/reset-password error:', err);
+    res.status(500).json({ success: false, error: 'Unable to reset password.' });
+  }
+});
+
+// Auto-migrate legacy Chrome-only student accounts upward into auth-store + users.xlsx + users.json
+app.post('/api/auth/migrate-browser-users', jsonParser, (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body?.users) ? req.body.users : [];
+    const store = readAuthStore();
+    const migrated = [];
+    const nowIso = new Date().toISOString();
+
+    for (const raw of incoming.slice(0, 100)) {
+      const email = String(raw?.email || '').trim().toLowerCase().slice(0, 160);
+      const pwHash = String(raw?.passwordHash || '').trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
+      if (!/^sha256\$[a-f0-9]+\$[a-f0-9]{64}$/i.test(pwHash)) continue;
+      if (findUserByEmail(store, email)) continue;
+
+      const rawUid = String(raw?.uid || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+      const uid = rawUid && !store.users[rawUid] ? rawUid : 'usr_' + crypto.randomBytes(8).toString('hex');
+      const parts = pwHash.split('$');
+      const username = String(raw?.username || email.split('@')[0] || 'Learner').trim().slice(0, 60);
+      const phoneNumber = String(raw?.phoneNumber || '').trim().slice(0, 32);
+      const dob = /^\d{4}-\d{2}-\d{2}$/.test(String(raw?.dob || '').trim()) ? String(raw.dob).trim() : '';
+
+      store.users[uid] = {
+        uid,
+        username,
+        email,
+        phoneNumber,
+        dob,
+        role: 'student',
+        membershipStatus: 'free',
+        membershipPlan: 'none',
+        membershipExpiresAt: '',
+        subscribedLessonIds: [],
+        subscribedCourses: [],
+        practiceLessonIds: [],
+        practiceCourses: [],
+        linkedProviders: ['password'],
+        mustChangePassword: false,
+        passwordSalt: parts[1] || '',
+        passwordHash: pwHash,
+        createdAt: String(raw?.createdAt || nowIso),
+        updatedAt: String(raw?.updatedAt || nowIso)
+      };
+      if (!store.userProgress[uid]) {
+        store.userProgress[uid] = sanitizeProgressInput(null, uid);
+      }
+      migrated.push(email);
+    }
+
+    if (migrated.length > 0) {
+      writeAuthStore(store);
+    }
+    res.json({ success: true, migratedCount: migrated.length, migratedEmails: migrated });
+  } catch (err) {
+    console.error('POST /api/auth/migrate-browser-users error:', err);
+    res.status(500).json({ success: false, error: 'Unable to migrate browser accounts.' });
   }
 });
 
@@ -2268,6 +2604,8 @@ const handleAdminSiteConfigSave = (req, res) => {
 };
 app.put('/api/admin/site-config', requireAdminToken, jsonParser, handleAdminSiteConfigSave);
 app.post('/api/admin/site-config', requireAdminToken, jsonParser, handleAdminSiteConfigSave);
+app.put('/api/site-config', requireAdminToken, jsonParser, handleAdminSiteConfigSave);
+app.post('/api/site-config', requireAdminToken, jsonParser, handleAdminSiteConfigSave);
 
 // Create a new course in site-config
 app.post('/api/admin/courses', requireAdminToken, jsonParser, (req, res) => {
@@ -3294,7 +3632,130 @@ app.post('/api/admin/requests/:requestId/reject', requireAdminToken, jsonParser,
   }
 });
 
-app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, (req, res) => {
+app.get('/api/admin/users', requireAdminToken, (req, res) => {
+  try {
+    const store = readAuthStore();
+    const reconciled = reconcileAuthStoreWithLessons(store);
+    if (reconciled.changed) {
+      writeAuthStore(store);
+    }
+    const allUsers = Object.values(store.users || {})
+      .map(sanitizeUserPublic)
+      .sort((a, b) => (a.username || '').localeCompare(b.username || ''));
+    const allRequests = [...(store.subscriptionRequests || [])].sort(
+      (a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || '')
+    );
+    const progress = Object.values(store.userProgress || {});
+    res.json({
+      success: true,
+      allUsers,
+      allRequests,
+      progress,
+      lessonCatalog: store.lessonCatalog || {}
+    });
+  } catch (err) {
+    console.error('GET /api/admin/users error:', err);
+    res.status(500).json({ success: false, error: 'Failed to load users from server.' });
+  }
+});
+
+app.post('/api/admin/users/sync', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const body = req.body || {};
+    const inUsers = Array.isArray(body.users) ? body.users : [];
+    const inRequests = Array.isArray(body.requests) ? body.requests : [];
+    const inProgress = Array.isArray(body.progress) ? body.progress : [];
+    const inCatalog = Array.isArray(body.lessonCatalog) ? body.lessonCatalog : [];
+    const store = readAuthStore();
+    const nowIso = new Date().toISOString();
+
+    for (const u of inUsers) {
+      const email = String(u?.email || '').trim().toLowerCase();
+      const uid = String(u?.uid || '').trim();
+      if (!email || !uid) continue;
+      const existingByUid = store.users[uid];
+      const existingByEmail = findUserByEmail(store, email);
+      const existing = existingByUid || existingByEmail;
+      const exTs = Date.parse(String(existing?.updatedAt || '')) || 0;
+      const inTs = Date.parse(String(u.updatedAt || '')) || 0;
+      if (!existing || inTs >= exTs) {
+        const targetUid = existing?.uid || uid;
+        const isAdm = String(u.role || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL.toLowerCase();
+        const rawHash = String(u.passwordHash || existing?.passwordHash || '').trim();
+        const rawSalt = String(u.passwordSalt || existing?.passwordSalt || (rawHash.startsWith('sha256$') ? rawHash.split('$')[1] || '' : '')).trim();
+        store.users[targetUid] = {
+          uid: targetUid,
+          username: String(u.username || existing?.username || email.split('@')[0] || 'Learner').trim().slice(0, 60),
+          email,
+          phoneNumber: String(u.phoneNumber ?? existing?.phoneNumber ?? '').trim().slice(0, 32),
+          dob: String(u.dob ?? existing?.dob ?? '').trim().slice(0, 10),
+          role: isAdm ? 'admin' : 'student',
+          membershipStatus: ['free', 'pending', 'active', 'expired'].includes(u.membershipStatus)
+            ? u.membershipStatus
+            : existing?.membershipStatus || (isAdm ? 'active' : 'free'),
+          membershipPlan: normalizeServerPlan(u.membershipPlan || existing?.membershipPlan || 'none'),
+          membershipExpiresAt: String(u.membershipExpiresAt ?? existing?.membershipExpiresAt ?? '').trim().slice(0, 40),
+          subscribedLessonIds: Array.isArray(u.subscribedLessonIds) ? u.subscribedLessonIds.slice(0, 100) : (existing?.subscribedLessonIds || []),
+          subscribedCourses: Array.isArray(u.subscribedCourses)
+            ? Array.from(new Set(u.subscribedCourses.map(normalizeCourseNameServer).filter(Boolean))).slice(0, 50)
+            : (existing?.subscribedCourses || []),
+          practiceLessonIds: Array.isArray(u.practiceLessonIds) ? u.practiceLessonIds.slice(0, 100) : (existing?.practiceLessonIds || []),
+          practiceCourses: Array.isArray(u.practiceCourses)
+            ? Array.from(new Set(u.practiceCourses.map(normalizeCourseNameServer).filter(Boolean))).slice(0, 50)
+            : (existing?.practiceCourses || []),
+          linkedProviders: ['password'],
+          mustChangePassword: Boolean(u.mustChangePassword),
+          passwordSalt: rawSalt,
+          passwordHash: rawHash,
+          createdAt: String(u.createdAt || existing?.createdAt || nowIso),
+          updatedAt: String(u.updatedAt || nowIso)
+        };
+      }
+    }
+
+    for (const r of inRequests) {
+      if (!r?.requestId || !r?.userId) continue;
+      const idx = store.subscriptionRequests.findIndex((x) => x.requestId === r.requestId);
+      if (idx >= 0) {
+        const exTs = Date.parse(String(store.subscriptionRequests[idx].updatedAt || '')) || 0;
+        const inTs = Date.parse(String(r.updatedAt || '')) || 0;
+        if (inTs >= exTs) store.subscriptionRequests[idx] = { ...store.subscriptionRequests[idx], ...r };
+      } else {
+        store.subscriptionRequests.push(r);
+      }
+    }
+
+    for (const p of inProgress) {
+      if (!p?.uid) continue;
+      store.userProgress[p.uid] = sanitizeProgressInput(p, p.uid);
+    }
+
+    for (const c of inCatalog) {
+      if (!c?.lessonId) continue;
+      store.lessonCatalog[c.lessonId] = {
+        lessonId: String(c.lessonId),
+        title: String(c.title || c.lessonId),
+        course: normalizeCourseNameServer(c.course || 'HSK 2'),
+        accessType: c.accessType === 'paid' ? 'paid' : 'free',
+        price: Number(c.price) || 0,
+        practicePrice: Number(c.practicePrice) || 0,
+        hasExercises: c.hasExercises !== false,
+        updatedBy: String(c.updatedBy || req.authUser.uid),
+        updatedAt: String(c.updatedAt || nowIso)
+      };
+    }
+
+    writeAuthStore(store);
+    const allUsers = Object.values(store.users).map(sanitizeUserPublic);
+    const allRequests = [...store.subscriptionRequests];
+    res.json({ success: true, allUsers, allRequests });
+  } catch (err) {
+    console.error('POST /api/admin/users/sync error:', err);
+    res.status(500).json({ success: false, error: 'Failed to sync user store.' });
+  }
+});
+
+const handleAdminUpdateUser = (req, res) => {
   try {
     const uid = String(req.params.uid || '').trim();
     const body = req.body || {};
@@ -3304,6 +3765,24 @@ app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, (req,
       return res.status(404).json({ success: false, error: 'User profile not found.' });
     }
 
+    if (typeof body.username === 'string' && body.username.trim()) {
+      targetUser.username = body.username.trim().slice(0, 60);
+    }
+    if (typeof body.email === 'string' && body.email.trim()) {
+      targetUser.email = body.email.trim().toLowerCase().slice(0, 160);
+    }
+    if (typeof body.phoneNumber === 'string') {
+      targetUser.phoneNumber = body.phoneNumber.trim().slice(0, 32);
+    }
+    if (typeof body.dob === 'string') {
+      const cleanDob = body.dob.trim().slice(0, 10);
+      if (!cleanDob || /^\d{4}-\d{2}-\d{2}$/.test(cleanDob)) {
+        targetUser.dob = cleanDob;
+      }
+    }
+    if (body.role === 'admin' || body.role === 'student') {
+      targetUser.role = body.role;
+    }
     if (['free', 'pending', 'active', 'expired'].includes(body.membershipStatus)) {
       targetUser.membershipStatus = body.membershipStatus;
     }
@@ -3342,10 +3821,73 @@ app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, (req,
     const allUsers = Object.values(store.users).map(sanitizeUserPublic);
     res.json({ success: true, user: sanitizeUserPublic(store.users[uid] || targetUser), allUsers });
   } catch (err) {
-    console.error('PUT /api/admin/users/:uid/membership error:', err);
-    res.status(500).json({ success: false, error: 'Failed to update user membership.' });
+    console.error('PUT /api/admin/users/:uid error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update user.' });
+  }
+};
+
+app.post('/api/admin/users', requireAdminToken, jsonParser, (req, res) => {
+  try {
+    const body = req.body || {};
+    const email = String(body.email || '').trim().toLowerCase().slice(0, 160);
+    const password = String(body.password || '').trim() || generateTempPassword(10);
+    const username = String(body.username || '').trim().slice(0, 60) || (email.includes('@') ? email.split('@')[0] : 'Learner');
+    const phoneNumber = String(body.phoneNumber || '').trim().slice(0, 32);
+    const rawDob = String(body.dob || '').trim();
+    const dob = /^\d{4}-\d{2}-\d{2}$/.test(rawDob) ? rawDob : '';
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+    }
+    const store = readAuthStore();
+    if (findUserByEmail(store, email)) {
+      return res.status(409).json({ success: false, error: 'An account with this email already exists.' });
+    }
+
+    const uid = 'usr_' + crypto.randomBytes(10).toString('hex');
+    const { salt, hash } = hashPassword(password);
+    const nowIso = new Date().toISOString();
+
+    const newUser = {
+      uid,
+      username,
+      email,
+      phoneNumber,
+      dob,
+      role: body.role === 'admin' ? 'admin' : 'student',
+      membershipStatus: ['free', 'pending', 'active', 'expired'].includes(body.membershipStatus) ? body.membershipStatus : 'free',
+      membershipPlan: normalizeServerPlan(body.membershipPlan || 'none'),
+      membershipExpiresAt: String(body.membershipExpiresAt || '').trim().slice(0, 40),
+      subscribedLessonIds: Array.isArray(body.subscribedLessonIds) ? body.subscribedLessonIds.slice(0, 100) : [],
+      subscribedCourses: Array.isArray(body.subscribedCourses) ? body.subscribedCourses.map(normalizeCourseNameServer).filter(Boolean) : [],
+      practiceLessonIds: Array.isArray(body.practiceLessonIds) ? body.practiceLessonIds.slice(0, 100) : [],
+      practiceCourses: Array.isArray(body.practiceCourses) ? body.practiceCourses.map(normalizeCourseNameServer).filter(Boolean) : [],
+      linkedProviders: ['password'],
+      mustChangePassword: Boolean(body.mustChangePassword ?? true),
+      passwordSalt: salt,
+      passwordHash: hash,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    store.users[uid] = newUser;
+    if (!store.userProgress[uid]) {
+      store.userProgress[uid] = sanitizeProgressInput(null, uid);
+    }
+    writeAuthStore(store);
+
+    const allUsers = Object.values(store.users).map(sanitizeUserPublic);
+    res.status(201).json({ success: true, user: sanitizeUserPublic(newUser), temporaryPassword: password, allUsers });
+  } catch (err) {
+    console.error('POST /api/admin/users error:', err);
+    res.status(500).json({ success: false, error: 'Failed to create user account.' });
   }
 });
+
+app.put('/api/admin/users/:uid', requireAdminToken, jsonParser, handleAdminUpdateUser);
+app.post('/api/admin/users/:uid', requireAdminToken, jsonParser, handleAdminUpdateUser);
+app.put('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, handleAdminUpdateUser);
+app.post('/api/admin/users/:uid/membership', requireAdminToken, jsonParser, handleAdminUpdateUser);
 
 app.post('/api/admin/users/:uid/reset-password', requireAdminToken, jsonParser, async (req, res) => {
   try {

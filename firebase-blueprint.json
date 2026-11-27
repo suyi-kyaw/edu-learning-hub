@@ -2,12 +2,12 @@
   "entities": {
     "UserProfile": {
       "title": "User Profile & Membership",
-      "description": "Learner account profile storing personal details, linked auth providers, role, and active membership status.",
+      "description": "Learner account profile storing personal details, linked auth providers, role, course/lesson entitlements, and active membership status.",
       "type": "object",
       "properties": {
         "uid": {
           "type": "string",
-          "description": "Firebase Auth user UID",
+          "description": "User UID",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -47,7 +47,7 @@
         },
         "membershipPlan": {
           "type": "string",
-          "enum": ["none", "monthly", "annual", "per_lesson", "course"],
+          "enum": ["none", "monthly", "annual", "per_lesson", "course", "practice_lesson", "practice_course"],
           "description": "Active or requested membership tier"
         },
         "membershipExpiresAt": {
@@ -57,11 +57,27 @@
         },
         "subscribedLessonIds": {
           "type": "array",
-          "description": "List of individually unlocked paid lesson IDs (max 100)"
+          "description": "List of individually unlocked full-access paid lesson IDs (max 100)"
+        },
+        "subscribedCourses": {
+          "type": "array",
+          "description": "List of unlocked full-access course names (max 50)"
+        },
+        "practiceLessonIds": {
+          "type": "array",
+          "description": "List of individually unlocked practice-only lesson IDs (max 100)"
+        },
+        "practiceCourses": {
+          "type": "array",
+          "description": "List of unlocked practice-only course names (max 50)"
         },
         "linkedProviders": {
           "type": "array",
           "description": "Connected sign-in providers (password, google.com)"
+        },
+        "mustChangePassword": {
+          "type": "boolean",
+          "description": "Whether the learner must rotate a temporary password on next sign-in"
         },
         "createdAt": {
           "type": "string",
@@ -92,7 +108,7 @@
     },
     "SubscriptionRequest": {
       "title": "Subscription Payment Request",
-      "description": "Learner request to subscribe to a paid plan or lesson via Email or Viber QR payment verification.",
+      "description": "Learner request to subscribe to a paid plan, course, practice tier, or lesson via Email or Viber QR payment verification.",
       "type": "object",
       "properties": {
         "requestId": {
@@ -104,7 +120,7 @@
         },
         "userId": {
           "type": "string",
-          "description": "Requester Firebase Auth UID",
+          "description": "Requester UID",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -127,17 +143,22 @@
         },
         "planType": {
           "type": "string",
-          "enum": ["monthly", "annual", "per_lesson", "course"],
+          "enum": ["monthly", "annual", "per_lesson", "course", "practice_lesson", "practice_course"],
           "description": "Requested subscription plan type"
         },
         "lessonId": {
           "type": "string",
-          "description": "Target lesson ID when planType is per_lesson, otherwise empty string",
+          "description": "Target lesson ID when planType is per_lesson or practice_lesson, otherwise empty string",
           "maxLength": 128
+        },
+        "courseName": {
+          "type": "string",
+          "description": "Target course name when applicable",
+          "maxLength": 80
         },
         "lessonTitle": {
           "type": "string",
-          "description": "Target lesson title or All-Access label",
+          "description": "Target lesson title or course label",
           "maxLength": 160
         },
         "amountLabel": {
@@ -202,7 +223,7 @@
     },
     "LessonCatalogItem": {
       "title": "Lesson Pricing Configuration",
-      "description": "Access level (free or paid) and price configured per lesson on curriculum upload.",
+      "description": "Access level (free or paid), Kyat full & practice prices, and exercise availability configured per lesson.",
       "type": "object",
       "properties": {
         "lessonId": {
@@ -219,7 +240,8 @@
         },
         "course": {
           "type": "string",
-          "description": "Course name (e.g. HSK 2)"
+          "description": "Course name (e.g. HSK 2)",
+          "maxLength": 80
         },
         "audience": {
           "type": "string",
@@ -233,7 +255,15 @@
         },
         "price": {
           "type": "number",
-          "description": "Per-lesson unlock price in Kyat"
+          "description": "Per-lesson full-access unlock price in Kyat"
+        },
+        "practicePrice": {
+          "type": "number",
+          "description": "Per-lesson practice-only price in Kyat"
+        },
+        "hasExercises": {
+          "type": "boolean",
+          "description": "Whether the lesson contains exercises"
         },
         "updatedBy": {
           "type": "string",
@@ -249,7 +279,6 @@
       "required": [
         "lessonId",
         "title",
-        "course",
         "accessType",
         "price",
         "updatedBy",
@@ -289,7 +318,7 @@
       "properties": {
         "uid": {
           "type": "string",
-          "description": "Firebase Auth UID",
+          "description": "User UID",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -352,8 +381,8 @@
       ]
     },
     "SiteConfig": {
-      "title": "Public Site Content & Contact Settings",
-      "description": "Homepage hero copy, banner image, section titles/descriptions, Adult/Kids track copy, Contact Us details, and featured Stories/Reels/Games IDs managed by admin.",
+      "title": "Public Site Content, Branding & Contact Settings",
+      "description": "Homepage hero copy, site logo URL, Cloudflare Worker API URL, section titles/descriptions, courses & pricing, Contact Us details, and featured showcase IDs managed by admin.",
       "type": "object",
       "properties": {
         "configId": {
@@ -370,15 +399,30 @@
         "heroPrimaryCta": { "type": "string", "maxLength": 60 },
         "heroSecondaryCta": { "type": "string", "maxLength": 60 },
         "heroBannerUrl": { "type": "string", "maxLength": 500 },
+        "siteLogoUrl": { "type": "string", "maxLength": 2000 },
+        "workerApiBaseUrl": { "type": "string", "maxLength": 300 },
         "storiesLabel": { "type": "string", "maxLength": 100 },
         "storiesTitle": { "type": "string", "maxLength": 120 },
         "storiesSubtitle": { "type": "string", "maxLength": 400 },
+        "reelsLabel": { "type": "string", "maxLength": 100 },
+        "reelsTitle": { "type": "string", "maxLength": 120 },
+        "reelsSubtitle": { "type": "string", "maxLength": 400 },
         "gamesLabel": { "type": "string", "maxLength": 100 },
         "gamesTitle": { "type": "string", "maxLength": 120 },
         "gamesSubtitle": { "type": "string", "maxLength": 400 },
         "lessonsLabel": { "type": "string", "maxLength": 100 },
         "lessonsTitle": { "type": "string", "maxLength": 120 },
         "lessonsSubtitle": { "type": "string", "maxLength": 400 },
+        "lessonsBadge": { "type": "string", "maxLength": 100 },
+        "lessonsCardTitle": { "type": "string", "maxLength": 140 },
+        "lessonsCardSubtitle": { "type": "string", "maxLength": 140 },
+        "lessonsCardDesc": { "type": "string", "maxLength": 400 },
+        "lessonsBullets": { "type": "array", "description": "Up to 6 highlight bullets for Lessons card" },
+        "lessonsCta": { "type": "string", "maxLength": 80 },
+        "courses": { "type": "array", "description": "Configured HSK and custom course names (max 50)" },
+        "coursePrices": { "type": "object", "description": "Map of course name to Kyat price" },
+        "coursePracticePrices": { "type": "object", "description": "Map of course name to practice-only Kyat price" },
+        "practicePrice": { "type": "number", "description": "Default practice-only Kyat price" },
         "adultBadge": { "type": "string", "maxLength": 80 },
         "adultTitle": { "type": "string", "maxLength": 140 },
         "adultSubtitle": { "type": "string", "maxLength": 140 },
@@ -394,9 +438,9 @@
         "contactEmail": { "type": "string", "maxLength": 160 },
         "contactPhone": { "type": "string", "maxLength": 40 },
         "contactViber": { "type": "string", "maxLength": 40 },
-        "featuredReelIds": { "type": "array", "description": "Up to 12 reel IDs featured on homepage" },
-        "featuredStoryIds": { "type": "array", "description": "Up to 12 story IDs featured on homepage" },
-        "featuredGameIds": { "type": "array", "description": "Up to 12 Wordwall game IDs featured on homepage" },
+        "featuredReelIds": { "type": "array", "description": "Up to 24 reel IDs featured on homepage" },
+        "featuredStoryIds": { "type": "array", "description": "Up to 24 story IDs featured on homepage" },
+        "featuredGameIds": { "type": "array", "description": "Up to 24 Wordwall game IDs featured on homepage" },
         "updatedBy": {
           "type": "string",
           "description": "Admin UID who last updated site settings",
@@ -417,6 +461,7 @@
         "heroPrimaryCta",
         "heroSecondaryCta",
         "heroBannerUrl",
+        "siteLogoUrl",
         "storiesLabel",
         "storiesTitle",
         "storiesSubtitle",
@@ -426,18 +471,6 @@
         "lessonsLabel",
         "lessonsTitle",
         "lessonsSubtitle",
-        "adultBadge",
-        "adultTitle",
-        "adultSubtitle",
-        "adultDesc",
-        "adultBullets",
-        "adultCta",
-        "kidsBadge",
-        "kidsTitle",
-        "kidsSubtitle",
-        "kidsDesc",
-        "kidsBullets",
-        "kidsCta",
         "contactEmail",
         "contactPhone",
         "contactViber",
@@ -468,7 +501,7 @@
     },
     "/siteConfig/{configId}": {
       "schema": { "$ref": "#/entities/SiteConfig" },
-      "description": "Publicly readable homepage content, contact us details, and featured showcase configuration."
+      "description": "Publicly readable homepage content, site logo, Worker API URL, courses/pricing, contact us details, and featured showcase configuration."
     },
     "/admins/{userId}": {
       "schema": { "$ref": "#/entities/AdminUser" },

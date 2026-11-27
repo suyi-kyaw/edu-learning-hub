@@ -9,6 +9,96 @@
  * =========================================================
  */
 
+import { initializeApp, getApps } from 'firebase/app';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  updateProfile as fbUpdateProfile,
+  updatePassword as fbUpdatePassword,
+  GoogleAuthProvider,
+  signInWithPopup
+} from 'firebase/auth';
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  getDocFromServer,
+  setDoc,
+  serverTimestamp,
+  Timestamp
+} from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
+
+const firebaseApp = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const firebaseAuth = getAuth(firebaseApp);
+const firestoreDb = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write'
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string;
+    email?: string | null;
+    emailVerified?: boolean;
+    isAnonymous?: boolean;
+    tenantId?: string | null;
+    providerInfo: Array<{
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }>;
+  };
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: firebaseAuth.currentUser?.uid,
+      email: firebaseAuth.currentUser?.email,
+      emailVerified: firebaseAuth.currentUser?.emailVerified,
+      isAnonymous: firebaseAuth.currentUser?.isAnonymous,
+      tenantId: firebaseAuth.currentUser?.tenantId,
+      providerInfo:
+        firebaseAuth.currentUser?.providerData.map((provider) => ({
+          providerId: provider.providerId,
+          displayName: provider.displayName,
+          email: provider.email,
+          photoUrl: provider.photoURL
+        })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+async function testFirestoreConnection(): Promise<void> {
+  try {
+    await getDocFromServer(doc(firestoreDb, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Firestore offline or unreachable. Continuing with backend & Excel store.');
+    }
+  }
+}
+
+void testFirestoreConnection();
+
 export interface AuthUserSummary {
   uid: string;
   email: string;
@@ -246,6 +336,7 @@ const OVERLAY_STORAGE_KEY = 'linguapath_excel_overlay_v1';
 const SITE_CONFIG_STORAGE_KEY = 'linguapath_site_config_v1';
 const LEGACY_LOCAL_STORE_KEY = 'linguapath_local_auth_store_v1';
 const SESSION_UID_STORAGE_KEY = 'linguapath_local_session_uid';
+const API_TOKEN_STORAGE_KEY = 'linguapath_api_token';
 const ADMIN_EMAIL = 'syndkyaw@gmail.com';
 
 // --- SheetJS Typings ---
@@ -716,6 +807,377 @@ function setSessionUid(uid: string | null): void {
     }
   } catch {
     // ignore storage errors
+  }
+}
+
+function getApiToken(): string {
+  try {
+    const val = localStorage.getItem(API_TOKEN_STORAGE_KEY);
+    return val ? val.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+function setApiToken(token: string | null): void {
+  try {
+    if (token && token.trim()) {
+      localStorage.setItem(API_TOKEN_STORAGE_KEY, token.trim());
+    } else {
+      localStorage.removeItem(API_TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getBackendBridge(): { lb: any; hasBackend: boolean; isStaticHost: boolean } {
+  const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
+  const isStaticHost = lb && typeof lb.isStaticGithubHost === 'function' ? Boolean(lb.isStaticGithubHost()) : false;
+  const hasBackend = lb && typeof lb.hasBackend === 'function' ? Boolean(lb.hasBackend()) : !isStaticHost;
+  return { lb, hasBackend, isStaticHost };
+}
+
+async function backendApiFetch(
+  path: string,
+  init: RequestInit = {}
+): Promise<{ ok: boolean; status: number; data: any; rawText: string; isHtml: boolean }> {
+  const { lb } = getBackendBridge();
+  const url = lb && typeof lb.apiUrl === 'function' ? lb.apiUrl(path) : path;
+  const token = getApiToken();
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined)
+  };
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (typeof init.body === 'string' && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const res = await fetch(url, {
+    ...init,
+    cache: 'no-store',
+    headers
+  });
+  const rawText = await res.text().catch(() => '');
+  const trimmed = rawText.trim();
+  const ctype = String(res.headers.get('content-type') || '').toLowerCase();
+  const isHtml =
+    ctype.includes('text/html') ||
+    trimmed.startsWith('<!DOCTYPE') ||
+    trimmed.startsWith('<html');
+  if (isHtml) {
+    return {
+      ok: false,
+      status: res.status || 404,
+      rawText,
+      isHtml: true,
+      data: {
+        success: false,
+        error: 'Backend API returned an HTML page instead of JSON. Check your Cloudflare Worker URL in Admin Settings.'
+      }
+    };
+  }
+  let parsed: any = null;
+  if (trimmed) {
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      parsed = null;
+    }
+  }
+  return {
+    ok: res.ok && Boolean(parsed),
+    status: res.status,
+    rawText,
+    isHtml: false,
+    data: parsed
+  };
+}
+
+function firestoreTimestampToIso(val: unknown): string {
+  if (!val) return '';
+  if (val instanceof Timestamp) {
+    return val.toDate().toISOString();
+  }
+  if (typeof val === 'object' && val !== null && typeof (val as { toDate?: () => Date }).toDate === 'function') {
+    try {
+      return (val as { toDate: () => Date }).toDate().toISOString();
+    } catch {
+      return '';
+    }
+  }
+  return typeof val === 'string' ? val : '';
+}
+
+async function fetchSiteConfigFromFirestore(): Promise<Partial<SiteConfig> | null> {
+  try {
+    const ref = doc(firestoreDb, 'siteConfig', 'homepage');
+    let snap;
+    try {
+      snap = await getDocFromServer(ref);
+    } catch {
+      snap = await getDoc(ref);
+    }
+    if (!snap.exists()) return null;
+    const raw = snap.data() as Record<string, unknown>;
+    return {
+      ...raw,
+      updatedAt: firestoreTimestampToIso(raw.updatedAt)
+    } as Partial<SiteConfig>;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg && !/offline|unavailable|permission/i.test(msg)) {
+      console.warn('Firestore siteConfig read skipped:', msg);
+    }
+    return null;
+  }
+}
+
+async function ensureFirebaseAuthSession(
+  email: string,
+  password: string,
+  displayName?: string,
+  mode: 'login' | 'register' = 'login'
+): Promise<void> {
+  try {
+    if (!email || !password) return;
+    if (firebaseAuth.currentUser && String(firebaseAuth.currentUser.email || '').toLowerCase() === email.toLowerCase()) {
+      return;
+    }
+    try {
+      await signInWithEmailAndPassword(firebaseAuth, email, password);
+    } catch (signErr: any) {
+      const code = String(signErr?.code || '');
+      if (mode === 'register' || code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+        try {
+          const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+          if (displayName && cred.user) {
+            await fbUpdateProfile(cred.user, { displayName }).catch(() => {});
+          }
+        } catch {
+          // Ignore if email already exists in Firebase Auth with an older password
+        }
+      }
+    }
+  } catch {
+    // Firebase Auth mirror must never break backend auth
+  }
+}
+
+async function canWriteFirestoreAsAdmin(): Promise<boolean> {
+  const fbUser = firebaseAuth.currentUser;
+  if (!fbUser) return false;
+  const fbEmail = String(fbUser.email || '').trim().toLowerCase();
+  if (fbEmail === ADMIN_EMAIL && fbUser.emailVerified) {
+    try {
+      const admRef = doc(firestoreDb, 'admins', fbUser.uid);
+      const admSnap = await getDoc(admRef);
+      if (!admSnap.exists()) {
+        await setDoc(admRef, {
+          uid: fbUser.uid,
+          email: fbEmail,
+          grantedAt: serverTimestamp()
+        });
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  }
+  try {
+    const admSnap = await getDoc(doc(firestoreDb, 'admins', fbUser.uid));
+    return admSnap.exists();
+  } catch {
+    return false;
+  }
+}
+
+async function syncSiteConfigToFirestore(cfg: SiteConfig): Promise<boolean> {
+  const fbUser = firebaseAuth.currentUser;
+  if (!fbUser) return false;
+  const allowed = await canWriteFirestoreAsAdmin();
+  if (!allowed) return false;
+
+  try {
+    const safeLogoUrl =
+      /^data:/i.test(cfg.siteLogoUrl) && cfg.siteLogoUrl.length > 1950
+        ? DEFAULT_SITE_CONFIG.siteLogoUrl
+        : String(cfg.siteLogoUrl || '').slice(0, 1950);
+    const safeBannerUrl =
+      /^data:/i.test(cfg.heroBannerUrl) && cfg.heroBannerUrl.length > 480
+        ? DEFAULT_SITE_CONFIG.heroBannerUrl
+        : String(cfg.heroBannerUrl || DEFAULT_SITE_CONFIG.heroBannerUrl).slice(0, 480);
+
+    const firestoreDoc: Record<string, unknown> = {
+      configId: 'homepage',
+      heroEyebrow: cfg.heroEyebrow,
+      heroTitleLine1: cfg.heroTitleLine1,
+      heroTitleHighlight: cfg.heroTitleHighlight,
+      heroSubtitle: cfg.heroSubtitle,
+      heroPrimaryCta: cfg.heroPrimaryCta,
+      heroSecondaryCta: cfg.heroSecondaryCta,
+      heroBannerUrl: safeBannerUrl,
+      siteLogoUrl: safeLogoUrl,
+      workerApiBaseUrl: String(cfg.workerApiBaseUrl || '').slice(0, 290),
+      storiesLabel: cfg.storiesLabel,
+      storiesTitle: cfg.storiesTitle,
+      storiesSubtitle: cfg.storiesSubtitle,
+      reelsLabel: cfg.reelsLabel || 'Short Reels',
+      reelsTitle: cfg.reelsTitle || 'Short Reels',
+      reelsSubtitle: cfg.reelsSubtitle || '',
+      gamesLabel: cfg.gamesLabel,
+      gamesTitle: cfg.gamesTitle,
+      gamesSubtitle: cfg.gamesSubtitle,
+      lessonsLabel: cfg.lessonsLabel,
+      lessonsTitle: cfg.lessonsTitle,
+      lessonsSubtitle: cfg.lessonsSubtitle,
+      lessonsBadge: cfg.lessonsBadge || '',
+      lessonsCardTitle: cfg.lessonsCardTitle || '',
+      lessonsCardSubtitle: cfg.lessonsCardSubtitle || '',
+      lessonsCardDesc: cfg.lessonsCardDesc || '',
+      lessonsBullets: Array.isArray(cfg.lessonsBullets) ? cfg.lessonsBullets.slice(0, 6) : [],
+      lessonsCta: cfg.lessonsCta || '',
+      courses: Array.isArray(cfg.courses) ? cfg.courses.slice(0, 50) : ['HSK 2'],
+      coursePrices: cfg.coursePrices || { 'HSK 2': 280000 },
+      coursePracticePrices: cfg.coursePracticePrices || { 'HSK 2': 55000 },
+      practicePrice: typeof cfg.practicePrice === 'number' ? cfg.practicePrice : 55000,
+      adultBadge: cfg.adultBadge || '',
+      adultTitle: cfg.adultTitle || '',
+      adultSubtitle: cfg.adultSubtitle || '',
+      adultDesc: cfg.adultDesc || '',
+      adultBullets: Array.isArray(cfg.adultBullets) ? cfg.adultBullets.slice(0, 6) : [],
+      adultCta: cfg.adultCta || '',
+      kidsBadge: cfg.kidsBadge || '',
+      kidsTitle: cfg.kidsTitle || '',
+      kidsSubtitle: cfg.kidsSubtitle || '',
+      kidsDesc: cfg.kidsDesc || '',
+      kidsBullets: Array.isArray(cfg.kidsBullets) ? cfg.kidsBullets.slice(0, 6) : [],
+      kidsCta: cfg.kidsCta || '',
+      contactEmail: cfg.contactEmail,
+      contactPhone: cfg.contactPhone,
+      contactViber: cfg.contactViber,
+      featuredReelIds: Array.isArray(cfg.featuredReelIds) ? cfg.featuredReelIds.slice(0, 24) : [],
+      featuredStoryIds: Array.isArray(cfg.featuredStoryIds) ? cfg.featuredStoryIds.slice(0, 24) : [],
+      featuredGameIds: Array.isArray(cfg.featuredGameIds) ? cfg.featuredGameIds.slice(0, 24) : [],
+      updatedBy: fbUser.uid,
+      updatedAt: serverTimestamp()
+    };
+
+    await setDoc(doc(firestoreDb, 'siteConfig', 'homepage'), firestoreDoc);
+    return true;
+  } catch (err) {
+    try {
+      handleFirestoreError(err, OperationType.WRITE, 'siteConfig/homepage');
+    } catch {
+      return false;
+    }
+    return false;
+  }
+}
+
+async function syncUserProfileToFirestore(profile: UserProfile): Promise<void> {
+  const fbUser = firebaseAuth.currentUser;
+  if (!fbUser || !profile?.email) return;
+  if (String(fbUser.email || '').trim().toLowerCase() !== profile.email.trim().toLowerCase()) return;
+  const docPath = `users/${fbUser.uid}`;
+  try {
+    const ref = doc(firestoreDb, 'users', fbUser.uid);
+    const existing = await getDoc(ref);
+    if (!existing.exists()) {
+      await setDoc(ref, {
+        uid: fbUser.uid,
+        username: String(profile.username || 'Learner').slice(0, 60),
+        email: String(profile.email || '').slice(0, 160),
+        phoneNumber: String(profile.phoneNumber || '').slice(0, 32),
+        dob: /^\d{4}-\d{2}-\d{2}$/.test(String(profile.dob || '')) ? profile.dob : '',
+        role: 'student',
+        membershipStatus: 'free',
+        membershipPlan: 'none',
+        membershipExpiresAt: '',
+        subscribedLessonIds: [],
+        subscribedCourses: [],
+        practiceLessonIds: [],
+        practiceCourses: [],
+        linkedProviders: ['password'],
+        mustChangePassword: Boolean(profile.mustChangePassword),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      await setDoc(
+        ref,
+        {
+          username: String(profile.username || 'Learner').slice(0, 60),
+          email: String(profile.email || '').slice(0, 160),
+          phoneNumber: String(profile.phoneNumber || '').slice(0, 32),
+          dob: /^\d{4}-\d{2}-\d{2}$/.test(String(profile.dob || '')) ? profile.dob : '',
+          linkedProviders: Array.isArray(profile.linkedProviders) && profile.linkedProviders.length ? profile.linkedProviders.slice(0, 5) : ['password'],
+          mustChangePassword: Boolean(profile.mustChangePassword),
+          updatedAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+    }
+  } catch (err) {
+    try {
+      handleFirestoreError(err, OperationType.WRITE, docPath);
+    } catch {
+      // Non-fatal mirror
+    }
+  }
+}
+
+async function syncUserProgressToFirestore(progress: UserProgress): Promise<void> {
+  const fbUser = firebaseAuth.currentUser;
+  if (!fbUser) return;
+  const docPath = `userProgress/${fbUser.uid}`;
+  try {
+    await setDoc(doc(firestoreDb, 'userProgress', fbUser.uid), {
+      uid: fbUser.uid,
+      currentStreak: Math.min(10000, Math.max(0, Math.round(progress.currentStreak || 0))),
+      bestStreak: Math.min(10000, Math.max(0, Math.round(progress.bestStreak || 0))),
+      lastCompletedDate: /^\d{4}-\d{2}-\d{2}$/.test(String(progress.lastCompletedDate || '')) ? progress.lastCompletedDate : '',
+      streakDates: Array.isArray(progress.streakDates) ? progress.streakDates.slice(-366) : [],
+      completedLessonIds: Array.isArray(progress.completedLessonIds) ? progress.completedLessonIds.slice(-200) : [],
+      reminderEnabled: Boolean(progress.reminderEnabled),
+      reminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(progress.reminderTime || '')) ? progress.reminderTime : '18:00',
+      lastNotifiedDate: /^\d{4}-\d{2}-\d{2}$/.test(String(progress.lastNotifiedDate || '')) ? progress.lastNotifiedDate : '',
+      updatedAt: serverTimestamp()
+    });
+  } catch (err) {
+    try {
+      handleFirestoreError(err, OperationType.WRITE, docPath);
+    } catch {
+      // Non-fatal mirror
+    }
+  }
+}
+
+async function syncCatalogToFirestore(items: LessonCatalogItem[]): Promise<void> {
+  const fbUser = firebaseAuth.currentUser;
+  if (!fbUser || !items.length) return;
+  const allowed = await canWriteFirestoreAsAdmin();
+  if (!allowed) return;
+  for (const item of items) {
+    const lessonId = sanitizeDocId(item.lessonId);
+    if (!lessonId) continue;
+    try {
+      await setDoc(doc(firestoreDb, 'lessonCatalog', lessonId), {
+        lessonId,
+        title: String(item.title || lessonId).slice(0, 160),
+        course: normalizeCourseName(item.course || 'HSK 2').slice(0, 80),
+        audience: ['Adult', 'Kids', 'HSK 1', 'HSK 2'].includes(String(item.audience)) ? item.audience : 'Adult',
+        accessType: item.accessType === 'paid' ? 'paid' : 'free',
+        price: Math.max(0, Number(item.price) || 0),
+        practicePrice: Math.max(0, Number(item.practicePrice) || 0),
+        hasExercises: item.hasExercises !== false,
+        updatedBy: fbUser.uid,
+        updatedAt: serverTimestamp()
+      });
+    } catch {
+      // Ignore individual mirror failures
+    }
   }
 }
 
@@ -1951,6 +2413,46 @@ async function resolveActiveCurriculumForHydration(): Promise<void> {
   }
 }
 
+function syncBaseWorkbookFromServerPayload(data: Record<string, unknown>): void {
+  if (!data || typeof data !== 'object') return;
+  if (Array.isArray(data.allUsers)) {
+    const nextUsers: Record<string, ExcelUserRecord> = {};
+    for (const rawU of data.allUsers as UserProfile[]) {
+      if (!rawU?.uid || !rawU?.email) continue;
+      const prevHash = baseWorkbookStore.users[rawU.uid]?.passwordHash || '';
+      nextUsers[rawU.uid] = { profile: { ...rawU }, passwordHash: prevHash };
+    }
+    if (Object.keys(nextUsers).length > 0) {
+      baseWorkbookStore.users = nextUsers;
+      baseWorkbookStore.loaded = true;
+    }
+  } else if (data.profile && typeof data.profile === 'object') {
+    const prof = data.profile as UserProfile;
+    if (prof.uid && prof.email) {
+      const prevHash = baseWorkbookStore.users[prof.uid]?.passwordHash || '';
+      baseWorkbookStore.users[prof.uid] = { profile: { ...prof }, passwordHash: prevHash };
+    }
+  }
+  if (Array.isArray(data.allRequests)) {
+    const nextReqs: Record<string, SubscriptionRequest> = {};
+    for (const r of data.allRequests as SubscriptionRequest[]) {
+      if (r?.requestId) nextReqs[r.requestId] = { ...r };
+    }
+    baseWorkbookStore.requests = nextReqs;
+  }
+  if (data.lessonCatalog && typeof data.lessonCatalog === 'object') {
+    if (Array.isArray(data.lessonCatalog)) {
+      const nextCat: Record<string, LessonCatalogItem> = {};
+      for (const c of data.lessonCatalog as LessonCatalogItem[]) {
+        if (c?.lessonId) nextCat[c.lessonId] = { ...c };
+      }
+      baseWorkbookStore.lessonCatalog = nextCat;
+    } else {
+      baseWorkbookStore.lessonCatalog = { ...(data.lessonCatalog as Record<string, LessonCatalogItem>) };
+    }
+  }
+}
+
 function applySessionPayload(data: Record<string, unknown>): void {
   if (data.user && typeof data.user === 'object') {
     state.user = data.user as AuthUserSummary;
@@ -1970,7 +2472,15 @@ function applySessionPayload(data: Record<string, unknown>): void {
     state.myRequests = data.myRequests as SubscriptionRequest[];
   }
   if (data.lessonCatalog && typeof data.lessonCatalog === 'object') {
-    state.lessonCatalog = data.lessonCatalog as Record<string, LessonCatalogItem>;
+    if (Array.isArray(data.lessonCatalog)) {
+      const catMap: Record<string, LessonCatalogItem> = {};
+      for (const item of data.lessonCatalog as LessonCatalogItem[]) {
+        if (item?.lessonId) catMap[item.lessonId] = item;
+      }
+      state.lessonCatalog = catMap;
+    } else {
+      state.lessonCatalog = data.lessonCatalog as Record<string, LessonCatalogItem>;
+    }
   }
   if (typeof data.adminClaimed === 'boolean') {
     state.adminClaimed = data.adminClaimed;
@@ -2015,68 +2525,327 @@ function syncMemoryFromDataset(dataset: ExcelDataset, uidOverride?: string | nul
   clearAuthSession();
 }
 
-async function hydratePublicAndSession(forceExcelReload = false): Promise<void> {
-  // 1. Load static site-config.json first so any configured Worker URL activates immediately
-  let baseCfg: Partial<SiteConfig> = {};
-  let serverCfg: Partial<SiteConfig> | null = null;
+async function migrateOverlayAccountsToBackend(emailFilter?: string): Promise<boolean> {
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend) return false;
+  const overlay = readOverlayStore();
+  const candidates: Array<Record<string, unknown>> = [];
+  const targetEmail = String(emailFilter || '').trim().toLowerCase();
 
+  for (const [uid, entry] of Object.entries(overlay.users || {})) {
+    if (!entry?.profile?.email) continue;
+    const em = String(entry.profile.email).trim().toLowerCase();
+    if (targetEmail && em !== targetEmail) continue;
+    if ((entry as any)._syncedToBackend && !targetEmail) continue;
+    const pwHash = String(entry.passwordHash || '').trim();
+    if (!/^sha256\$[a-f0-9]+\$[a-f0-9]{64}$/i.test(pwHash)) continue;
+    candidates.push({
+      uid,
+      username: entry.profile.username,
+      email: em,
+      phoneNumber: entry.profile.phoneNumber || '',
+      dob: entry.profile.dob || '',
+      passwordHash: pwHash,
+      createdAt: entry.profile.createdAt || '',
+      updatedAt: entry.profile.updatedAt || ''
+    });
+  }
+
+  if (!candidates.length) return false;
   try {
-    const staticCfg = await fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' });
-    if (staticCfg.ok) {
-      baseCfg = (await staticCfg.json()) as Partial<SiteConfig>;
+    const res = await backendApiFetch('/api/auth/migrate-browser-users', {
+      method: 'POST',
+      body: JSON.stringify({ users: candidates })
+    });
+    if (res.ok && res.data?.success) {
+      const freshOverlay = readOverlayStore();
+      for (const c of candidates) {
+        const cUid = String(c.uid || '');
+        if (freshOverlay.users[cUid]) {
+          (freshOverlay.users[cUid] as any)._syncedToBackend = true;
+          if (!baseWorkbookStore.users[cUid]) {
+            baseWorkbookStore.users[cUid] = {
+              profile: { ...freshOverlay.users[cUid].profile },
+              passwordHash: String(c.passwordHash || '')
+            };
+          }
+        }
+      }
+      writeOverlayStore(freshOverlay);
+      return true;
     }
   } catch {
-    // keep defaults
+    // non-fatal background migration retry on next open/login
+  }
+  return false;
+}
+
+async function pushPendingLocalProgressIfNeeded(serverProgress?: UserProgress | null): Promise<UserProgress | null> {
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken() || !state.user?.uid) return serverProgress || null;
+  const overlay = readOverlayStore();
+  const localProg = overlay.progress?.[state.user.uid];
+  if (!localProg) return serverProgress || null;
+
+  const serverIds = new Set(serverProgress?.completedLessonIds || []);
+  const localIds = Array.isArray(localProg.completedLessonIds) ? localProg.completedLessonIds : [];
+  const hasMoreLessons = localIds.some((id) => !serverIds.has(id));
+  const localTs = parseIsoTimestamp(localProg.updatedAt);
+  const serverTs = parseIsoTimestamp(serverProgress?.updatedAt);
+  if (!hasMoreLessons && localTs <= serverTs) return serverProgress || null;
+
+  const mergedCompleted = Array.from(new Set([...(serverProgress?.completedLessonIds || []), ...localIds])).slice(-200);
+  const mergedDates = Array.from(
+    new Set([...(serverProgress?.streakDates || []), ...(localProg.streakDates || [])])
+  ).slice(-366);
+  const mergedPayload: UserProgress = {
+    uid: state.user.uid,
+    currentStreak: Math.max(Number(serverProgress?.currentStreak) || 0, Number(localProg.currentStreak) || 0),
+    bestStreak: Math.max(Number(serverProgress?.bestStreak) || 0, Number(localProg.bestStreak) || 0),
+    lastCompletedDate:
+      (localProg.lastCompletedDate || '') > (serverProgress?.lastCompletedDate || '')
+        ? localProg.lastCompletedDate
+        : serverProgress?.lastCompletedDate || '',
+    streakDates: mergedDates,
+    completedLessonIds: mergedCompleted,
+    reminderEnabled: localTs >= serverTs ? Boolean(localProg.reminderEnabled) : Boolean(serverProgress?.reminderEnabled ?? true),
+    reminderTime: localTs >= serverTs ? sanitizeTimeStr(localProg.reminderTime) : sanitizeTimeStr(serverProgress?.reminderTime),
+    lastNotifiedDate:
+      (localProg.lastNotifiedDate || '') > (serverProgress?.lastNotifiedDate || '')
+        ? localProg.lastNotifiedDate
+        : serverProgress?.lastNotifiedDate || '',
+    updatedAt: new Date().toISOString()
+  };
+
+  try {
+    const res = await backendApiFetch('/api/progress', {
+      method: 'PUT',
+      body: JSON.stringify(mergedPayload)
+    });
+    if (res.ok && res.data?.userProgress) {
+      state.userProgress = normalizeUserProgress(res.data.userProgress, state.user.uid);
+      return state.userProgress;
+    }
+  } catch {
+    // ignore non-fatal progress sync failure
+  }
+  return serverProgress || null;
+}
+
+async function refreshUsersFromBackend(): Promise<UserProfile[]> {
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken() || !getComputedAdmin()) return [...state.allUsers];
+  const res = await backendApiFetch('/api/admin/users', { method: 'GET' });
+  if (!res.ok || !res.data?.success) {
+    throw new Error((res.data && res.data.error) || `Failed to load users from database (HTTP ${res.status}).`);
+  }
+  applySessionPayload(res.data);
+  syncBaseWorkbookFromServerPayload(res.data);
+  emitState();
+  return [...state.allUsers];
+}
+
+async function syncLocalDataToDatabase(options: { silent?: boolean } = {}): Promise<{
+  migratedUsers: number;
+  mergedCount: number;
+  requestsCount: number;
+  totalUsers: number;
+  siteConfigSynced: boolean;
+}> {
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend) {
+    if (!options.silent) {
+      throw new Error('Connect a Cloudflare Worker URL or start the Node server to sync local data.');
+    }
+    return {
+      migratedUsers: 0,
+      mergedCount: state.allUsers.length,
+      requestsCount: state.allRequests.length,
+      totalUsers: state.allUsers.length,
+      siteConfigSynced: false
+    };
+  }
+
+  let migratedUsersCount = 0;
+  const overlay = readOverlayStore();
+  const migrateCandidates = Object.entries(overlay.users || {})
+    .filter(([, entry]) => entry?.profile?.email && /^sha256\$[a-f0-9]+\$[a-f0-9]{64}$/i.test(String(entry.passwordHash || '')))
+    .map(([uid, entry]) => ({
+      uid,
+      username: entry.profile.username,
+      email: entry.profile.email.toLowerCase(),
+      phoneNumber: entry.profile.phoneNumber || '',
+      dob: entry.profile.dob || '',
+      passwordHash: entry.passwordHash,
+      createdAt: entry.profile.createdAt || '',
+      updatedAt: entry.profile.updatedAt || ''
+    }));
+
+  if (migrateCandidates.length > 0) {
+    const migRes = await backendApiFetch('/api/auth/migrate-browser-users', {
+      method: 'POST',
+      body: JSON.stringify({ users: migrateCandidates })
+    }).catch(() => null);
+    if (migRes?.ok && migRes.data?.success) {
+      migratedUsersCount = Number(migRes.data.migratedCount) || 0;
+    }
+  }
+
+  let siteConfigSynced = false;
+  if (getApiToken() && getComputedAdmin()) {
+    const overlayUsersPayload = Object.values(overlay.users || {}).map((rec) => ({
+      ...rec.profile,
+      passwordHash: rec.passwordHash || ''
+    }));
+    const overlayRequestsPayload = Object.values(overlay.requests || {});
+    const overlayProgressPayload = Object.values(overlay.progress || {});
+    const overlayCatalogPayload = Object.values(overlay.lessonCatalog || {});
+
+    if (
+      overlayUsersPayload.length > 0 ||
+      overlayRequestsPayload.length > 0 ||
+      overlayProgressPayload.length > 0 ||
+      overlayCatalogPayload.length > 0
+    ) {
+      const syncRes = await backendApiFetch('/api/admin/users/sync', {
+        method: 'POST',
+        body: JSON.stringify({
+          users: overlayUsersPayload,
+          requests: overlayRequestsPayload,
+          progress: overlayProgressPayload,
+          lessonCatalog: overlayCatalogPayload
+        })
+      });
+      if (!syncRes.ok || !syncRes.data?.success) {
+        if (!options.silent) {
+          throw new Error((syncRes.data && syncRes.data.error) || 'Could not push local users to database & Excel.');
+        }
+      } else {
+        applySessionPayload(syncRes.data);
+        syncBaseWorkbookFromServerPayload(syncRes.data);
+        const cleanOverlay = readOverlayStore();
+        cleanOverlay.users = {};
+        cleanOverlay.requests = {};
+        cleanOverlay.progress = {};
+        cleanOverlay.lessonCatalog = {};
+        writeOverlayStore(cleanOverlay);
+      }
+    }
+
+    if ((overlay.siteConfig as any)?._pendingServerSync && overlay.siteConfig) {
+      try {
+        await saveSiteConfig(overlay.siteConfig);
+        siteConfigSynced = true;
+      } catch {
+        // ignore if offline
+      }
+    }
+
+    await refreshUsersFromBackend().catch(() => {});
+  } else if (!options.silent) {
+    throw new Error('Sign in as Admin to sync all users and site settings to the database & Excel.');
+  }
+
+  emitState();
+  return {
+    migratedUsers: migratedUsersCount,
+    mergedCount: state.allUsers.length,
+    requestsCount: state.allRequests.length,
+    totalUsers: state.allUsers.length,
+    siteConfigSynced
+  };
+}
+
+async function hydratePublicAndSession(forceExcelReload = false): Promise<void> {
+  // 1. Load static data/site-config.json and public Firestore siteConfig/homepage in parallel
+  let baseCfg: Partial<SiteConfig> = {};
+  let firestoreCfg: Partial<SiteConfig> | null = null;
+  let serverCfg: Partial<SiteConfig> | null = null;
+
+  const [staticCfgRes, fsCfgRes] = await Promise.all([
+    fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' }).catch(() => null),
+    fetchSiteConfigFromFirestore().catch(() => null)
+  ]);
+  if (staticCfgRes && staticCfgRes.ok) {
+    baseCfg = (await staticCfgRes.json().catch(() => ({}))) as Partial<SiteConfig>;
+  }
+  if (fsCfgRes) {
+    firestoreCfg = fsCfgRes;
   }
 
   // 2. Load data/users.xlsx and merge browser overlay
   await loadBaseWorkbookFromExcel(forceExcelReload);
   const initialOverlay = readOverlayStore();
 
-  const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
-  const candidateWorkerBase = String(initialOverlay.siteConfig?.workerApiBaseUrl || baseCfg?.workerApiBaseUrl || '').trim();
+  const { lb } = getBackendBridge();
+  const candidateWorkerBase = String(
+    initialOverlay.siteConfig?.workerApiBaseUrl ||
+      firestoreCfg?.workerApiBaseUrl ||
+      baseCfg?.workerApiBaseUrl ||
+      ''
+  ).trim();
   if (candidateWorkerBase && lb && typeof lb.setSiteWorkerBase === 'function') {
     lb.setSiteWorkerBase(candidateWorkerBase);
   }
 
-  // 3. Resolve active lessons catalog across ALL pages before finalizing session state
-  await resolveActiveCurriculumForHydration();
+  // 3. Auto-push any legacy Chrome-only student accounts to D1 & Excel right when backend is reachable
+  const canReachBackend = getBackendBridge().hasBackend;
+  if (canReachBackend) {
+    await migrateOverlayAccountsToBackend().catch(() => false);
+  }
+
+  // 4. Resolve active lessons catalog and fetch authoritative /api/site-config in parallel
+  const curriculumPromise = resolveActiveCurriculumForHydration().catch(() => {});
+  const siteConfigPromise = canReachBackend
+    ? backendApiFetch('/api/site-config?t=' + Date.now(), { method: 'GET' }).catch(() => null)
+    : Promise.resolve(null);
+
+  const [, siteApiRes] = await Promise.all([curriculumPromise, siteConfigPromise]);
+  if (siteApiRes && siteApiRes.ok && siteApiRes.data?.success && siteApiRes.data?.config) {
+    serverCfg = siteApiRes.data.config as Partial<SiteConfig>;
+  }
+
   const dataset = getMergedDataset();
   reconcileDatasetWithLessons(dataset);
 
-  const canReachBackend = !lb || typeof lb.hasBackend !== 'function' || lb.hasBackend();
-  if (canReachBackend) {
-    try {
-      const apiPath = '/api/site-config?t=' + Date.now();
-      const apiUrl = lb?.apiUrl ? lb.apiUrl(apiPath) : apiPath;
-      const sRes = await fetch(apiUrl, { cache: 'no-store' });
-      if (sRes.ok) {
-        const sData = (await sRes.json().catch(() => null)) as any;
-        if (sData && sData.success && sData.config && typeof sData.config === 'object') {
-          serverCfg = sData.config as Partial<SiteConfig>;
-        }
-      }
-    } catch (_) {
-      // API unreachable or static host
-    }
+  // Pick authoritative newest siteConfig across Server D1/Excel, Firestore, static site-config.json, and pending local edit
+  let bestRemoteCfg: Partial<SiteConfig> | null = serverCfg || firestoreCfg || null;
+  if (serverCfg && firestoreCfg) {
+    bestRemoteCfg =
+      parseIsoTimestamp(firestoreCfg.updatedAt) > parseIsoTimestamp(serverCfg.updatedAt)
+        ? { ...serverCfg, ...firestoreCfg }
+        : { ...firestoreCfg, ...serverCfg };
   }
 
+  const localPending = Boolean((initialOverlay.siteConfig as any)?._pendingServerSync);
+  const localTime = parseIsoTimestamp(initialOverlay.siteConfig?.updatedAt);
+  const remoteTime = parseIsoTimestamp(bestRemoteCfg?.updatedAt);
+
   let effectiveCfg: Partial<SiteConfig>;
-  if (serverCfg) {
-    const serverTime = parseIsoTimestamp(serverCfg.updatedAt);
-    const localTime = parseIsoTimestamp(dataset.siteConfig?.updatedAt);
-    const localPending = Boolean((dataset.siteConfig as any)?._pendingServerSync);
-    if (dataset.siteConfig && localPending && localTime > serverTime) {
-      effectiveCfg = { ...baseCfg, ...serverCfg, ...dataset.siteConfig };
-    } else {
-      effectiveCfg = { ...baseCfg, ...serverCfg };
-      // Refresh local overlay store with authoritative server config
-      const overlay = readOverlayStore();
-      overlay.siteConfig = { ...effectiveCfg };
-      writeOverlayStore(overlay);
+  if (initialOverlay.siteConfig && localPending && (!bestRemoteCfg || localTime >= remoteTime)) {
+    effectiveCfg = { ...baseCfg, ...(bestRemoteCfg || {}), ...initialOverlay.siteConfig };
+    // Auto-push pending local siteConfig (e.g. logo update) if admin is authenticated
+    if (canReachBackend && getApiToken()) {
+      const normalizedPending = normalizeSiteConfig(effectiveCfg);
+      const pushRes = await backendApiFetch('/api/admin/site-config', {
+        method: 'PUT',
+        body: JSON.stringify(normalizedPending)
+      }).catch(() => null);
+      if (pushRes?.ok && pushRes.data?.success && pushRes.data?.config) {
+        effectiveCfg = { ...baseCfg, ...(pushRes.data.config as Partial<SiteConfig>) };
+        const cleanOv = readOverlayStore();
+        cleanOv.siteConfig = { ...effectiveCfg };
+        writeOverlayStore(cleanOv);
+        void syncSiteConfigToFirestore(normalizeSiteConfig(effectiveCfg));
+      }
     }
+  } else if (bestRemoteCfg) {
+    effectiveCfg = { ...baseCfg, ...bestRemoteCfg };
+    const cleanOv = readOverlayStore();
+    cleanOv.siteConfig = { ...effectiveCfg };
+    writeOverlayStore(cleanOv);
   } else {
-    effectiveCfg = dataset.siteConfig ? { ...baseCfg, ...dataset.siteConfig } : baseCfg;
+    effectiveCfg = initialOverlay.siteConfig ? { ...baseCfg, ...initialOverlay.siteConfig } : baseCfg;
   }
 
   state.siteConfig = normalizeSiteConfig(effectiveCfg);
@@ -2088,7 +2857,34 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   }
   emitSiteConfigChange(false);
 
-  syncMemoryFromDataset(dataset);
+  // 5. Authenticate session strictly against DB & Excel when backend is active
+  if (canReachBackend) {
+    const token = getApiToken();
+    if (token) {
+      const meRes = await backendApiFetch('/api/auth/me?t=' + Date.now(), { method: 'GET' }).catch(() => null);
+      if (meRes && meRes.ok && meRes.data?.success && meRes.data?.user) {
+        setSessionUid(String(meRes.data.user.uid));
+        applySessionPayload(meRes.data);
+        syncBaseWorkbookFromServerPayload(meRes.data);
+        await pushPendingLocalProgressIfNeeded(state.userProgress);
+        if (state.isAdmin) {
+          await syncLocalDataToDatabase({ silent: true }).catch(() => {});
+          if (!Array.isArray(meRes.data.allUsers)) {
+            await refreshUsersFromBackend().catch(() => {});
+          }
+        }
+      } else {
+        setApiToken(null);
+        clearAuthSession();
+      }
+    } else {
+      clearAuthSession();
+    }
+  } else {
+    // Offline static fallback when no backend Worker URL is connected
+    syncMemoryFromDataset(dataset);
+  }
+
   state.ready = true;
   emitState();
 }
@@ -2129,48 +2925,44 @@ async function registerWithEmail(params: {
     throw new Error('Password must be at least 6 characters long.');
   }
 
-  await loadBaseWorkbookFromExcel(false);
-  const merged = getMergedDataset();
-  const duplicate = Object.values(merged.users).find(
-    (u) => u.profile.email.toLowerCase() === cleanEmail
-  );
-  if (duplicate) {
-    throw new Error('An account with this email address already exists. Please sign in instead.');
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend) {
+    throw new Error(
+      'Cannot register while disconnected from the database server. Please connect the Cloudflare Worker URL or open the server-hosted site.'
+    );
   }
 
-  const uid = `usr_${Date.now().toString(36)}_${generateRandomHex(4)}`;
-  const nowIso = new Date().toISOString();
-  const shouldClaimAdmin = cleanEmail === ADMIN_EMAIL && !isAdminClaimedInDataset(merged);
-  const passwordHash = await createSaltedPasswordHash(rawPassword);
+  const res = await backendApiFetch('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: cleanUsername,
+      email: cleanEmail,
+      phoneNumber: cleanPhone,
+      dob: cleanDob,
+      password: rawPassword
+    })
+  });
 
-  const profile: UserProfile = {
-    uid,
-    username: cleanUsername,
-    email: cleanEmail,
-    phoneNumber: cleanPhone,
-    dob: cleanDob,
-    role: shouldClaimAdmin ? 'admin' : 'student',
-    membershipStatus: shouldClaimAdmin ? 'active' : 'free',
-    membershipPlan: shouldClaimAdmin ? 'course' : 'none',
-    membershipExpiresAt: '',
-    subscribedLessonIds: [],
-    subscribedCourses: [],
-    practiceLessonIds: [],
-    practiceCourses: [],
-    linkedProviders: ['password'],
-    mustChangePassword: false,
-    createdAt: nowIso,
-    updatedAt: nowIso
-  };
+  if (!res.ok || !res.data?.success || !res.data?.token || !res.data?.user?.uid) {
+    throw new Error(
+      (res.data && res.data.error) || 'Registration failed: account could not be saved to database & Excel.'
+    );
+  }
 
-  const overlay = readOverlayStore();
-  overlay.users[uid] = { profile, passwordHash };
-  overlay.progress[uid] = createDefaultUserProgress(uid);
-  writeOverlayStore(overlay);
-  setSessionUid(uid);
+  setApiToken(String(res.data.token));
+  setSessionUid(String(res.data.user.uid));
+  applySessionPayload(res.data);
+  syncBaseWorkbookFromServerPayload(res.data);
 
-  const nextDataset = getMergedDataset();
-  syncMemoryFromDataset(nextDataset, uid);
+  // Best-effort Firebase Auth + Firestore mirror
+  await ensureFirebaseAuthSession(cleanEmail, rawPassword, cleanUsername, 'register');
+  if (state.profile) {
+    void syncUserProfileToFirestore(state.profile);
+  }
+  if (state.userProgress) {
+    void syncUserProgressToFirestore(state.userProgress);
+  }
+
   state.ready = true;
   emitState();
   return state.profile as UserProfile;
@@ -2183,30 +2975,77 @@ async function loginWithEmail(email: string, password: string): Promise<AuthUser
     throw new Error('Please enter both your email and password.');
   }
 
-  // Always check fresh data/users.xlsx merged with browser registrations
+  const { hasBackend } = getBackendBridge();
+  if (hasBackend) {
+    // Auto-push any legacy Chrome-only account matching this email into DB & Excel before verifying login
+    await migrateOverlayAccountsToBackend(cleanEmail).catch(() => false);
+
+    const res = await backendApiFetch('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: cleanEmail, password: rawPassword })
+    });
+
+    if (!res.ok || !res.data?.success || !res.data?.token || !res.data?.user?.uid) {
+      throw new Error(
+        (res.data && res.data.error) ||
+          'Invalid email or password. Only accounts saved in the database and Excel sheet can sign in.'
+      );
+    }
+
+    setApiToken(String(res.data.token));
+    setSessionUid(String(res.data.user.uid));
+    applySessionPayload(res.data);
+    syncBaseWorkbookFromServerPayload(res.data);
+
+    // Clear duplicate un-synced overlay credential for this user
+    const overlay = readOverlayStore();
+    if (overlay.users[String(res.data.user.uid)]) {
+      delete overlay.users[String(res.data.user.uid)];
+      writeOverlayStore(overlay);
+    }
+
+    await pushPendingLocalProgressIfNeeded(state.userProgress);
+    if (state.isAdmin) {
+      await syncLocalDataToDatabase({ silent: true }).catch(() => {});
+    }
+
+    await ensureFirebaseAuthSession(cleanEmail, rawPassword, state.profile?.username, 'login');
+    if (state.profile) {
+      void syncUserProfileToFirestore(state.profile);
+    }
+    if (state.userProgress) {
+      void syncUserProgressToFirestore(state.userProgress);
+    }
+
+    state.ready = true;
+    emitState();
+    return state.user as AuthUserSummary;
+  }
+
+  // Offline static host fallback (only when no Worker/Node backend is connected):
+  // strictly verify against repository data/users.xlsx, NOT unpushed browser registrations
   await loadBaseWorkbookFromExcel(true);
   if (!validLessonIdsLoaded) {
     await resolveActiveCurriculumForHydration().catch(() => {});
   }
-  const dataset = getMergedDataset();
-  reconcileDatasetWithLessons(dataset);
-
-  const matchedEntry = Object.values(dataset.users).find(
+  const excelOnlyEntry = Object.values(baseWorkbookStore.users).find(
     (entry) => entry.profile.email.toLowerCase() === cleanEmail
   );
-  if (!matchedEntry) {
+  if (!excelOnlyEntry) {
     if (!baseWorkbookStore.loaded && baseWorkbookStore.lastError) {
       throw new Error(baseWorkbookStore.lastError);
     }
-    throw new Error(`No account found in users.xlsx for ${cleanEmail}. Click Register to create one.`);
+    throw new Error(
+      `Account ${cleanEmail} is not saved in users.xlsx or connected database yet. Connect the Worker URL or sync users.xlsx to sign in.`
+    );
   }
-
-  const valid = await verifyPasswordCredential(rawPassword, matchedEntry.passwordHash);
+  const valid = await verifyPasswordCredential(rawPassword, excelOnlyEntry.passwordHash);
   if (!valid) {
     throw new Error('Incorrect email or password.');
   }
-
-  const uid = matchedEntry.profile.uid;
+  const dataset = getMergedDataset();
+  reconcileDatasetWithLessons(dataset);
+  const uid = excelOnlyEntry.profile.uid;
   setSessionUid(uid);
   syncMemoryFromDataset(dataset, uid);
   state.ready = true;
@@ -2222,7 +3061,7 @@ async function resetPasswordWithVerification(params: {
 }): Promise<string> {
   const cleanEmail = String(params.email || '').trim().toLowerCase();
   const cleanDob = normalizeExcelDob(params.dob);
-  const cleanPhone = normalizePhoneCompare(params.phoneNumber);
+  const cleanPhone = String(params.phoneNumber || '').trim();
   const newPassword = String(params.newPassword || '');
 
   if (!cleanEmail || !cleanDob || !cleanPhone) {
@@ -2232,40 +3071,25 @@ async function resetPasswordWithVerification(params: {
     throw new Error('New password must be at least 6 characters long.');
   }
 
-  await loadBaseWorkbookFromExcel(false);
-  const dataset = getMergedDataset();
-  const matchedEntry = Object.values(dataset.users).find(
-    (entry) => entry.profile.email.toLowerCase() === cleanEmail
-  );
-  if (!matchedEntry) {
-    throw new Error(`No account found for ${cleanEmail}.`);
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend) {
+    throw new Error('Connect the Worker URL or server to reset your password in the database & Excel.');
   }
 
-  const storedDob = normalizeExcelDob(matchedEntry.profile.dob);
-  const storedPhone = normalizePhoneCompare(matchedEntry.profile.phoneNumber);
-  if (!storedDob || !storedPhone) {
-    throw new Error(
-      'This account cannot be self-reset without both Date of Birth and Phone saved. Ask the site Admin to reset your password in Admin Portal or users.xlsx.'
-    );
+  const res = await backendApiFetch('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: cleanEmail,
+      dob: cleanDob,
+      phoneNumber: cleanPhone,
+      newPassword
+    })
+  });
+  if (!res.ok || !res.data?.success) {
+    throw new Error((res.data && res.data.error) || 'Could not reset password.');
   }
-  if (storedDob !== cleanDob || !phonesMatch(matchedEntry.profile.phoneNumber, params.phoneNumber)) {
-    throw new Error('Verification details did not match our records. Check your Date of Birth and Phone Number.');
-  }
-
-  const nextHash = await createSaltedPasswordHash(newPassword);
-  const nowIso = new Date().toISOString();
-  const overlay = readOverlayStore();
-  overlay.users[matchedEntry.profile.uid] = {
-    profile: {
-      ...matchedEntry.profile,
-      mustChangePassword: false,
-      updatedAt: nowIso
-    },
-    passwordHash: nextHash
-  };
-  writeOverlayStore(overlay);
   emitState();
-  return 'Password reset successfully! Sign in now with your new password.';
+  return String(res.data.message || 'Password reset successfully! Sign in now with your new password.');
 }
 
 async function sendPasswordReset(email: string): Promise<string> {
@@ -2283,28 +3107,26 @@ async function changePassword(currentPassword: string, newPassword: string): Pro
     throw new Error('Enter your current password and a new password (min. 6 characters).');
   }
 
-  const dataset = getMergedDataset();
-  const entry = dataset.users[state.user.uid];
-  if (!entry) throw new Error('Account record not found.');
-
-  const valid = await verifyPasswordCredential(currentPassword, entry.passwordHash);
-  if (!valid) {
-    throw new Error('Current password is incorrect.');
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Sign in with an active server connection to change your password.');
   }
 
-  const nextHash = await createSaltedPasswordHash(newPassword);
-  const nowIso = new Date().toISOString();
-  const nextProfile: UserProfile = {
-    ...entry.profile,
-    mustChangePassword: false,
-    updatedAt: nowIso
-  };
+  const res = await backendApiFetch('/api/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
+  if (!res.ok || !res.data?.success || !res.data?.profile) {
+    throw new Error((res.data && res.data.error) || 'Could not update password.');
+  }
 
-  const overlay = readOverlayStore();
-  overlay.users[state.user.uid] = { profile: nextProfile, passwordHash: nextHash };
-  writeOverlayStore(overlay);
-
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  state.profile = res.data.profile as UserProfile;
+  if (state.user) state.user.mustChangePassword = false;
+  syncBaseWorkbookFromServerPayload({ profile: state.profile });
+  if (firebaseAuth.currentUser) {
+    await fbUpdatePassword(firebaseAuth.currentUser, newPassword).catch(() => {});
+    void syncUserProfileToFirestore(state.profile);
+  }
   emitState();
   return state.profile as UserProfile;
 }
@@ -2315,7 +3137,9 @@ async function reloadAuthSession(): Promise<AuthState> {
 }
 
 async function logout(): Promise<void> {
+  setApiToken(null);
   clearAuthSession();
+  await signOut(firebaseAuth).catch(() => {});
   state.ready = true;
   emitState();
   try {
@@ -2326,6 +3150,66 @@ async function logout(): Promise<void> {
       }
     }
   } catch (_) {}
+}
+
+async function adminCreateUserAccount(params: {
+  username: string;
+  email: string;
+  phoneNumber?: string;
+  dob?: string;
+  password?: string;
+  role?: 'admin' | 'student';
+  membershipStatus?: UserProfile['membershipStatus'];
+  membershipPlan?: UserProfile['membershipPlan'];
+  membershipExpiresAt?: string;
+  subscribedLessonIds?: string[];
+  subscribedCourses?: string[];
+  practiceLessonIds?: string[];
+  practiceCourses?: string[];
+}): Promise<{ user: UserProfile; temporaryPassword: string }> {
+  if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Administrator server session required.');
+  }
+  const res = await backendApiFetch('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  });
+  if (!res.ok || !res.data?.success || !res.data?.user) {
+    throw new Error((res.data && res.data.error) || 'Failed to create user account in database & Excel.');
+  }
+  applySessionPayload(res.data);
+  syncBaseWorkbookFromServerPayload(res.data);
+  emitState();
+  return {
+    user: res.data.user as UserProfile,
+    temporaryPassword: String(res.data.temporaryPassword || '')
+  };
+}
+
+async function verifyAdminWithGoogle(): Promise<boolean> {
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(firebaseAuth, provider);
+    const user = result.user;
+    if (user && String(user.email || '').trim().toLowerCase() === ADMIN_EMAIL) {
+      const admRef = doc(firestoreDb, 'admins', user.uid);
+      await setDoc(admRef, {
+        uid: user.uid,
+        email: ADMIN_EMAIL,
+        grantedAt: serverTimestamp()
+      }, { merge: true });
+      await syncSiteConfigToFirestore(state.siteConfig);
+      await syncLocalDataToDatabase({ silent: true });
+      emitState();
+      return true;
+    }
+    throw new Error('Signed-in Google account is not the designated admin (syndkyaw@gmail.com).');
+  } catch (err) {
+    console.error('Google Admin verification error:', err);
+    throw err;
+  }
 }
 
 async function adminUpdateUserDetails(
@@ -2346,67 +3230,25 @@ async function adminUpdateUserDetails(
   }
 ): Promise<void> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-  const dataset = getMergedDataset();
-  const entry = dataset.users[userId];
-  if (!entry) throw new Error('User not found.');
-
-  const nowIso = new Date().toISOString();
-  const filterLessons = (ids: string[] | undefined, fb: string[] | undefined): string[] => {
-    const raw = Array.isArray(ids) ? ids : Array.isArray(fb) ? fb : [];
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const id of raw) {
-      const clean = sanitizeDocId(id);
-      const key = normalizeLessonIdKey(clean);
-      if (!key || !isLessonIdActive(clean) || seen.has(key)) continue;
-      seen.add(key);
-      out.push(validLessonIdMap.get(key) || clean);
-    }
-    return out;
-  };
-  const dedupeCoursesList = (courses: string[] | undefined, fb: string[] | undefined): string[] => {
-    const raw = Array.isArray(courses) ? courses : Array.isArray(fb) ? fb : [];
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const c of raw) {
-      const norm = normalizeCourseName(c);
-      const slug = courseSlug(norm);
-      if (!slug || seen.has(slug)) continue;
-      seen.add(slug);
-      out.push(norm);
-    }
-    return out;
-  };
-
-  let nextStatus = updates.membershipStatus !== undefined ? updates.membershipStatus : entry.profile.membershipStatus;
-  let nextPlan = updates.membershipPlan !== undefined ? normalizePlan(updates.membershipPlan) : normalizePlan(entry.profile.membershipPlan);
-  if (nextStatus === 'free') {
-    nextPlan = 'none';
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Administrator server session required. Please sign out and sign in again.');
   }
 
-  let nextProfile: UserProfile = {
-    ...entry.profile,
-    username: updates.username !== undefined ? String(updates.username).trim().slice(0, 60) : entry.profile.username,
-    email: updates.email !== undefined ? String(updates.email).trim().toLowerCase().slice(0, 160) : entry.profile.email,
-    phoneNumber: updates.phoneNumber !== undefined ? String(updates.phoneNumber).trim().slice(0, 32) : entry.profile.phoneNumber,
-    dob: updates.dob !== undefined ? normalizeExcelDob(updates.dob) : entry.profile.dob,
-    role: updates.role === 'admin' || updates.role === 'student' ? updates.role : entry.profile.role,
-    membershipStatus: nextStatus,
-    membershipPlan: nextPlan,
-    membershipExpiresAt: updates.membershipExpiresAt !== undefined ? normalizeExcelDob(updates.membershipExpiresAt) : entry.profile.membershipExpiresAt,
-    subscribedLessonIds: filterLessons(updates.subscribedLessonIds, entry.profile.subscribedLessonIds),
-    subscribedCourses: dedupeCoursesList(updates.subscribedCourses, entry.profile.subscribedCourses),
-    practiceLessonIds: filterLessons(updates.practiceLessonIds, entry.profile.practiceLessonIds),
-    practiceCourses: dedupeCoursesList(updates.practiceCourses, entry.profile.practiceCourses),
-    updatedAt: nowIso
-  };
-  nextProfile = reconcileProfileEntitlements(nextProfile, new Set()).profile;
-
+  const res = await backendApiFetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates)
+  });
+  if (!res.ok || !res.data?.success) {
+    throw new Error((res.data && res.data.error) || 'Failed to update user details in database & Excel.');
+  }
+  applySessionPayload(res.data);
+  syncBaseWorkbookFromServerPayload(res.data);
   const overlay = readOverlayStore();
-  overlay.users[userId] = { profile: nextProfile, passwordHash: entry.passwordHash };
-  writeOverlayStore(overlay);
-
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  if (overlay.users[userId]) {
+    delete overlay.users[userId];
+    writeOverlayStore(overlay);
+  }
   emitState();
 }
 
@@ -2421,24 +3263,26 @@ async function updateProfileDetails(params: {
   const cleanDob = normalizeExcelDob(params.dob);
   if (!cleanUsername) throw new Error('User Name cannot be empty.');
 
-  const dataset = getMergedDataset();
-  const entry = dataset.users[state.user.uid];
-  if (!entry) throw new Error('Account record not found.');
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Active server connection required to update your profile.');
+  }
 
-  const overlay = readOverlayStore();
-  overlay.users[state.user.uid] = {
-    profile: {
-      ...entry.profile,
+  const res = await backendApiFetch('/api/auth/profile', {
+    method: 'PUT',
+    body: JSON.stringify({
       username: cleanUsername,
       phoneNumber: cleanPhone,
-      dob: cleanDob,
-      updatedAt: new Date().toISOString()
-    },
-    passwordHash: entry.passwordHash
-  };
-  writeOverlayStore(overlay);
-
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+      dob: cleanDob
+    })
+  });
+  if (!res.ok || !res.data?.success || !res.data?.profile) {
+    throw new Error((res.data && res.data.error) || 'Could not update profile.');
+  }
+  state.profile = res.data.profile as UserProfile;
+  if (state.user) state.user.displayName = state.profile.username;
+  syncBaseWorkbookFromServerPayload({ profile: state.profile });
+  void syncUserProfileToFirestore(state.profile);
   emitState();
 }
 
@@ -2453,7 +3297,6 @@ async function submitSubscriptionRequest(params: {
   note?: string;
 }): Promise<SubscriptionRequest> {
   if (!state.user || !state.profile) throw new Error('Please sign in first.');
-  const nowIso = new Date().toISOString();
   const rawPlan = String(params.planType || 'course').trim().toLowerCase();
   const planType: SubscriptionRequest['planType'] =
     rawPlan === 'annual' ||
@@ -2502,51 +3345,46 @@ async function submitSubscriptionRequest(params: {
       : planType === 'annual'
       ? '$149 / yr'
       : '$19 / mo';
-  const request: SubscriptionRequest = {
-    requestId: `req_${Date.now().toString(36)}_${generateRandomHex(3)}`,
-    userId: state.user.uid,
-    username: state.profile.username || state.user.displayName || 'Learner',
-    userEmail: state.profile.email || state.user.email,
-    userPhone: state.profile.phoneNumber || '',
-    planType,
-    lessonId: params.lessonId ? sanitizeDocId(params.lessonId) : '',
-    courseName: cleanCourse,
-    lessonTitle: String(params.lessonTitle || '').trim() || defaultTitle,
-    amountLabel: String(params.amountLabel || '').trim() || defaultAmt,
-    contactChannel: params.contactChannel === 'email' ? 'email' : 'viber',
-    contactHandle: String(params.contactHandle || '').trim(),
-    note: String(params.note || '').trim().slice(0, 400),
-    status: 'pending',
-    adminNote: '',
-    createdAt: nowIso,
-    updatedAt: nowIso
-  };
 
-  const overlay = readOverlayStore();
-  overlay.requests[request.requestId] = request;
-  writeOverlayStore(overlay);
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Active server connection required to submit a subscription request.');
+  }
 
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  const res = await backendApiFetch('/api/requests', {
+    method: 'POST',
+    body: JSON.stringify({
+      planType,
+      lessonId: params.lessonId ? sanitizeDocId(params.lessonId) : '',
+      courseName: cleanCourse,
+      lessonTitle: String(params.lessonTitle || '').trim() || defaultTitle,
+      amountLabel: String(params.amountLabel || '').trim() || defaultAmt,
+      contactChannel: params.contactChannel === 'email' ? 'email' : 'viber',
+      contactHandle: String(params.contactHandle || '').trim(),
+      note: String(params.note || '').trim().slice(0, 400)
+    })
+  });
+  if (!res.ok || !res.data?.success || !res.data?.request) {
+    throw new Error((res.data && res.data.error) || 'Could not submit subscription request.');
+  }
+  applySessionPayload(res.data);
   emitState();
-  return request;
+  return res.data.request as SubscriptionRequest;
 }
 
 async function cancelPendingRequest(requestId: string): Promise<void> {
   if (!state.user) throw new Error('Please sign in first.');
-  const dataset = getMergedDataset();
-  const target = dataset.requests[requestId];
-  if (!target || target.userId !== state.user.uid || target.status !== 'pending') return;
-
-  const overlay = readOverlayStore();
-  overlay.requests[requestId] = {
-    ...target,
-    status: 'rejected',
-    adminNote: 'Cancelled by learner',
-    updatedAt: new Date().toISOString()
-  };
-  writeOverlayStore(overlay);
-
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Active server connection required to cancel a request.');
+  }
+  const res = await backendApiFetch(`/api/requests/${encodeURIComponent(requestId)}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok || !res.data?.success) {
+    throw new Error((res.data && res.data.error) || 'Could not cancel request.');
+  }
+  applySessionPayload(res.data);
   emitState();
 }
 
@@ -2557,90 +3395,19 @@ async function approveSubscriptionRequest(
   adminNote = 'Verified via QR payment'
 ): Promise<void> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-  const dataset = getMergedDataset();
-  const targetReq = dataset.requests[reqDoc.requestId];
-  if (!targetReq) throw new Error('Subscription request not found.');
-
-  const nowIso = new Date().toISOString();
-  const overlay = readOverlayStore();
-  overlay.requests[reqDoc.requestId] = {
-    ...targetReq,
-    status: 'approved',
-    adminNote,
-    updatedAt: nowIso
-  };
-
-  const userEntry = dataset.users[targetReq.userId];
-  if (userEntry) {
-    const nextCourses = [...(userEntry.profile.subscribedCourses || [])];
-    const nextPracticeCourses = [...(userEntry.profile.practiceCourses || [])];
-    const nextLessons = [...(userEntry.profile.subscribedLessonIds || [])];
-    const nextPracticeLessons = [...(userEntry.profile.practiceLessonIds || [])];
-    let nextPlan = normalizePlan(userEntry.profile.membershipPlan);
-    let nextExpiry = userEntry.profile.membershipExpiresAt || '';
-
-    if (targetReq.planType === 'per_lesson' && targetReq.lessonId) {
-      if (!isLessonIdActive(targetReq.lessonId)) {
-        throw new Error(`Lesson "${targetReq.lessonId}" is no longer in the curriculum.`);
-      }
-      const key = normalizeLessonIdKey(targetReq.lessonId);
-      const canonical = validLessonIdMap.get(key) || sanitizeDocId(targetReq.lessonId);
-      if (!nextLessons.some((x) => normalizeLessonIdKey(x) === key)) {
-        nextLessons.push(canonical);
-      }
-      if (nextPlan !== 'course') nextPlan = 'per_lesson';
-    } else if (targetReq.planType === 'practice_lesson' && targetReq.lessonId) {
-      if (!isLessonIdActive(targetReq.lessonId)) {
-        throw new Error(`Lesson "${targetReq.lessonId}" is no longer in the curriculum.`);
-      }
-      const key = normalizeLessonIdKey(targetReq.lessonId);
-      const canonical = validLessonIdMap.get(key) || sanitizeDocId(targetReq.lessonId);
-      if (!nextPracticeLessons.some((x) => normalizeLessonIdKey(x) === key)) {
-        nextPracticeLessons.push(canonical);
-      }
-      if (nextPlan !== 'course' && nextPlan !== 'per_lesson' && nextPlan !== 'practice_course') {
-        nextPlan = 'practice_lesson';
-      }
-    } else if (targetReq.planType === 'practice_course') {
-      const targetCourse = normalizeCourseName(targetReq.courseName || targetReq.lessonTitle || 'HSK 2');
-      const slug = courseSlug(targetCourse);
-      if (slug && !nextPracticeCourses.some((c) => courseSlug(c) === slug)) {
-        nextPracticeCourses.push(targetCourse);
-      }
-      if (nextPlan !== 'course') nextPlan = 'practice_course';
-    } else if (targetReq.planType === 'course') {
-      const targetCourse = normalizeCourseName(targetReq.courseName || targetReq.lessonTitle || 'HSK 2');
-      const slug = courseSlug(targetCourse);
-      if (slug && !nextCourses.some((c) => courseSlug(c) === slug)) {
-        nextCourses.push(targetCourse);
-      }
-      nextPlan = 'course';
-    } else {
-      const d = new Date();
-      d.setDate(d.getDate() + (targetReq.planType === 'annual' ? 365 : 30));
-      nextExpiry = d.toISOString().slice(0, 10);
-      nextPlan = targetReq.planType === 'annual' ? 'annual' : 'monthly';
-    }
-
-    const nextProfile: UserProfile = {
-      ...userEntry.profile,
-      membershipStatus: 'active',
-      membershipPlan: nextPlan,
-      membershipExpiresAt: nextExpiry,
-      subscribedLessonIds: nextLessons,
-      subscribedCourses: nextCourses,
-      practiceLessonIds: nextPracticeLessons,
-      practiceCourses: nextPracticeCourses,
-      updatedAt: nowIso
-    };
-    overlay.users[targetReq.userId] = {
-      profile: nextProfile,
-      passwordHash: userEntry.passwordHash
-    };
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Administrator server session required. Please sign out and sign in again.');
   }
-
-  writeOverlayStore(overlay);
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  const res = await backendApiFetch(`/api/admin/requests/${encodeURIComponent(reqDoc.requestId)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ adminNote })
+  });
+  if (!res.ok || !res.data?.success) {
+    throw new Error((res.data && res.data.error) || 'Failed to approve request.');
+  }
+  applySessionPayload(res.data);
+  syncBaseWorkbookFromServerPayload(res.data);
   emitState();
 }
 
@@ -2649,49 +3416,20 @@ async function rejectSubscriptionRequest(
   adminNote = 'Payment could not be verified'
 ): Promise<void> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-  const dataset = getMergedDataset();
-  const targetReq = dataset.requests[requestId];
-  if (targetReq) {
-    const overlay = readOverlayStore();
-    overlay.requests[requestId] = {
-      ...targetReq,
-      status: 'rejected',
-      adminNote,
-      updatedAt: new Date().toISOString()
-    };
-    writeOverlayStore(overlay);
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Administrator server session required. Please sign out and sign in again.');
   }
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  const res = await backendApiFetch(`/api/admin/requests/${encodeURIComponent(requestId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ adminNote })
+  });
+  if (!res.ok || !res.data?.success) {
+    throw new Error((res.data && res.data.error) || 'Failed to reject request.');
+  }
+  applySessionPayload(res.data);
+  syncBaseWorkbookFromServerPayload(res.data);
   emitState();
-}
-
-async function syncMembershipToBackend(uid: string, profile: UserProfile): Promise<void> {
-  try {
-    const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
-    if (!lb || typeof lb.hasBackend !== 'function' || !lb.hasBackend()) return;
-    const apiPath = `/api/admin/users/${encodeURIComponent(uid)}/membership`;
-    const apiUrl = lb.apiUrl ? lb.apiUrl(apiPath) : apiPath;
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (state.user?.uid) {
-      headers['X-Admin-Uid'] = state.user.uid;
-      headers['X-User-Uid'] = state.user.uid;
-    }
-    await fetch(apiUrl, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({
-        membershipStatus: profile.membershipStatus,
-        membershipPlan: profile.membershipPlan,
-        membershipExpiresAt: profile.membershipExpiresAt || '',
-        subscribedLessonIds: profile.subscribedLessonIds || [],
-        subscribedCourses: profile.subscribedCourses || [],
-        practiceLessonIds: profile.practiceLessonIds || [],
-        practiceCourses: profile.practiceCourses || []
-      })
-    }).catch(() => {});
-  } catch {
-    // non-fatal best-effort server mirror
-  }
 }
 
 async function updateUserMembershipAdmin(
@@ -2707,113 +3445,27 @@ async function updateUserMembershipAdmin(
   }
 ): Promise<void> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-  const dataset = getMergedDataset();
-  const entry = dataset.users[userId];
-  if (!entry) throw new Error('User not found.');
-
-  const filterLessonList = (rawArr: string[] | undefined, fallback: string[] | undefined): string[] => {
-    const src = Array.isArray(rawArr) ? rawArr : Array.isArray(fallback) ? fallback : [];
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const x of src) {
-      const clean = sanitizeDocId(x);
-      const key = normalizeLessonIdKey(clean);
-      if (!key || !isLessonIdActive(clean) || seen.has(key)) continue;
-      seen.add(key);
-      out.push(validLessonIdMap.get(key) || clean);
-    }
-    return out;
-  };
-  const dedupeCourseList = (rawArr: string[] | undefined, fallback: string[] | undefined): string[] => {
-    const src = Array.isArray(rawArr) ? rawArr : Array.isArray(fallback) ? fallback : [];
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const c of src) {
-      const norm = normalizeCourseName(c);
-      const slug = courseSlug(norm);
-      if (!slug || seen.has(slug)) continue;
-      seen.add(slug);
-      out.push(norm);
-    }
-    return out;
-  };
-
-  const nextLessons = filterLessonList(updates.subscribedLessonIds, entry.profile.subscribedLessonIds);
-  const nextCourses = dedupeCourseList(updates.subscribedCourses, entry.profile.subscribedCourses);
-  const nextPracticeLessons = filterLessonList(updates.practiceLessonIds, entry.profile.practiceLessonIds);
-  const nextPracticeCourses = dedupeCourseList(updates.practiceCourses, entry.profile.practiceCourses);
-
-  let nextStatus = updates.membershipStatus || 'free';
-  let nextPlan = normalizePlan(updates.membershipPlan);
-  const isAdm = entry.profile.role === 'admin' || String(entry.profile.email || '').toLowerCase() === ADMIN_EMAIL;
-
-  if (!isAdm) {
-    const hasAny =
-      nextLessons.length > 0 ||
-      nextCourses.length > 0 ||
-      nextPracticeLessons.length > 0 ||
-      nextPracticeCourses.length > 0;
-    const hasTimePass = isTimePassActive({
-      ...entry.profile,
-      membershipPlan: nextPlan,
-      membershipExpiresAt:
-        updates.membershipExpiresAt !== undefined
-          ? normalizeExcelDob(updates.membershipExpiresAt)
-          : entry.profile.membershipExpiresAt
-    });
-    if (!hasAny && !hasTimePass && nextStatus === 'active') {
-      nextStatus = 'free';
-      nextPlan = 'none';
-    }
-    if (nextStatus === 'free') {
-      nextPlan = 'none';
-    }
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Administrator server session required. Please sign out and sign in again.');
   }
 
-  let nextProfile: UserProfile = {
-    ...entry.profile,
-    membershipStatus: nextStatus,
-    membershipPlan: nextPlan,
-    membershipExpiresAt:
-      updates.membershipExpiresAt !== undefined
-        ? normalizeExcelDob(updates.membershipExpiresAt)
-        : entry.profile.membershipExpiresAt,
-    subscribedLessonIds: nextLessons,
-    subscribedCourses: nextCourses,
-    practiceLessonIds: nextPracticeLessons,
-    practiceCourses: nextPracticeCourses,
-    updatedAt: new Date().toISOString()
-  };
-  nextProfile = reconcileProfileEntitlements(nextProfile, new Set()).profile;
+  const res = await backendApiFetch(`/api/admin/users/${encodeURIComponent(userId)}/membership`, {
+    method: 'PUT',
+    body: JSON.stringify(updates)
+  });
+  if (!res.ok || !res.data?.success) {
+    throw new Error((res.data && res.data.error) || 'Failed to update user membership in database & Excel.');
+  }
 
+  applySessionPayload(res.data);
+  syncBaseWorkbookFromServerPayload(res.data);
   const overlay = readOverlayStore();
-  overlay.users[userId] = { profile: nextProfile, passwordHash: entry.passwordHash };
-  writeOverlayStore(overlay);
-
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  if (overlay.users[userId]) {
+    delete overlay.users[userId];
+    writeOverlayStore(overlay);
+  }
   emitState();
-  await syncMembershipToBackend(userId, nextProfile);
-}
-
-function generateTempPassword(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  let pw = '';
-  try {
-    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
-      const buf = new Uint8Array(12);
-      window.crypto.getRandomValues(buf);
-      for (let i = 0; i < buf.length; i++) {
-        pw += alphabet[buf[i] % alphabet.length];
-      }
-      return pw;
-    }
-  } catch {
-    // fallback below
-  }
-  for (let i = 0; i < 12; i++) {
-    pw += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return pw;
 }
 
 async function adminResetUserPassword(
@@ -2821,52 +3473,47 @@ async function adminResetUserPassword(
   options: { newPassword?: string } = {}
 ): Promise<{ temporaryPassword: string; user?: UserProfile }> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-  const dataset = getMergedDataset();
-  const entry = dataset.users[userId];
-  if (!entry) throw new Error('User not found.');
-
-  const temporaryPassword = options.newPassword?.trim() || generateTempPassword();
-  if (temporaryPassword.length < 6) {
-    throw new Error('Password must be at least 6 characters.');
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Administrator server session required. Please sign out and sign in again.');
   }
 
-  const nextHash = await createSaltedPasswordHash(temporaryPassword);
-  const nextProfile: UserProfile = {
-    ...entry.profile,
-    mustChangePassword: true,
-    updatedAt: new Date().toISOString()
-  };
-
-  const overlay = readOverlayStore();
-  overlay.users[userId] = { profile: nextProfile, passwordHash: nextHash };
-  writeOverlayStore(overlay);
-
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
+  const res = await backendApiFetch(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ newPassword: options.newPassword?.trim() || '' })
+  });
+  if (!res.ok || !res.data?.success) {
+    throw new Error((res.data && res.data.error) || 'Failed to reset user password.');
+  }
+  applySessionPayload(res.data);
+  syncBaseWorkbookFromServerPayload(res.data);
   emitState();
   return {
-    temporaryPassword,
-    user: nextProfile
+    temporaryPassword: String(res.data.temporaryPassword || ''),
+    user: res.data.user as UserProfile | undefined
   };
 }
 
-async function syncCatalogToBackend(payload: { items?: unknown[]; removeIds?: string[] }): Promise<void> {
-  try {
-    const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
-    if (!lb || typeof lb.hasBackend !== 'function' || !lb.hasBackend()) return;
-    const apiPath = '/api/admin/catalog';
-    const apiUrl = lb.apiUrl ? lb.apiUrl(apiPath) : apiPath;
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (state.user?.uid) {
-      headers['X-Admin-Uid'] = state.user.uid;
-      headers['X-User-Uid'] = state.user.uid;
-    }
-    await fetch(apiUrl, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(payload)
-    }).catch(() => {});
-  } catch {
-    // non-fatal best-effort mirror
+async function syncCatalogToBackend(
+  payload: { items?: LessonCatalogItem[]; removeIds?: string[] }
+): Promise<void> {
+  const { hasBackend } = getBackendBridge();
+  if (!hasBackend || !getApiToken()) {
+    throw new Error('Administrator server session required to sync lesson catalog.');
+  }
+  const res = await backendApiFetch('/api/admin/catalog', {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok || !res.data?.success) {
+    throw new Error((res.data && res.data.error) || 'Failed to sync lesson catalog to database & Excel.');
+  }
+  if (res.data.lessonCatalog) {
+    state.lessonCatalog = res.data.lessonCatalog as Record<string, LessonCatalogItem>;
+    syncBaseWorkbookFromServerPayload({ lessonCatalog: res.data.lessonCatalog });
+  }
+  if (Array.isArray(payload.items) && payload.items.length > 0) {
+    void syncCatalogToFirestore(payload.items);
   }
 }
 
@@ -2883,7 +3530,6 @@ async function saveLessonCatalogItems(
   }>
 ): Promise<void> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
-  const overlay = readOverlayStore();
   const nowIso = new Date().toISOString();
   const cleanItems: LessonCatalogItem[] = [];
   for (const item of items || []) {
@@ -2901,7 +3547,7 @@ async function saveLessonCatalogItems(
       updatedBy: state.user.email,
       updatedAt: nowIso
     };
-    overlay.lessonCatalog[id] = entry;
+    state.lessonCatalog[id] = entry;
     if (validLessonIdsLoaded) {
       const key = normalizeLessonIdKey(id);
       if (key) {
@@ -2911,10 +3557,8 @@ async function saveLessonCatalogItems(
     }
     cleanItems.push(entry);
   }
-  writeOverlayStore(overlay);
-  syncMemoryFromDataset(getMergedDataset(), state.user.uid);
-  emitState();
   await syncCatalogToBackend({ items: cleanItems });
+  emitState();
 }
 
 async function removeLessonCatalogItems(lessonIds: string[]): Promise<void> {
@@ -2935,13 +3579,13 @@ async function removeLessonCatalogItems(lessonIds: string[]): Promise<void> {
   const merged = getMergedDataset();
   reconcileDatasetWithLessons(merged, cleanIds);
   syncMemoryFromDataset(merged, state.user.uid);
-  emitState();
-
   await syncCatalogToBackend({ removeIds: cleanIds });
+  emitState();
 }
 
 async function getIdToken(): Promise<string | null> {
-  return state.user ? state.user.uid : null;
+  const token = getApiToken();
+  return token || null;
 }
 
 function getSiteConfig(): SiteConfig {
@@ -2960,7 +3604,7 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig 
     updatedAt: nowIso
   });
 
-  // 1. Immediately persist locally with _pendingServerSync until backend confirms
+  // Immediately persist locally with _pendingServerSync until backend confirms
   const overlay = readOverlayStore();
   overlay.siteConfig = { ...merged, _pendingServerSync: true } as SiteConfig;
   writeOverlayStore(overlay);
@@ -2971,30 +3615,14 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig 
   emitSiteConfigChange(true);
   emitState();
 
-  // Push to live backend / Cloudflare D1 whenever on server host OR connected to Worker URL
-  const lb = typeof window !== 'undefined' ? (window as any).LinguaBackend : null;
-  const isStaticHost = lb?.isStaticGithubHost ? lb.isStaticGithubHost() : false;
-  const hasRemoteBackend = lb?.hasBackend ? lb.hasBackend() : !isStaticHost;
+  const { lb, hasBackend: hasRemoteBackend, isStaticHost } = getBackendBridge();
+  const bearerToken = getApiToken();
 
-  if (!isStaticHost || hasRemoteBackend) {
-    let bearerToken = '';
-    try {
-      bearerToken = String(localStorage.getItem('linguapath_api_token') || '').trim();
-    } catch {
-      bearerToken = '';
-    }
-    const uidToken = await getIdToken();
-    const effectiveToken = bearerToken || uidToken;
+  if (hasRemoteBackend && bearerToken) {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${bearerToken}`
     };
-    if (effectiveToken) {
-      headers['Authorization'] = `Bearer ${effectiveToken}`;
-    }
-    if (state.user?.uid) {
-      headers['X-Admin-Uid'] = state.user.uid;
-      headers['X-User-Uid'] = state.user.uid;
-    }
     const apiPath = '/api/admin/site-config';
     const apiUrl = lb?.apiUrl ? lb.apiUrl(apiPath) : apiPath;
 
@@ -3005,19 +3633,20 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig 
         headers,
         body: JSON.stringify(merged)
       });
-      const data = (await res.json().catch(() => null)) as any;
+      const text = await res.text().catch(() => '');
+      const trimmed = text.trim();
+      const data = trimmed && !trimmed.startsWith('<') ? (JSON.parse(trimmed) as any) : null;
       if (res.ok && data && data.success !== false) {
         remoteSavedConfig = normalizeSiteConfig(data.config || merged);
       } else {
-        const serverErr = (data && (data.error || data.message)) || `Server rejected site configuration save (HTTP ${res.status}).`;
+        const serverErr =
+          (data && (data.error || data.message)) || `Server rejected site configuration save (HTTP ${res.status}).`;
         console.warn('Remote site-config save error, local changes retained:', serverErr);
       }
     } catch (err) {
       console.warn('Network error saving site-config to backend, local changes retained:', err);
     }
 
-    // If a remote Worker URL is active on an Express/Node origin, also sync same-origin server.js
-    // so visitors without a custom Worker override in localStorage receive the exact same prices.
     const storedOverride = lb?.getStoredOverride ? lb.getStoredOverride() : '';
     if (!isStaticHost && storedOverride && apiUrl !== apiPath) {
       try {
@@ -3033,6 +3662,8 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig 
       } catch (_) {}
     }
 
+    const firestoreSynced = await syncSiteConfigToFirestore(remoteSavedConfig || merged);
+
     if (remoteSavedConfig) {
       const freshOverlay = readOverlayStore();
       freshOverlay.siteConfig = { ...remoteSavedConfig };
@@ -3046,7 +3677,12 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig 
       return state.siteConfig;
     }
 
-    return Object.assign({}, state.siteConfig, { _savedLocallyOnly: true });
+    if (firestoreSynced) {
+      const freshOverlay = readOverlayStore();
+      freshOverlay.siteConfig = { ...merged };
+      writeOverlayStore(freshOverlay);
+      return state.siteConfig;
+    }
   }
 
   return Object.assign({}, state.siteConfig, { _savedLocallyOnly: true });
@@ -3784,8 +4420,20 @@ async function persistUserProgress(next: UserProgress): Promise<UserProgress> {
   const overlay = readOverlayStore();
   overlay.progress[state.user.uid] = { ...payload };
   writeOverlayStore(overlay);
-  emitState();
 
+  const { hasBackend } = getBackendBridge();
+  if (hasBackend && getApiToken()) {
+    const res = await backendApiFetch('/api/progress', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }).catch(() => null);
+    if (res?.ok && res.data?.userProgress) {
+      state.userProgress = normalizeUserProgress(res.data.userProgress, state.user.uid);
+    }
+    void syncUserProgressToFirestore(state.userProgress as UserProgress);
+  }
+
+  emitState();
   return state.userProgress as UserProgress;
 }
 
@@ -3903,6 +4551,8 @@ const LinguaAuth = {
   updateUserMembershipAdmin,
   adminUpdateUserDetails,
   adminResetUserPassword,
+  adminCreateUserAccount,
+  verifyAdminWithGoogle,
   saveLessonCatalogItems,
   removeLessonCatalogItems,
   syncValidLessonIds: updateActiveLessonsRegistry,
@@ -3912,6 +4562,8 @@ const LinguaAuth = {
   exportUsersWorkbook,
   importUsersWorkbook,
   reloadUsersWorkbookFromRepo,
+  syncLocalDataToDatabase,
+  refreshUsersFromBackend,
   getExcelSyncSummary,
   getLessonPricing,
   getCoursePrice,
