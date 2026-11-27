@@ -11,7 +11,7 @@
   'use strict';
 
   var STORAGE_KEY = 'linguapath_backend_url';
-  var DEFAULT_PRODUCTION_BACKEND_URL = '';
+  var DEFAULT_PRODUCTION_BACKEND_URL = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
 
   function normalizeBaseUrl(raw) {
     var trimmed = String(raw || '').trim();
