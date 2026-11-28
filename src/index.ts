@@ -3528,53 +3528,62 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email)
       ).catch(() => null);
 
-      const storedSalt = String(getRowField(userRow, 'passwordSalt', 'password_salt') || '');
-      const storedHash = String(getRowField(userRow, 'passwordHash', 'password_hash') || '');
-      let ok = userRow ? await verifyPasswordWorker(password, storedSalt, storedHash) : false;
+      let ok = false;
+      try {
+        const storedSalt = String(getRowField(userRow, 'passwordSalt', 'password_salt') || '');
+        const storedHash = String(getRowField(userRow, 'passwordHash', 'password_hash') || '');
+        ok = userRow ? await verifyPasswordWorker(password, storedSalt, storedHash).catch(() => false) : false;
+      } catch (_) {
+        ok = false;
+      }
 
       if (!ok && email === ADMIN_EMAIL.toLowerCase() && password.length >= 6) {
-        const { salt, hash } = await createSaltedHashWorker(password);
-        const nowIso = new Date().toISOString();
-        await withD1TableRepair(env.DB, async () => {
-          if (userRow) {
-            const updateStmt = await prepareUpdateD1UserByUid(env.DB, String(userRow.uid), {
-              passwordSalt: salt,
-              passwordHash: hash,
-              role: 'admin',
-              membershipStatus: 'active',
-              updatedAt: nowIso
-            });
-            await updateStmt.run();
-          } else {
-            const uid = `usr_${randomHexWorker(8)}`;
-            const insertStmt = await prepareInsertD1User(env.DB, {
-              uid,
-              email,
-              username: 'Admin',
-              phoneNumber: '+95 9 798 123 456',
-              dob: '1992-01-01',
-              role: 'admin',
-              membershipStatus: 'active',
-              membershipPlan: 'course',
-              membershipExpiresAt: '',
-              subscribedLessonIds: [],
-              subscribedCourses: ['HSK 2'],
-              practiceLessonIds: [],
-              practiceCourses: [],
-              mustChangePassword: 0,
-              passwordSalt: salt,
-              passwordHash: hash,
-              createdAt: nowIso,
-              updatedAt: nowIso
-            });
-            await insertStmt.run();
-          }
-        });
-        await rebuildAndPersistUsersWorkbookD1(env).catch(() => {});
-        userRow = await withD1TableRepair(env.DB, () =>
-          oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email)
-        ).catch(() => null);
-        ok = Boolean(userRow);
+        try {
+          const { salt, hash } = await createSaltedHashWorker(password);
+          const nowIso = new Date().toISOString();
+          await withD1TableRepair(env.DB, async () => {
+            if (userRow) {
+              const updateStmt = await prepareUpdateD1UserByUid(env.DB, String(userRow.uid), {
+                passwordSalt: salt,
+                passwordHash: hash,
+                role: 'admin',
+                membershipStatus: 'active',
+                updatedAt: nowIso
+              });
+              await updateStmt.run();
+            } else {
+              const uid = `usr_${randomHexWorker(8)}`;
+              const insertStmt = await prepareInsertD1User(env.DB, {
+                uid,
+                email,
+                username: 'Admin',
+                phoneNumber: '+95 9 798 123 456',
+                dob: '1992-01-01',
+                role: 'admin',
+                membershipStatus: 'active',
+                membershipPlan: 'course',
+                membershipExpiresAt: '',
+                subscribedLessonIds: [],
+                subscribedCourses: ['HSK 2'],
+                practiceLessonIds: [],
+                practiceCourses: [],
+                mustChangePassword: 0,
+                passwordSalt: salt,
+                passwordHash: hash,
+                createdAt: nowIso,
+                updatedAt: nowIso
+              });
+              await insertStmt.run();
+            }
+          });
+          await rebuildAndPersistUsersWorkbookD1(env).catch(() => {});
+          userRow = await withD1TableRepair(env.DB, () =>
+            oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email)
+          ).catch(() => null);
+          ok = Boolean(userRow);
+        } catch (adminErr) {
+          console.error('Admin auto-upsert error during login:', adminErr);
+        }
       }
 
       if (!ok || !userRow) {
