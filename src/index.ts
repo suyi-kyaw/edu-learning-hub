@@ -5,6 +5,8 @@
  * live Admin writes, and Cloudflare D1 (binding: DB) + ASSETS binding.
  */
 
+import * as XLSX from 'xlsx';
+
 export interface R2MultipartUploadLike {
   uploadId: string;
   uploadPart(partNumber: number, value: ReadableStream | ArrayBuffer | ArrayBufferView | Blob | string): Promise<{ partNumber: number; etag: string }>;
@@ -52,7 +54,7 @@ const CORS_HEADERS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
   'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Admin-Uid, X-User-Uid',
-  'access-control-expose-headers': 'Content-Range, Content-Length, Accept-Ranges, Content-Type',
+  'access-control-expose-headers': 'Content-Range, Content-Length, Accept-Ranges, Content-Type, Content-Disposition, X-User-Count, X-Request-Count, X-Progress-Count, X-Catalog-Count',
   'access-control-max-age': '86400',
 };
 
@@ -108,6 +110,40 @@ async function all<T>(db: D1Database, sql: string, ...params: unknown[]): Promis
       } catch (_) {}
     }
     return [];
+  }
+}
+
+async function oneStrict<T>(db: D1Database, sql: string, ...params: unknown[]): Promise<T | null> {
+  if (!db) {
+    throw new Error('Cloudflare D1 database binding (DB) is not configured.');
+  }
+  try {
+    return await db.prepare(sql).bind(...params).first<T>();
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      d1SchemaReady = false;
+      await ensureD1Tables(db, true);
+      return await db.prepare(sql).bind(...params).first<T>();
+    }
+    throw err;
+  }
+}
+
+async function allStrict<T>(db: D1Database, sql: string, ...params: unknown[]): Promise<T[]> {
+  if (!db) {
+    throw new Error('Cloudflare D1 database binding (DB) is not configured.');
+  }
+  try {
+    const { results } = await db.prepare(sql).bind(...params).all<T>();
+    return results ?? [];
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      d1SchemaReady = false;
+      await ensureD1Tables(db, true);
+      const { results } = await db.prepare(sql).bind(...params).all<T>();
+      return results ?? [];
+    }
+    throw err;
   }
 }
 
@@ -317,7 +353,8 @@ const D1_TABLE_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, username TEXT NOT NULL, phoneNumber TEXT DEFAULT '', dob TEXT DEFAULT '', role TEXT DEFAULT 'student', membershipStatus TEXT DEFAULT 'free', membershipPlan TEXT DEFAULT 'none', membershipExpiresAt TEXT DEFAULT '', subscribedLessonIds TEXT DEFAULT '[]', subscribedCourses TEXT DEFAULT '[]', practiceLessonIds TEXT DEFAULT '[]', practiceCourses TEXT DEFAULT '[]', linkedProviders TEXT DEFAULT '["password"]', mustChangePassword INTEGER DEFAULT 0, passwordSalt TEXT DEFAULT '', passwordHash TEXT DEFAULT '', password_salt TEXT DEFAULT '', password_hash TEXT DEFAULT '', createdAt TEXT, updatedAt TEXT)`,
   `CREATE TABLE IF NOT EXISTS subscription_requests (requestId TEXT PRIMARY KEY, userId TEXT NOT NULL, username TEXT, userEmail TEXT, userPhone TEXT, planType TEXT, lessonId TEXT DEFAULT '', courseName TEXT DEFAULT '', lessonTitle TEXT DEFAULT '', amountLabel TEXT DEFAULT '', contactChannel TEXT DEFAULT 'viber', contactHandle TEXT DEFAULT '', note TEXT DEFAULT '', status TEXT DEFAULT 'pending', adminNote TEXT DEFAULT '', createdAt TEXT, updatedAt TEXT)`,
   `CREATE TABLE IF NOT EXISTS user_progress (uid TEXT PRIMARY KEY, currentStreak INTEGER DEFAULT 0, bestStreak INTEGER DEFAULT 0, lastCompletedDate TEXT DEFAULT '', streakDates TEXT DEFAULT '[]', completedLessonIds TEXT DEFAULT '[]', reminderEnabled INTEGER DEFAULT 1, reminderTime TEXT DEFAULT '18:00', lastNotifiedDate TEXT DEFAULT '', updatedAt TEXT)`,
-  `CREATE TABLE IF NOT EXISTS lesson_catalog (lessonId TEXT PRIMARY KEY, title TEXT, course TEXT, audience TEXT DEFAULT 'Adult', accessType TEXT DEFAULT 'free', price REAL DEFAULT 0, practicePrice REAL DEFAULT 0, hasExercises INTEGER DEFAULT 1, updatedBy TEXT DEFAULT '', updatedAt TEXT)`
+  `CREATE TABLE IF NOT EXISTS lesson_catalog (lessonId TEXT PRIMARY KEY, title TEXT, course TEXT, audience TEXT DEFAULT 'Adult', accessType TEXT DEFAULT 'free', price REAL DEFAULT 0, practicePrice REAL DEFAULT 0, hasExercises INTEGER DEFAULT 1, updatedBy TEXT DEFAULT '', updatedAt TEXT)`,
+  `CREATE TABLE IF NOT EXISTS d1_workbooks (name TEXT PRIMARY KEY, xlsx_b64 TEXT NOT NULL, row_count INTEGER DEFAULT 0, updated_at TEXT NOT NULL)`
 ];
 
 const EXPECTED_TABLE_COLUMNS: Record<string, Record<string, string>> = {
@@ -542,59 +579,51 @@ const EXPECTED_TABLE_COLUMNS: Record<string, Record<string, string>> = {
     hasExercises: 'INTEGER DEFAULT 1',
     updatedBy: "TEXT DEFAULT ''",
     updatedAt: "TEXT DEFAULT ''"
+  },
+  d1_workbooks: {
+    name: 'TEXT',
+    xlsx_b64: "TEXT DEFAULT ''",
+    row_count: 'INTEGER DEFAULT 0',
+    updated_at: "TEXT DEFAULT ''"
   }
 };
 
 let d1SchemaReady = false;
-let d1SchemaPromise: Promise<void> | null = null;
 
 async function ensureD1Tables(db: D1Database, force = false): Promise<void> {
   if (!db) return;
   if (d1SchemaReady && !force) return;
-  if (d1SchemaPromise && !force) return d1SchemaPromise;
 
-  const runInit = async () => {
-    try {
-      const stmts = D1_TABLE_STATEMENTS.map((sql) => db.prepare(sql));
-      await db.batch(stmts);
-    } catch (_) {
-      for (const sql of D1_TABLE_STATEMENTS) {
-        try {
-          await db.prepare(sql).run();
-        } catch (_) {}
-      }
+  try {
+    const stmts = D1_TABLE_STATEMENTS.map((sql) => db.prepare(sql));
+    await db.batch(stmts);
+  } catch (_) {
+    for (const sql of D1_TABLE_STATEMENTS) {
+      await db.prepare(sql).run();
     }
-    for (const [tableName, columns] of Object.entries(EXPECTED_TABLE_COLUMNS)) {
-      try {
-        const info = await db.prepare(`PRAGMA table_info("${tableName}")`).all<{ name: string }>();
-        const existingCols = new Set(
-          (info?.results || []).map((c) => String(c.name || '').trim().toLowerCase())
-        );
-        for (const [colName, colDef] of Object.entries(columns)) {
-          if (!existingCols.has(colName.toLowerCase())) {
-            try {
-              const safeDef = colDef.replace(/DEFAULT\s+"([^"]*)"/g, "DEFAULT '$1'");
-              await db.prepare(`ALTER TABLE "${tableName}" ADD COLUMN "${colName}" ${safeDef}`).run();
-            } catch (colErr) {
-              console.warn(`[ensureD1Tables] Warning adding column ${tableName}.${colName}:`, colErr);
-            }
+  }
+  for (const [tableName, columns] of Object.entries(EXPECTED_TABLE_COLUMNS)) {
+    try {
+      const info = await db.prepare(`PRAGMA table_info("${tableName}")`).all<{ name: string }>();
+      const existingCols = new Set(
+        (info?.results || []).map((c) => String(c.name || '').trim().toLowerCase())
+      );
+      if (!existingCols.size) continue;
+      for (const [colName, colDef] of Object.entries(columns)) {
+        if (!existingCols.has(colName.toLowerCase())) {
+          try {
+            const safeDef = colDef.replace(/DEFAULT\s+"([^"]*)"/g, "DEFAULT '$1'");
+            await db.prepare(`ALTER TABLE "${tableName}" ADD COLUMN "${colName}" ${safeDef}`).run();
+          } catch (colErr) {
+            console.warn(`[ensureD1Tables] Warning adding column ${tableName}.${colName}:`, colErr);
           }
         }
-      } catch (tableErr) {
-        console.warn(`[ensureD1Tables] Warning inspecting table ${tableName}:`, tableErr);
       }
+    } catch (tableErr) {
+      console.warn(`[ensureD1Tables] Warning inspecting table ${tableName}:`, tableErr);
     }
-    d1SchemaReady = true;
-  };
-
-  d1SchemaPromise = runInit().catch((err) => {
-    d1SchemaReady = false;
-    throw err;
-  }).finally(() => {
-    d1SchemaPromise = null;
-  });
-
-  return d1SchemaPromise;
+  }
+  d1SchemaReady = true;
 }
 
 async function withD1TableRepair<T>(db: D1Database, fn: () => Promise<T>): Promise<T> {
@@ -633,7 +662,8 @@ const ALLOWED_D1_TABLES = new Set([
   'users',
   'subscription_requests',
   'user_progress',
-  'lesson_catalog'
+  'lesson_catalog',
+  'd1_workbooks'
 ]);
 
 async function getD1TableColumns(db: D1Database, tableName: string): Promise<D1ColumnMeta[]> {
@@ -756,7 +786,15 @@ async function prepareInsertD1User(
   fields: Record<string, unknown>,
   options: { ignoreEmailConflict?: boolean } = {}
 ): Promise<D1PreparedStatement> {
-  const cols = await getD1TableColumns(db, 'users');
+  let cols = await getD1TableColumns(db, 'users');
+  if (!cols.length) {
+    d1SchemaReady = false;
+    await ensureD1Tables(db, true);
+    cols = await getD1TableColumns(db, 'users');
+  }
+  if (!cols.length) {
+    throw new Error('Database users table schema could not be inspected.');
+  }
   const colMap = buildD1UserColumnMap(fields);
   const colNames: string[] = [];
   const placeholders: string[] = [];
@@ -775,6 +813,9 @@ async function prepareInsertD1User(
     }
   }
 
+  if (!colNames.length) {
+    throw new Error('No writable columns found on users table.');
+  }
   const conflictClause = options.ignoreEmailConflict ? ' ON CONFLICT(email) DO NOTHING' : '';
   const sql = `INSERT INTO "users" (${colNames.join(', ')}) VALUES (${placeholders.join(', ')})${conflictClause}`;
   return db.prepare(sql).bind(...binds);
@@ -785,7 +826,15 @@ async function prepareUpdateD1UserByUid(
   uid: string,
   partialFields: Record<string, unknown>
 ): Promise<D1PreparedStatement> {
-  const cols = await getD1TableColumns(db, 'users');
+  let cols = await getD1TableColumns(db, 'users');
+  if (!cols.length) {
+    d1SchemaReady = false;
+    await ensureD1Tables(db, true);
+    cols = await getD1TableColumns(db, 'users');
+  }
+  if (!cols.length) {
+    throw new Error('Database users table schema could not be inspected.');
+  }
   const fullMap = buildD1UserColumnMap({ ...partialFields, uid });
   const keyGroups: Array<{ check: () => boolean; colKeys: string[] }> = [
     { check: () => partialFields.email !== undefined, colKeys: ['email'] },
@@ -827,6 +876,9 @@ async function prepareUpdateD1UserByUid(
     }
   }
 
+  if (!assignments.length) {
+    throw new Error('No updatable columns matched on users table.');
+  }
   binds.push(uid);
   const sql = `UPDATE "users" SET ${assignments.join(', ')} WHERE "uid" = ?`;
   return db.prepare(sql).bind(...binds);
@@ -835,7 +887,7 @@ async function prepareUpdateD1UserByUid(
 async function upsertD1UserRow(db: D1Database, rawFields: Record<string, unknown>): Promise<string> {
   const email = String(rawFields.email || '').trim().toLowerCase().slice(0, 160);
   const uid = String(rawFields.uid || '').trim();
-  const existing = await one<any>(db, `SELECT * FROM users WHERE uid = ? OR LOWER(email) = ?`, uid, email);
+  const existing = await oneStrict<any>(db, `SELECT * FROM users WHERE uid = ? OR LOWER(email) = ?`, uid, email);
 
   if (existing) {
     const targetUid = String(existing.uid);
@@ -1891,7 +1943,11 @@ async function getLessons(env: Env, url: URL): Promise<Response> {
         const data = await assetRes.json<{ sheets?: { Lessons?: Record<string, unknown>[] } }>();
         if (data?.sheets?.Lessons) {
           rawLessons = data.sheets.Lessons;
-          syncLessonsSheetsToD1(env.DB, data.sheets as any).catch(() => {});
+          try {
+            await syncLessonsSheetsToD1(env.DB, data.sheets as any);
+          } catch (syncErr) {
+            console.warn('[getLessons] Non-fatal lesson seed warning:', syncErr);
+          }
         }
       }
     } catch (_) {}
@@ -2060,15 +2116,19 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
       if (staticSheets.Games?.length) rawGames = staticSheets.Games;
       if (staticSheets.Pronunciation?.length) rawPron = staticSheets.Pronunciation;
 
-      // Seed D1 in background
-      syncLessonsSheetsToD1(env.DB, {
-        Lessons: rawLessons,
-        Exercises: rawExercises,
-        Writing: rawWriting,
-        Vocabulary: rawVocab,
-        Games: rawGames,
-        Pronunciation: rawPron
-      }).catch(() => {});
+      // Seed D1 strictly inside this request lifecycle (never cross-request background promises)
+      try {
+        await syncLessonsSheetsToD1(env.DB, {
+          Lessons: rawLessons,
+          Exercises: rawExercises,
+          Writing: rawWriting,
+          Vocabulary: rawVocab,
+          Games: rawGames,
+          Pronunciation: rawPron
+        });
+      } catch (syncErr) {
+        console.warn('[getDatabaseBundle] Non-fatal lesson seed warning:', syncErr);
+      }
     }
 
     const Lessons = rawLessons.map(normalizeLessonRow);
@@ -2789,85 +2849,338 @@ function phonesMatchWorker(a: unknown, b: unknown): boolean {
 
 async function ensureD1UsersSeeded(env: Env, origin: string): Promise<void> {
   await ensureD1Tables(env.DB);
-  const cntRow = await one<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM users`);
+  const cntRow = await oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM users`);
   if ((cntRow?.c || 0) > 0) return;
 
+  let data: {
+    users?: Record<string, any>;
+    userProgress?: Record<string, any>;
+    subscriptionRequests?: any[];
+    lessonCatalog?: Record<string, any>;
+  } | null = null;
   try {
     const assetRes = await env.ASSETS.fetch(new Request(new URL('/data/users.json', origin)));
-    if (!assetRes.ok) return;
-    const data = (await assetRes.json()) as {
-      users?: Record<string, any>;
-      userProgress?: Record<string, any>;
-      subscriptionRequests?: any[];
-      lessonCatalog?: Record<string, any>;
+    if (assetRes.ok) {
+      data = await assetRes.json();
+    }
+  } catch (_) {
+    return;
+  }
+  if (!data) return;
+
+  const stmts: D1PreparedStatement[] = [];
+  const nowIso = new Date().toISOString();
+
+  if (data.users && typeof data.users === 'object') {
+    for (const u of Object.values(data.users)) {
+      const email = String(u?.email || '').trim().toLowerCase();
+      const uid = String(u?.uid || '').trim();
+      if (!email || !uid) continue;
+      const isAdm = String(u.role || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL;
+      stmts.push(
+        await prepareInsertD1User(
+          env.DB,
+          {
+            uid,
+            email,
+            username: bindStr(u.username, email.split('@')[0]),
+            phoneNumber: bindStr(u.phoneNumber),
+            dob: bindStr(u.dob),
+            role: isAdm ? 'admin' : 'student',
+            membershipStatus: bindStr(u.membershipStatus, isAdm ? 'active' : 'free'),
+            membershipPlan: bindStr(u.membershipPlan, isAdm ? 'course' : 'none'),
+            membershipExpiresAt: bindStr(u.membershipExpiresAt),
+            subscribedLessonIds: parseJsonStrArray(u.subscribedLessonIds),
+            subscribedCourses: parseJsonStrArray(u.subscribedCourses),
+            practiceLessonIds: parseJsonStrArray(u.practiceLessonIds),
+            practiceCourses: parseJsonStrArray(u.practiceCourses),
+            mustChangePassword: u.mustChangePassword ? 1 : 0,
+            passwordSalt: bindStr(u.passwordSalt),
+            passwordHash: bindStr(u.passwordHash),
+            createdAt: bindStr(u.createdAt, nowIso),
+            updatedAt: bindStr(u.updatedAt, nowIso)
+          },
+          { ignoreEmailConflict: true }
+        )
+      );
+    }
+  }
+
+  if (data.userProgress && typeof data.userProgress === 'object') {
+    for (const [keyUid, rawProg] of Object.entries(data.userProgress)) {
+      const clean = sanitizeWorkerProgressRow(rawProg, String((rawProg as any)?.uid || keyUid));
+      if (!clean.uid) continue;
+      stmts.push(
+        env.DB.prepare(`
+          INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(uid) DO NOTHING
+        `).bind(
+          clean.uid,
+          clean.currentStreak,
+          clean.bestStreak,
+          clean.lastCompletedDate,
+          JSON.stringify(clean.streakDates),
+          JSON.stringify(clean.completedLessonIds),
+          clean.reminderEnabled ? 1 : 0,
+          clean.reminderTime,
+          clean.lastNotifiedDate,
+          bindStr(clean.updatedAt, nowIso)
+        )
+      );
+    }
+  }
+
+  if (Array.isArray(data.subscriptionRequests)) {
+    for (const r of data.subscriptionRequests) {
+      if (!r?.requestId || !r?.userId) continue;
+      stmts.push(
+        env.DB.prepare(`
+          INSERT INTO subscription_requests (requestId, userId, username, userEmail, userPhone, planType, lessonId, courseName, lessonTitle, amountLabel, contactChannel, contactHandle, note, status, adminNote, createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(requestId) DO NOTHING
+        `).bind(
+          String(r.requestId), String(r.userId), bindStr(r.username), bindStr(r.userEmail), bindStr(r.userPhone),
+          bindStr(r.planType, 'course'), bindStr(r.lessonId), bindStr(r.courseName), bindStr(r.lessonTitle),
+          bindStr(r.amountLabel), bindStr(r.contactChannel, 'viber'), bindStr(r.contactHandle), bindStr(r.note),
+          bindStr(r.status, 'pending'), bindStr(r.adminNote), bindStr(r.createdAt, nowIso), bindStr(r.updatedAt, nowIso)
+        )
+      );
+    }
+  }
+
+  if (data.lessonCatalog && typeof data.lessonCatalog === 'object') {
+    for (const cat of Object.values(data.lessonCatalog)) {
+      const lessonId = String(cat?.lessonId || '').trim();
+      if (!lessonId) continue;
+      stmts.push(
+        env.DB.prepare(`
+          INSERT INTO lesson_catalog (lessonId, title, course, audience, accessType, price, practicePrice, hasExercises, updatedBy, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(lessonId) DO NOTHING
+        `).bind(
+          lessonId,
+          bindStr(cat.title, lessonId),
+          bindStr(cat.course, 'HSK 2'),
+          bindStr(cat.audience, 'Adult'),
+          bindStr(cat.accessType, 'free'),
+          bindNum(cat.price, 0),
+          bindNum(cat.practicePrice, 0),
+          cat.hasExercises === false ? 0 : 1,
+          bindStr(cat.updatedBy, 'seed'),
+          bindStr(cat.updatedAt, nowIso)
+        )
+      );
+    }
+  }
+
+  if (stmts.length > 0) {
+    await executeD1Batch(env.DB, stmts);
+    try {
+      await rebuildAndPersistUsersWorkbookD1(env);
+    } catch (wbErr) {
+      console.warn('[ensureD1UsersSeeded] Workbook snapshot skipped during initial seed:', wbErr);
+    }
+  }
+}
+
+function formatPortablePasswordHashWorker(row: any): string {
+  const rawHash = String(getRowField(row, 'passwordHash', 'password_hash', 'password', 'hash') || '').trim();
+  const rawSalt = String(getRowField(row, 'passwordSalt', 'password_salt', 'salt') || '').trim();
+  if (!rawHash) return '';
+  if (rawHash.startsWith('sha256$') || rawHash.startsWith('scrypt$')) return rawHash;
+  if (rawSalt && /^[a-f0-9]{64}$/i.test(rawHash)) {
+    return `sha256$${rawSalt}$${rawHash}`;
+  }
+  return rawHash;
+}
+
+async function buildUsersWorkbookXlsxWorker(env: Env): Promise<{
+  bytes: Uint8Array;
+  userCount: number;
+  requestCount: number;
+  progressCount: number;
+  catalogCount: number;
+}> {
+  const [userRows, reqRowsRaw, progRowsRaw, catRowsRaw] = await Promise.all([
+    allStrict<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`),
+    allStrict<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`),
+    allStrict<any>(env.DB, `SELECT * FROM user_progress`),
+    allStrict<any>(env.DB, `SELECT * FROM lesson_catalog`)
+  ]);
+
+  const userSheetRows = userRows.map((row) => {
+    const clean = sanitizeWorkerUserRow(row);
+    if (!clean) return null;
+    return {
+      uid: clean.uid,
+      username: clean.username || '',
+      email: clean.email || '',
+      phoneNumber: clean.phoneNumber || '',
+      dob: clean.dob || '',
+      passwordHash: formatPortablePasswordHashWorker(row),
+      role: clean.role || 'student',
+      membershipStatus: clean.membershipStatus || 'free',
+      membershipPlan: clean.membershipPlan || 'none',
+      membershipExpiresAt: clean.membershipExpiresAt || '',
+      subscribedLessonIds: (clean.subscribedLessonIds || []).join(','),
+      subscribedCourses: (clean.subscribedCourses || []).join(','),
+      practiceLessonIds: (clean.practiceLessonIds || []).join(','),
+      practiceCourses: (clean.practiceCourses || []).join(','),
+      mustChangePassword: clean.mustChangePassword ? 'true' : 'false',
+      createdAt: String(clean.createdAt || ''),
+      updatedAt: String(clean.updatedAt || '')
     };
-    const stmts: D1PreparedStatement[] = [];
-    const nowIso = new Date().toISOString();
+  }).filter(Boolean) as Record<string, string | number>[];
 
-    if (data?.users && typeof data.users === 'object') {
-      for (const u of Object.values(data.users)) {
-        const email = String(u?.email || '').trim().toLowerCase();
-        const uid = String(u?.uid || '').trim();
-        if (!email || !uid) continue;
-        const isAdm = String(u.role || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL;
-        stmts.push(
-          await prepareInsertD1User(
-            env.DB,
-            {
-              uid,
-              email,
-              username: bindStr(u.username, email.split('@')[0]),
-              phoneNumber: bindStr(u.phoneNumber),
-              dob: bindStr(u.dob),
-              role: isAdm ? 'admin' : 'student',
-              membershipStatus: bindStr(u.membershipStatus, isAdm ? 'active' : 'free'),
-              membershipPlan: bindStr(u.membershipPlan, isAdm ? 'course' : 'none'),
-              membershipExpiresAt: bindStr(u.membershipExpiresAt),
-              subscribedLessonIds: parseJsonStrArray(u.subscribedLessonIds),
-              subscribedCourses: parseJsonStrArray(u.subscribedCourses),
-              practiceLessonIds: parseJsonStrArray(u.practiceLessonIds),
-              practiceCourses: parseJsonStrArray(u.practiceCourses),
-              mustChangePassword: u.mustChangePassword ? 1 : 0,
-              passwordSalt: bindStr(u.passwordSalt),
-              passwordHash: bindStr(u.passwordHash),
-              createdAt: bindStr(u.createdAt, nowIso),
-              updatedAt: bindStr(u.updatedAt, nowIso)
-            },
-            { ignoreEmailConflict: true }
-          )
-        );
-      }
-    }
+  const reqSheetRows = reqRowsRaw.map((r) => ({
+    requestId: String(r.requestId || ''),
+    userId: String(r.userId || ''),
+    username: String(r.username || ''),
+    userEmail: String(r.userEmail || ''),
+    userPhone: String(r.userPhone || ''),
+    planType: String(r.planType || ''),
+    lessonId: String(r.lessonId || ''),
+    courseName: String(r.courseName || ''),
+    lessonTitle: String(r.lessonTitle || ''),
+    amountLabel: String(r.amountLabel || ''),
+    contactChannel: String(r.contactChannel || ''),
+    contactHandle: String(r.contactHandle || ''),
+    note: String(r.note || ''),
+    status: String(r.status || 'pending'),
+    adminNote: String(r.adminNote || ''),
+    createdAt: String(r.createdAt || ''),
+    updatedAt: String(r.updatedAt || '')
+  }));
 
-    if (data?.lessonCatalog && typeof data.lessonCatalog === 'object') {
-      for (const cat of Object.values(data.lessonCatalog)) {
-        const lessonId = String(cat?.lessonId || '').trim();
-        if (!lessonId) continue;
-        stmts.push(
-          env.DB.prepare(`
-            INSERT INTO lesson_catalog (lessonId, title, course, audience, accessType, price, practicePrice, hasExercises, updatedBy, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(lessonId) DO NOTHING
-          `).bind(
-            lessonId,
-            bindStr(cat.title, lessonId),
-            bindStr(cat.course, 'HSK 2'),
-            bindStr(cat.audience, 'Adult'),
-            bindStr(cat.accessType, 'free'),
-            bindNum(cat.price, 0),
-            bindNum(cat.practicePrice, 0),
-            cat.hasExercises === false ? 0 : 1,
-            bindStr(cat.updatedBy, 'seed'),
-            bindStr(cat.updatedAt, nowIso)
-          )
-        );
-      }
-    }
+  const progSheetRows = progRowsRaw.map((p) => {
+    const clean = sanitizeWorkerProgressRow(p, String(p.uid || ''));
+    return {
+      uid: clean.uid,
+      currentStreak: Number(clean.currentStreak) || 0,
+      bestStreak: Number(clean.bestStreak) || 0,
+      lastCompletedDate: String(clean.lastCompletedDate || ''),
+      streakDates: (clean.streakDates || []).join(','),
+      completedLessonIds: (clean.completedLessonIds || []).join(','),
+      reminderEnabled: clean.reminderEnabled ? 'true' : 'false',
+      reminderTime: String(clean.reminderTime || '18:00'),
+      lastNotifiedDate: String(clean.lastNotifiedDate || ''),
+      updatedAt: String(clean.updatedAt || '')
+    };
+  });
 
-    if (stmts.length > 0) {
-      await executeD1Batch(env.DB, stmts);
+  const catSheetRows = catRowsRaw.map((c) => ({
+    lessonId: String(c.lessonId || ''),
+    title: String(c.title || ''),
+    course: String(c.course || ''),
+    audience: String(c.audience || 'Adult'),
+    accessType: c.accessType === 'paid' ? 'paid' : 'free',
+    price: Number(c.price) || 0,
+    practicePrice: Number(c.practicePrice) || 0,
+    hasExercises: Number(c.hasExercises ?? 1) === 0 ? 'false' : 'true',
+    updatedBy: String(c.updatedBy || ''),
+    updatedAt: String(c.updatedAt || '')
+  }));
+
+  const wb = XLSX.utils.book_new();
+  const sheetSpecs: Array<{ name: string; rows: Record<string, string | number>[]; headers: string[] }> = [
+    {
+      name: 'Users',
+      rows: userSheetRows,
+      headers: [
+        'uid', 'username', 'email', 'phoneNumber', 'dob', 'passwordHash', 'role',
+        'membershipStatus', 'membershipPlan', 'membershipExpiresAt',
+        'subscribedLessonIds', 'subscribedCourses', 'practiceLessonIds', 'practiceCourses',
+        'mustChangePassword', 'createdAt', 'updatedAt'
+      ]
+    },
+    {
+      name: 'Requests',
+      rows: reqSheetRows,
+      headers: [
+        'requestId', 'userId', 'username', 'userEmail', 'userPhone', 'planType', 'lessonId',
+        'courseName', 'lessonTitle', 'amountLabel', 'contactChannel', 'contactHandle',
+        'note', 'status', 'adminNote', 'createdAt', 'updatedAt'
+      ]
+    },
+    {
+      name: 'Progress',
+      rows: progSheetRows,
+      headers: [
+        'uid', 'currentStreak', 'bestStreak', 'lastCompletedDate', 'streakDates',
+        'completedLessonIds', 'reminderEnabled', 'reminderTime', 'lastNotifiedDate', 'updatedAt'
+      ]
+    },
+    {
+      name: 'Catalog',
+      rows: catSheetRows,
+      headers: ['lessonId', 'title', 'course', 'audience', 'accessType', 'price', 'practicePrice', 'hasExercises', 'updatedBy', 'updatedAt']
     }
-  } catch (_) {}
+  ];
+
+  for (const spec of sheetSpecs) {
+    const ws =
+      spec.rows.length > 0
+        ? XLSX.utils.json_to_sheet(spec.rows, { header: spec.headers })
+        : XLSX.utils.aoa_to_sheet([spec.headers]);
+    XLSX.utils.book_append_sheet(wb, ws, spec.name);
+  }
+
+  const written = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer | Uint8Array;
+  const bytes = written instanceof Uint8Array ? written : new Uint8Array(written);
+  return {
+    bytes,
+    userCount: userSheetRows.length,
+    requestCount: reqSheetRows.length,
+    progressCount: progSheetRows.length,
+    catalogCount: catSheetRows.length
+  };
+}
+
+async function rebuildAndPersistUsersWorkbookD1(env: Env): Promise<{
+  bytes: Uint8Array;
+  userCount: number;
+  requestCount: number;
+  progressCount: number;
+  catalogCount: number;
+  updatedAt: string;
+}> {
+  const built = await buildUsersWorkbookXlsxWorker(env);
+  const b64 = uint8ToBase64(built.bytes);
+  const nowIso = new Date().toISOString();
+
+  await withD1TableRepair(env.DB, async () => {
+    await env.DB.prepare(`
+      INSERT INTO d1_workbooks (name, xlsx_b64, row_count, updated_at)
+      VALUES ('users.xlsx', ?, ?, ?)
+      ON CONFLICT(name) DO UPDATE SET
+        xlsx_b64 = excluded.xlsx_b64,
+        row_count = excluded.row_count,
+        updated_at = excluded.updated_at
+    `).bind(b64, built.userCount, nowIso).run();
+  });
+
+  const savedWb = await oneStrict<{ row_count: number; len: number }>(
+    env.DB,
+    `SELECT row_count, LENGTH(xlsx_b64) AS len FROM d1_workbooks WHERE name = 'users.xlsx'`
+  );
+  if (!savedWb || Number(savedWb.len) <= 0 || Number(savedWb.row_count) !== built.userCount) {
+    throw new Error('Could not verify saved Excel workbook (users.xlsx) in D1 database.');
+  }
+
+  if (env.MEDIA_BUCKET) {
+    try {
+      await env.MEDIA_BUCKET.put('workbooks/users.xlsx', built.bytes, {
+        httpMetadata: {
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
+      });
+    } catch (r2Err) {
+      console.warn('[rebuildAndPersistUsersWorkbookD1] Optional R2 workbook backup warning:', r2Err);
+    }
+  }
+
+  return { ...built, updatedAt: nowIso };
 }
 
 async function buildWorkerSessionResponse(env: Env, userRow: any, token: string | null) {
@@ -3018,12 +3331,12 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         return fail('Date of Birth must be in YYYY-MM-DD format.', 400);
       }
 
-      const existing = await one<any>(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
+      const existing = await oneStrict<any>(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
       if (existing) {
         return fail('An account with this email already exists. Please sign in instead.', 409, { code: 'email-already-in-use' });
       }
 
-      const adminRow = await one<any>(env.DB, `SELECT uid FROM users WHERE role = 'admin' LIMIT 1`);
+      const adminRow = await oneStrict<any>(env.DB, `SELECT uid FROM users WHERE role = 'admin' LIMIT 1`);
       const shouldClaimAdmin = email === ADMIN_EMAIL && !adminRow;
       const uid = `usr_${randomHexWorker(8)}`;
       const { salt, hash } = await createSaltedHashWorker(password);
@@ -3058,10 +3371,16 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         `).bind(uid, nowIso).run();
       });
 
-      const userRow = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid);
-      if (!userRow) {
+      const [userRow, progRow] = await Promise.all([
+        oneStrict<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
+        oneStrict<any>(env.DB, `SELECT uid FROM user_progress WHERE uid = ?`, uid)
+      ]);
+      if (!userRow || !progRow) {
         return fail('Account registration could not be verified in the database. Please retry.', 500);
       }
+
+      const wbMeta = await rebuildAndPersistUsersWorkbookD1(env);
+
       const token = await signWorkerToken(env, { uid, email, role: shouldClaimAdmin ? 'admin' : 'student' });
       const sessionPayload = await buildWorkerSessionResponse(env, userRow, token);
       return json(
@@ -3069,13 +3388,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           ...sessionPayload,
           persistedToDatabase: true,
           persistedToExcel: true,
-          storage: 'cloudflare-d1'
+          excelRowCount: wbMeta.userCount,
+          excelUpdatedAt: wbMeta.updatedAt,
+          storage: 'cloudflare-d1+excel'
         },
         201
       );
     } catch (err: any) {
       console.error('Registration worker error:', err);
-      return fail(err?.message || 'Unable to create account. Please try again.', 500);
+      return fail(err?.message || 'Unable to save your account to Database & Excel. Please try again.', 500);
     }
   }
 
@@ -3088,7 +3409,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return fail('Please enter both your email and password.', 400);
     }
 
-    let userRow = await one<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
+    let userRow = await oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
     const storedSalt = String(getRowField(userRow, 'passwordSalt', 'password_salt') || '');
     const storedHash = String(getRowField(userRow, 'passwordHash', 'password_hash') || '');
     let ok = userRow ? await verifyPasswordWorker(password, storedSalt, storedHash) : false;
@@ -3131,7 +3452,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           await insertStmt.run();
         }
       });
-      userRow = await one<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
+      await rebuildAndPersistUsersWorkbookD1(env);
+      userRow = await oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
       ok = Boolean(userRow);
     }
 
@@ -3162,7 +3484,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return fail('New password must be between 6 and 128 characters.', 400);
     }
 
-    const userRow = await one<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
+    const userRow = await oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
     if (!userRow) {
       return fail(`No account found in database for ${email}.`, 404);
     }
@@ -3185,6 +3507,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       });
       await updateStmt.run();
     });
+    await rebuildAndPersistUsersWorkbookD1(env);
 
     return json({ success: true, message: 'Password reset successfully! Sign in now with your new password.' });
   }
@@ -3203,7 +3526,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           const pwHash = String(raw?.passwordHash || '').trim();
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
           if (!/^sha256\$[a-f0-9]+\$[a-f0-9]{64}$/i.test(pwHash)) continue;
-          const existing = await one<any>(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
+          const existing = await oneStrict<any>(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
           if (existing) continue;
 
           const uid = String(raw?.uid || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || `usr_${randomHexWorker(8)}`;
@@ -3246,7 +3569,17 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         }
       });
 
-      return json({ success: true, migratedCount: migrated.length, migratedEmails: migrated });
+      if (migrated.length > 0) {
+        await rebuildAndPersistUsersWorkbookD1(env);
+      }
+
+      return json({
+        success: true,
+        migratedCount: migrated.length,
+        migratedEmails: migrated,
+        persistedToDatabase: true,
+        persistedToExcel: true
+      });
     } catch (err: any) {
       return fail(err?.message || 'Unable to migrate browser accounts.', 500);
     }
@@ -3281,7 +3614,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       });
       await stmt.run();
     });
-    const updated = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(auth.user.uid));
+    await rebuildAndPersistUsersWorkbookD1(env);
+    const updated = await oneStrict<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(auth.user.uid));
     return json({ success: true, profile: sanitizeWorkerUserRow(updated) });
   }
 
@@ -3308,7 +3642,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       });
       await stmt.run();
     });
-    const updated = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(auth.user.uid));
+    await rebuildAndPersistUsersWorkbookD1(env);
+    const updated = await oneStrict<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(auth.user.uid));
     return json({ success: true, profile: sanitizeWorkerUserRow(updated) });
   }
 
@@ -3317,26 +3652,29 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (auth instanceof Response) return auth;
     const body = (await request.json().catch(() => ({}))) as any;
     const clean = sanitizeWorkerProgressRow(body, String(auth.user.uid));
-    await env.DB.prepare(`
-      INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(uid) DO UPDATE SET
-        currentStreak=excluded.currentStreak, bestStreak=excluded.bestStreak, lastCompletedDate=excluded.lastCompletedDate,
-        streakDates=excluded.streakDates, completedLessonIds=excluded.completedLessonIds,
-        reminderEnabled=excluded.reminderEnabled, reminderTime=excluded.reminderTime, lastNotifiedDate=excluded.lastNotifiedDate,
-        updatedAt=excluded.updatedAt
-    `).bind(
-      clean.uid,
-      clean.currentStreak,
-      clean.bestStreak,
-      clean.lastCompletedDate,
-      JSON.stringify(clean.streakDates),
-      JSON.stringify(clean.completedLessonIds),
-      clean.reminderEnabled ? 1 : 0,
-      clean.reminderTime,
-      clean.lastNotifiedDate,
-      String(clean.updatedAt)
-    ).run();
+    await withD1TableRepair(env.DB, () =>
+      env.DB.prepare(`
+        INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(uid) DO UPDATE SET
+          currentStreak=excluded.currentStreak, bestStreak=excluded.bestStreak, lastCompletedDate=excluded.lastCompletedDate,
+          streakDates=excluded.streakDates, completedLessonIds=excluded.completedLessonIds,
+          reminderEnabled=excluded.reminderEnabled, reminderTime=excluded.reminderTime, lastNotifiedDate=excluded.lastNotifiedDate,
+          updatedAt=excluded.updatedAt
+      `).bind(
+        clean.uid,
+        clean.currentStreak,
+        clean.bestStreak,
+        clean.lastCompletedDate,
+        JSON.stringify(clean.streakDates),
+        JSON.stringify(clean.completedLessonIds),
+        clean.reminderEnabled ? 1 : 0,
+        clean.reminderTime,
+        clean.lastNotifiedDate,
+        String(clean.updatedAt)
+      ).run()
+    );
+    await rebuildAndPersistUsersWorkbookD1(env);
     return json({ success: true, userProgress: clean });
   }
 
@@ -3351,29 +3689,32 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const requestId = `req_${randomHexWorker(6)}`;
     const nowIso = new Date().toISOString();
 
-    await env.DB.prepare(`
-      INSERT INTO subscription_requests (requestId, userId, username, userEmail, userPhone, planType, lessonId, courseName, lessonTitle, amountLabel, contactChannel, contactHandle, note, status, adminNote, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?)
-    `).bind(
-      requestId,
-      String(auth.user.uid),
-      String(auth.user.username || 'Learner'),
-      String(auth.user.email || ''),
-      String(auth.user.phoneNumber || ''),
-      planType,
-      String(body.lessonId || '').trim().slice(0, 128),
-      String(body.courseName || 'HSK 2').trim().slice(0, 80),
-      String(body.lessonTitle || planType).trim().slice(0, 160),
-      String(body.amountLabel || '').trim().slice(0, 60),
-      body.contactChannel === 'email' ? 'email' : 'viber',
-      String(body.contactHandle || '').trim().slice(0, 120),
-      String(body.note || '').trim().slice(0, 400),
-      nowIso,
-      nowIso
-    ).run();
+    await withD1TableRepair(env.DB, () =>
+      env.DB.prepare(`
+        INSERT INTO subscription_requests (requestId, userId, username, userEmail, userPhone, planType, lessonId, courseName, lessonTitle, amountLabel, contactChannel, contactHandle, note, status, adminNote, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?)
+      `).bind(
+        requestId,
+        String(auth.user.uid),
+        String(auth.user.username || 'Learner'),
+        String(auth.user.email || ''),
+        String(auth.user.phoneNumber || ''),
+        planType,
+        String(body.lessonId || '').trim().slice(0, 128),
+        String(body.courseName || 'HSK 2').trim().slice(0, 80),
+        String(body.lessonTitle || planType).trim().slice(0, 160),
+        String(body.amountLabel || '').trim().slice(0, 60),
+        body.contactChannel === 'email' ? 'email' : 'viber',
+        String(body.contactHandle || '').trim().slice(0, 120),
+        String(body.note || '').trim().slice(0, 400),
+        nowIso,
+        nowIso
+      ).run()
+    );
 
-    const created = await one<any>(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId);
-    const myRequests = await all<any>(env.DB, `SELECT * FROM subscription_requests WHERE userId = ? ORDER BY createdAt DESC`, String(auth.user.uid));
+    await rebuildAndPersistUsersWorkbookD1(env);
+    const created = await oneStrict<any>(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId);
+    const myRequests = await allStrict<any>(env.DB, `SELECT * FROM subscription_requests WHERE userId = ? ORDER BY createdAt DESC`, String(auth.user.uid));
     return json({ success: true, request: created, myRequests }, 201);
   }
 
@@ -3382,13 +3723,16 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const auth = await requireAuthWorker(request, env);
     if (auth instanceof Response) return auth;
     const requestId = decodeURIComponent(reqDeleteMatch[1]);
-    const target = await one<any>(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId);
+    const target = await oneStrict<any>(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId);
     if (!target) return fail('Subscription request not found.', 404);
     const isAdmin = String(auth.user.role || '').toLowerCase() === 'admin';
     if (target.userId !== auth.user.uid && !isAdmin) return fail('Not authorized to cancel this request.', 403);
     if (target.status !== 'pending' && !isAdmin) return fail('Only pending requests can be cancelled.', 400);
-    await env.DB.prepare(`DELETE FROM subscription_requests WHERE requestId = ?`).bind(requestId).run();
-    const myRequests = await all<any>(env.DB, `SELECT * FROM subscription_requests WHERE userId = ? ORDER BY createdAt DESC`, String(auth.user.uid));
+    await withD1TableRepair(env.DB, () =>
+      env.DB.prepare(`DELETE FROM subscription_requests WHERE requestId = ?`).bind(requestId).run()
+    );
+    await rebuildAndPersistUsersWorkbookD1(env);
+    const myRequests = await allStrict<any>(env.DB, `SELECT * FROM subscription_requests WHERE userId = ? ORDER BY createdAt DESC`, String(auth.user.uid));
     return json({ success: true, myRequests });
   }
 
@@ -3412,6 +3756,30 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     });
   }
 
+  if (path === '/api/admin/users/export.xlsx' && method === 'GET') {
+    await ensureD1UsersSeeded(env, url.origin);
+    const admin = await requireAdminWorker(request, env);
+    if (admin instanceof Response) return admin;
+    try {
+      const wbMeta = await rebuildAndPersistUsersWorkbookD1(env);
+      return new Response(wbMeta.bytes, {
+        status: 200,
+        headers: {
+          ...CORS_HEADERS,
+          'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'content-disposition': 'attachment; filename="users.xlsx"',
+          'cache-control': 'no-store',
+          'x-user-count': String(wbMeta.userCount),
+          'x-request-count': String(wbMeta.requestCount),
+          'x-progress-count': String(wbMeta.progressCount),
+          'x-catalog-count': String(wbMeta.catalogCount)
+        }
+      });
+    } catch (err: any) {
+      return fail(err?.message || 'Unable to generate Excel workbook (users.xlsx).', 500);
+    }
+  }
+
   if (path === '/api/admin/users/sync' && method === 'POST') {
     try {
       await ensureD1UsersSeeded(env, url.origin);
@@ -3430,7 +3798,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           const email = String(u?.email || '').trim().toLowerCase();
           const uid = String(u?.uid || '').trim();
           if (!email || !uid) continue;
-          const existing = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ? OR LOWER(email) = ?`, uid, email);
+          const existing = await oneStrict<any>(env.DB, `SELECT * FROM users WHERE uid = ? OR LOWER(email) = ?`, uid, email);
           const exTs = Date.parse(String(getRowField(existing, 'updatedAt', 'updated_at') || '')) || 0;
           const inTs = Date.parse(String(u.updatedAt || '')) || 0;
           if (!existing || inTs >= exTs) {
@@ -3519,10 +3887,12 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       }
 
       if (stmts.length > 0) await executeD1Batch(env.DB, stmts);
+      const wbMeta = await rebuildAndPersistUsersWorkbookD1(env);
+
       const [allUserRows, allReqRows, catRows] = await Promise.all([
-        all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`),
-        all<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`),
-        all<any>(env.DB, `SELECT * FROM lesson_catalog`)
+        allStrict<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`),
+        allStrict<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`),
+        allStrict<any>(env.DB, `SELECT * FROM lesson_catalog`)
       ]);
       const lessonCatalog: Record<string, any> = {};
       for (const c of catRows) {
@@ -3534,14 +3904,16 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         syncedUsersCount: cleanUsers.length,
         persistedToDatabase: true,
         persistedToExcel: true,
-        storage: 'cloudflare-d1',
+        excelRowCount: wbMeta.userCount,
+        excelUpdatedAt: wbMeta.updatedAt,
+        storage: 'cloudflare-d1+excel',
         allUsers: cleanUsers,
         allRequests: allReqRows,
         lessonCatalog
       });
     } catch (err: any) {
       console.error('POST /api/admin/users/sync error:', err);
-      return fail(err?.message || 'Failed to sync local users to D1 database.', 500);
+      return fail(err?.message || 'Failed to sync local users to D1 database & Excel.', 500);
     }
   }
 
@@ -3601,9 +3973,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       `).bind(uid, nowIso).run();
     });
 
+    await rebuildAndPersistUsersWorkbookD1(env);
+
     const [created, allUserRows] = await Promise.all([
-      one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
-      all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`)
+      oneStrict<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
+      allStrict<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`)
     ]);
     return json({
       success: true,
@@ -3637,9 +4011,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         });
         await stmt.run();
       });
+      await rebuildAndPersistUsersWorkbookD1(env);
       const [updated, allUserRows] = await Promise.all([
-        one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
-        all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`)
+        oneStrict<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
+        allStrict<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`)
       ]);
       return json({
         success: true,
@@ -3695,9 +4070,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       await stmt.run();
     });
 
+    await rebuildAndPersistUsersWorkbookD1(env);
     const [updated, allUserRows] = await Promise.all([
-      one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
-      all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`)
+      oneStrict<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
+      allStrict<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`)
     ]);
     return json({
       success: true,
@@ -3719,11 +4095,14 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     if (action === 'reject') {
       const adminNote = String(body.adminNote || 'Payment could not be verified').trim().slice(0, 300);
-      await env.DB.prepare(`UPDATE subscription_requests SET status = 'rejected', adminNote = ?, updatedAt = ? WHERE requestId = ?`)
-        .bind(adminNote, nowIso, requestId).run();
+      await withD1TableRepair(env.DB, () =>
+        env.DB.prepare(`UPDATE subscription_requests SET status = 'rejected', adminNote = ?, updatedAt = ? WHERE requestId = ?`)
+          .bind(adminNote, nowIso, requestId).run()
+      );
+      await rebuildAndPersistUsersWorkbookD1(env);
       const [updatedReq, allRequests] = await Promise.all([
-        one<any>(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId),
-        all<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`)
+        oneStrict<any>(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId),
+        allStrict<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`)
       ]);
       return json({ success: true, request: updatedReq, allRequests });
     }
@@ -3768,11 +4147,12 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         updateUserStmt
       ]);
     });
+    await rebuildAndPersistUsersWorkbookD1(env);
     const [updatedReq, updatedUser, allRequests, allUsers] = await Promise.all([
-      one<any>(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId),
-      one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(targetUser.uid)),
-      all<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`),
-      all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`)
+      oneStrict<any>(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId),
+      oneStrict<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(targetUser.uid)),
+      allStrict<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`),
+      allStrict<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`)
     ]);
     return json({
       success: true,
@@ -3847,7 +4227,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       );
     }
     if (stmts.length > 0) await executeD1Batch(env.DB, stmts);
-    const catRows = await all<any>(env.DB, `SELECT * FROM lesson_catalog`);
+    await rebuildAndPersistUsersWorkbookD1(env);
+    const catRows = await allStrict<any>(env.DB, `SELECT * FROM lesson_catalog`);
     const lessonCatalog: Record<string, any> = {};
     for (const c of catRows) lessonCatalog[c.lessonId] = c;
     return json({ success: true, lessonCatalog });
@@ -4015,7 +4396,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         'users',
         'subscription_requests',
         'user_progress',
-        'lesson_catalog'
+        'lesson_catalog',
+        'd1_workbooks'
       ],
       timestamp: new Date().toISOString()
     });

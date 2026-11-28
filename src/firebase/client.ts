@@ -891,7 +891,7 @@ async function backendApiFetch(
     status: res.status,
     rawText,
     isHtml: false,
-    data: parsed
+    data: parsed || (!res.ok && trimmed ? { success: false, error: trimmed.slice(0, 300) } : null)
   };
 }
 
@@ -4028,6 +4028,54 @@ async function exportUsersWorkbook(): Promise<{
   catalogCount: number;
 }> {
   if (!state.user || !getComputedAdmin()) throw new Error('Administrator access required.');
+
+  const { lb, hasBackend } = getBackendBridge();
+  const token = getApiToken();
+  if (hasBackend && token) {
+    const endpoint = '/api/admin/users/export.xlsx?t=' + Date.now();
+    const url = lb && typeof lb.apiUrl === 'function' ? lb.apiUrl(endpoint) : endpoint;
+    const res = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      let errMsg = `Could not export users.xlsx from server (HTTP ${res.status}).`;
+      try {
+        const parsedErr = JSON.parse(errText);
+        if (parsedErr?.error) errMsg = String(parsedErr.error);
+      } catch {
+        if (errText.trim()) errMsg = errText.trim().slice(0, 240);
+      }
+      throw new Error(errMsg);
+    }
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = 'users.xlsx';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    }
+    const userCount = Number(res.headers.get('x-user-count')) || state.allUsers.length;
+    const requestCount = Number(res.headers.get('x-request-count')) || state.allRequests.length;
+    const progressCount = Number(res.headers.get('x-progress-count')) || Object.keys(baseWorkbookStore.progress || {}).length;
+    const catalogCount = Number(res.headers.get('x-catalog-count')) || Object.keys(state.lessonCatalog || {}).length;
+    return {
+      fileName: 'users.xlsx',
+      userCount,
+      requestCount,
+      progressCount,
+      catalogCount
+    };
+  }
+
   const xlsx = await ensureXlsxLoaded();
   if (!xlsx) throw new Error('SheetJS library is not loaded.');
 
@@ -4199,6 +4247,11 @@ async function importUsersWorkbook(arrayBuffer: ArrayBuffer): Promise<{
   reconcileDatasetWithLessons(merged);
   syncMemoryFromDataset(merged, state.user.uid);
   emitState();
+
+  const { hasBackend } = getBackendBridge();
+  if (hasBackend && getApiToken()) {
+    await syncLocalDataToDatabase({ silent: false });
+  }
 
   return {
     userCount,

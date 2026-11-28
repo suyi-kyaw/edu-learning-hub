@@ -274,3 +274,10 @@ CREATE TABLE IF NOT EXISTS lesson_catalog (
   updatedAt TEXT
 );
 
+CREATE TABLE IF NOT EXISTS d1_workbooks (
+  name TEXT PRIMARY KEY,
+  xlsx_b64 TEXT NOT NULL,
+  row_count INTEGER DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+

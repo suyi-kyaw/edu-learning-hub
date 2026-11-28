@@ -3713,6 +3713,35 @@ app.get('/api/admin/users', requireAdminToken, (req, res) => {
   }
 });
 
+app.get('/api/admin/users/export.xlsx', requireAdminToken, (req, res) => {
+  try {
+    const store = readAuthStore();
+    reconcileAuthStoreWithLessons(store);
+    syncUsersFilesFromStore(store, { strict: true });
+    if (!fs.existsSync(USERS_XLSX_PATH)) {
+      return res.status(500).json({ success: false, error: 'users.xlsx workbook could not be generated.' });
+    }
+    const buf = fs.readFileSync(USERS_XLSX_PATH);
+    const userCount = Object.values(store.users || {}).filter((u) => u && u.email && u.uid).length;
+    const requestCount = Array.isArray(store.subscriptionRequests) ? store.subscriptionRequests.length : 0;
+    const progressCount = Object.keys(store.userProgress || {}).length;
+    const catalogCount = Object.keys(store.lessonCatalog || {}).length;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="users.xlsx"');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-User-Count', String(userCount));
+    res.setHeader('X-Request-Count', String(requestCount));
+    res.setHeader('X-Progress-Count', String(progressCount));
+    res.setHeader('X-Catalog-Count', String(catalogCount));
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-User-Count, X-Request-Count, X-Progress-Count, X-Catalog-Count');
+    return res.send(buf);
+  } catch (err) {
+    console.error('GET /api/admin/users/export.xlsx error:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to export users.xlsx.' });
+  }
+});
+
 app.post('/api/admin/users/sync', requireAdminToken, jsonParser, (req, res) => {
   try {
     const body = req.body || {};
