@@ -103,7 +103,7 @@ function formatPortablePasswordHash(u) {
   return rawHash;
 }
 
-function syncUsersFilesFromStore(store) {
+function syncUsersFilesFromStore(store, syncOpts = {}) {
   try {
     if (!store || typeof store !== 'object') return;
     const usersList = Object.values(store.users || {}).filter((u) => u && u.email && u.uid);
@@ -258,14 +258,17 @@ function syncUsersFilesFromStore(store) {
     fs.renameSync(xlsxTmp, USERS_XLSX_PATH);
   } catch (err) {
     console.warn('Could not sync users.xlsx / users.json:', err.message);
+    if (syncOpts && syncOpts.strict) {
+      throw err;
+    }
   }
 }
 
-function writeAuthStore(store) {
+function writeAuthStore(store, opts = {}) {
   const tmpPath = `${AUTH_STORE_PATH}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
   fs.writeFileSync(tmpPath, JSON.stringify(store, null, 2), { encoding: 'utf8', mode: 0o600 });
   fs.renameSync(tmpPath, AUTH_STORE_PATH);
-  syncUsersFilesFromStore(store);
+  syncUsersFilesFromStore(store, opts);
 }
 
 function isAdminClaimed(store = readAuthStore()) {
@@ -2003,13 +2006,26 @@ app.post('/api/auth/register', jsonParser, (req, res) => {
     if (!store.userProgress[uid]) {
       store.userProgress[uid] = sanitizeProgressInput(null, uid);
     }
-    writeAuthStore(store);
+    writeAuthStore(store, { strict: true });
+
+    const verifyStore = readAuthStore();
+    if (!verifyStore.users?.[uid] || !fs.existsSync(USERS_XLSX_PATH)) {
+      return res.status(500).json({
+        success: false,
+        error: 'Account could not be verified in the database and Excel workbook.'
+      });
+    }
 
     const token = signAuthToken(newUser);
-    res.status(201).json(buildSessionResponse(store, newUser, token));
+    res.status(201).json({
+      ...buildSessionResponse(verifyStore, verifyStore.users[uid], token),
+      persistedToDatabase: true,
+      persistedToExcel: true,
+      storage: 'node-excel'
+    });
   } catch (err) {
     console.error('POST /api/auth/register error:', err);
-    res.status(500).json({ success: false, error: 'Unable to create account.' });
+    res.status(500).json({ success: false, error: err?.message || 'Unable to create account.' });
   }
 });
 
@@ -2334,7 +2350,10 @@ app.get('/api/auth/me', requireAuthToken, (req, res) => {
   if (reconciled.changed) {
     writeAuthStore(store);
   }
-  const latestUser = store.users[req.authUser.uid] || req.authUser;
+  const latestUser = store.users[req.authUser.uid];
+  if (!latestUser) {
+    return res.status(401).json({ success: false, error: 'Account record could not be verified in database.' });
+  }
   res.setHeader('Cache-Control', 'no-cache');
   res.json(buildSessionResponse(store, latestUser, null));
 });
@@ -3780,13 +3799,22 @@ app.post('/api/admin/users/sync', requireAdminToken, jsonParser, (req, res) => {
       };
     }
 
-    writeAuthStore(store);
+    writeAuthStore(store, { strict: true });
     const allUsers = Object.values(store.users).map(sanitizeUserPublic);
     const allRequests = [...store.subscriptionRequests];
-    res.json({ success: true, allUsers, allRequests });
+    res.json({
+      success: true,
+      syncedUsersCount: allUsers.length,
+      persistedToDatabase: true,
+      persistedToExcel: fs.existsSync(USERS_XLSX_PATH),
+      storage: 'node-excel',
+      allUsers,
+      allRequests,
+      lessonCatalog: store.lessonCatalog || {}
+    });
   } catch (err) {
     console.error('POST /api/admin/users/sync error:', err);
-    res.status(500).json({ success: false, error: 'Failed to sync user store.' });
+    res.status(500).json({ success: false, error: err?.message || 'Failed to sync user store.' });
   }
 });
 

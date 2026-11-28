@@ -37,7 +37,7 @@
     }
   };
 
-  let modalMode = 'closed'; // 'closed' | 'auth' | 'account' | 'subscribe'
+  let modalMode = 'closed'; // 'closed' | 'auth' | 'registering' | 'account' | 'subscribe'
   let authTab = 'signin'; // 'signin' | 'register' | 'reset'
   let resetPrefillEmail = '';
   let accountTab = 'profile'; // 'profile' | 'plans' | 'admin'
@@ -52,6 +52,33 @@
   let pendingPostAuthSubscribe = null;
   let feedbackBanner = null; // { type: 'success' | 'error' | 'info', text: string }
   let lastAuthUserUid = null;
+  let registrationState = {
+    phase: 'idle', // 'idle' | 'pending' | 'success' | 'error'
+    step: 'validate', // 'validate' | 'saving' | 'verifying' | 'done'
+    detail: '',
+    errorMessage: '',
+    isDuplicateEmail: false,
+    pendingCreds: null, // In-memory only during active registration/retry; cleared on success/cancel
+    draftMeta: { username: '', email: '', phoneNumber: '', dob: '' }
+  };
+
+  function clearTransientRegistrationCreds() {
+    if (registrationState.pendingCreds) {
+      registrationState.pendingCreds = null;
+    }
+  }
+
+  function resetRegistrationState(clearDraft = false) {
+    clearTransientRegistrationCreds();
+    registrationState.phase = 'idle';
+    registrationState.step = 'validate';
+    registrationState.detail = '';
+    registrationState.errorMessage = '';
+    registrationState.isDuplicateEmail = false;
+    if (clearDraft) {
+      registrationState.draftMeta = { username: '', email: '', phoneNumber: '', dob: '' };
+    }
+  }
 
   function escapeHTML(str) {
     return String(str ?? '')
@@ -240,6 +267,9 @@
 
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop) {
+          if (modalMode === 'registering' && registrationState.phase === 'pending') {
+            return;
+          }
           closeModal();
         }
       });
@@ -248,11 +278,15 @@
   }
 
   function closeModal() {
+    if (modalMode === 'registering' && registrationState.phase === 'pending') {
+      return;
+    }
     modalMode = 'closed';
     feedbackBanner = null;
+    resetRegistrationState(true);
     const backdrop = document.getElementById('linguaAuthModal');
     if (backdrop) {
-      backdrop.classList.remove('is-open');
+      backdrop.classList.remove('is-open', 'is-fullscreen');
       backdrop.setAttribute('aria-hidden', 'true');
     }
     document.body.classList.remove('lp-modal-open');
@@ -262,6 +296,7 @@
     const api = getAuthApi();
     const state = api ? api.getState() : null;
     feedbackBanner = null;
+    resetRegistrationState(true);
     if (state && state.user) {
       modalMode = 'account';
       accountTab = 'profile';
@@ -276,6 +311,7 @@
     const api = getAuthApi();
     const state = api ? api.getState() : null;
     feedbackBanner = null;
+    resetRegistrationState(true);
     if (!state || !state.user) {
       openAuthModal('signin');
       return;
@@ -670,25 +706,25 @@
           <div class="lp-form-grid-2">
             <div class="lp-field">
               <label for="lpRegUsername">User Name *</label>
-              <input type="text" id="lpRegUsername" maxlength="60" autocomplete="username" placeholder="e.g. Mei Lin" required />
+              <input type="text" id="lpRegUsername" maxlength="60" autocomplete="username" value="${escapeHTML(registrationState.draftMeta?.username || '')}" placeholder="e.g. Mei Lin" required />
             </div>
             <div class="lp-field">
               <label for="lpRegEmail">Email Address *</label>
-              <input type="email" id="lpRegEmail" maxlength="160" autocomplete="email" placeholder="you@example.com" required />
+              <input type="email" id="lpRegEmail" maxlength="160" autocomplete="email" value="${escapeHTML(registrationState.draftMeta?.email || '')}" placeholder="you@example.com" required />
             </div>
           </div>
 
           <div class="lp-form-grid-2">
             <div class="lp-field">
               <label for="lpRegPhone">Phone / Viber Number *</label>
-              <input type="tel" id="lpRegPhone" maxlength="32" autocomplete="tel" placeholder="+95 9 xxx xxx xxx" required />
+              <input type="tel" id="lpRegPhone" maxlength="32" autocomplete="tel" value="${escapeHTML(registrationState.draftMeta?.phoneNumber || '')}" placeholder="+95 9 xxx xxx xxx" required />
             </div>
             <div class="lp-field">
               <div class="lp-field-label-row">
                 <label for="lpRegDob">Date of Birth *</label>
-                <span class="lp-age-readout" id="lpRegAgePreview">Age: --</span>
+                <span class="lp-age-readout" id="lpRegAgePreview">${registrationState.draftMeta?.dob && getAgeLabel(registrationState.draftMeta.dob) ? `Age: ${escapeHTML(getAgeLabel(registrationState.draftMeta.dob))}` : 'Age: --'}</span>
               </div>
-              <input type="date" id="lpRegDob" max="${todayIso}" required />
+              <input type="date" id="lpRegDob" max="${todayIso}" value="${escapeHTML(registrationState.draftMeta?.dob || '')}" required />
             </div>
           </div>
 
@@ -707,6 +743,139 @@
         </form>
       `
       }
+    `;
+  }
+
+  function renderRegisteringView(state) {
+    const phase = registrationState.phase;
+    const step = registrationState.step;
+    const draft = registrationState.draftMeta || {};
+    const stepOrder = { validate: 0, saving: 1, verifying: 2, done: 3 };
+    const currentIdx = phase === 'success' ? 3 : stepOrder[step] ?? 0;
+
+    const steps = [
+      { id: 'validate', label: 'Validate profile details', desc: 'Check name, email, phone number, and password rules' },
+      { id: 'saving', label: 'Save account to Database & Excel', desc: 'Write your profile & encrypted password to persistent storage' },
+      { id: 'verifying', label: 'Confirm account is ready for login', desc: 'Verify stored record so you can sign in from any browser' }
+    ];
+
+    const heading =
+      phase === 'success'
+        ? 'Registration Complete'
+        : phase === 'error'
+        ? 'Account Not Saved Yet'
+        : 'Still Registering Your Account…';
+
+    const statusBannerClass =
+      phase === 'success'
+        ? 'lp-reg-notice-success'
+        : phase === 'error'
+        ? 'lp-reg-notice-error'
+        : 'lp-reg-notice-pending';
+
+    const statusNotice =
+      phase === 'success'
+        ? 'Your account has been stored and verified in the Database & Excel workbook. You can now sign in and access your account.'
+        : phase === 'error'
+        ? `${registrationState.errorMessage || 'Unable to store your account right now.'} Your account cannot sign in until it finishes saving to the Database & Excel store.`
+        : registrationState.detail ||
+          'Please wait while your registration saves to the Database & Excel store. Your account can only sign in after storage completes.';
+
+    const canGoAdmin = Boolean(state?.isAdmin && !pendingPostAuthSubscribe);
+    const continueLabel = canGoAdmin
+      ? 'Open Admin Portal →'
+      : pendingPostAuthSubscribe
+      ? 'Continue to Subscription →'
+      : 'Continue to My Account →';
+
+    return `
+      <div class="lp-reg-fullscreen-shell">
+        <div class="lp-modal-header">
+          <div>
+            <span class="lp-modal-eyebrow">Account Registration Progress</span>
+            <h2 id="lpAuthModalTitle">${escapeHTML(heading)}</h2>
+          </div>
+          ${
+            phase === 'pending'
+              ? ''
+              : '<button type="button" class="lp-modal-close" id="lpCloseAuthModalBtn" aria-label="Close modal">✕</button>'
+          }
+        </div>
+
+        <div class="lp-reg-identity-line">
+          <strong>${escapeHTML(draft.username || 'Learner')}</strong>
+          <span aria-hidden="true">·</span>
+          <span>${escapeHTML(draft.email || '')}</span>
+          ${draft.phoneNumber ? `<span aria-hidden="true">·</span><span>${escapeHTML(draft.phoneNumber)}</span>` : ''}
+        </div>
+
+        <div class="lp-reg-notice ${statusBannerClass}" role="status" aria-live="polite">
+          <div class="lp-reg-notice-title">
+            ${
+              phase === 'success'
+                ? 'Saved to Database & Excel'
+                : phase === 'error'
+                ? 'Storage Failed — Account Locked Until Saved'
+                : 'Still Registering — Please Do Not Close This Window'
+            }
+          </div>
+          <p class="lp-reg-notice-text">${escapeHTML(statusNotice)}</p>
+        </div>
+
+        <ol class="lp-reg-steps" aria-label="Registration steps">
+          ${steps
+            .map((s, idx) => {
+              let itemState = 'waiting';
+              let stateText = 'Waiting';
+              let marker = String(idx + 1);
+              if (phase === 'success' || idx < currentIdx) {
+                itemState = 'done';
+                stateText = 'Done';
+                marker = '✓';
+              } else if (idx === currentIdx) {
+                if (phase === 'error') {
+                  itemState = 'error';
+                  stateText = 'Failed';
+                  marker = '!';
+                } else {
+                  itemState = 'active';
+                  stateText = 'In progress';
+                  marker = '…';
+                }
+              }
+              return `
+                <li class="lp-reg-step lp-reg-step-${itemState}">
+                  <span class="lp-reg-step-marker" aria-hidden="true">${marker}</span>
+                  <div class="lp-reg-step-body">
+                    <div class="lp-reg-step-title">${escapeHTML(s.label)}</div>
+                    <div class="lp-reg-step-desc">${escapeHTML(s.desc)}</div>
+                  </div>
+                  <span class="lp-reg-step-status">${escapeHTML(stateText)}</span>
+                </li>
+              `;
+            })
+            .join('')}
+        </ol>
+
+        <div class="lp-reg-actions">
+          ${
+            phase === 'pending'
+              ? `<button type="button" class="lp-btn lp-btn-primary lp-btn-full" disabled>Still Registering &amp; Saving to Database &amp; Excel…</button>`
+              : phase === 'error'
+              ? `
+                ${
+                  registrationState.isDuplicateEmail
+                    ? `<button type="button" class="lp-btn lp-btn-primary" id="lpRegGoSignInBtn">Go to Sign In</button>`
+                    : registrationState.pendingCreds
+                    ? `<button type="button" class="lp-btn lp-btn-primary" id="lpRegRetryBtn">Retry Saving Account</button>`
+                    : ''
+                }
+                <button type="button" class="lp-btn lp-btn-secondary" id="lpRegEditBtn">Edit Details</button>
+              `
+              : `<button type="button" class="lp-btn lp-btn-primary lp-btn-full" id="lpRegContinueBtn">${escapeHTML(continueLabel)}</button>`
+          }
+        </div>
+      </div>
     `;
   }
 
@@ -1389,7 +1558,11 @@
     const state = api ? api.getState() : { ready: false, user: null, profile: null, myRequests: [], allRequests: [], allUsers: [] };
 
     let inner = '';
-    if (modalMode === 'subscribe') {
+    let isFullscreen = false;
+    if (modalMode === 'registering') {
+      isFullscreen = true;
+      inner = renderRegisteringView(state);
+    } else if (modalMode === 'subscribe') {
       inner = renderSubscribeView(state);
     } else if (modalMode === 'account' && state.user) {
       inner = renderAccountView(state);
@@ -1398,7 +1571,8 @@
       inner = renderAuthView(state);
     }
 
-    backdrop.innerHTML = `<div class="lp-auth-card">${inner}</div>`;
+    backdrop.classList.toggle('is-fullscreen', isFullscreen);
+    backdrop.innerHTML = `<div class="lp-auth-card${isFullscreen ? ' lp-reg-fullscreen-card' : ''}">${inner}</div>`;
     backdrop.classList.add('is-open');
     backdrop.setAttribute('aria-hidden', 'false');
     document.body.classList.add('lp-modal-open');
@@ -1576,6 +1750,111 @@
       };
     }
 
+    async function executeRegistrationFlow(creds) {
+      if (!api || !creds) return;
+      modalMode = 'registering';
+      registrationState.phase = 'pending';
+      registrationState.step = 'validate';
+      registrationState.detail = 'Validating your profile details…';
+      registrationState.errorMessage = '';
+      registrationState.isDuplicateEmail = false;
+      registrationState.pendingCreds = creds;
+      registrationState.draftMeta = {
+        username: creds.username,
+        email: creds.email,
+        phoneNumber: creds.phoneNumber,
+        dob: creds.dob
+      };
+      renderModal();
+
+      try {
+        await api.registerWithEmail(creds, {
+          onProgress: (step, detail) => {
+            if (modalMode !== 'registering') return;
+            registrationState.step = step;
+            registrationState.detail = detail || '';
+            renderModal();
+          }
+        });
+        clearTransientRegistrationCreds();
+        registrationState.phase = 'success';
+        registrationState.step = 'done';
+        registrationState.detail =
+          'Your account is saved and verified in the Database & Excel store and is ready to log in.';
+        showToast('Account registered & verified in Database & Excel!');
+        renderModal();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unable to save registration to Database & Excel.';
+        registrationState.phase = 'error';
+        registrationState.errorMessage = msg;
+        registrationState.isDuplicateEmail = /already exists/i.test(msg);
+        if (registrationState.isDuplicateEmail) {
+          clearTransientRegistrationCreds();
+        }
+        renderModal();
+      }
+    }
+
+    // Registration progress screen controls
+    const retryRegBtn = document.getElementById('lpRegRetryBtn');
+    if (retryRegBtn) {
+      retryRegBtn.onclick = () => {
+        if (registrationState.pendingCreds) {
+          void executeRegistrationFlow(registrationState.pendingCreds);
+        }
+      };
+    }
+
+    const editRegBtn = document.getElementById('lpRegEditBtn');
+    if (editRegBtn) {
+      editRegBtn.onclick = () => {
+        resetRegistrationState(false);
+        modalMode = 'auth';
+        authTab = 'register';
+        feedbackBanner = null;
+        renderModal();
+      };
+    }
+
+    const goSignInRegBtn = document.getElementById('lpRegGoSignInBtn');
+    if (goSignInRegBtn) {
+      goSignInRegBtn.onclick = () => {
+        resetPrefillEmail = registrationState.draftMeta?.email || '';
+        resetRegistrationState(true);
+        modalMode = 'auth';
+        authTab = 'signin';
+        feedbackBanner = { type: 'info', text: 'An account with this email is already registered. Sign in below.' };
+        renderModal();
+      };
+    }
+
+    const continueRegBtn = document.getElementById('lpRegContinueBtn');
+    if (continueRegBtn) {
+      continueRegBtn.onclick = () => {
+        const nextState = api ? api.getState() : state;
+        resetRegistrationState(true);
+        if (nextState?.isAdmin && !pendingPostAuthSubscribe) {
+          closeModal();
+          if (window.location.pathname.includes('admin.html')) {
+            showToast('Admin account verified — CMS Portal unlocked.');
+          } else {
+            window.location.href = 'admin.html';
+          }
+          return;
+        }
+        if (pendingPostAuthSubscribe) {
+          subscribeContext = { ...pendingPostAuthSubscribe };
+          pendingPostAuthSubscribe = null;
+          modalMode = 'subscribe';
+        } else {
+          modalMode = 'account';
+          accountTab = 'profile';
+        }
+        feedbackBanner = { type: 'success', text: 'Account verified in Database & Excel and signed in!' };
+        renderModal();
+      };
+    }
+
     // Register submit
     const regForm = document.getElementById('lpRegisterForm');
     if (regForm) {
@@ -1588,6 +1867,8 @@
         const dob = document.getElementById('lpRegDob')?.value?.trim() || '';
         const password = document.getElementById('lpRegPassword')?.value || '';
         const confirmPw = document.getElementById('lpRegPasswordConfirm')?.value || '';
+
+        registrationState.draftMeta = { username, email, phoneNumber, dob };
 
         if (!username || !email || !phoneNumber || !dob) {
           feedbackBanner = { type: 'error', text: 'Please fill in User Name, Email, Phone Number, and Date of Birth.' };
@@ -1605,44 +1886,7 @@
           return;
         }
 
-        const submitBtn = document.getElementById('lpRegisterSubmitBtn');
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          submitBtn.textContent = 'Creating Account…';
-        }
-        try {
-          await api.registerWithEmail({ username, email, phoneNumber, dob, password });
-          const nextState = api.getState();
-          if (nextState?.isAdmin && !pendingPostAuthSubscribe) {
-            closeModal();
-            if (window.location.pathname.includes('admin.html')) {
-              showToast('Admin account created — CMS Portal unlocked.');
-            } else {
-              showToast('Admin account created — opening Admin Portal…');
-              setTimeout(() => {
-                window.location.href = 'admin.html';
-              }, 300);
-            }
-            return;
-          }
-          feedbackBanner = { type: 'success', text: 'Account created and signed in!' };
-          showToast('Welcome to JiedeEdu!');
-          if (pendingPostAuthSubscribe) {
-            subscribeContext = { ...pendingPostAuthSubscribe };
-            pendingPostAuthSubscribe = null;
-            modalMode = 'subscribe';
-          } else {
-            modalMode = 'account';
-            accountTab = 'profile';
-          }
-          renderModal();
-        } catch (err) {
-          feedbackBanner = {
-            type: 'error',
-            text: err instanceof Error ? err.message : 'Registration failed.'
-          };
-          renderModal();
-        }
+        await executeRegistrationFlow({ username, email, phoneNumber, dob, password });
       };
     }
 
@@ -2551,6 +2795,9 @@
         return;
       }
       if (modalMode !== 'closed') {
+        if (modalMode === 'registering' && registrationState.phase === 'pending') {
+          return;
+        }
         closeModal();
       }
     }
@@ -2564,6 +2811,10 @@
     const newUid = state.user ? state.user.uid : null;
     const authUserChanged = newUid !== lastAuthUserUid;
     lastAuthUserUid = newUid;
+
+    if (modalMode === 'registering') {
+      return;
+    }
 
     if (modalMode !== 'closed') {
       // Avoid blowing away typed input unless the user signed in/out or changed tabs explicitly

@@ -222,6 +222,8 @@ CREATE TABLE IF NOT EXISTS users (
   mustChangePassword INTEGER DEFAULT 0,
   passwordSalt TEXT DEFAULT '',
   passwordHash TEXT DEFAULT '',
+  password_salt TEXT DEFAULT '',
+  password_hash TEXT DEFAULT '',
   createdAt TEXT,
   updatedAt TEXT
 );

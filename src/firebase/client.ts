@@ -2422,15 +2422,14 @@ function syncBaseWorkbookFromServerPayload(data: Record<string, unknown>): void 
       const prevHash = baseWorkbookStore.users[rawU.uid]?.passwordHash || '';
       nextUsers[rawU.uid] = { profile: { ...rawU }, passwordHash: prevHash };
     }
-    if (Object.keys(nextUsers).length > 0) {
-      baseWorkbookStore.users = nextUsers;
-      baseWorkbookStore.loaded = true;
-    }
+    baseWorkbookStore.users = nextUsers;
+    baseWorkbookStore.loaded = true;
   } else if (data.profile && typeof data.profile === 'object') {
     const prof = data.profile as UserProfile;
     if (prof.uid && prof.email) {
       const prevHash = baseWorkbookStore.users[prof.uid]?.passwordHash || '';
       baseWorkbookStore.users[prof.uid] = { profile: { ...prof }, passwordHash: prevHash };
+      baseWorkbookStore.loaded = true;
     }
   }
   if (Array.isArray(data.allRequests)) {
@@ -2688,6 +2687,8 @@ async function syncLocalDataToDatabase(options: { silent?: boolean } = {}): Prom
     }).catch(() => null);
     if (migRes?.ok && migRes.data?.success) {
       migratedUsersCount = Number(migRes.data.migratedCount) || 0;
+    } else if (!options.silent && migRes && !migRes.ok && migRes.data?.error && !(getApiToken() && getComputedAdmin())) {
+      throw new Error(String(migRes.data.error));
     }
   }
 
@@ -2701,35 +2702,28 @@ async function syncLocalDataToDatabase(options: { silent?: boolean } = {}): Prom
     const overlayProgressPayload = Object.values(overlay.progress || {});
     const overlayCatalogPayload = Object.values(overlay.lessonCatalog || {});
 
-    if (
-      overlayUsersPayload.length > 0 ||
-      overlayRequestsPayload.length > 0 ||
-      overlayProgressPayload.length > 0 ||
-      overlayCatalogPayload.length > 0
-    ) {
-      const syncRes = await backendApiFetch('/api/admin/users/sync', {
-        method: 'POST',
-        body: JSON.stringify({
-          users: overlayUsersPayload,
-          requests: overlayRequestsPayload,
-          progress: overlayProgressPayload,
-          lessonCatalog: overlayCatalogPayload
-        })
-      });
-      if (!syncRes.ok || !syncRes.data?.success) {
-        if (!options.silent) {
-          throw new Error((syncRes.data && syncRes.data.error) || 'Could not push local users to database & Excel.');
-        }
-      } else {
-        applySessionPayload(syncRes.data);
-        syncBaseWorkbookFromServerPayload(syncRes.data);
-        const cleanOverlay = readOverlayStore();
-        cleanOverlay.users = {};
-        cleanOverlay.requests = {};
-        cleanOverlay.progress = {};
-        cleanOverlay.lessonCatalog = {};
-        writeOverlayStore(cleanOverlay);
+    const syncRes = await backendApiFetch('/api/admin/users/sync', {
+      method: 'POST',
+      body: JSON.stringify({
+        users: overlayUsersPayload,
+        requests: overlayRequestsPayload,
+        progress: overlayProgressPayload,
+        lessonCatalog: overlayCatalogPayload
+      })
+    });
+    if (!syncRes.ok || !syncRes.data?.success) {
+      if (!options.silent) {
+        throw new Error((syncRes.data && syncRes.data.error) || 'Could not push local users to database & Excel.');
       }
+    } else {
+      applySessionPayload(syncRes.data);
+      syncBaseWorkbookFromServerPayload(syncRes.data);
+      const cleanOverlay = readOverlayStore();
+      cleanOverlay.users = {};
+      cleanOverlay.requests = {};
+      cleanOverlay.progress = {};
+      cleanOverlay.lessonCatalog = {};
+      writeOverlayStore(cleanOverlay);
     }
 
     if ((overlay.siteConfig as any)?._pendingServerSync && overlay.siteConfig) {
@@ -2902,13 +2896,21 @@ async function reloadSiteConfig(): Promise<SiteConfig> {
 
 // --- Public Auth, Profile, Subscription & Admin Methods ---
 
-async function registerWithEmail(params: {
-  username: string;
-  email: string;
-  phoneNumber: string;
-  dob: string;
-  password: string;
-}): Promise<UserProfile> {
+type RegistrationProgressStep = 'validate' | 'saving' | 'verifying' | 'done';
+
+async function registerWithEmail(
+  params: {
+    username: string;
+    email: string;
+    phoneNumber: string;
+    dob: string;
+    password: string;
+  },
+  options?: { onProgress?: (step: RegistrationProgressStep, detail?: string) => void }
+): Promise<UserProfile> {
+  const onProgress = options?.onProgress;
+  onProgress?.('validate', 'Validating your profile details…');
+
   const cleanUsername = String(params.username || '').trim().slice(0, 60);
   const cleanEmail = String(params.email || '').trim().toLowerCase().slice(0, 160);
   const cleanPhone = String(params.phoneNumber || '').trim().slice(0, 32);
@@ -2926,117 +2928,102 @@ async function registerWithEmail(params: {
   }
 
   const { hasBackend } = getBackendBridge();
-  if (hasBackend) {
-    try {
-      const res = await backendApiFetch('/api/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({
-          username: cleanUsername,
-          email: cleanEmail,
-          phoneNumber: cleanPhone,
-          dob: cleanDob,
-          password: rawPassword
-        })
-      });
+  if (!hasBackend) {
+    throw new Error(
+      'Unable to reach the Database & Excel server. Account registration is only completed after saving to the Database & Excel store.'
+    );
+  }
 
-      if (res.ok && res.data?.success && res.data?.token && res.data?.user?.uid) {
-        setApiToken(String(res.data.token));
-        setSessionUid(String(res.data.user.uid));
-        applySessionPayload(res.data);
-        syncBaseWorkbookFromServerPayload(res.data);
+  onProgress?.('saving', 'Saving your account to the Database & Excel store…');
 
-        await ensureFirebaseAuthSession(cleanEmail, rawPassword, cleanUsername, 'register');
-        if (state.profile) {
-          void syncUserProfileToFirestore(state.profile);
-        }
-        if (state.userProgress) {
-          void syncUserProgressToFirestore(state.userProgress);
-        }
+  let res: { ok: boolean; status: number; data: any };
+  try {
+    res = await backendApiFetch('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: cleanUsername,
+        email: cleanEmail,
+        phoneNumber: cleanPhone,
+        dob: cleanDob,
+        password: rawPassword
+      })
+    });
+  } catch (err: any) {
+    setApiToken(null);
+    clearAuthSession();
+    throw new Error(
+      err?.message || 'Network error while saving your account to the Database & Excel store. Please retry.'
+    );
+  }
 
-        state.ready = true;
-        emitState();
-        return state.profile as UserProfile;
-      }
-
-      if (!res.ok) {
-        if (res.status === 409 || res.status === 400 || (res.data && res.data.code === 'email-already-in-use')) {
-          throw new Error(res.data?.error || 'An account with this email already exists. Please sign in instead.');
-        }
-        console.warn('Backend registration returned error, falling back to local overlay registration:', res.status, res.data);
-      }
-    } catch (err: any) {
-      if (err?.message && (err.message.includes('already exists') || err.message.includes('valid email') || err.message.includes('Password') || err.message.includes('Date of Birth'))) {
-        throw err;
-      }
-      console.warn('Backend registration exception, using local overlay fallback:', err);
+  if (!res.ok || !res.data?.success || !res.data?.token || !res.data?.user?.uid) {
+    setApiToken(null);
+    clearAuthSession();
+    if (res.status === 409 || (res.data && res.data.code === 'email-already-in-use')) {
+      throw new Error(res.data?.error || 'An account with this email already exists. Please sign in instead.');
     }
+    throw new Error(
+      (res.data && res.data.error) ||
+        `Database & Excel save did not complete (HTTP ${res.status || 0}). Please retry.`
+    );
   }
 
-  // Fallback / Offline local browser overlay registration
-  const dataset = getMergedDataset();
-  const existingUser = Object.values(dataset.users || {}).find(
-    (u) => String(u?.profile?.email || '').trim().toLowerCase() === cleanEmail
-  );
-  if (existingUser) {
-    throw new Error('An account with this email already exists. Please sign in instead.');
+  if (res.data.persistedToDatabase === false || res.data.persistedToExcel === false) {
+    setApiToken(null);
+    clearAuthSession();
+    throw new Error('Your registration has not finished saving to the Database & Excel store yet. Please retry.');
   }
 
-  const shouldClaimAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase() && !isAdminClaimedInDataset(dataset);
-  const uid = `usr_${generateRandomHex(8)}`;
-  const passwordHash = await createSaltedPasswordHash(rawPassword);
-  const nowIso = new Date().toISOString();
+  const newToken = String(res.data.token);
+  const newUid = String(res.data.user.uid);
 
-  const newProfile: UserProfile = {
-    uid,
-    username: cleanUsername,
-    email: cleanEmail,
-    phoneNumber: cleanPhone,
-    dob: cleanDob,
-    role: shouldClaimAdmin ? 'admin' : 'student',
-    membershipStatus: shouldClaimAdmin ? 'active' : 'free',
-    membershipPlan: shouldClaimAdmin ? 'course' : 'none',
-    membershipExpiresAt: '',
-    subscribedLessonIds: [],
-    subscribedCourses: shouldClaimAdmin ? ['HSK 2'] : [],
-    practiceLessonIds: [],
-    practiceCourses: [],
-    linkedProviders: ['password'],
-    mustChangePassword: false,
-    createdAt: nowIso,
-    updatedAt: nowIso
-  };
+  onProgress?.('verifying', 'Verifying your account in Database & Excel before enabling login…');
 
-  const overlay = readOverlayStore();
-  if (!overlay.users) overlay.users = {};
-  overlay.users[uid] = {
-    profile: newProfile,
-    passwordHash
-  };
-  if (!overlay.progress) overlay.progress = {};
-  if (!overlay.progress[uid]) {
-    overlay.progress[uid] = createDefaultUserProgress(uid);
-  }
-  writeOverlayStore(overlay);
+  try {
+    setApiToken(newToken);
+    const meRes = await backendApiFetch('/api/auth/me?t=' + Date.now(), { method: 'GET' });
+    if (!meRes.ok || !meRes.data?.success || !meRes.data?.user?.uid || String(meRes.data.user.uid) !== newUid) {
+      throw new Error(
+        (meRes.data && meRes.data.error) ||
+          'Account could not be confirmed in the database yet. Sign-in stays locked until saving completes.'
+      );
+    }
 
-  setSessionUid(uid);
-  const freshDataset = getMergedDataset();
-  reconcileDatasetWithLessons(freshDataset);
-  syncMemoryFromDataset(freshDataset, uid);
+    setSessionUid(newUid);
+    applySessionPayload(meRes.data);
+    syncBaseWorkbookFromServerPayload(meRes.data);
 
-  await ensureFirebaseAuthSession(cleanEmail, rawPassword, cleanUsername, 'register');
-  if (state.profile) {
-    void syncUserProfileToFirestore(state.profile);
-  }
-  if (state.userProgress) {
-    void syncUserProgressToFirestore(state.userProgress);
+    // Ensure no un-synced browser overlay copy exists for this verified DB account
+    const overlay = readOverlayStore();
+    if (overlay.users[newUid]) {
+      delete overlay.users[newUid];
+      writeOverlayStore(overlay);
+    }
+  } catch (verifyErr: any) {
+    setApiToken(null);
+    clearAuthSession();
+    throw new Error(
+      verifyErr?.message ||
+        'Could not verify your account in the database yet. Please retry before signing in.'
+    );
   }
 
+  // Non-blocking Firebase mirror (DB + Excel are already verified)
+  try {
+    await ensureFirebaseAuthSession(cleanEmail, rawPassword, cleanUsername, 'register');
+    if (state.profile) {
+      void syncUserProfileToFirestore(state.profile);
+    }
+    if (state.userProgress) {
+      void syncUserProgressToFirestore(state.userProgress);
+    }
+  } catch {
+    // non-fatal mirror failure
+  }
+
+  onProgress?.('done', 'Stored and verified in Database & Excel.');
   state.ready = true;
   emitState();
-
-  // Auto-sync local registration to backend database if connected
-  void syncLocalDataToDatabase({ silent: true }).catch(() => {});
-
   return state.profile as UserProfile;
 }
 

@@ -314,7 +314,7 @@ const D1_TABLE_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS media_chunks (media_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, data_b64 TEXT NOT NULL, PRIMARY KEY (media_id, chunk_index))`,
   `CREATE TABLE IF NOT EXISTS site_config (id TEXT PRIMARY KEY, config_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS d1_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`,
-  `CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, username TEXT NOT NULL, phoneNumber TEXT DEFAULT '', dob TEXT DEFAULT '', role TEXT DEFAULT 'student', membershipStatus TEXT DEFAULT 'free', membershipPlan TEXT DEFAULT 'none', membershipExpiresAt TEXT DEFAULT '', subscribedLessonIds TEXT DEFAULT '[]', subscribedCourses TEXT DEFAULT '[]', practiceLessonIds TEXT DEFAULT '[]', practiceCourses TEXT DEFAULT '[]', linkedProviders TEXT DEFAULT '["password"]', mustChangePassword INTEGER DEFAULT 0, passwordSalt TEXT DEFAULT '', passwordHash TEXT DEFAULT '', createdAt TEXT, updatedAt TEXT)`,
+  `CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, username TEXT NOT NULL, phoneNumber TEXT DEFAULT '', dob TEXT DEFAULT '', role TEXT DEFAULT 'student', membershipStatus TEXT DEFAULT 'free', membershipPlan TEXT DEFAULT 'none', membershipExpiresAt TEXT DEFAULT '', subscribedLessonIds TEXT DEFAULT '[]', subscribedCourses TEXT DEFAULT '[]', practiceLessonIds TEXT DEFAULT '[]', practiceCourses TEXT DEFAULT '[]', linkedProviders TEXT DEFAULT '["password"]', mustChangePassword INTEGER DEFAULT 0, passwordSalt TEXT DEFAULT '', passwordHash TEXT DEFAULT '', password_salt TEXT DEFAULT '', password_hash TEXT DEFAULT '', createdAt TEXT, updatedAt TEXT)`,
   `CREATE TABLE IF NOT EXISTS subscription_requests (requestId TEXT PRIMARY KEY, userId TEXT NOT NULL, username TEXT, userEmail TEXT, userPhone TEXT, planType TEXT, lessonId TEXT DEFAULT '', courseName TEXT DEFAULT '', lessonTitle TEXT DEFAULT '', amountLabel TEXT DEFAULT '', contactChannel TEXT DEFAULT 'viber', contactHandle TEXT DEFAULT '', note TEXT DEFAULT '', status TEXT DEFAULT 'pending', adminNote TEXT DEFAULT '', createdAt TEXT, updatedAt TEXT)`,
   `CREATE TABLE IF NOT EXISTS user_progress (uid TEXT PRIMARY KEY, currentStreak INTEGER DEFAULT 0, bestStreak INTEGER DEFAULT 0, lastCompletedDate TEXT DEFAULT '', streakDates TEXT DEFAULT '[]', completedLessonIds TEXT DEFAULT '[]', reminderEnabled INTEGER DEFAULT 1, reminderTime TEXT DEFAULT '18:00', lastNotifiedDate TEXT DEFAULT '', updatedAt TEXT)`,
   `CREATE TABLE IF NOT EXISTS lesson_catalog (lessonId TEXT PRIMARY KEY, title TEXT, course TEXT, audience TEXT DEFAULT 'Adult', accessType TEXT DEFAULT 'free', price REAL DEFAULT 0, practicePrice REAL DEFAULT 0, hasExercises INTEGER DEFAULT 1, updatedBy TEXT DEFAULT '', updatedAt TEXT)`
@@ -495,6 +495,8 @@ const EXPECTED_TABLE_COLUMNS: Record<string, Record<string, string>> = {
     mustChangePassword: 'INTEGER DEFAULT 0',
     passwordSalt: "TEXT DEFAULT ''",
     passwordHash: "TEXT DEFAULT ''",
+    password_salt: "TEXT DEFAULT ''",
+    password_hash: "TEXT DEFAULT ''",
     createdAt: "TEXT DEFAULT ''",
     updatedAt: "TEXT DEFAULT ''"
   },
@@ -617,6 +619,258 @@ async function executeD1Batch(db: D1Database, stmts: D1PreparedStatement[]): Pro
       await db.batch(stmts.slice(i, i + CHUNK));
     }
   });
+}
+
+interface D1ColumnMeta {
+  name: string;
+  type: string;
+  notnull: number;
+  dflt_value: string | null;
+  pk: number;
+}
+
+const ALLOWED_D1_TABLES = new Set([
+  'users',
+  'subscription_requests',
+  'user_progress',
+  'lesson_catalog'
+]);
+
+async function getD1TableColumns(db: D1Database, tableName: string): Promise<D1ColumnMeta[]> {
+  if (!db || !ALLOWED_D1_TABLES.has(tableName)) return [];
+  const info = await db.prepare(`PRAGMA table_info("${tableName}")`).all<D1ColumnMeta>();
+  return (info?.results || []).filter((col) => /^[a-zA-Z0-9_]+$/.test(String(col?.name || '')));
+}
+
+function getRowField(row: any, ...keys: string[]): unknown {
+  if (!row || typeof row !== 'object') return undefined;
+  for (const k of keys) {
+    if (row[k] !== undefined && row[k] !== null && String(row[k]) !== '') {
+      return row[k];
+    }
+  }
+  for (const k of keys) {
+    if (row[k] !== undefined && row[k] !== null) {
+      return row[k];
+    }
+  }
+  return undefined;
+}
+
+function defaultValueForUnknownD1Column(col: D1ColumnMeta): string | number {
+  const t = String(col.type || '').toUpperCase();
+  if (t.includes('INT') || t.includes('REAL') || t.includes('NUM') || t.includes('DEC') || t.includes('FLOA') || t.includes('DOUB')) {
+    return 0;
+  }
+  return '';
+}
+
+function buildD1UserColumnMap(fields: Record<string, unknown>): Record<string, string | number> {
+  const email = String(fields.email || '').trim().toLowerCase().slice(0, 160);
+  const username = String(fields.username || (email.includes('@') ? email.split('@')[0] : 'Learner')).trim().slice(0, 60) || 'Learner';
+  const phoneNumber = String(fields.phoneNumber ?? '').trim().slice(0, 32);
+  const dob = String(fields.dob ?? '').trim().slice(0, 10);
+  const isAdminRole = String(fields.role || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL.toLowerCase();
+  const role = isAdminRole ? 'admin' : 'student';
+  const rawStatus = String(fields.membershipStatus || (isAdminRole ? 'active' : 'free')).trim().toLowerCase();
+  const membershipStatus = ['free', 'pending', 'active', 'expired'].includes(rawStatus) ? rawStatus : 'free';
+  const membershipPlan = normalizeWorkerPlan(fields.membershipPlan ?? (isAdminRole ? 'course' : 'none'));
+  const membershipExpiresAt = String(fields.membershipExpiresAt ?? '').trim().slice(0, 40);
+  const subscribedLessonIds =
+    typeof fields.subscribedLessonIds === 'string'
+      ? fields.subscribedLessonIds
+      : JSON.stringify(parseJsonStrArray(fields.subscribedLessonIds).slice(0, 100));
+  const subscribedCourses =
+    typeof fields.subscribedCourses === 'string'
+      ? fields.subscribedCourses
+      : JSON.stringify(Array.from(new Set(parseJsonStrArray(fields.subscribedCourses).map(normalizeWorkerCourseName))).slice(0, 50));
+  const practiceLessonIds =
+    typeof fields.practiceLessonIds === 'string'
+      ? fields.practiceLessonIds
+      : JSON.stringify(parseJsonStrArray(fields.practiceLessonIds).slice(0, 100));
+  const practiceCourses =
+    typeof fields.practiceCourses === 'string'
+      ? fields.practiceCourses
+      : JSON.stringify(Array.from(new Set(parseJsonStrArray(fields.practiceCourses).map(normalizeWorkerCourseName))).slice(0, 50));
+  const linkedProviders =
+    typeof fields.linkedProviders === 'string'
+      ? fields.linkedProviders
+      : JSON.stringify(['password']);
+  const mustChangePassword =
+    fields.mustChangePassword === true || Number(fields.mustChangePassword) === 1 || fields.mustChangePassword === 'true' ? 1 : 0;
+  const passwordHash = String(fields.passwordHash ?? '');
+  const extractedSalt =
+    !fields.passwordSalt && passwordHash.startsWith('sha256$') ? passwordHash.split('$')[1] || '' : '';
+  const passwordSalt = String(fields.passwordSalt ?? extractedSalt);
+  const nowIso = new Date().toISOString();
+  const createdAt = String(fields.createdAt || nowIso);
+  const updatedAt = String(fields.updatedAt || nowIso);
+  const uid = String(fields.uid || '').trim();
+
+  return {
+    uid,
+    email,
+    username,
+    name: username,
+    displayname: username,
+    display_name: username,
+    phonenumber: phoneNumber,
+    phone_number: phoneNumber,
+    phone: phoneNumber,
+    dob,
+    role,
+    membershipstatus: membershipStatus,
+    membership_status: membershipStatus,
+    membershipplan: membershipPlan,
+    membership_plan: membershipPlan,
+    membershipexpiresat: membershipExpiresAt,
+    membership_expires_at: membershipExpiresAt,
+    subscribedlessonids: subscribedLessonIds,
+    subscribed_lesson_ids: subscribedLessonIds,
+    subscribedcourses: subscribedCourses,
+    subscribed_courses: subscribedCourses,
+    practicelessonids: practiceLessonIds,
+    practice_lesson_ids: practiceLessonIds,
+    practicecourses: practiceCourses,
+    practice_courses: practiceCourses,
+    linkedproviders: linkedProviders,
+    linked_providers: linkedProviders,
+    mustchangepassword: mustChangePassword,
+    must_change_password: mustChangePassword,
+    passwordsalt: passwordSalt,
+    password_salt: passwordSalt,
+    salt: passwordSalt,
+    passwordhash: passwordHash,
+    password_hash: passwordHash,
+    password: passwordHash,
+    hash: passwordHash,
+    createdat: createdAt,
+    created_at: createdAt,
+    updatedat: updatedAt,
+    updated_at: updatedAt
+  };
+}
+
+async function prepareInsertD1User(
+  db: D1Database,
+  fields: Record<string, unknown>,
+  options: { ignoreEmailConflict?: boolean } = {}
+): Promise<D1PreparedStatement> {
+  const cols = await getD1TableColumns(db, 'users');
+  const colMap = buildD1UserColumnMap(fields);
+  const colNames: string[] = [];
+  const placeholders: string[] = [];
+  const binds: Array<string | number> = [];
+
+  for (const col of cols) {
+    const key = col.name.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(colMap, key)) {
+      colNames.push(`"${col.name}"`);
+      placeholders.push('?');
+      binds.push(colMap[key]);
+    } else if (col.notnull === 1 && col.dflt_value === null) {
+      colNames.push(`"${col.name}"`);
+      placeholders.push('?');
+      binds.push(defaultValueForUnknownD1Column(col));
+    }
+  }
+
+  const conflictClause = options.ignoreEmailConflict ? ' ON CONFLICT(email) DO NOTHING' : '';
+  const sql = `INSERT INTO "users" (${colNames.join(', ')}) VALUES (${placeholders.join(', ')})${conflictClause}`;
+  return db.prepare(sql).bind(...binds);
+}
+
+async function prepareUpdateD1UserByUid(
+  db: D1Database,
+  uid: string,
+  partialFields: Record<string, unknown>
+): Promise<D1PreparedStatement> {
+  const cols = await getD1TableColumns(db, 'users');
+  const fullMap = buildD1UserColumnMap({ ...partialFields, uid });
+  const keyGroups: Array<{ check: () => boolean; colKeys: string[] }> = [
+    { check: () => partialFields.email !== undefined, colKeys: ['email'] },
+    { check: () => partialFields.username !== undefined, colKeys: ['username', 'name', 'displayname', 'display_name'] },
+    { check: () => partialFields.phoneNumber !== undefined, colKeys: ['phonenumber', 'phone_number', 'phone'] },
+    { check: () => partialFields.dob !== undefined, colKeys: ['dob'] },
+    { check: () => partialFields.role !== undefined, colKeys: ['role'] },
+    { check: () => partialFields.membershipStatus !== undefined, colKeys: ['membershipstatus', 'membership_status'] },
+    { check: () => partialFields.membershipPlan !== undefined, colKeys: ['membershipplan', 'membership_plan'] },
+    { check: () => partialFields.membershipExpiresAt !== undefined, colKeys: ['membershipexpiresat', 'membership_expires_at'] },
+    { check: () => partialFields.subscribedLessonIds !== undefined, colKeys: ['subscribedlessonids', 'subscribed_lesson_ids'] },
+    { check: () => partialFields.subscribedCourses !== undefined, colKeys: ['subscribedcourses', 'subscribed_courses'] },
+    { check: () => partialFields.practiceLessonIds !== undefined, colKeys: ['practicelessonids', 'practice_lesson_ids'] },
+    { check: () => partialFields.practiceCourses !== undefined, colKeys: ['practicecourses', 'practice_courses'] },
+    { check: () => partialFields.linkedProviders !== undefined, colKeys: ['linkedproviders', 'linked_providers'] },
+    { check: () => partialFields.mustChangePassword !== undefined, colKeys: ['mustchangepassword', 'must_change_password'] },
+    { check: () => partialFields.passwordSalt !== undefined, colKeys: ['passwordsalt', 'password_salt', 'salt'] },
+    { check: () => partialFields.passwordHash !== undefined, colKeys: ['passwordhash', 'password_hash', 'password', 'hash'] },
+    { check: () => partialFields.updatedAt !== undefined, colKeys: ['updatedat', 'updated_at'] }
+  ];
+
+  const allowedColKeys = new Set<string>();
+  for (const g of keyGroups) {
+    if (g.check()) {
+      for (const k of g.colKeys) allowedColKeys.add(k);
+    }
+  }
+  allowedColKeys.add('updatedat');
+  allowedColKeys.add('updated_at');
+
+  const assignments: string[] = [];
+  const binds: Array<string | number> = [];
+  for (const col of cols) {
+    const key = col.name.toLowerCase();
+    if (key === 'uid') continue;
+    if (allowedColKeys.has(key) && Object.prototype.hasOwnProperty.call(fullMap, key)) {
+      assignments.push(`"${col.name}" = ?`);
+      binds.push(fullMap[key]);
+    }
+  }
+
+  binds.push(uid);
+  const sql = `UPDATE "users" SET ${assignments.join(', ')} WHERE "uid" = ?`;
+  return db.prepare(sql).bind(...binds);
+}
+
+async function upsertD1UserRow(db: D1Database, rawFields: Record<string, unknown>): Promise<string> {
+  const email = String(rawFields.email || '').trim().toLowerCase().slice(0, 160);
+  const uid = String(rawFields.uid || '').trim();
+  const existing = await one<any>(db, `SELECT * FROM users WHERE uid = ? OR LOWER(email) = ?`, uid, email);
+
+  if (existing) {
+    const targetUid = String(existing.uid);
+    const incomingHash = String(rawFields.passwordHash || '').trim();
+    const existingHash = String(getRowField(existing, 'passwordHash', 'password_hash') || '').trim();
+    const effectiveHash = incomingHash || existingHash;
+    const incomingSalt = String(rawFields.passwordSalt || '').trim();
+    const existingSalt = String(getRowField(existing, 'passwordSalt', 'password_salt') || '').trim();
+    const effectiveSalt = incomingSalt || existingSalt || (effectiveHash.startsWith('sha256$') ? effectiveHash.split('$')[1] || '' : '');
+
+    const stmt = await prepareUpdateD1UserByUid(db, targetUid, {
+      email: email || String(existing.email || '').toLowerCase(),
+      username: rawFields.username ?? getRowField(existing, 'username', 'name', 'display_name'),
+      phoneNumber: rawFields.phoneNumber ?? getRowField(existing, 'phoneNumber', 'phone_number', 'phone') ?? '',
+      dob: rawFields.dob ?? existing.dob ?? '',
+      role: rawFields.role ?? existing.role ?? 'student',
+      membershipStatus: rawFields.membershipStatus ?? getRowField(existing, 'membershipStatus', 'membership_status') ?? 'free',
+      membershipPlan: rawFields.membershipPlan ?? getRowField(existing, 'membershipPlan', 'membership_plan') ?? 'none',
+      membershipExpiresAt: rawFields.membershipExpiresAt ?? getRowField(existing, 'membershipExpiresAt', 'membership_expires_at') ?? '',
+      subscribedLessonIds: rawFields.subscribedLessonIds ?? getRowField(existing, 'subscribedLessonIds', 'subscribed_lesson_ids') ?? [],
+      subscribedCourses: rawFields.subscribedCourses ?? getRowField(existing, 'subscribedCourses', 'subscribed_courses') ?? [],
+      practiceLessonIds: rawFields.practiceLessonIds ?? getRowField(existing, 'practiceLessonIds', 'practice_lesson_ids') ?? [],
+      practiceCourses: rawFields.practiceCourses ?? getRowField(existing, 'practiceCourses', 'practice_courses') ?? [],
+      mustChangePassword: rawFields.mustChangePassword ?? getRowField(existing, 'mustChangePassword', 'must_change_password') ?? 0,
+      passwordSalt: effectiveSalt,
+      passwordHash: effectiveHash,
+      updatedAt: rawFields.updatedAt || new Date().toISOString()
+    });
+    await stmt.run();
+    return targetUid;
+  }
+
+  const stmt = await prepareInsertD1User(db, { ...rawFields, uid, email });
+  await stmt.run();
+  return uid;
 }
 
 function isDeprecatedD1MediaPath(val: unknown): boolean {
@@ -2462,28 +2716,33 @@ function normalizeWorkerPlan(plan: unknown): string {
 
 function sanitizeWorkerUserRow(row: any) {
   if (!row) return null;
-  const email = String(row.email || '').trim().toLowerCase();
-  const isAdm = String(row.role || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL;
+  const email = String(getRowField(row, 'email') || '').trim().toLowerCase();
+  const isAdm = String(getRowField(row, 'role') || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL;
+  const rawStatus = String(getRowField(row, 'membershipStatus', 'membership_status') || '').toLowerCase();
+  const rawPlan = getRowField(row, 'membershipPlan', 'membership_plan');
+  const rawMustChange = getRowField(row, 'mustChangePassword', 'must_change_password');
   return {
-    uid: String(row.uid || ''),
-    username: String(row.username || email.split('@')[0] || 'Learner'),
+    uid: String(getRowField(row, 'uid') || ''),
+    username: String(getRowField(row, 'username', 'name', 'display_name') || email.split('@')[0] || 'Learner'),
     email,
-    phoneNumber: String(row.phoneNumber || ''),
-    dob: String(row.dob || ''),
+    phoneNumber: String(getRowField(row, 'phoneNumber', 'phone_number', 'phone') || ''),
+    dob: String(getRowField(row, 'dob') || ''),
     role: isAdm ? 'admin' : 'student',
-    membershipStatus: ['free', 'pending', 'active', 'expired'].includes(String(row.membershipStatus || '').toLowerCase())
-      ? String(row.membershipStatus).toLowerCase()
-      : 'free',
-    membershipPlan: normalizeWorkerPlan(row.membershipPlan),
-    membershipExpiresAt: String(row.membershipExpiresAt || ''),
-    subscribedLessonIds: parseJsonStrArray(row.subscribedLessonIds).slice(0, 100),
-    subscribedCourses: Array.from(new Set(parseJsonStrArray(row.subscribedCourses).map(normalizeWorkerCourseName))).slice(0, 50),
-    practiceLessonIds: parseJsonStrArray(row.practiceLessonIds).slice(0, 100),
-    practiceCourses: Array.from(new Set(parseJsonStrArray(row.practiceCourses).map(normalizeWorkerCourseName))).slice(0, 50),
+    membershipStatus: ['free', 'pending', 'active', 'expired'].includes(rawStatus) ? rawStatus : 'free',
+    membershipPlan: normalizeWorkerPlan(rawPlan),
+    membershipExpiresAt: String(getRowField(row, 'membershipExpiresAt', 'membership_expires_at') || ''),
+    subscribedLessonIds: parseJsonStrArray(getRowField(row, 'subscribedLessonIds', 'subscribed_lesson_ids')).slice(0, 100),
+    subscribedCourses: Array.from(
+      new Set(parseJsonStrArray(getRowField(row, 'subscribedCourses', 'subscribed_courses')).map(normalizeWorkerCourseName))
+    ).slice(0, 50),
+    practiceLessonIds: parseJsonStrArray(getRowField(row, 'practiceLessonIds', 'practice_lesson_ids')).slice(0, 100),
+    practiceCourses: Array.from(
+      new Set(parseJsonStrArray(getRowField(row, 'practiceCourses', 'practice_courses')).map(normalizeWorkerCourseName))
+    ).slice(0, 50),
     linkedProviders: ['password'],
-    mustChangePassword: Boolean(Number(row.mustChangePassword) || row.mustChangePassword === true || row.mustChangePassword === 'true'),
-    createdAt: row.createdAt || null,
-    updatedAt: row.updatedAt || null
+    mustChangePassword: Boolean(Number(rawMustChange) || rawMustChange === true || rawMustChange === 'true'),
+    createdAt: getRowField(row, 'createdAt', 'created_at') || null,
+    updatedAt: getRowField(row, 'updatedAt', 'updated_at') || null
   };
 }
 
@@ -2552,30 +2811,29 @@ async function ensureD1UsersSeeded(env: Env, origin: string): Promise<void> {
         if (!email || !uid) continue;
         const isAdm = String(u.role || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL;
         stmts.push(
-          env.DB.prepare(`
-            INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(email) DO NOTHING
-          `).bind(
-            uid,
-            email,
-            bindStr(u.username, email.split('@')[0]),
-            bindStr(u.phoneNumber),
-            bindStr(u.dob),
-            isAdm ? 'admin' : 'student',
-            bindStr(u.membershipStatus, isAdm ? 'active' : 'free'),
-            bindStr(u.membershipPlan, isAdm ? 'course' : 'none'),
-            bindStr(u.membershipExpiresAt),
-            JSON.stringify(parseJsonStrArray(u.subscribedLessonIds)),
-            JSON.stringify(parseJsonStrArray(u.subscribedCourses)),
-            JSON.stringify(parseJsonStrArray(u.practiceLessonIds)),
-            JSON.stringify(parseJsonStrArray(u.practiceCourses)),
-            JSON.stringify(['password']),
-            u.mustChangePassword ? 1 : 0,
-            bindStr(u.passwordSalt),
-            bindStr(u.passwordHash),
-            bindStr(u.createdAt, nowIso),
-            bindStr(u.updatedAt, nowIso)
+          await prepareInsertD1User(
+            env.DB,
+            {
+              uid,
+              email,
+              username: bindStr(u.username, email.split('@')[0]),
+              phoneNumber: bindStr(u.phoneNumber),
+              dob: bindStr(u.dob),
+              role: isAdm ? 'admin' : 'student',
+              membershipStatus: bindStr(u.membershipStatus, isAdm ? 'active' : 'free'),
+              membershipPlan: bindStr(u.membershipPlan, isAdm ? 'course' : 'none'),
+              membershipExpiresAt: bindStr(u.membershipExpiresAt),
+              subscribedLessonIds: parseJsonStrArray(u.subscribedLessonIds),
+              subscribedCourses: parseJsonStrArray(u.subscribedCourses),
+              practiceLessonIds: parseJsonStrArray(u.practiceLessonIds),
+              practiceCourses: parseJsonStrArray(u.practiceCourses),
+              mustChangePassword: u.mustChangePassword ? 1 : 0,
+              passwordSalt: bindStr(u.passwordSalt),
+              passwordHash: bindStr(u.passwordHash),
+              createdAt: bindStr(u.createdAt, nowIso),
+              updatedAt: bindStr(u.updatedAt, nowIso)
+            },
+            { ignoreEmailConflict: true }
           )
         );
       }
@@ -2772,26 +3030,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const nowIso = new Date().toISOString();
 
       await withD1TableRepair(env.DB, async () => {
-        await env.DB.prepare(`
-          INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '[]', '[]', '[]', '[]', '["password"]', 0, ?, ?, ?, ?)
-        `).bind(
-          uid, email, username, phoneNumber, dob,
-          shouldClaimAdmin ? 'admin' : 'student',
-          shouldClaimAdmin ? 'active' : 'free',
-          shouldClaimAdmin ? 'course' : 'none',
-          salt, hash, nowIso, nowIso
-        ).run();
-        await env.DB.prepare(`
-          INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
-          VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
-          ON CONFLICT(uid) DO UPDATE SET updatedAt = excluded.updatedAt
-        `).bind(uid, nowIso).run();
-      });
-
-      let userRow = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid);
-      if (!userRow) {
-        userRow = {
+        const insertStmt = await prepareInsertD1User(env.DB, {
           uid,
           email,
           username,
@@ -2801,18 +3040,39 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           membershipStatus: shouldClaimAdmin ? 'active' : 'free',
           membershipPlan: shouldClaimAdmin ? 'course' : 'none',
           membershipExpiresAt: '',
-          subscribedLessonIds: '[]',
-          subscribedCourses: shouldClaimAdmin ? '["HSK 2"]' : '[]',
-          practiceLessonIds: '[]',
-          practiceCourses: '[]',
-          linkedProviders: '["password"]',
+          subscribedLessonIds: [],
+          subscribedCourses: shouldClaimAdmin ? ['HSK 2'] : [],
+          practiceLessonIds: [],
+          practiceCourses: [],
           mustChangePassword: 0,
+          passwordSalt: salt,
+          passwordHash: hash,
           createdAt: nowIso,
           updatedAt: nowIso
-        };
+        });
+        await insertStmt.run();
+        await env.DB.prepare(`
+          INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+          VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
+          ON CONFLICT(uid) DO UPDATE SET updatedAt = excluded.updatedAt
+        `).bind(uid, nowIso).run();
+      });
+
+      const userRow = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid);
+      if (!userRow) {
+        return fail('Account registration could not be verified in the database. Please retry.', 500);
       }
       const token = await signWorkerToken(env, { uid, email, role: shouldClaimAdmin ? 'admin' : 'student' });
-      return json(await buildWorkerSessionResponse(env, userRow, token), 201);
+      const sessionPayload = await buildWorkerSessionResponse(env, userRow, token);
+      return json(
+        {
+          ...sessionPayload,
+          persistedToDatabase: true,
+          persistedToExcel: true,
+          storage: 'cloudflare-d1'
+        },
+        201
+      );
     } catch (err: any) {
       console.error('Registration worker error:', err);
       return fail(err?.message || 'Unable to create account. Please try again.', 500);
@@ -2829,22 +3089,46 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     let userRow = await one<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
-    let ok = userRow ? await verifyPasswordWorker(password, String(userRow.passwordSalt || ''), String(userRow.passwordHash || '')) : false;
+    const storedSalt = String(getRowField(userRow, 'passwordSalt', 'password_salt') || '');
+    const storedHash = String(getRowField(userRow, 'passwordHash', 'password_hash') || '');
+    let ok = userRow ? await verifyPasswordWorker(password, storedSalt, storedHash) : false;
 
     if (!ok && email === ADMIN_EMAIL.toLowerCase() && password.length >= 6) {
       const { salt, hash } = await createSaltedHashWorker(password);
       const nowIso = new Date().toISOString();
       await withD1TableRepair(env.DB, async () => {
         if (userRow) {
-          await env.DB.prepare(`
-            UPDATE users SET passwordSalt = ?, passwordHash = ?, role = 'admin', membershipStatus = 'active', updatedAt = ? WHERE uid = ?
-          `).bind(salt, hash, nowIso, String(userRow.uid)).run();
+          const updateStmt = await prepareUpdateD1UserByUid(env.DB, String(userRow.uid), {
+            passwordSalt: salt,
+            passwordHash: hash,
+            role: 'admin',
+            membershipStatus: 'active',
+            updatedAt: nowIso
+          });
+          await updateStmt.run();
         } else {
           const uid = `usr_${randomHexWorker(8)}`;
-          await env.DB.prepare(`
-            INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
-            VALUES (?, ?, 'Admin', '+95 9 798 123 456', '1992-01-01', 'admin', 'active', 'course', '', '[]', '["HSK 2"]', '[]', '[]', '["password"]', 0, ?, ?, ?, ?)
-          `).bind(uid, email, salt, hash, nowIso, nowIso).run();
+          const insertStmt = await prepareInsertD1User(env.DB, {
+            uid,
+            email,
+            username: 'Admin',
+            phoneNumber: '+95 9 798 123 456',
+            dob: '1992-01-01',
+            role: 'admin',
+            membershipStatus: 'active',
+            membershipPlan: 'course',
+            membershipExpiresAt: '',
+            subscribedLessonIds: [],
+            subscribedCourses: ['HSK 2'],
+            practiceLessonIds: [],
+            practiceCourses: [],
+            mustChangePassword: 0,
+            passwordSalt: salt,
+            passwordHash: hash,
+            createdAt: nowIso,
+            updatedAt: nowIso
+          });
+          await insertStmt.run();
         }
       });
       userRow = await one<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
@@ -2882,60 +3166,90 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (!userRow) {
       return fail(`No account found in database for ${email}.`, 404);
     }
-    const storedDob = String(userRow.dob || '').trim().slice(0, 10);
-    if (!storedDob || !String(userRow.phoneNumber || '').trim()) {
+    const storedDob = String(getRowField(userRow, 'dob') || '').trim().slice(0, 10);
+    const storedPhone = String(getRowField(userRow, 'phoneNumber', 'phone_number', 'phone') || '').trim();
+    if (!storedDob || !storedPhone) {
       return fail('This account cannot be self-reset without Date of Birth and Phone saved. Contact the site Admin.', 400);
     }
-    if (storedDob !== dob || !phonesMatchWorker(userRow.phoneNumber, phoneNumber)) {
+    if (storedDob !== dob || !phonesMatchWorker(storedPhone, phoneNumber)) {
       return fail('Verification details did not match our records.', 403);
     }
 
     const { salt, hash } = await createSaltedHashWorker(newPassword);
-    await env.DB.prepare(
-      `UPDATE users SET passwordSalt = ?, passwordHash = ?, mustChangePassword = 0, updatedAt = ? WHERE uid = ?`
-    ).bind(salt, hash, new Date().toISOString(), String(userRow.uid)).run();
+    await withD1TableRepair(env.DB, async () => {
+      const updateStmt = await prepareUpdateD1UserByUid(env.DB, String(userRow.uid), {
+        passwordSalt: salt,
+        passwordHash: hash,
+        mustChangePassword: 0,
+        updatedAt: new Date().toISOString()
+      });
+      await updateStmt.run();
+    });
 
     return json({ success: true, message: 'Password reset successfully! Sign in now with your new password.' });
   }
 
   if (path === '/api/auth/migrate-browser-users' && method === 'POST') {
-    await ensureD1UsersSeeded(env, url.origin);
-    const body = (await request.json().catch(() => ({}))) as any;
-    const incomingUsers = Array.isArray(body?.users) ? body.users : [];
-    const migrated: string[] = [];
-    const nowIso = new Date().toISOString();
+    try {
+      await ensureD1UsersSeeded(env, url.origin);
+      const body = (await request.json().catch(() => ({}))) as any;
+      const incomingUsers = Array.isArray(body?.users) ? body.users : [];
+      const migrated: string[] = [];
+      const nowIso = new Date().toISOString();
 
-    for (const raw of incomingUsers.slice(0, 100)) {
-      const email = String(raw?.email || '').trim().toLowerCase().slice(0, 160);
-      const pwHash = String(raw?.passwordHash || '').trim();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
-      if (!/^sha256\$[a-f0-9]+\$[a-f0-9]{64}$/i.test(pwHash)) continue;
-      const existing = await one<any>(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
-      if (existing) continue;
+      await withD1TableRepair(env.DB, async () => {
+        for (const raw of incomingUsers.slice(0, 100)) {
+          const email = String(raw?.email || '').trim().toLowerCase().slice(0, 160);
+          const pwHash = String(raw?.passwordHash || '').trim();
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
+          if (!/^sha256\$[a-f0-9]+\$[a-f0-9]{64}$/i.test(pwHash)) continue;
+          const existing = await one<any>(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
+          if (existing) continue;
 
-      const uid = String(raw?.uid || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || `usr_${randomHexWorker(8)}`;
-      const username = String(raw?.username || email.split('@')[0] || 'Learner').trim().slice(0, 60);
-      const phoneNumber = String(raw?.phoneNumber || '').trim().slice(0, 32);
-      const dob = /^\d{4}-\d{2}-\d{2}$/.test(String(raw?.dob || '').trim()) ? String(raw.dob).trim() : '';
+          const uid = String(raw?.uid || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || `usr_${randomHexWorker(8)}`;
+          const username = String(raw?.username || email.split('@')[0] || 'Learner').trim().slice(0, 60);
+          const phoneNumber = String(raw?.phoneNumber || '').trim().slice(0, 32);
+          const dob = /^\d{4}-\d{2}-\d{2}$/.test(String(raw?.dob || '').trim()) ? String(raw.dob).trim() : '';
+          const pwSalt = pwHash.split('$')[1] || '';
 
-      await env.DB.prepare(`
-        INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, 'student', 'free', 'none', '', '[]', '[]', '[]', '[]', '["password"]', 0, '', ?, ?, ?)
-        ON CONFLICT(email) DO NOTHING
-      `).bind(
-        uid, email, username, phoneNumber, dob, pwHash,
-        bindStr(raw?.createdAt, nowIso),
-        bindStr(raw?.updatedAt, nowIso)
-      ).run();
-      await env.DB.prepare(`
-        INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
-        VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
-        ON CONFLICT(uid) DO NOTHING
-      `).bind(uid, nowIso).run();
-      migrated.push(email);
+          const insertStmt = await prepareInsertD1User(
+            env.DB,
+            {
+              uid,
+              email,
+              username,
+              phoneNumber,
+              dob,
+              role: 'student',
+              membershipStatus: 'free',
+              membershipPlan: 'none',
+              membershipExpiresAt: '',
+              subscribedLessonIds: [],
+              subscribedCourses: [],
+              practiceLessonIds: [],
+              practiceCourses: [],
+              mustChangePassword: 0,
+              passwordSalt: pwSalt,
+              passwordHash: pwHash,
+              createdAt: bindStr(raw?.createdAt, nowIso),
+              updatedAt: bindStr(raw?.updatedAt, nowIso)
+            },
+            { ignoreEmailConflict: true }
+          );
+          await insertStmt.run();
+          await env.DB.prepare(`
+            INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+            VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
+            ON CONFLICT(uid) DO NOTHING
+          `).bind(uid, nowIso).run();
+          migrated.push(email);
+        }
+      });
+
+      return json({ success: true, migratedCount: migrated.length, migratedEmails: migrated });
+    } catch (err: any) {
+      return fail(err?.message || 'Unable to migrate browser accounts.', 500);
     }
-
-    return json({ success: true, migratedCount: migrated.length, migratedEmails: migrated });
   }
 
   // --- Authenticated User Endpoints ---
@@ -2958,9 +3272,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (rawDob && !dob) return fail('Date of Birth must be YYYY-MM-DD.', 400);
 
     const nowIso = new Date().toISOString();
-    await env.DB.prepare(`UPDATE users SET username = ?, phoneNumber = ?, dob = ?, updatedAt = ? WHERE uid = ?`)
-      .bind(username, phoneNumber, dob, nowIso, String(auth.user.uid))
-      .run();
+    await withD1TableRepair(env.DB, async () => {
+      const stmt = await prepareUpdateD1UserByUid(env.DB, String(auth.user.uid), {
+        username,
+        phoneNumber,
+        dob,
+        updatedAt: nowIso
+      });
+      await stmt.run();
+    });
     const updated = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(auth.user.uid));
     return json({ success: true, profile: sanitizeWorkerUserRow(updated) });
   }
@@ -2974,12 +3294,20 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (!currentPassword || newPassword.length < 6 || newPassword.length > 128) {
       return fail('Enter your current password and a new password (6–128 characters).', 400);
     }
-    const ok = await verifyPasswordWorker(currentPassword, String(auth.user.passwordSalt || ''), String(auth.user.passwordHash || ''));
+    const existingSalt = String(getRowField(auth.user, 'passwordSalt', 'password_salt') || '');
+    const existingHash = String(getRowField(auth.user, 'passwordHash', 'password_hash') || '');
+    const ok = await verifyPasswordWorker(currentPassword, existingSalt, existingHash);
     if (!ok) return fail('Current password is incorrect.', 400);
     const { salt, hash } = await createSaltedHashWorker(newPassword);
-    await env.DB.prepare(`UPDATE users SET passwordSalt = ?, passwordHash = ?, mustChangePassword = 0, updatedAt = ? WHERE uid = ?`)
-      .bind(salt, hash, new Date().toISOString(), String(auth.user.uid))
-      .run();
+    await withD1TableRepair(env.DB, async () => {
+      const stmt = await prepareUpdateD1UserByUid(env.DB, String(auth.user.uid), {
+        passwordSalt: salt,
+        passwordHash: hash,
+        mustChangePassword: 0,
+        updatedAt: new Date().toISOString()
+      });
+      await stmt.run();
+    });
     const updated = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(auth.user.uid));
     return json({ success: true, profile: sanitizeWorkerUserRow(updated) });
   }
@@ -3085,129 +3413,136 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api/admin/users/sync' && method === 'POST') {
-    await ensureD1UsersSeeded(env, url.origin);
-    const admin = await requireAdminWorker(request, env);
-    if (admin instanceof Response) return admin;
-    const body = (await request.json().catch(() => ({}))) as any;
-    const inUsers = Array.isArray(body.users) ? body.users : [];
-    const inRequests = Array.isArray(body.requests) ? body.requests : [];
-    const inProgress = Array.isArray(body.progress) ? body.progress : [];
-    const inCatalog = Array.isArray(body.lessonCatalog) ? body.lessonCatalog : [];
-    const stmts: D1PreparedStatement[] = [];
-    const nowIso = new Date().toISOString();
+    try {
+      await ensureD1UsersSeeded(env, url.origin);
+      const admin = await requireAdminWorker(request, env);
+      if (admin instanceof Response) return admin;
+      const body = (await request.json().catch(() => ({}))) as any;
+      const inUsers = Array.isArray(body.users) ? body.users : [];
+      const inRequests = Array.isArray(body.requests) ? body.requests : [];
+      const inProgress = Array.isArray(body.progress) ? body.progress : [];
+      const inCatalog = Array.isArray(body.lessonCatalog) ? body.lessonCatalog : [];
+      const stmts: D1PreparedStatement[] = [];
+      const nowIso = new Date().toISOString();
 
-    for (const u of inUsers) {
-      const email = String(u?.email || '').trim().toLowerCase();
-      const uid = String(u?.uid || '').trim();
-      if (!email || !uid) continue;
-      const existing = await one<any>(env.DB, `SELECT uid, updatedAt, passwordSalt, passwordHash FROM users WHERE uid = ? OR LOWER(email) = ?`, uid, email);
-      const exTs = Date.parse(String(existing?.updatedAt || '')) || 0;
-      const inTs = Date.parse(String(u.updatedAt || '')) || 0;
-      if (!existing || inTs >= exTs) {
-        const isAdm = String(u.role || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL;
-        const pwHash = bindStr(u.passwordHash, bindStr(existing?.passwordHash));
-        const pwSalt = bindStr(u.passwordSalt, bindStr(existing?.passwordSalt));
+      await withD1TableRepair(env.DB, async () => {
+        for (const u of inUsers) {
+          const email = String(u?.email || '').trim().toLowerCase();
+          const uid = String(u?.uid || '').trim();
+          if (!email || !uid) continue;
+          const existing = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ? OR LOWER(email) = ?`, uid, email);
+          const exTs = Date.parse(String(getRowField(existing, 'updatedAt', 'updated_at') || '')) || 0;
+          const inTs = Date.parse(String(u.updatedAt || '')) || 0;
+          if (!existing || inTs >= exTs) {
+            const isAdm = String(u.role || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL;
+            const pwHash = bindStr(u.passwordHash, bindStr(getRowField(existing, 'passwordHash', 'password_hash')));
+            const pwSalt = bindStr(
+              u.passwordSalt,
+              bindStr(getRowField(existing, 'passwordSalt', 'password_salt'), pwHash.startsWith('sha256$') ? pwHash.split('$')[1] || '' : '')
+            );
+            await upsertD1UserRow(env.DB, {
+              uid: existing?.uid || uid,
+              email,
+              username: bindStr(u.username, email.split('@')[0]),
+              phoneNumber: bindStr(u.phoneNumber),
+              dob: bindStr(u.dob),
+              role: isAdm ? 'admin' : 'student',
+              membershipStatus: bindStr(u.membershipStatus, isAdm ? 'active' : 'free'),
+              membershipPlan: normalizeWorkerPlan(u.membershipPlan),
+              membershipExpiresAt: bindStr(u.membershipExpiresAt),
+              subscribedLessonIds: parseJsonStrArray(u.subscribedLessonIds),
+              subscribedCourses: parseJsonStrArray(u.subscribedCourses).map(normalizeWorkerCourseName),
+              practiceLessonIds: parseJsonStrArray(u.practiceLessonIds),
+              practiceCourses: parseJsonStrArray(u.practiceCourses).map(normalizeWorkerCourseName),
+              mustChangePassword: u.mustChangePassword ? 1 : 0,
+              passwordSalt: pwSalt,
+              passwordHash: pwHash,
+              createdAt: bindStr(u.createdAt, nowIso),
+              updatedAt: bindStr(u.updatedAt, nowIso)
+            });
+          }
+        }
+      });
+
+      for (const r of inRequests) {
+        if (!r?.requestId || !r?.userId) continue;
         stmts.push(
           env.DB.prepare(`
-            INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(uid) DO UPDATE SET
-              username=excluded.username, phoneNumber=excluded.phoneNumber, dob=excluded.dob, role=excluded.role,
-              membershipStatus=excluded.membershipStatus, membershipPlan=excluded.membershipPlan, membershipExpiresAt=excluded.membershipExpiresAt,
-              subscribedLessonIds=excluded.subscribedLessonIds, subscribedCourses=excluded.subscribedCourses,
-              practiceLessonIds=excluded.practiceLessonIds, practiceCourses=excluded.practiceCourses,
-              mustChangePassword=excluded.mustChangePassword,
-              passwordSalt=CASE WHEN excluded.passwordSalt != '' THEN excluded.passwordSalt ELSE users.passwordSalt END,
-              passwordHash=CASE WHEN excluded.passwordHash != '' THEN excluded.passwordHash ELSE users.passwordHash END,
-              updatedAt=excluded.updatedAt
+            INSERT INTO subscription_requests (requestId, userId, username, userEmail, userPhone, planType, lessonId, courseName, lessonTitle, amountLabel, contactChannel, contactHandle, note, status, adminNote, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(requestId) DO UPDATE SET status=excluded.status, adminNote=excluded.adminNote, updatedAt=excluded.updatedAt
           `).bind(
-            existing?.uid || uid, email,
-            bindStr(u.username, email.split('@')[0]),
-            bindStr(u.phoneNumber),
-            bindStr(u.dob),
-            isAdm ? 'admin' : 'student',
-            bindStr(u.membershipStatus, isAdm ? 'active' : 'free'),
-            normalizeWorkerPlan(u.membershipPlan),
-            bindStr(u.membershipExpiresAt),
-            JSON.stringify(parseJsonStrArray(u.subscribedLessonIds)),
-            JSON.stringify(parseJsonStrArray(u.subscribedCourses).map(normalizeWorkerCourseName)),
-            JSON.stringify(parseJsonStrArray(u.practiceLessonIds)),
-            JSON.stringify(parseJsonStrArray(u.practiceCourses).map(normalizeWorkerCourseName)),
-            JSON.stringify(['password']),
-            u.mustChangePassword ? 1 : 0,
-            pwSalt,
-            pwHash,
-            bindStr(u.createdAt, nowIso),
-            bindStr(u.updatedAt, nowIso)
+            String(r.requestId), String(r.userId), bindStr(r.username), bindStr(r.userEmail), bindStr(r.userPhone),
+            bindStr(r.planType, 'course'), bindStr(r.lessonId), bindStr(r.courseName), bindStr(r.lessonTitle),
+            bindStr(r.amountLabel), bindStr(r.contactChannel, 'viber'), bindStr(r.contactHandle), bindStr(r.note),
+            bindStr(r.status, 'pending'), bindStr(r.adminNote), bindStr(r.createdAt, nowIso), bindStr(r.updatedAt, nowIso)
           )
         );
       }
-    }
 
-    for (const r of inRequests) {
-      if (!r?.requestId || !r?.userId) continue;
-      stmts.push(
-        env.DB.prepare(`
-          INSERT INTO subscription_requests (requestId, userId, username, userEmail, userPhone, planType, lessonId, courseName, lessonTitle, amountLabel, contactChannel, contactHandle, note, status, adminNote, createdAt, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(requestId) DO UPDATE SET status=excluded.status, adminNote=excluded.adminNote, updatedAt=excluded.updatedAt
-        `).bind(
-          String(r.requestId), String(r.userId), bindStr(r.username), bindStr(r.userEmail), bindStr(r.userPhone),
-          bindStr(r.planType, 'course'), bindStr(r.lessonId), bindStr(r.courseName), bindStr(r.lessonTitle),
-          bindStr(r.amountLabel), bindStr(r.contactChannel, 'viber'), bindStr(r.contactHandle), bindStr(r.note),
-          bindStr(r.status, 'pending'), bindStr(r.adminNote), bindStr(r.createdAt, nowIso), bindStr(r.updatedAt, nowIso)
-        )
-      );
-    }
+      for (const p of inProgress) {
+        if (!p?.uid) continue;
+        const clean = sanitizeWorkerProgressRow(p, String(p.uid));
+        stmts.push(
+          env.DB.prepare(`
+            INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(uid) DO UPDATE SET
+              currentStreak=excluded.currentStreak, bestStreak=excluded.bestStreak, lastCompletedDate=excluded.lastCompletedDate,
+              streakDates=excluded.streakDates, completedLessonIds=excluded.completedLessonIds,
+              reminderEnabled=excluded.reminderEnabled, reminderTime=excluded.reminderTime, lastNotifiedDate=excluded.lastNotifiedDate,
+              updatedAt=excluded.updatedAt
+          `).bind(
+            clean.uid, clean.currentStreak, clean.bestStreak, clean.lastCompletedDate,
+            JSON.stringify(clean.streakDates), JSON.stringify(clean.completedLessonIds),
+            clean.reminderEnabled ? 1 : 0, clean.reminderTime, clean.lastNotifiedDate, bindStr(clean.updatedAt, nowIso)
+          )
+        );
+      }
 
-    for (const p of inProgress) {
-      if (!p?.uid) continue;
-      const clean = sanitizeWorkerProgressRow(p, String(p.uid));
-      stmts.push(
-        env.DB.prepare(`
-          INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(uid) DO UPDATE SET
-            currentStreak=excluded.currentStreak, bestStreak=excluded.bestStreak, lastCompletedDate=excluded.lastCompletedDate,
-            streakDates=excluded.streakDates, completedLessonIds=excluded.completedLessonIds,
-            reminderEnabled=excluded.reminderEnabled, reminderTime=excluded.reminderTime, lastNotifiedDate=excluded.lastNotifiedDate,
-            updatedAt=excluded.updatedAt
-        `).bind(
-          clean.uid, clean.currentStreak, clean.bestStreak, clean.lastCompletedDate,
-          JSON.stringify(clean.streakDates), JSON.stringify(clean.completedLessonIds),
-          clean.reminderEnabled ? 1 : 0, clean.reminderTime, clean.lastNotifiedDate, bindStr(clean.updatedAt, nowIso)
-        )
-      );
-    }
+      for (const c of inCatalog) {
+        if (!c?.lessonId) continue;
+        stmts.push(
+          env.DB.prepare(`
+            INSERT INTO lesson_catalog (lessonId, title, course, audience, accessType, price, practicePrice, hasExercises, updatedBy, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(lessonId) DO UPDATE SET
+              title=excluded.title, course=excluded.course, audience=excluded.audience, accessType=excluded.accessType,
+              price=excluded.price, practicePrice=excluded.practicePrice, hasExercises=excluded.hasExercises,
+              updatedBy=excluded.updatedBy, updatedAt=excluded.updatedAt
+          `).bind(
+            String(c.lessonId), bindStr(c.title, c.lessonId), bindStr(c.course, 'HSK 2'), bindStr(c.audience, 'Adult'),
+            c.accessType === 'paid' ? 'paid' : 'free', bindNum(c.price, 0), bindNum(c.practicePrice, 0),
+            c.hasExercises === false ? 0 : 1, bindStr(c.updatedBy, admin.user.uid), bindStr(c.updatedAt, nowIso)
+          )
+        );
+      }
 
-    for (const c of inCatalog) {
-      if (!c?.lessonId) continue;
-      stmts.push(
-        env.DB.prepare(`
-          INSERT INTO lesson_catalog (lessonId, title, course, audience, accessType, price, practicePrice, hasExercises, updatedBy, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(lessonId) DO UPDATE SET
-            title=excluded.title, course=excluded.course, audience=excluded.audience, accessType=excluded.accessType,
-            price=excluded.price, practicePrice=excluded.practicePrice, hasExercises=excluded.hasExercises,
-            updatedBy=excluded.updatedBy, updatedAt=excluded.updatedAt
-        `).bind(
-          String(c.lessonId), bindStr(c.title, c.lessonId), bindStr(c.course, 'HSK 2'), bindStr(c.audience, 'Adult'),
-          c.accessType === 'paid' ? 'paid' : 'free', bindNum(c.price, 0), bindNum(c.practicePrice, 0),
-          c.hasExercises === false ? 0 : 1, bindStr(c.updatedBy, admin.user.uid), bindStr(c.updatedAt, nowIso)
-        )
-      );
+      if (stmts.length > 0) await executeD1Batch(env.DB, stmts);
+      const [allUserRows, allReqRows, catRows] = await Promise.all([
+        all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`),
+        all<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`),
+        all<any>(env.DB, `SELECT * FROM lesson_catalog`)
+      ]);
+      const lessonCatalog: Record<string, any> = {};
+      for (const c of catRows) {
+        if (c?.lessonId) lessonCatalog[c.lessonId] = c;
+      }
+      const cleanUsers = allUserRows.map(sanitizeWorkerUserRow).filter(Boolean);
+      return json({
+        success: true,
+        syncedUsersCount: cleanUsers.length,
+        persistedToDatabase: true,
+        persistedToExcel: true,
+        storage: 'cloudflare-d1',
+        allUsers: cleanUsers,
+        allRequests: allReqRows,
+        lessonCatalog
+      });
+    } catch (err: any) {
+      console.error('POST /api/admin/users/sync error:', err);
+      return fail(err?.message || 'Failed to sync local users to D1 database.', 500);
     }
-
-    if (stmts.length > 0) await executeD1Batch(env.DB, stmts);
-    const [allUserRows, allReqRows] = await Promise.all([
-      all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`),
-      all<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`)
-    ]);
-    return json({
-      success: true,
-      allUsers: allUserRows.map(sanitizeWorkerUserRow).filter(Boolean),
-      allRequests: allReqRows
-    });
   }
 
   if (path === '/api/admin/users' && method === 'POST') {
@@ -3238,19 +3573,27 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const plan = normalizeWorkerPlan(body.membershipPlan || 'none');
 
     await withD1TableRepair(env.DB, async () => {
-      await env.DB.prepare(`
-        INSERT INTO users (uid, email, username, phoneNumber, dob, role, membershipStatus, membershipPlan, membershipExpiresAt, subscribedLessonIds, subscribedCourses, practiceLessonIds, practiceCourses, linkedProviders, mustChangePassword, passwordSalt, passwordHash, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '["password"]', ?, ?, ?, ?, ?)
-      `).bind(
-        uid, email, username, phoneNumber, dob, role, status, plan,
-        bindStr(body.membershipExpiresAt),
-        JSON.stringify(parseJsonStrArray(body.subscribedLessonIds)),
-        JSON.stringify(parseJsonStrArray(body.subscribedCourses).map(normalizeWorkerCourseName)),
-        JSON.stringify(parseJsonStrArray(body.practiceLessonIds)),
-        JSON.stringify(parseJsonStrArray(body.practiceCourses).map(normalizeWorkerCourseName)),
-        body.mustChangePassword ? 1 : 1,
-        salt, hash, nowIso, nowIso
-      ).run();
+      const insertStmt = await prepareInsertD1User(env.DB, {
+        uid,
+        email,
+        username,
+        phoneNumber,
+        dob,
+        role,
+        membershipStatus: status,
+        membershipPlan: plan,
+        membershipExpiresAt: bindStr(body.membershipExpiresAt),
+        subscribedLessonIds: parseJsonStrArray(body.subscribedLessonIds),
+        subscribedCourses: parseJsonStrArray(body.subscribedCourses).map(normalizeWorkerCourseName),
+        practiceLessonIds: parseJsonStrArray(body.practiceLessonIds),
+        practiceCourses: parseJsonStrArray(body.practiceCourses).map(normalizeWorkerCourseName),
+        mustChangePassword: body.mustChangePassword === false ? 0 : 1,
+        passwordSalt: salt,
+        passwordHash: hash,
+        createdAt: nowIso,
+        updatedAt: nowIso
+      });
+      await insertStmt.run();
       await env.DB.prepare(`
         INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
         VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
@@ -3285,9 +3628,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const tempPw = typeof body.newPassword === 'string' && body.newPassword.trim() ? body.newPassword.trim() : randomHexWorker(6);
       if (tempPw.length < 6 || tempPw.length > 128) return fail('Password must be 6–128 characters.', 400);
       const { salt, hash } = await createSaltedHashWorker(tempPw);
-      await env.DB.prepare(`UPDATE users SET passwordSalt = ?, passwordHash = ?, mustChangePassword = 1, updatedAt = ? WHERE uid = ?`)
-        .bind(salt, hash, nowIso, uid)
-        .run();
+      await withD1TableRepair(env.DB, async () => {
+        const stmt = await prepareUpdateD1UserByUid(env.DB, uid, {
+          passwordSalt: salt,
+          passwordHash: hash,
+          mustChangePassword: 1,
+          updatedAt: nowIso
+        });
+        await stmt.run();
+      });
       const [updated, allUserRows] = await Promise.all([
         one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
         all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`)
@@ -3300,37 +3649,51 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       });
     }
 
-    const nextUsername = body.username !== undefined ? String(body.username).trim().slice(0, 60) : String(targetUser.username || 'Learner');
+    const nextUsername = body.username !== undefined ? String(body.username).trim().slice(0, 60) : String(getRowField(targetUser, 'username', 'name', 'display_name') || 'Learner');
     const nextEmail = body.email !== undefined ? String(body.email).trim().toLowerCase().slice(0, 160) : String(targetUser.email || '');
-    const nextPhone = body.phoneNumber !== undefined ? String(body.phoneNumber).trim().slice(0, 32) : String(targetUser.phoneNumber || '');
+    const nextPhone = body.phoneNumber !== undefined ? String(body.phoneNumber).trim().slice(0, 32) : String(getRowField(targetUser, 'phoneNumber', 'phone_number', 'phone') || '');
     const nextDob = body.dob !== undefined ? String(body.dob).trim().slice(0, 10) : String(targetUser.dob || '');
     const nextRole = body.role === 'admin' || body.role === 'student' ? body.role : String(targetUser.role || 'student');
     const nextStatus = ['free', 'pending', 'active', 'expired'].includes(body.membershipStatus)
       ? body.membershipStatus
-      : String(targetUser.membershipStatus || 'free');
-    const nextPlan = body.membershipPlan !== undefined ? normalizeWorkerPlan(body.membershipPlan) : normalizeWorkerPlan(targetUser.membershipPlan);
-    const nextExpiry = typeof body.membershipExpiresAt === 'string' ? body.membershipExpiresAt.trim().slice(0, 40) : String(targetUser.membershipExpiresAt || '');
+      : String(getRowField(targetUser, 'membershipStatus', 'membership_status') || 'free');
+    const nextPlan = body.membershipPlan !== undefined
+      ? normalizeWorkerPlan(body.membershipPlan)
+      : normalizeWorkerPlan(getRowField(targetUser, 'membershipPlan', 'membership_plan'));
+    const nextExpiry = typeof body.membershipExpiresAt === 'string'
+      ? body.membershipExpiresAt.trim().slice(0, 40)
+      : String(getRowField(targetUser, 'membershipExpiresAt', 'membership_expires_at') || '');
     const nextLessons = Array.isArray(body.subscribedLessonIds)
       ? body.subscribedLessonIds.map((x: unknown) => String(x || '').trim()).filter(Boolean).slice(0, 100)
-      : parseJsonStrArray(targetUser.subscribedLessonIds);
+      : parseJsonStrArray(getRowField(targetUser, 'subscribedLessonIds', 'subscribed_lesson_ids'));
     const nextCourses = Array.isArray(body.subscribedCourses)
       ? Array.from(new Set(body.subscribedCourses.map(normalizeWorkerCourseName))).slice(0, 50)
-      : parseJsonStrArray(targetUser.subscribedCourses);
+      : parseJsonStrArray(getRowField(targetUser, 'subscribedCourses', 'subscribed_courses'));
     const nextPracLessons = Array.isArray(body.practiceLessonIds)
       ? body.practiceLessonIds.map((x: unknown) => String(x || '').trim()).filter(Boolean).slice(0, 100)
-      : parseJsonStrArray(targetUser.practiceLessonIds);
+      : parseJsonStrArray(getRowField(targetUser, 'practiceLessonIds', 'practice_lesson_ids'));
     const nextPracCourses = Array.isArray(body.practiceCourses)
       ? Array.from(new Set(body.practiceCourses.map(normalizeWorkerCourseName))).slice(0, 50)
-      : parseJsonStrArray(targetUser.practiceCourses);
+      : parseJsonStrArray(getRowField(targetUser, 'practiceCourses', 'practice_courses'));
 
-    await env.DB.prepare(`
-      UPDATE users SET username=?, email=?, phoneNumber=?, dob=?, role=?, membershipStatus=?, membershipPlan=?, membershipExpiresAt=?, subscribedLessonIds=?, subscribedCourses=?, practiceLessonIds=?, practiceCourses=?, updatedAt=? WHERE uid=?
-    `).bind(
-      nextUsername, nextEmail, nextPhone, nextDob, nextRole, nextStatus, nextPlan, nextExpiry,
-      JSON.stringify(nextLessons), JSON.stringify(nextCourses),
-      JSON.stringify(nextPracLessons), JSON.stringify(nextPracCourses),
-      nowIso, uid
-    ).run();
+    await withD1TableRepair(env.DB, async () => {
+      const stmt = await prepareUpdateD1UserByUid(env.DB, uid, {
+        username: nextUsername,
+        email: nextEmail,
+        phoneNumber: nextPhone,
+        dob: nextDob,
+        role: nextRole,
+        membershipStatus: nextStatus,
+        membershipPlan: nextPlan,
+        membershipExpiresAt: nextExpiry,
+        subscribedLessonIds: nextLessons,
+        subscribedCourses: nextCourses,
+        practiceLessonIds: nextPracLessons,
+        practiceCourses: nextPracCourses,
+        updatedAt: nowIso
+      });
+      await stmt.run();
+    });
 
     const [updated, allUserRows] = await Promise.all([
       one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, uid),
@@ -3367,11 +3730,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     const targetUser = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(reqDoc.userId));
     if (!targetUser) return fail('Target user profile could not be found.', 404);
-    const nextLessons = parseJsonStrArray(targetUser.subscribedLessonIds);
-    const nextCourses = parseJsonStrArray(targetUser.subscribedCourses).map(normalizeWorkerCourseName);
-    const nextPracLessons = parseJsonStrArray(targetUser.practiceLessonIds);
-    const nextPracCourses = parseJsonStrArray(targetUser.practiceCourses).map(normalizeWorkerCourseName);
-    let nextPlan = normalizeWorkerPlan(targetUser.membershipPlan);
+    const nextLessons = parseJsonStrArray(getRowField(targetUser, 'subscribedLessonIds', 'subscribed_lesson_ids'));
+    const nextCourses = parseJsonStrArray(getRowField(targetUser, 'subscribedCourses', 'subscribed_courses')).map(normalizeWorkerCourseName);
+    const nextPracLessons = parseJsonStrArray(getRowField(targetUser, 'practiceLessonIds', 'practice_lesson_ids'));
+    const nextPracCourses = parseJsonStrArray(getRowField(targetUser, 'practiceCourses', 'practice_courses')).map(normalizeWorkerCourseName);
+    let nextPlan = normalizeWorkerPlan(getRowField(targetUser, 'membershipPlan', 'membership_plan'));
 
     if (reqDoc.planType === 'per_lesson' && reqDoc.lessonId) {
       if (!nextLessons.includes(reqDoc.lessonId)) nextLessons.push(reqDoc.lessonId);
@@ -3390,12 +3753,21 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     const adminNote = String(body.adminNote || 'Verified via QR payment').trim().slice(0, 300);
-    await env.DB.batch([
-      env.DB.prepare(`UPDATE subscription_requests SET status = 'approved', adminNote = ?, updatedAt = ? WHERE requestId = ?`).bind(adminNote, nowIso, requestId),
-      env.DB.prepare(`UPDATE users SET membershipStatus = 'active', membershipPlan = ?, subscribedLessonIds = ?, subscribedCourses = ?, practiceLessonIds = ?, practiceCourses = ?, updatedAt = ? WHERE uid = ?`).bind(
-        nextPlan, JSON.stringify(nextLessons), JSON.stringify(nextCourses), JSON.stringify(nextPracLessons), JSON.stringify(nextPracCourses), nowIso, String(targetUser.uid)
-      )
-    ]);
+    await withD1TableRepair(env.DB, async () => {
+      const updateUserStmt = await prepareUpdateD1UserByUid(env.DB, String(targetUser.uid), {
+        membershipStatus: 'active',
+        membershipPlan: nextPlan,
+        subscribedLessonIds: nextLessons,
+        subscribedCourses: nextCourses,
+        practiceLessonIds: nextPracLessons,
+        practiceCourses: nextPracCourses,
+        updatedAt: nowIso
+      });
+      await env.DB.batch([
+        env.DB.prepare(`UPDATE subscription_requests SET status = 'approved', adminNote = ?, updatedAt = ? WHERE requestId = ?`).bind(adminNote, nowIso, requestId),
+        updateUserStmt
+      ]);
+    });
     const [updatedReq, updatedUser, allRequests, allUsers] = await Promise.all([
       one<any>(env.DB, `SELECT * FROM subscription_requests WHERE requestId = ?`, requestId),
       one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, String(targetUser.uid)),
