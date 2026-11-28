@@ -2845,16 +2845,14 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   await loadBaseWorkbookFromExcel(forceExcelReload);
   const initialOverlay = readOverlayStore();
 
-  const { lb } = getBackendBridge();
+  const { lb, isStaticHost } = getBackendBridge();
   const storedWorkerOverride = lb && typeof lb.getStoredOverride === 'function' ? String(lb.getStoredOverride() || '').trim() : '';
   const candidateWorkerBase = String(
     storedWorkerOverride ||
-      initialOverlay.siteConfig?.workerApiBaseUrl ||
-      firestoreCfg?.workerApiBaseUrl ||
-      baseCfg?.workerApiBaseUrl ||
+      (isStaticHost ? initialOverlay.siteConfig?.workerApiBaseUrl || firestoreCfg?.workerApiBaseUrl || baseCfg?.workerApiBaseUrl : '') ||
       ''
   ).trim();
-  if (candidateWorkerBase && lb && typeof lb.setSiteWorkerBase === 'function') {
+  if (isStaticHost && candidateWorkerBase && lb && typeof lb.setSiteWorkerBase === 'function') {
     lb.setSiteWorkerBase(candidateWorkerBase);
   }
 

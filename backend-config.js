@@ -54,9 +54,20 @@
     } catch (_) {}
   }
 
+  function isSelfHostedBackend() {
+    if (typeof window === 'undefined' || !window.location) return false;
+    // If we're not on static GitHub Pages, we are running directly on the backend (Cloudflare Worker or Node server)
+    return !isStaticGithubHost();
+  }
+
   function setSiteWorkerBase(rawUrl) {
     var prev = SITE_WORKER_BASE;
     var clean = normalizeBaseUrl(rawUrl);
+    // If running on a self-hosted backend, don't set a foreign worker base unless manually overridden
+    if (isSelfHostedBackend() && !getStoredOverride()) {
+      SITE_WORKER_BASE = '';
+      return '';
+    }
     if (clean && isValidHttpUrl(clean) && !isMixedContentUrl(clean)) {
       SITE_WORKER_BASE = clean;
     } else if (!clean) {
@@ -81,6 +92,8 @@
   }
 
   function readCachedSiteConfigWorkerUrl() {
+    // If running directly on the Cloudflare Worker or Node, don't use foreign cached URL
+    if (isSelfHostedBackend()) return '';
     try {
       if (typeof window !== 'undefined' && window.__INITIAL_SITE_CONFIG_CACHE__ && window.__INITIAL_SITE_CONFIG_CACHE__.workerApiBaseUrl) {
         var cached = normalizeBaseUrl(window.__INITIAL_SITE_CONFIG_CACHE__.workerApiBaseUrl);
@@ -99,12 +112,20 @@
   }
 
   function getApiBase() {
+    var stored = getStoredOverride();
+    if (stored) return stored;
+
+    // When running on Cloudflare Workers, Node, or localhost, NEVER redirect requests across domains.
+    // The current host serves /api directly on the same origin.
+    if (isSelfHostedBackend()) {
+      return '';
+    }
+
+    // On GitHub Pages (static github host), use configured Cloudflare Worker URL
     return (
-      getStoredOverride() ||
       SITE_WORKER_BASE ||
       readCachedSiteConfigWorkerUrl() ||
-      (!isStaticGithubHost() ? normalizeBaseUrl(DEFAULT_PRODUCTION_BACKEND_URL) : '') ||
-      ''
+      'https://edu-learning-hub.suyi-huper.workers.dev'
     );
   }
 
@@ -189,6 +210,9 @@
     if (!raw) return '';
     if (/^https?:\/\//i.test(raw)) return raw;
     var rel = raw.charAt(0) === '/' ? raw : '/' + raw;
+    if (isSelfHostedBackend() && !getStoredOverride()) {
+      return rel;
+    }
     var base = getApiBase();
     return base ? base + rel : rel;
   }
