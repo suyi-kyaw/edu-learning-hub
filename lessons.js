@@ -808,7 +808,9 @@
     if (window.LinguaContentStore && typeof window.LinguaContentStore.loadLessonsWorkbook === 'function') {
       try {
         const storeRes = await window.LinguaContentStore.loadLessonsWorkbook();
-        if (storeRes && storeRes.sheets && ['local-draft', 'cloudflare-d1', 'xlsx', 'json'].includes(storeRes.source)) {
+        const src = String(storeRes?.source || '');
+        const validSource = src.indexOf('cloudflare-d1') === 0 || ['local-draft', 'xlsx', 'json'].includes(src);
+        if (storeRes && storeRes.sheets && validSource) {
           allLessons = Array.isArray(storeRes.sheets.Lessons) ? storeRes.sheets.Lessons : [];
           allExercises = Array.isArray(storeRes.sheets.Exercises) ? storeRes.sheets.Exercises : [];
           allWriting = Array.isArray(storeRes.sheets.Writing) ? storeRes.sheets.Writing : [];
@@ -6629,6 +6631,24 @@
 
     await loadLessonsWorkbook();
     handleUrlParams();
+
+    let workerSyncedLessonsOnce = false;
+    window.addEventListener('linguapath-worker-ready', async () => {
+      if (workerSyncedLessonsOnce || !window.LinguaContentStore?.getDataSourceStatus) return;
+      const src = String((window.LinguaContentStore.getDataSourceStatus('lessons') || {}).source || '');
+      if (src.indexOf('cloudflare-d1') === 0) {
+        workerSyncedLessonsOnce = true;
+        return;
+      }
+      workerSyncedLessonsOnce = true;
+      await loadLessonsWorkbook().catch(() => {});
+      renderCourseSidebar();
+      renderLessonGrid();
+      renderContinueLessonBanner();
+      if (activeLesson) {
+        renderWorkspaceHeader(activeLesson);
+      }
+    });
 
     window.addEventListener('popstate', () => {
       handleUrlParams();

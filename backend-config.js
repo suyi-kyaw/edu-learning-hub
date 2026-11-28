@@ -40,13 +40,30 @@
   }
 
   var SITE_WORKER_BASE = '';
+  var workerDiscoveryPromise = null;
+
+  function dispatchWorkerReady(baseUrl) {
+    try {
+      if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(
+          new CustomEvent('linguapath-worker-ready', {
+            detail: { baseUrl: baseUrl || '' }
+          })
+        );
+      }
+    } catch (_) {}
+  }
 
   function setSiteWorkerBase(rawUrl) {
+    var prev = SITE_WORKER_BASE;
     var clean = normalizeBaseUrl(rawUrl);
     if (clean && isValidHttpUrl(clean) && !isMixedContentUrl(clean)) {
       SITE_WORKER_BASE = clean;
     } else if (!clean) {
       SITE_WORKER_BASE = '';
+    }
+    if (SITE_WORKER_BASE && SITE_WORKER_BASE !== prev) {
+      dispatchWorkerReady(SITE_WORKER_BASE);
     }
     return SITE_WORKER_BASE;
   }
@@ -63,13 +80,78 @@
     return '';
   }
 
+  function readCachedSiteConfigWorkerUrl() {
+    try {
+      if (typeof window !== 'undefined' && window.__INITIAL_SITE_CONFIG_CACHE__ && window.__INITIAL_SITE_CONFIG_CACHE__.workerApiBaseUrl) {
+        var cached = normalizeBaseUrl(window.__INITIAL_SITE_CONFIG_CACHE__.workerApiBaseUrl);
+        if (cached && isValidHttpUrl(cached) && !isMixedContentUrl(cached)) return cached;
+      }
+      if (global.localStorage) {
+        var cfgRaw = global.localStorage.getItem('linguapath_site_config_v1');
+        if (cfgRaw) {
+          var cfg = JSON.parse(cfgRaw);
+          var url = normalizeBaseUrl(cfg && cfg.workerApiBaseUrl);
+          if (url && isValidHttpUrl(url) && !isMixedContentUrl(url)) return url;
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
   function getApiBase() {
-    return getStoredOverride() || SITE_WORKER_BASE || (!isStaticGithubHost() ? normalizeBaseUrl(DEFAULT_PRODUCTION_BACKEND_URL) : '') || '';
+    return (
+      getStoredOverride() ||
+      SITE_WORKER_BASE ||
+      readCachedSiteConfigWorkerUrl() ||
+      (!isStaticGithubHost() ? normalizeBaseUrl(DEFAULT_PRODUCTION_BACKEND_URL) : '') ||
+      ''
+    );
   }
 
   function hasBackend() {
     if (!isStaticGithubHost()) return true;
     return Boolean(getApiBase());
+  }
+
+  function ensureWorkerBaseResolved(timeoutMs) {
+    if (!isStaticGithubHost() || getApiBase()) {
+      return Promise.resolve(getApiBase());
+    }
+    if (workerDiscoveryPromise) return workerDiscoveryPromise;
+    var limit = Number(timeoutMs) > 0 ? Number(timeoutMs) : 1800;
+    workerDiscoveryPromise = (async function () {
+      try {
+        var cached = readCachedSiteConfigWorkerUrl();
+        if (cached) {
+          setSiteWorkerBase(cached);
+          return getApiBase();
+        }
+        var tasks = [];
+        tasks.push(
+          fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' })
+            .then(function (r) {
+              return r && r.ok ? r.json() : null;
+            })
+            .then(function (cfg) {
+              if (cfg && cfg.workerApiBaseUrl) {
+                setSiteWorkerBase(cfg.workerApiBaseUrl);
+              }
+            })
+            .catch(function () {})
+        );
+        if (global.LinguaAuth && typeof global.LinguaAuth.waitUntilReady === 'function') {
+          tasks.push(global.LinguaAuth.waitUntilReady().catch(function () {}));
+        }
+        await Promise.race([
+          Promise.allSettled(tasks),
+          new Promise(function (resolve) {
+            setTimeout(resolve, limit);
+          })
+        ]);
+      } catch (_) {}
+      return getApiBase();
+    })();
+    return workerDiscoveryPromise;
   }
 
   function setApiBase(rawUrl) {
@@ -167,44 +249,107 @@
     }
   }
 
+  function isRetryableStatus(status) {
+    return status === 408 || status === 429 || (status >= 500 && status <= 599);
+  }
+
+  async function fetchWithRetry(url, init, options) {
+    var opts = options || {};
+    var retries = typeof opts.retries === 'number' ? Math.max(0, opts.retries) : 2;
+    var baseDelayMs = Number(opts.baseDelayMs) > 0 ? Number(opts.baseDelayMs) : 200;
+    var timeoutMs = Number(opts.timeoutMs) > 0 ? Number(opts.timeoutMs) : 8500;
+    var lastErr = null;
+    var lastRes = null;
+
+    for (var attempt = 0; attempt <= retries; attempt++) {
+      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var timerId = null;
+      try {
+        var fetchInit = Object.assign({}, init || {});
+        if (!fetchInit.cache) fetchInit.cache = 'no-store';
+        if (controller && !fetchInit.signal) {
+          fetchInit.signal = controller.signal;
+          timerId = setTimeout(function () {
+            try {
+              controller.abort();
+            } catch (_) {}
+          }, timeoutMs);
+        }
+        var res = await fetch(url, fetchInit);
+        if (timerId) clearTimeout(timerId);
+        lastRes = res;
+        if (res && !isRetryableStatus(res.status)) {
+          return res;
+        }
+        if (attempt === retries) {
+          return res;
+        }
+      } catch (err) {
+        if (timerId) clearTimeout(timerId);
+        lastErr = err;
+        if (attempt === retries) {
+          throw err;
+        }
+      }
+      var jitter = Math.floor(Math.random() * 90);
+      var waitMs = baseDelayMs * Math.pow(2, attempt) + jitter;
+      await new Promise(function (resolve) {
+        setTimeout(resolve, waitMs);
+      });
+    }
+
+    if (lastRes) return lastRes;
+    throw lastErr || new Error('Network request failed.');
+  }
+
   async function testConnection(candidateUrl) {
+    if (!candidateUrl) {
+      await ensureWorkerBaseResolved(1200);
+    }
     var base = candidateUrl ? normalizeBaseUrl(candidateUrl) : getApiBase();
     if (!base && isStaticGithubHost()) {
       return {
         ok: false,
+        status: 'disconnected',
         error: 'No Cloudflare Worker URL configured. Enter your Worker https:// URL or connect it in Site Settings.'
       };
     }
     if (candidateUrl && !isValidHttpUrl(base)) {
-      return { ok: false, error: 'Enter a valid https:// Cloudflare Worker URL.' };
+      return { ok: false, status: 'disconnected', error: 'Enter a valid https:// Cloudflare Worker URL.' };
     }
     if (candidateUrl && isMixedContentUrl(base)) {
-      return { ok: false, error: 'HTTPS pages require an https:// Worker URL.' };
+      return { ok: false, status: 'disconnected', error: 'HTTPS pages require an https:// Worker URL.' };
     }
     var endpoint = (base ? base : '') + '/api/database/status?t=' + Date.now();
     try {
-      var res = await fetch(endpoint, { cache: 'no-store' });
+      var res = await fetchWithRetry(endpoint, { cache: 'no-store' }, { retries: 1, timeoutMs: 6500 });
       var parsed = await safeReadJsonResponse(res);
       var data = parsed.data;
-      if (!res.ok || !data || !data.success) {
+      if (!res.ok || !data || !data.success || data.status === 'disconnected') {
         return {
           ok: false,
+          status: (data && data.status) || 'disconnected',
+          database: (data && data.database) || 'edu-hub-db',
           error: parsed.error || (data && data.error) || 'Worker health check returned HTTP ' + res.status
         };
       }
       var tables = Array.isArray(data.tables) ? data.tables : [];
       return {
         ok: true,
+        status: data.status || 'connected',
+        binding: data.binding || 'DB',
         url: base || '',
         database: data.database || 'edu-hub-db',
         tables: tables,
         tableCount: Number(data.tableCount || tables.length || 0),
+        rowCounts: data.rowCounts || null,
         maxUploadBytes: Number(data.maxUploadBytes) || 50 * 1024 * 1024,
         storage: data.storage || { d1: true, r2: false }
       };
     } catch (err) {
       return {
         ok: false,
+        status: 'disconnected',
         error: err && err.message ? err.message : 'Could not reach the Cloudflare Worker URL.'
       };
     }
@@ -220,10 +365,12 @@
     getApiBase: getApiBase,
     getStoredOverride: getStoredOverride,
     hasBackend: hasBackend,
+    ensureWorkerBaseResolved: ensureWorkerBaseResolved,
     setApiBase: setApiBase,
     clearApiBase: clearApiBase,
     apiUrl: apiUrl,
     assetUrl: assetUrl,
+    fetchWithRetry: fetchWithRetry,
     testConnection: testConnection
   };
 
@@ -684,11 +831,15 @@
       if (!token) return;
       var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
       var syncEndpoint = apiUrl(forceFlag ? '/api/database/sync?force=1' : '/api/database/sync');
-      await fetch(syncEndpoint, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({ domain: domain, sheets: sheets, force: Boolean(forceFlag) })
-      }).catch(function () {});
+      await fetchWithRetry(
+        syncEndpoint,
+        {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ domain: domain, sheets: sheets, force: Boolean(forceFlag) })
+        },
+        { retries: 1, timeoutMs: 9000 }
+      ).catch(function () {});
     } catch (_) {}
   }
 
@@ -697,6 +848,7 @@
     if (!meta) throw new Error('Unknown content domain: ' + domain);
     var normalized = normalizeSheetsForDomain(domain, sheets);
 
+    await ensureWorkerBaseResolved(1500);
     if (!hasBackend()) {
       return {
         syncedToServer: false,
@@ -711,17 +863,21 @@
     var token = await getAuthBearerToken();
     var lastServerError = '';
 
-    // 1. Try Admin API endpoint with auth token
+    // 1. Try Admin API endpoint with auth token (auto-retry transient D1/network errors)
     if (token) {
       try {
-        var res = await fetch(apiUrl('/api/admin/workbook/' + encodeURIComponent(domain)), {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer ' + token
+        var res = await fetchWithRetry(
+          apiUrl('/api/admin/workbook/' + encodeURIComponent(domain)),
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + token
+            },
+            body: JSON.stringify({ sheets: normalized })
           },
-          body: JSON.stringify({ sheets: normalized })
-        });
+          { retries: 2, timeoutMs: 12000 }
+        );
         var parsedAdmin = await safeReadJsonResponse(res);
         var data = parsedAdmin.data || {};
         if (res.ok && data && data.success) {
@@ -760,19 +916,25 @@
         if (parsedAdmin.error) {
           lastServerError = String(parsedAdmin.error);
         }
-      } catch (_) {}
+      } catch (err) {
+        lastServerError = err && err.message ? err.message : lastServerError;
+      }
     }
 
     // 2. Direct database sync endpoint (supported by Cloudflare Worker and Node server)
     try {
-      var syncRes = await fetch(apiUrl('/api/database/sync'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: 'Bearer ' + token } : {})
+      var syncRes = await fetchWithRetry(
+        apiUrl('/api/database/sync'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: 'Bearer ' + token } : {})
+          },
+          body: JSON.stringify({ domain: domain, sheets: normalized })
         },
-        body: JSON.stringify({ domain: domain, sheets: normalized })
-      });
+        { retries: 2, timeoutMs: 12000 }
+      );
       var parsedSync = await safeReadJsonResponse(syncRes);
       var syncData = parsedSync.data || {};
       if (syncRes.ok && syncData && syncData.success) {
@@ -783,16 +945,30 @@
         } catch (_) {}
         setDataSourceStatus(domain, 'cloudflare-d1', 'edu-hub-db');
         dispatchContentChange(domain, normalized);
+        if (domain === 'lessons' && syncData.lessonCatalog) {
+          try {
+            if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+              window.dispatchEvent(
+                new CustomEvent('linguapath-catalog-synced', {
+                  detail: { lessonCatalog: syncData.lessonCatalog }
+                })
+              );
+            }
+          } catch (_) {}
+        }
         return {
           syncedToServer: true,
           sheets: normalized,
-          counts: syncData.counts || {}
+          counts: syncData.counts || {},
+          lessonCatalog: syncData.lessonCatalog || null
         };
       }
       if (parsedSync.error) {
         lastServerError = String(parsedSync.error);
       }
-    } catch (_) {}
+    } catch (err) {
+      lastServerError = err && err.message ? err.message : lastServerError;
+    }
 
     return {
       syncedToServer: false,
@@ -809,12 +985,15 @@
     var meta = WORKBOOK_META[domain];
     if (!meta) throw new Error('Unknown content domain: ' + domain);
 
-    // Fetch D1 Database bundle and static Excel/JSON workbook in parallel (only query D1 when backend exists)
+    // Ensure Worker URL is resolved (on GitHub Pages, awaits Firestore/site-config discovery cleanly)
+    await ensureWorkerBaseResolved(1800);
+
+    // Fetch D1 Database bundle (with auto-retry) and static Excel/JSON workbook in parallel
     var d1Promise = (async function () {
       if (!hasBackend()) return null;
       try {
         var d1Url = apiUrl('/api/database/bundle?domain=' + encodeURIComponent(domain) + '&t=' + Date.now());
-        var d1Res = await fetch(d1Url, { cache: 'no-store' });
+        var d1Res = await fetchWithRetry(d1Url, { cache: 'no-store' }, { retries: 2, timeoutMs: 8000 });
         var parsedD1 = await safeReadJsonResponse(d1Res);
         var d1Data = parsedD1.data;
         if (d1Res.ok && d1Data && d1Data.success && d1Data.sheets) {
@@ -1177,6 +1356,8 @@
 
     var repoSheets = await fetchStaticRepoSheets(domain);
 
+    await ensureWorkerBaseResolved(1500);
+
     if (!hasBackend()) {
       dispatchContentChange(domain, repoSheets);
       return {
@@ -1191,11 +1372,15 @@
     var headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = 'Bearer ' + token;
 
-    var forceRes = await fetch(apiUrl('/api/database/force-sync'), {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify({ domain: domain, sheets: repoSheets, force: true })
-    });
+    var forceRes = await fetchWithRetry(
+      apiUrl('/api/database/force-sync'),
+      {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ domain: domain, sheets: repoSheets, force: true })
+      },
+      { retries: 2, timeoutMs: 12000 }
+    );
     var parsedForce = await safeReadJsonResponse(forceRes);
     var forceData = parsedForce.data || {};
 

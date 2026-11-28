@@ -2,8 +2,20 @@
 .git
 .gitignore
 .wrangler
+.env
+.env.*
 node_modules
 src
+scripts
+server.js
+server.ts
+schema.sql
+firebase-blueprint.json
+firestore.rules
+firestore.indexes.json
+eslint.config.*
+tsconfig.json
+generate-*.js
 package.json
 bun.lock
 bun.lockb
@@ -13,3 +25,5 @@ wrangler.toml
 wrangler.toml_
 .assetsignore
 README.md
+data/auth-store.json
+data/users.json

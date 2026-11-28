@@ -613,6 +613,17 @@
     // Initial load
     document.addEventListener('DOMContentLoaded', () => {
       fetchGamesData();
+      let workerSyncedGamesOnce = false;
+      window.addEventListener('linguapath-worker-ready', () => {
+        if (workerSyncedGamesOnce || !window.LinguaContentStore?.getDataSourceStatus) return;
+        const src = String((window.LinguaContentStore.getDataSourceStatus('lessons') || {}).source || '');
+        if (src.indexOf('cloudflare-d1') === 0) {
+          workerSyncedGamesOnce = true;
+          return;
+        }
+        workerSyncedGamesOnce = true;
+        fetchGamesData();
+      });
     });
   </script>
 </body>

@@ -4201,6 +4201,23 @@ document.addEventListener(
       loadStoryLesson();
     });
 
+    let workerSyncedStoryOnce = false;
+    window.addEventListener("linguapath-worker-ready", () => {
+      if (workerSyncedStoryOnce || !window.LinguaContentStore?.getDataSourceStatus) return;
+      const storiesSrc = String((window.LinguaContentStore.getDataSourceStatus("stories") || {}).source || "");
+      const reelsSrc = String((window.LinguaContentStore.getDataSourceStatus("reels") || {}).source || "");
+      const needStories = document.getElementById("storyCourseSidebar") && storiesSrc.indexOf("cloudflare-d1") !== 0;
+      const needReels = document.getElementById("reelsVideoGrid") && reelsSrc.indexOf("cloudflare-d1") !== 0;
+      workerSyncedStoryOnce = true;
+      if (needStories) {
+        cachedStoryWorkbook.loaded = false;
+        loadStoryLesson();
+      }
+      if (needReels) {
+        loadReelsAndStoriesWorkbook();
+      }
+    });
+
     window.addEventListener("lingua-auth-change", () => {
       updateHeaderStreakUI();
       updateUserLevelUI();

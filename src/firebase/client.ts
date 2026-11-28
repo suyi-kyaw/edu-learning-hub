@@ -838,11 +838,68 @@ function getBackendBridge(): { lb: any; hasBackend: boolean; isStaticHost: boole
   return { lb, hasBackend, isStaticHost };
 }
 
+function isTransientHttpStatus(status: number): boolean {
+  return status === 408 || status === 429 || (status >= 500 && status <= 599);
+}
+
+async function performFetchWithRetry(
+  url: string,
+  init: RequestInit,
+  retries = 2,
+  timeoutMs = 10000
+): Promise<Response> {
+  const { lb } = getBackendBridge();
+  if (lb && typeof lb.fetchWithRetry === 'function' && !init.signal) {
+    return await lb.fetchWithRetry(url, init, { retries, timeoutMs, baseDelayMs: 220 });
+  }
+  let lastErr: unknown = null;
+  let lastRes: Response | null = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = typeof AbortController !== 'undefined' && !init.signal ? new AbortController() : null;
+    const timer = controller
+      ? setTimeout(() => {
+          try {
+            controller.abort();
+          } catch {
+            // ignore abort error
+          }
+        }, timeoutMs)
+      : null;
+    try {
+      const res = await fetch(url, {
+        ...init,
+        cache: init.cache || 'no-store',
+        signal: init.signal || (controller ? controller.signal : undefined)
+      });
+      if (timer) clearTimeout(timer);
+      lastRes = res;
+      if (!isTransientHttpStatus(res.status) || attempt === retries || init.signal?.aborted) {
+        return res;
+      }
+    } catch (err) {
+      if (timer) clearTimeout(timer);
+      lastErr = err;
+      if (attempt === retries || init.signal?.aborted) {
+        throw err;
+      }
+    }
+    const waitMs = 220 * Math.pow(2, attempt) + Math.floor(Math.random() * 90);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  if (lastRes) return lastRes;
+  throw lastErr instanceof Error ? lastErr : new Error('Network request failed.');
+}
+
 async function backendApiFetch(
   path: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  options: { retries?: number; timeoutMs?: number } = {}
 ): Promise<{ ok: boolean; status: number; data: any; rawText: string; isHtml: boolean }> {
-  const { lb } = getBackendBridge();
+  let { lb, isStaticHost } = getBackendBridge();
+  if (isStaticHost && lb && !lb.getApiBase?.() && typeof lb.ensureWorkerBaseResolved === 'function') {
+    await lb.ensureWorkerBaseResolved(1200).catch(() => {});
+    lb = getBackendBridge().lb;
+  }
   const url = lb && typeof lb.apiUrl === 'function' ? lb.apiUrl(path) : path;
   const token = getApiToken();
   const headers: Record<string, string> = {
@@ -854,11 +911,18 @@ async function backendApiFetch(
   if (typeof init.body === 'string' && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
-  const res = await fetch(url, {
-    ...init,
-    cache: 'no-store',
-    headers
-  });
+  const retries = typeof options.retries === 'number' ? options.retries : 2;
+  const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 10000;
+  const res = await performFetchWithRetry(
+    url,
+    {
+      ...init,
+      cache: 'no-store',
+      headers
+    },
+    retries,
+    timeoutMs
+  );
   const rawText = await res.text().catch(() => '');
   const trimmed = rawText.trim();
   const ctype = String(res.headers.get('content-type') || '').toLowerCase();
@@ -2300,42 +2364,50 @@ async function resolveActiveCurriculumForHydration(): Promise<void> {
   let loadedExercises: Array<{ lessonId?: string }> | undefined = undefined;
   let authoritativeEmptyAllowed = false;
 
-  // Fetch story IDs lightly in parallel so completedLessonIds keeps valid Story IDs
+  // Fetch story IDs lightly in parallel (D1 with Excel/JSON fallback) so completedLessonIds keeps valid Story IDs
   const storiesPromise = (async () => {
     try {
-      const sRes = await fetch(`data/stories.json?t=${Date.now()}`, { cache: 'no-store' });
-      if (sRes.ok) {
-        const sJson = (await sRes.json().catch(() => null)) as { sheets?: { Lessons?: Array<{ id?: string }> } } | null;
-        if (Array.isArray(sJson?.sheets?.Lessons)) {
-          validStoryIdSet = new Set(
-            sJson!.sheets!.Lessons.map((s) => normalizeLessonIdKey(s?.id)).filter(Boolean)
-          );
+      let sLessons: Array<{ id?: string }> | null = null;
+      if (hasBackend) {
+        const sD1 = await backendApiFetch(`/api/database/bundle?domain=stories&t=${Date.now()}`, { method: 'GET' }, { retries: 1, timeoutMs: 6500 }).catch(() => null);
+        if (sD1?.ok && Array.isArray(sD1.data?.sheets?.Lessons)) {
+          sLessons = sD1.data.sheets.Lessons;
         }
+      }
+      if (!sLessons) {
+        const sRes = await fetch(`data/stories.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (sRes.ok) {
+          const sJson = (await sRes.json().catch(() => null)) as { sheets?: { Lessons?: Array<{ id?: string }> } } | null;
+          if (Array.isArray(sJson?.sheets?.Lessons)) {
+            sLessons = sJson.sheets.Lessons;
+          }
+        }
+      }
+      if (Array.isArray(sLessons)) {
+        validStoryIdSet = new Set(
+          sLessons.map((s) => normalizeLessonIdKey(s?.id)).filter(Boolean)
+        );
       }
     } catch {
       // ignore story preload error
     }
   })();
 
-  // 1. Live D1 / Express backend lessons bundle when backend exists
+  // 1. Live D1 / Express backend lessons bundle when backend exists (auto-retry transient errors)
   if (hasBackend) {
     try {
-      const apiPath = `/api/database/bundle?domain=lessons&t=${Date.now()}`;
-      const apiUrl = lb?.apiUrl ? lb.apiUrl(apiPath) : apiPath;
-      const res = await fetch(apiUrl, { cache: 'no-store' });
-      if (res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          success?: boolean;
-          sheets?: { Lessons?: unknown[]; Exercises?: Array<{ lessonId?: string }> };
-        } | null;
-        if (data?.success && Array.isArray(data?.sheets?.Lessons)) {
-          loadedLessons = data.sheets.Lessons;
-          if (Array.isArray(data?.sheets?.Exercises)) loadedExercises = data.sheets.Exercises;
-          authoritativeEmptyAllowed = true;
-        }
+      const apiRes = await backendApiFetch(
+        `/api/database/bundle?domain=lessons&t=${Date.now()}`,
+        { method: 'GET' },
+        { retries: 2, timeoutMs: 8000 }
+      );
+      if (apiRes.ok && apiRes.data?.success && Array.isArray(apiRes.data?.sheets?.Lessons)) {
+        loadedLessons = apiRes.data.sheets.Lessons;
+        if (Array.isArray(apiRes.data?.sheets?.Exercises)) loadedExercises = apiRes.data.sheets.Exercises;
+        authoritativeEmptyAllowed = true;
       }
     } catch {
-      // fall through
+      // fall through to Excel / JSON fallback
     }
   }
 
@@ -2772,8 +2844,10 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   const initialOverlay = readOverlayStore();
 
   const { lb } = getBackendBridge();
+  const storedWorkerOverride = lb && typeof lb.getStoredOverride === 'function' ? String(lb.getStoredOverride() || '').trim() : '';
   const candidateWorkerBase = String(
-    initialOverlay.siteConfig?.workerApiBaseUrl ||
+    storedWorkerOverride ||
+      initialOverlay.siteConfig?.workerApiBaseUrl ||
       firestoreCfg?.workerApiBaseUrl ||
       baseCfg?.workerApiBaseUrl ||
       ''
@@ -3675,31 +3749,31 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig 
   emitState();
 
   const { lb, hasBackend: hasRemoteBackend, isStaticHost } = getBackendBridge();
+  if (partial.workerApiBaseUrl !== undefined && lb && typeof lb.setSiteWorkerBase === 'function') {
+    lb.setSiteWorkerBase(merged.workerApiBaseUrl || '');
+  }
   const bearerToken = getApiToken();
 
   if (hasRemoteBackend && bearerToken) {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${bearerToken}`
-    };
     const apiPath = '/api/admin/site-config';
     const apiUrl = lb?.apiUrl ? lb.apiUrl(apiPath) : apiPath;
 
     let remoteSavedConfig: SiteConfig | null = null;
     try {
-      const res = await fetch(apiUrl, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(merged)
-      });
-      const text = await res.text().catch(() => '');
-      const trimmed = text.trim();
-      const data = trimmed && !trimmed.startsWith('<') ? (JSON.parse(trimmed) as any) : null;
-      if (res.ok && data && data.success !== false) {
-        remoteSavedConfig = normalizeSiteConfig(data.config || merged);
+      const apiRes = await backendApiFetch(
+        apiPath,
+        {
+          method: 'PUT',
+          body: JSON.stringify(merged)
+        },
+        { retries: 2, timeoutMs: 10000 }
+      );
+      if (apiRes.ok && apiRes.data && apiRes.data.success !== false) {
+        remoteSavedConfig = normalizeSiteConfig(apiRes.data.config || merged);
       } else {
         const serverErr =
-          (data && (data.error || data.message)) || `Server rejected site configuration save (HTTP ${res.status}).`;
+          (apiRes.data && (apiRes.data.error || apiRes.data.message)) ||
+          `Server rejected site configuration save (HTTP ${apiRes.status}).`;
         console.warn('Remote site-config save error, local changes retained:', serverErr);
       }
     } catch (err) {
@@ -3709,11 +3783,19 @@ async function saveSiteConfig(partial: Partial<SiteConfig>): Promise<SiteConfig 
     const storedOverride = lb?.getStoredOverride ? lb.getStoredOverride() : '';
     if (!isStaticHost && storedOverride && apiUrl !== apiPath) {
       try {
-        const localRes = await fetch(apiPath, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(remoteSavedConfig || merged)
-        });
+        const localRes = await performFetchWithRetry(
+          apiPath,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${bearerToken}`
+            },
+            body: JSON.stringify(remoteSavedConfig || merged)
+          },
+          1,
+          8000
+        );
         const localData = (await localRes.json().catch(() => null)) as any;
         if (!remoteSavedConfig && localRes.ok && localData && localData.success !== false) {
           remoteSavedConfig = normalizeSiteConfig(localData.config || merged);
@@ -4702,6 +4784,18 @@ declare global {
   interface Window {
     LinguaAuth?: typeof LinguaAuth;
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('linguapath-catalog-synced', (e: Event) => {
+    const detail = (e as CustomEvent)?.detail;
+    if (detail && detail.lessonCatalog && typeof detail.lessonCatalog === 'object') {
+      const incoming = detail.lessonCatalog as Record<string, LessonCatalogItem>;
+      baseWorkbookStore.lessonCatalog = { ...incoming };
+      state.lessonCatalog = { ...incoming };
+      emitState();
+    }
+  });
 }
 
 window.LinguaAuth = LinguaAuth;

@@ -81,15 +81,60 @@ function isMissingTableError(err: unknown): boolean {
   );
 }
 
+function isTransientD1Error(err: unknown): boolean {
+  const msg = String((err as any)?.message || err || '').toLowerCase();
+  if (!msg) return false;
+  if (
+    msg.includes('sqlite_constraint') ||
+    msg.includes('constraint failed') ||
+    msg.includes('unique constraint') ||
+    msg.includes('not null constraint') ||
+    msg.includes('not configured')
+  ) {
+    return false;
+  }
+  return (
+    msg.includes('sqlite_busy') ||
+    msg.includes('database is locked') ||
+    msg.includes('d1_error') ||
+    msg.includes('d1_') ||
+    msg.includes('network') ||
+    msg.includes('timeout') ||
+    msg.includes('timed out') ||
+    msg.includes('overloaded') ||
+    msg.includes('temporarily unavailable') ||
+    msg.includes('connection') ||
+    msg.includes('internal error') ||
+    msg.includes('reset')
+  );
+}
+
+async function withD1Retry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt + 1 >= maxAttempts || !isTransientD1Error(err)) {
+        throw err;
+      }
+      const delayMs = 45 * (attempt + 1) + Math.floor(Math.random() * 35);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastErr;
+}
+
 async function one<T>(db: D1Database, sql: string, ...params: unknown[]): Promise<T | null> {
   if (!db) return null;
   try {
-    return await db.prepare(sql).bind(...params).first<T>();
+    return await withD1Retry(() => db.prepare(sql).bind(...params).first<T>(), 2);
   } catch (err) {
     if (isMissingTableError(err)) {
       try {
         await ensureD1Tables(db, true);
-        return await db.prepare(sql).bind(...params).first<T>();
+        return await withD1Retry(() => db.prepare(sql).bind(...params).first<T>(), 2);
       } catch (_) {}
     }
     return null;
@@ -99,13 +144,13 @@ async function one<T>(db: D1Database, sql: string, ...params: unknown[]): Promis
 async function all<T>(db: D1Database, sql: string, ...params: unknown[]): Promise<T[]> {
   if (!db) return [];
   try {
-    const { results } = await db.prepare(sql).bind(...params).all<T>();
+    const { results } = await withD1Retry(() => db.prepare(sql).bind(...params).all<T>(), 2);
     return results ?? [];
   } catch (err) {
     if (isMissingTableError(err)) {
       try {
         await ensureD1Tables(db, true);
-        const { results } = await db.prepare(sql).bind(...params).all<T>();
+        const { results } = await withD1Retry(() => db.prepare(sql).bind(...params).all<T>(), 2);
         return results ?? [];
       } catch (_) {}
     }
@@ -117,34 +162,38 @@ async function oneStrict<T>(db: D1Database, sql: string, ...params: unknown[]): 
   if (!db) {
     throw new Error('Cloudflare D1 database binding (DB) is not configured.');
   }
-  try {
-    return await db.prepare(sql).bind(...params).first<T>();
-  } catch (err) {
-    if (isMissingTableError(err)) {
-      d1SchemaReady = false;
-      await ensureD1Tables(db, true);
+  return withD1Retry(async () => {
+    try {
       return await db.prepare(sql).bind(...params).first<T>();
+    } catch (err) {
+      if (isMissingTableError(err)) {
+        d1SchemaReady = false;
+        await ensureD1Tables(db, true);
+        return await db.prepare(sql).bind(...params).first<T>();
+      }
+      throw err;
     }
-    throw err;
-  }
+  }, 3);
 }
 
 async function allStrict<T>(db: D1Database, sql: string, ...params: unknown[]): Promise<T[]> {
   if (!db) {
     throw new Error('Cloudflare D1 database binding (DB) is not configured.');
   }
-  try {
-    const { results } = await db.prepare(sql).bind(...params).all<T>();
-    return results ?? [];
-  } catch (err) {
-    if (isMissingTableError(err)) {
-      d1SchemaReady = false;
-      await ensureD1Tables(db, true);
+  return withD1Retry(async () => {
+    try {
       const { results } = await db.prepare(sql).bind(...params).all<T>();
       return results ?? [];
+    } catch (err) {
+      if (isMissingTableError(err)) {
+        d1SchemaReady = false;
+        await ensureD1Tables(db, true);
+        const { results } = await db.prepare(sql).bind(...params).all<T>();
+        return results ?? [];
+      }
+      throw err;
     }
-    throw err;
-  }
+  }, 3);
 }
 
 function normalizeLessonRow(l: any) {
@@ -627,17 +676,22 @@ async function ensureD1Tables(db: D1Database, force = false): Promise<void> {
 }
 
 async function withD1TableRepair<T>(db: D1Database, fn: () => Promise<T>): Promise<T> {
-  await ensureD1Tables(db);
-  try {
-    return await fn();
-  } catch (err) {
-    if (isMissingTableError(err)) {
-      d1SchemaReady = false;
-      await ensureD1Tables(db, true);
-      return await fn();
-    }
-    throw err;
+  if (!db) {
+    throw new Error('Cloudflare D1 database binding (DB) is not configured.');
   }
+  await ensureD1Tables(db);
+  return withD1Retry(async () => {
+    try {
+      return await fn();
+    } catch (err) {
+      if (isMissingTableError(err)) {
+        d1SchemaReady = false;
+        await ensureD1Tables(db, true);
+        return await fn();
+      }
+      throw err;
+    }
+  }, 3);
 }
 
 async function executeD1Batch(db: D1Database, stmts: D1PreparedStatement[]): Promise<void> {
@@ -645,7 +699,7 @@ async function executeD1Batch(db: D1Database, stmts: D1PreparedStatement[]): Pro
   await withD1TableRepair(db, async () => {
     const CHUNK = 60;
     for (let i = 0; i < stmts.length; i += CHUNK) {
-      await db.batch(stmts.slice(i, i + CHUNK));
+      await withD1Retry(() => db.batch(stmts.slice(i, i + CHUNK)), 2);
     }
   });
 }
@@ -1688,15 +1742,21 @@ async function syncLessonsSheetsToD1(db: D1Database, sheets: Record<string, any[
   }
 
   if (Array.isArray(sheets.Games)) {
-    stmts.push(db.prepare(`DELETE FROM games`));
+    const incomingGameIds = new Set<string>();
     for (let i = 0; i < sheets.Games.length; i++) {
       const g = sheets.Games[i];
       if (!g || typeof g !== 'object') continue;
       const gid = bindStr(g.id).trim() || `game-${i + 1}`;
+      if (incomingGameIds.has(gid)) continue;
+      incomingGameIds.add(gid);
       stmts.push(
         db.prepare(`
           INSERT INTO games (id, "order", title, category, badge, description, embed_code, embed_url, width, height, active)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            "order"=excluded."order", title=excluded.title, category=excluded.category, badge=excluded.badge,
+            description=excluded.description, embed_code=excluded.embed_code, embed_url=excluded.embed_url,
+            width=excluded.width, height=excluded.height, active=excluded.active
         `).bind(
           gid,
           bindNum(g.order || g.order_num, i + 1),
@@ -1711,6 +1771,12 @@ async function syncLessonsSheetsToD1(db: D1Database, sheets: Record<string, any[
           bindStr(g.active, 'true')
         )
       );
+    }
+    const existingGames = await all<{ id: string }>(db, `SELECT id FROM games`);
+    for (const row of existingGames) {
+      if (row?.id && !incomingGameIds.has(String(row.id))) {
+        stmts.push(db.prepare(`DELETE FROM games WHERE id = ?`).bind(String(row.id)));
+      }
     }
   }
 
@@ -1784,14 +1850,19 @@ async function syncStoriesSheetsToD1(db: D1Database, sheets: Record<string, any[
   const stmts: D1PreparedStatement[] = [];
 
   if (Array.isArray(sheets.Lessons)) {
-    stmts.push(db.prepare(`DELETE FROM stories_lessons`));
+    const incomingStoryIds = new Set<string>();
     for (const l of sheets.Lessons) {
       const id = String(l.id || l.lessonId || '').trim();
-      if (!id) continue;
+      if (!id || incomingStoryIds.has(id)) continue;
+      incomingStoryIds.add(id);
       stmts.push(
         db.prepare(`
           INSERT INTO stories_lessons (id, title, chineseTitle, pinyin, meaning, level, description, video, poster)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            title=excluded.title, chineseTitle=excluded.chineseTitle, pinyin=excluded.pinyin,
+            meaning=excluded.meaning, level=excluded.level, description=excluded.description,
+            video=excluded.video, poster=excluded.poster
         `).bind(
           id,
           l.title || id,
@@ -1804,6 +1875,12 @@ async function syncStoriesSheetsToD1(db: D1Database, sheets: Record<string, any[
           String(l.poster || l.posterUrl || l.poster_url || l.Poster || l.PosterUrl || l.thumbnail_path || '').trim()
         )
       );
+    }
+    const existingStories = await all<{ id: string }>(db, `SELECT id FROM stories_lessons`);
+    for (const row of existingStories) {
+      if (row?.id && !incomingStoryIds.has(String(row.id))) {
+        stmts.push(db.prepare(`DELETE FROM stories_lessons WHERE id = ?`).bind(String(row.id)));
+      }
     }
   }
 
@@ -1897,14 +1974,21 @@ async function syncReelsSheetsToD1(db: D1Database, sheets: Record<string, any[]>
   const videos = Array.isArray(sheets.Videos) ? sheets.Videos : null;
 
   if (videos) {
-    stmts.push(db.prepare(`DELETE FROM reels_videos`));
+    const incomingReelIds = new Set<string>();
     for (const v of videos) {
       const id = String(v.id || '').trim();
-      if (!id) continue;
+      if (!id || incomingReelIds.has(id)) continue;
+      incomingReelIds.add(id);
       stmts.push(
         db.prepare(`
           INSERT INTO reels_videos (id, type, holiday_id, title, video_path, thumbnail_path, duration_sec, status, text_cn, text_pinyin, text_en, text_my)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            type=excluded.type, holiday_id=excluded.holiday_id, title=excluded.title,
+            video_path=excluded.video_path, thumbnail_path=excluded.thumbnail_path,
+            duration_sec=excluded.duration_sec, status=excluded.status,
+            text_cn=excluded.text_cn, text_pinyin=excluded.text_pinyin,
+            text_en=excluded.text_en, text_my=excluded.text_my
         `).bind(
           id,
           v.type || 'daily',
@@ -1921,6 +2005,12 @@ async function syncReelsSheetsToD1(db: D1Database, sheets: Record<string, any[]>
         )
       );
     }
+    const existingReels = await all<{ id: string }>(db, `SELECT id FROM reels_videos`);
+    for (const row of existingReels) {
+      if (row?.id && !incomingReelIds.has(String(row.id))) {
+        stmts.push(db.prepare(`DELETE FROM reels_videos WHERE id = ?`).bind(String(row.id)));
+      }
+    }
   }
 
   if (stmts.length > 0) {
@@ -1929,13 +2019,16 @@ async function syncReelsSheetsToD1(db: D1Database, sheets: Record<string, any[]>
 }
 
 async function getLessons(env: Env, url: URL): Promise<Response> {
+  if (!env.DB) {
+    return fail('Cloudflare D1 database binding (DB) is not configured.', 503);
+  }
   const level = url.searchParams.get('level');
   const accessType = url.searchParams.get('access_type');
   const category = url.searchParams.get('category');
 
   await ensureD1Tables(env.DB);
 
-  let rawLessons = await all<Record<string, unknown>>(env.DB, `SELECT * FROM lessons ORDER BY rowid ASC`);
+  let rawLessons = await allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM lessons ORDER BY rowid ASC`);
   if (!rawLessons.length) {
     try {
       const assetRes = await env.ASSETS.fetch(new Request(new URL('/data/lessons.json', url.origin)));
@@ -1968,11 +2061,14 @@ async function getLessons(env: Env, url: URL): Promise<Response> {
 }
 
 async function getLessonDetail(env: Env, id: string, origin: string): Promise<Response> {
+  if (!env.DB) {
+    return fail('Cloudflare D1 database binding (DB) is not configured.', 503);
+  }
   await ensureD1Tables(env.DB);
   const cleanId = String(id || '').trim();
 
-  // Try D1 first
-  let lessonRaw = await one<Record<string, unknown>>(
+  // Try D1 first (auto-retries transient errors)
+  let lessonRaw = await oneStrict<Record<string, unknown>>(
     env.DB,
     `SELECT * FROM lessons WHERE id = ? OR id = ? OR id = ?`,
     cleanId,
@@ -1980,28 +2076,28 @@ async function getLessonDetail(env: Env, id: string, origin: string): Promise<Re
     cleanId.replace(/^lesson-/, '')
   );
 
-  let vocabulary = (await all<Record<string, unknown>>(
+  let vocabulary = (await allStrict<Record<string, unknown>>(
     env.DB,
     `SELECT * FROM vocabulary WHERE lessonId = ? OR lesson_id = ? ORDER BY "order" ASC`,
     cleanId,
     cleanId
   )).map(normalizeVocabularyRow);
 
-  let exercises = (await all<Record<string, unknown>>(
+  let exercises = (await allStrict<Record<string, unknown>>(
     env.DB,
     `SELECT * FROM exercises WHERE lessonId = ? OR lesson_id = ? ORDER BY "order" ASC`,
     cleanId,
     cleanId
   )).map(normalizeExerciseRow);
 
-  let writingCharacters = (await all<Record<string, unknown>>(
+  let writingCharacters = (await allStrict<Record<string, unknown>>(
     env.DB,
     `SELECT * FROM writing_characters WHERE lessonId = ? OR lesson_id = ? ORDER BY "order" ASC`,
     cleanId,
     cleanId
   )).map(normalizeWritingRow);
 
-  let pronunciation = (await all<Record<string, unknown>>(
+  let pronunciation = (await allStrict<Record<string, unknown>>(
     env.DB,
     `SELECT * FROM pronunciation WHERE lessonId = ? OR lesson_id = ? ORDER BY "order" ASC`,
     cleanId,
@@ -2068,17 +2164,20 @@ async function getLessonDetail(env: Env, id: string, origin: string): Promise<Re
 }
 
 async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
+  if (!env.DB) {
+    return fail('Cloudflare D1 database binding (DB) is not configured.', 503);
+  }
   const domain = String(url.searchParams.get('domain') || 'lessons').toLowerCase();
-  await ensureD1Tables(env.DB);
+  await withD1Retry(() => ensureD1Tables(env.DB), 2);
 
   if (domain === 'lessons') {
     let [rawLessons, rawExercises, rawWriting, rawVocab, rawGames, rawPron] = await Promise.all([
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM lessons ORDER BY rowid ASC`),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM exercises ORDER BY "order" ASC`),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM writing_characters ORDER BY "order" ASC`),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM vocabulary ORDER BY "order" ASC`),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM games ORDER BY "order" ASC`),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM pronunciation ORDER BY "order" ASC`)
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM lessons ORDER BY rowid ASC`),
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM exercises ORDER BY "order" ASC`),
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM writing_characters ORDER BY "order" ASC`),
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM vocabulary ORDER BY "order" ASC`),
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM games ORDER BY "order" ASC`),
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM pronunciation ORDER BY "order" ASC`)
     ]);
 
     let staticData: any = null;
@@ -2160,10 +2259,10 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
     const STORIES_MIGRATION_KEY = 'migration_stories_assets_v2';
     const [migrationApplied, rawLessonsInit, rawStoryInit, rawVocabInit, rawExercisesInit] = await Promise.all([
       getD1Meta(env.DB, STORIES_MIGRATION_KEY),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM stories_lessons ORDER BY rowid ASC`),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM story_scenes ORDER BY "order" ASC`),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM stories_vocabulary ORDER BY "order" ASC`),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM stories_exercises ORDER BY "order" ASC`)
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM stories_lessons ORDER BY rowid ASC`),
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM story_scenes ORDER BY "order" ASC`),
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM stories_vocabulary ORDER BY "order" ASC`),
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM stories_exercises ORDER BY "order" ASC`)
     ]);
 
     let rawLessons = rawLessonsInit;
@@ -2270,7 +2369,7 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
     const REELS_MIGRATION_KEY = 'migration_reels_assets_v2';
     const [migrationApplied, rawVideosInit] = await Promise.all([
       getD1Meta(env.DB, REELS_MIGRATION_KEY),
-      all<Record<string, unknown>>(env.DB, `SELECT * FROM reels_videos ORDER BY rowid ASC`)
+      allStrict<Record<string, unknown>>(env.DB, `SELECT * FROM reels_videos ORDER BY rowid ASC`)
     ]);
     let rawVideos = rawVideosInit;
     let staticData: any = null;
@@ -2328,7 +2427,10 @@ async function getDatabaseBundle(env: Env, url: URL): Promise<Response> {
 }
 
 async function handleDatabaseSync(request: Request, env: Env): Promise<Response> {
-  await ensureD1Tables(env.DB);
+  if (!env.DB) {
+    return fail('Cloudflare D1 database binding (DB) is not configured.', 503);
+  }
+  await withD1Retry(() => ensureD1Tables(env.DB), 2);
   try {
     const body = (await request.json()) as any;
     const domain = String(body?.domain || 'lessons').toLowerCase();
@@ -2340,6 +2442,11 @@ async function handleDatabaseSync(request: Request, env: Env): Promise<Response>
 
     if (domain === 'lessons') {
       await syncLessonsSheetsToD1(env.DB, sheets);
+      const catRows = await allStrict<any>(env.DB, `SELECT * FROM lesson_catalog`);
+      const lessonCatalog: Record<string, any> = {};
+      for (const c of catRows) {
+        if (c?.lessonId) lessonCatalog[c.lessonId] = c;
+      }
       return json({
         success: true,
         syncedToServer: true,
@@ -2352,7 +2459,9 @@ async function handleDatabaseSync(request: Request, env: Env): Promise<Response>
           vocabulary: sheets.Vocabulary?.length || 0,
           games: sheets.Games?.length || 0,
           pronunciation: sheets.Pronunciation?.length || 0
-        }
+        },
+        lessonCatalog,
+        sheets
       });
     }
 
@@ -2399,7 +2508,10 @@ async function handleDatabaseSync(request: Request, env: Env): Promise<Response>
 }
 
 async function handleForceDatabaseSync(request: Request, env: Env, url: URL): Promise<Response> {
-  await ensureD1Tables(env.DB);
+  if (!env.DB) {
+    return fail('Cloudflare D1 database binding (DB) is not configured.', 503);
+  }
+  await withD1Retry(() => ensureD1Tables(env.DB), 2);
   try {
     const body = (await request.json().catch(() => ({}))) as any;
     const domain = String(body?.domain || url.searchParams.get('domain') || 'stories').toLowerCase();
@@ -2486,8 +2598,11 @@ function normalizeWorkerFeaturedIdList(raw: unknown): string[] {
 }
 
 async function handleWorkerGetSiteConfig(request: Request, env: Env, url: URL): Promise<Response> {
+  if (!env.DB) {
+    return fail('Cloudflare D1 database binding (DB) is not configured.', 503);
+  }
   const row = await withD1TableRepair(env.DB, () =>
-    one<{ config_json: string; updated_at: string }>(
+    oneStrict<{ config_json: string; updated_at: string }>(
       env.DB,
       `SELECT config_json, updated_at FROM site_config WHERE id = 'homepage'`
     )
@@ -2554,6 +2669,9 @@ async function handleWorkerGetSiteConfig(request: Request, env: Env, url: URL): 
 }
 
 async function handleWorkerSaveSiteConfig(request: Request, env: Env): Promise<Response> {
+  if (!env.DB) {
+    return fail('Cloudflare D1 database binding (DB) is not configured.', 503);
+  }
   try {
     const body = (await request.json().catch(() => ({}))) as any;
     if (!body || typeof body !== 'object') {
@@ -4164,7 +4282,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api/catalog' && method === 'GET') {
-    const catRows = await all<any>(env.DB, `SELECT * FROM lesson_catalog`);
+    if (!env.DB) {
+      return fail('Cloudflare D1 database binding (DB) is not configured.', 503);
+    }
+    await ensureD1Tables(env.DB);
+    const catRows = await allStrict<any>(env.DB, `SELECT * FROM lesson_catalog`);
     const lessonCatalog: Record<string, any> = {};
     for (const c of catRows) {
       if (c?.lessonId) {
@@ -4302,27 +4424,75 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     const adminWorkbookMatch = path.match(/^\/api\/admin\/workbook\/([^/]+)$/);
     if (adminWorkbookMatch) {
+      if (!env.DB) {
+        return fail('Cloudflare D1 database binding (DB) is not configured.', 503);
+      }
       const admin = await requireAdminWorker(request, env);
       if (admin instanceof Response) return admin;
       try {
         const domain = decodeURIComponent(adminWorkbookMatch[1]).toLowerCase();
         const body = (await request.json()) as any;
-        if (domain === 'lessons' && body?.sheets) {
-          await syncLessonsSheetsToD1(env.DB, body.sheets);
-        } else if (domain === 'stories' && body?.sheets) {
-          await syncStoriesSheetsToD1(env.DB, body.sheets);
-          await setD1Meta(env.DB, 'migration_stories_assets_v2', 'applied');
-        } else if (domain === 'reels' && body?.sheets) {
-          await syncReelsSheetsToD1(env.DB, body.sheets);
-          await setD1Meta(env.DB, 'migration_reels_assets_v2', 'applied');
+        const sheets = body?.sheets;
+        if (!sheets || typeof sheets !== 'object') {
+          return fail('Invalid sheets payload.', 400);
         }
-        return json({
-          success: true,
-          syncedToServer: true,
-          database: 'edu-hub-db',
-          domain,
-          sheets: body?.sheets || {}
-        });
+        if (domain === 'lessons') {
+          await syncLessonsSheetsToD1(env.DB, sheets);
+          const catRows = await allStrict<any>(env.DB, `SELECT * FROM lesson_catalog`);
+          const lessonCatalog: Record<string, any> = {};
+          for (const c of catRows) {
+            if (c?.lessonId) lessonCatalog[c.lessonId] = c;
+          }
+          return json({
+            success: true,
+            syncedToServer: true,
+            database: 'edu-hub-db',
+            domain,
+            counts: {
+              lessons: sheets.Lessons?.length || 0,
+              exercises: sheets.Exercises?.length || 0,
+              writing: sheets.Writing?.length || 0,
+              vocabulary: sheets.Vocabulary?.length || 0,
+              games: sheets.Games?.length || 0,
+              pronunciation: sheets.Pronunciation?.length || 0
+            },
+            lessonCatalog,
+            sheets
+          });
+        } else if (domain === 'stories') {
+          await syncStoriesSheetsToD1(env.DB, sheets);
+          await setD1Meta(env.DB, 'migration_stories_assets_v2', 'applied');
+          return json({
+            success: true,
+            syncedToServer: true,
+            database: 'edu-hub-db',
+            domain,
+            counts: {
+              lessons: sheets.Lessons?.length || 0,
+              story: sheets.Story?.length || 0,
+              vocabulary: sheets.Vocabulary?.length || 0,
+              exercises: sheets.Exercises?.length || 0
+            },
+            sheets: {
+              ...sheets,
+              Lessons: Array.isArray(sheets.Lessons) ? sheets.Lessons.map(normalizeStoryLessonRow) : sheets.Lessons
+            }
+          });
+        } else if (domain === 'reels') {
+          await syncReelsSheetsToD1(env.DB, sheets);
+          await setD1Meta(env.DB, 'migration_reels_assets_v2', 'applied');
+          return json({
+            success: true,
+            syncedToServer: true,
+            database: 'edu-hub-db',
+            domain,
+            counts: {
+              videos: sheets.Videos?.length || 0
+            },
+            sheets
+          });
+        }
+        return fail('Unknown workbook domain: ' + domain, 400);
       } catch (err: any) {
         return fail(err?.message || 'Admin save failed', 500);
       }
@@ -4342,7 +4512,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
   if (path === '/api/admin/media-library') {
     const rows = await withD1TableRepair(env.DB, () =>
-      all<{ id: string; filename: string; media_type: string; size_bytes: number; storage_mode: string; created_at: string }>(
+      allStrict<{ id: string; filename: string; media_type: string; size_bytes: number; storage_mode: string; created_at: string }>(
         env.DB,
         `SELECT id, filename, media_type, size_bytes, storage_mode, created_at FROM media_files WHERE (status IS NULL OR status = 'ready') ORDER BY created_at DESC LIMIT 100`
       )
@@ -4358,49 +4528,128 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api' || path === '/api/health') {
-    const row = await one<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM lessons`);
-    return json({
-      ok: true,
-      status: 'healthy',
-      database: 'edu-hub-db',
-      lessons: row?.c ?? 0,
-      maxUploadBytes: MAX_WORKER_UPLOAD_BYTES,
-      storage: { d1: true, r2: Boolean(env.MEDIA_BUCKET) }
-    });
+    if (!env.DB) {
+      return json(
+        {
+          ok: false,
+          success: false,
+          status: 'disconnected',
+          database: 'edu-hub-db',
+          binding: 'DB',
+          error: 'Cloudflare D1 database binding (DB) is not configured.'
+        },
+        503
+      );
+    }
+    try {
+      await ensureD1Tables(env.DB);
+      const [lessonsRow, usersRow] = await Promise.all([
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM lessons`),
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM users`)
+      ]);
+      return json({
+        ok: true,
+        success: true,
+        status: 'healthy',
+        database: 'edu-hub-db',
+        binding: 'DB',
+        lessons: Number(lessonsRow?.c || 0),
+        users: Number(usersRow?.c || 0),
+        maxUploadBytes: MAX_WORKER_UPLOAD_BYTES,
+        storage: { d1: true, r2: Boolean(env.MEDIA_BUCKET) },
+        timestamp: new Date().toISOString()
+      });
+    } catch (err: any) {
+      return json(
+        {
+          ok: false,
+          success: false,
+          status: 'disconnected',
+          database: 'edu-hub-db',
+          binding: 'DB',
+          error: err?.message || 'Cloudflare D1 health query failed.'
+        },
+        503
+      );
+    }
   }
 
   if (path === '/api/database/status' || path === '/api/status') {
-    await ensureD1Tables(env.DB);
-    return json({
-      success: true,
-      database: 'edu-hub-db',
-      status: 'connected',
-      maxUploadBytes: MAX_WORKER_UPLOAD_BYTES,
-      storage: { d1: true, r2: Boolean(env.MEDIA_BUCKET) },
-      tables: [
-        'lessons',
-        'exercises',
-        'writing_characters',
-        'vocabulary',
-        'games',
-        'pronunciation',
-        'stories_lessons',
-        'story_scenes',
-        'stories_vocabulary',
-        'stories_exercises',
-        'reels_videos',
-        'media_files',
-        'media_chunks',
-        'site_config',
-        'd1_meta',
-        'users',
-        'subscription_requests',
-        'user_progress',
-        'lesson_catalog',
-        'd1_workbooks'
-      ],
-      timestamp: new Date().toISOString()
-    });
+    if (!env.DB) {
+      return json(
+        {
+          ok: false,
+          success: false,
+          status: 'disconnected',
+          database: 'edu-hub-db',
+          binding: 'DB',
+          error: 'Cloudflare D1 database binding (DB) is not configured.'
+        },
+        503
+      );
+    }
+    try {
+      await ensureD1Tables(env.DB);
+      const tableRows = await allStrict<{ name: string }>(
+        env.DB,
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name ASC`
+      );
+      const tables = tableRows.map((r) => String(r.name || '')).filter(Boolean);
+      const [
+        lessonsCnt,
+        exercisesCnt,
+        storiesCnt,
+        reelsCnt,
+        gamesCnt,
+        usersCnt,
+        requestsCnt,
+        workbooksCnt
+      ] = await Promise.all([
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM lessons`),
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM exercises`),
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM stories_lessons`),
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM reels_videos`),
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM games`),
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM users`),
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM subscription_requests`),
+        oneStrict<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM d1_workbooks`)
+      ]);
+      const rowCounts = {
+        lessons: Number(lessonsCnt?.c || 0),
+        exercises: Number(exercisesCnt?.c || 0),
+        stories_lessons: Number(storiesCnt?.c || 0),
+        reels_videos: Number(reelsCnt?.c || 0),
+        games: Number(gamesCnt?.c || 0),
+        users: Number(usersCnt?.c || 0),
+        subscription_requests: Number(requestsCnt?.c || 0),
+        d1_workbooks: Number(workbooksCnt?.c || 0)
+      };
+      return json({
+        ok: true,
+        success: true,
+        database: 'edu-hub-db',
+        binding: 'DB',
+        status: 'connected',
+        maxUploadBytes: MAX_WORKER_UPLOAD_BYTES,
+        storage: { d1: true, r2: Boolean(env.MEDIA_BUCKET) },
+        tableCount: tables.length,
+        tables,
+        rowCounts,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err: any) {
+      return json(
+        {
+          ok: false,
+          success: false,
+          status: 'disconnected',
+          database: 'edu-hub-db',
+          binding: 'DB',
+          error: err?.message || 'Could not query Cloudflare D1 database.'
+        },
+        503
+      );
+    }
   }
 
   if (path === '/api/database/bundle' || path === '/api/bundle') return getDatabaseBundle(env, url);

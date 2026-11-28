@@ -3134,6 +3134,41 @@ async function initHomepageHydration() {
     }
   });
 
+  let workerSyncedHomeOnce = false;
+  window.addEventListener("linguapath-worker-ready", async () => {
+    if (workerSyncedHomeOnce || !window.LinguaContentStore) return;
+    const store = window.LinguaContentStore;
+    const isD1 = (d) => {
+      const s = store.getDataSourceStatus ? String((store.getDataSourceStatus(d) || {}).source || "") : "";
+      return s.indexOf("cloudflare-d1") === 0;
+    };
+    if (isD1("reels") && isD1("stories") && isD1("lessons")) {
+      workerSyncedHomeOnce = true;
+      return;
+    }
+    workerSyncedHomeOnce = true;
+    try {
+      const [reelsRes, storiesRes, lessonsRes] = await Promise.allSettled([
+        isD1("reels") ? Promise.resolve(null) : store.loadReelsWorkbook(),
+        isD1("stories") ? Promise.resolve(null) : store.loadStoriesWorkbook(),
+        isD1("lessons") ? Promise.resolve(null) : store.loadLessonsWorkbook()
+      ]);
+      if (reelsRes.status === "fulfilled" && reelsRes.value?.sheets?.Videos) {
+        cachedHomeReels = reelsRes.value.sheets.Videos;
+      }
+      if (storiesRes.status === "fulfilled" && storiesRes.value?.sheets?.Lessons) {
+        cachedHomeStories = storiesRes.value.sheets.Lessons;
+      }
+      if (lessonsRes.status === "fulfilled" && lessonsRes.value?.sheets?.Games) {
+        cachedHomeGames = lessonsRes.value.sheets.Games;
+      }
+      const cfg = cachedHomeSiteConfig || window.LinguaAuth?.getSiteConfig?.();
+      renderHomepageFeaturedReels(cfg);
+      renderHomepageFeaturedStories(cfg);
+      renderHomepageFeaturedGames(cfg);
+    } catch (_) {}
+  });
+
   // Load config readiness + dynamic datasets in parallel so we never stick on pre-hydration 3-card defaults
   try {
     const authReadyPromise =

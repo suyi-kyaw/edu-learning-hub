@@ -179,22 +179,37 @@
       return;
     }
 
-    badge.classList.remove('is-warning');
-    badge.classList.add('is-connected');
     try {
-      const res = await fetch(apiUrl('/api/database/status'), { cache: 'no-store' });
-      const json = await res.json().catch(() => null);
-      if (json && json.success) {
-        const hasR2 = Boolean(json.storage && json.storage.r2);
-        const limitMb = Math.round((Number(json.maxUploadBytes) || 50 * 1024 * 1024) / (1024 * 1024));
+      const check =
+        window.LinguaBackend && typeof window.LinguaBackend.testConnection === 'function'
+          ? await window.LinguaBackend.testConnection()
+          : await fetch(apiUrl('/api/database/status?t=' + Date.now()), { cache: 'no-store' }).then(async (r) => {
+              const json = await r.json().catch(() => null);
+              return json ? { ok: Boolean(r.ok && json.success && json.status !== 'disconnected'), ...json } : { ok: false };
+            });
+
+      if (check && check.ok) {
+        badge.classList.remove('is-warning');
+        badge.classList.add('is-connected');
+        const hasR2 = Boolean(check.storage && check.storage.r2);
+        const limitMb = Math.round((Number(check.maxUploadBytes) || 50 * 1024 * 1024) / (1024 * 1024));
         const modeLabel = hasR2 ? 'D1 + R2' : 'D1';
+        const tblCount = Array.isArray(check.tables)
+          ? check.tables.length
+          : (Number(check.tableCount) || 0);
+        const tblSuffix = tblCount > 0 ? `${tblCount} tbl · ` : '';
         badge.textContent = remoteBase
-          ? `Remote Worker ${modeLabel} (${limitMb}MB)`
-          : `Cloudflare ${modeLabel} & Excel (${limitMb}MB)`;
+          ? `Remote Worker ${modeLabel} (${tblSuffix}${limitMb}MB)`
+          : `Cloudflare ${modeLabel} & Excel (${tblSuffix}${limitMb}MB)`;
         return;
       }
     } catch (_) {}
-    badge.textContent = remoteBase ? 'Remote Worker (Unreachable)' : 'Cloudflare D1 & Excel (edu-hub-db)';
+
+    badge.classList.remove('is-connected');
+    badge.classList.add('is-warning');
+    badge.textContent = remoteBase
+      ? 'Remote Worker Disconnected (Excel Fallback)'
+      : 'D1 Disconnected (Excel Fallback)';
   }
 
   function isSameId(a, b) {
@@ -620,18 +635,28 @@
                     return { ok: false, error: 'Worker API returned HTML instead of JSON.' };
                   }
                   const parsed = JSON.parse(txt);
-                  return { ok: Boolean(r.ok && parsed && parsed.success), ...parsed };
+                  return { ok: Boolean(r.ok && parsed && parsed.success && parsed.status !== 'disconnected'), ...parsed };
                 });
+          updateBackendBadge();
           if (check && check.ok) {
             const tblCount = Array.isArray(check.tables)
               ? check.tables.length
-              : (Number(check.tableCount) || 12);
-            toast(`Connected to Cloudflare D1 (${check.database || 'edu-hub-db'})! Found ${tblCount} tables.`);
+              : (Number(check.tableCount) || 0);
+            const rc = check.rowCounts || null;
+            const rowSummary = rc
+              ? ` · Lessons: ${Number(rc.lessons || 0)}, Stories: ${Number(rc.stories_lessons || 0)}, Reels: ${Number(rc.reels_videos || 0)}, Games: ${Number(rc.games || 0)}, Users: ${Number(rc.users || 0)}`
+              : '';
+            toast(
+              `Connected to D1 ${check.database || 'edu-hub-db'} [${check.binding || 'DB'}] (${tblCount} tables${rowSummary}).`
+            );
           } else {
-            toast(`D1 status: ${(check && (check.error || check.message)) || 'offline'}. Using Excel fallback.`, 'info');
+            toast(
+              `D1 disconnected: ${(check && (check.error || check.message)) || 'offline'}. Using Excel fallback for reading.`,
+              'info'
+            );
           }
         } catch (err) {
-          toast(`D1 test: ${err && err.message ? err.message : 'Server error'}. Using Excel fallback.`, 'info');
+          toast(`D1 test failed: ${err && err.message ? err.message : 'Server error'}. Using Excel fallback.`, 'info');
         } finally {
           btn.disabled = false;
           btn.textContent = 'Test D1 DB';
@@ -779,9 +804,23 @@
       }
 
       state.loadedOnce = true;
+      updateBackendBadge();
       const draftSummary = store.getDraftStatusSummary();
       const hasAnyDraft = draftSummary.lessons || draftSummary.stories || draftSummary.reels;
-      setSyncStatus(hasAnyDraft ? 'Local Drafts + Excel' : 'Static Excel Loaded');
+      const sourceList = ['lessons', 'stories', 'reels'].map((d) =>
+        store.getDataSourceStatus ? String((store.getDataSourceStatus(d) || {}).source || '') : ''
+      );
+      const loadedFromD1 = sourceList.some((s) => s.indexOf('cloudflare-d1') === 0);
+      const loadedFromFallback = sourceList.some((s) => s.indexOf('-fallback') !== -1);
+      if (hasAnyDraft) {
+        setSyncStatus(loadedFromD1 ? 'Local Drafts + Cloudflare D1' : 'Local Drafts + Excel');
+      } else if (loadedFromD1) {
+        setSyncStatus('Cloudflare D1 Live (edu-hub-db)');
+      } else if (loadedFromFallback) {
+        setSyncStatus('Excel Fallback Active');
+      } else {
+        setSyncStatus('Static Excel Loaded');
+      }
       updateNavCounts();
       renderActiveTab();
     } catch (err) {
@@ -2394,6 +2433,7 @@
         try {
           const check = await window.LinguaBackend.testConnection(candidate);
           if (!check || !check.ok) {
+            updateBackendBadge();
             throw new Error((check && check.error) || 'Worker unreachable.');
           }
           if (candidate) {
@@ -2402,8 +2442,13 @@
           updateBackendBadge();
           const modeTxt = check.storage && check.storage.r2 ? 'D1 + R2' : 'D1';
           const limitMb = Math.round((Number(check.maxUploadBytes) || 50 * 1024 * 1024) / (1024 * 1024));
+          const tblCount = Array.isArray(check.tables) ? check.tables.length : (Number(check.tableCount) || 0);
+          const rc = check.rowCounts || null;
+          const rowInfo = rc
+            ? ` · ${Number(rc.lessons || 0)} lessons, ${Number(rc.stories_lessons || 0)} stories, ${Number(rc.reels_videos || 0)} reels, ${Number(rc.games || 0)} games, ${Number(rc.users || 0)} users`
+            : '';
           if (workerStatusEl) {
-            workerStatusEl.textContent = `Connected: ${check.url || 'same-origin'} (${modeTxt}, max ${limitMb} MB)`;
+            workerStatusEl.textContent = `Connected: ${check.url || 'same-origin'} (${modeTxt}, ${tblCount} tables${rowInfo}, max ${limitMb} MB)`;
           }
           if (candidate && state.authState?.isAdmin && window.LinguaAuth?.saveSiteConfig) {
             try {
@@ -2413,7 +2458,7 @@
               state.siteConfig = savedCfg;
             } catch (_) {}
           }
-          toast(`Connected to Cloudflare Worker (${modeTxt}, up to ${limitMb} MB uploads).`);
+          toast(`Connected to Cloudflare D1 ${check.database || 'edu-hub-db'} (${modeTxt}, ${tblCount} tables).`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Worker connection failed.';
           if (workerStatusEl) workerStatusEl.textContent = `Connection failed: ${msg}`;
