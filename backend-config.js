@@ -114,6 +114,11 @@
   }
 
   function ensureWorkerBaseResolved(timeoutMs) {
+    var cached = readCachedSiteConfigWorkerUrl();
+    if (cached) {
+      setSiteWorkerBase(cached);
+      return Promise.resolve(getApiBase());
+    }
     if (!isStaticGithubHost() || getApiBase()) {
       return Promise.resolve(getApiBase());
     }
@@ -121,11 +126,6 @@
     var limit = Number(timeoutMs) > 0 ? Number(timeoutMs) : 1800;
     workerDiscoveryPromise = (async function () {
       try {
-        var cached = readCachedSiteConfigWorkerUrl();
-        if (cached) {
-          setSiteWorkerBase(cached);
-          return getApiBase();
-        }
         var tasks = [];
         tasks.push(
           fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' })

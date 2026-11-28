@@ -1,5 +1,6 @@
 {
   "configId": "homepage",
+  "workerApiBaseUrl": "https://ais-dev-dadishjklygmzdkogpxo2g-303069198920.us-west2.run.app",
   "heroEyebrow": "Learn Chinese Step by Step",
   "heroTitleLine1": "Learn Chinese",
   "heroTitleHighlight": "with Confidence.",
