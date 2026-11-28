@@ -109,7 +109,16 @@ function isTransientD1Error(err: unknown): boolean {
   );
 }
 
-async function withD1Retry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+async function withD1Retry<T>(
+  firstArg: (() => Promise<T>) | any,
+  secondArg?: (() => Promise<T>) | number,
+  thirdArg?: number
+): Promise<T> {
+  const fn: () => Promise<T> = typeof firstArg === 'function' ? firstArg : (secondArg as () => Promise<T>);
+  const maxAttempts = typeof secondArg === 'number' ? secondArg : typeof thirdArg === 'number' ? thirdArg : 3;
+  if (typeof fn !== 'function') {
+    throw new Error('withD1Retry requires a function callback.');
+  }
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -3584,7 +3593,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const nowIso = new Date().toISOString();
 
       await withD1TableRepair(env.DB, async () => {
-        const insertStmt = await prepareInsertD1User(env.DB, {
+        await upsertD1UserRow(env.DB, {
           uid,
           email,
           username,
@@ -3604,12 +3613,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           createdAt: nowIso,
           updatedAt: nowIso
         });
-        await insertStmt.run();
         await env.DB.prepare(`
           INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
           VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
           ON CONFLICT(uid) DO UPDATE SET updatedAt = excluded.updatedAt
-        `).bind(uid, nowIso).run();
+        `).bind(uid, nowIso).run().catch(() => {});
       });
 
       const [userRow, progRow] = await Promise.all([
@@ -3652,7 +3660,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     try {
-      return await withD1Retry(env.DB, async () => {
+      return await withD1Retry(async () => {
         console.log('[CF_AUTH_LOGIN] Querying D1 database for user:', email);
         await ensureD1UsersSeeded(env, url.origin).catch((seedErr) => {
           console.warn('[CF_AUTH_LOGIN] Seed check note:', seedErr);
@@ -3743,6 +3751,42 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       });
     } catch (d1Err) {
       console.warn('[CF_AUTH_LOGIN] D1 login error, falling back to static/Excel user verification:', d1Err);
+
+      // 1. Fallback verification against static /data/users.json if available
+      try {
+        const assetRes = await env.ASSETS.fetch(new Request(new URL('/data/users.json', url.origin)));
+        if (assetRes.ok) {
+          const uJson = (await assetRes.json()) as any;
+          if (uJson?.users && typeof uJson.users === 'object') {
+            const fallbackUser = Object.values(uJson.users).find(
+              (u: any) => String(u?.email || '').trim().toLowerCase() === email
+            ) as any;
+            if (fallbackUser) {
+              const storedSalt = String(fallbackUser.passwordSalt || '');
+              const storedHash = String(fallbackUser.passwordHash || '');
+              const ok = await verifyPasswordWorker(password, storedSalt, storedHash).catch(() => false);
+              if (ok) {
+                const token = await signWorkerToken(env, {
+                  uid: String(fallbackUser.uid),
+                  email: String(fallbackUser.email),
+                  role: String(fallbackUser.role || 'student')
+                });
+                return json({
+                  success: true,
+                  token,
+                  user: sanitizeWorkerUserRow(fallbackUser),
+                  profile: sanitizeWorkerUserRow(fallbackUser),
+                  fallbackExcel: true
+                });
+              }
+            }
+          }
+        }
+      } catch (assetErr) {
+        console.warn('[CF_AUTH_LOGIN] Static user fallback check note:', assetErr);
+      }
+
+      // 2. Fallback verification for Admin
       if (email === ADMIN_EMAIL.toLowerCase() && password.length >= 6) {
         console.log('[CF_AUTH_LOGIN] Admin fallback auth activated');
         const fallbackAdminRow = {
@@ -3781,7 +3825,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         console.log('[CF_AUTH_LOGIN] Returned Admin fallback session:', fallbackSession);
         return json(fallbackSession);
       }
-      return fail('Database connection failed, and credentials did not match fallback records.', 401, { code: 'fallback-auth-failed' });
+
+      return fail('Invalid email or password. Please check your credentials and try again.', 401, { code: 'invalid-credentials' });
     }
   }
 
