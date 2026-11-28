@@ -3542,39 +3542,27 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           const { salt, hash } = await createSaltedHashWorker(password);
           const nowIso = new Date().toISOString();
           await withD1TableRepair(env.DB, async () => {
-            if (userRow) {
-              const updateStmt = await prepareUpdateD1UserByUid(env.DB, String(userRow.uid), {
-                passwordSalt: salt,
-                passwordHash: hash,
-                role: 'admin',
-                membershipStatus: 'active',
-                updatedAt: nowIso
-              });
-              await updateStmt.run();
-            } else {
-              const uid = `usr_${randomHexWorker(8)}`;
-              const insertStmt = await prepareInsertD1User(env.DB, {
-                uid,
-                email,
-                username: 'Admin',
-                phoneNumber: '+95 9 798 123 456',
-                dob: '1992-01-01',
-                role: 'admin',
-                membershipStatus: 'active',
-                membershipPlan: 'course',
-                membershipExpiresAt: '',
-                subscribedLessonIds: [],
-                subscribedCourses: ['HSK 2'],
-                practiceLessonIds: [],
-                practiceCourses: [],
-                mustChangePassword: 0,
-                passwordSalt: salt,
-                passwordHash: hash,
-                createdAt: nowIso,
-                updatedAt: nowIso
-              });
-              await insertStmt.run();
-            }
+            const uid = userRow?.uid ? String(userRow.uid) : `usr_${randomHexWorker(8)}`;
+            await upsertD1UserRow(env.DB, {
+              uid,
+              email,
+              username: userRow?.username || 'Admin',
+              phoneNumber: userRow?.phoneNumber || '+95 9 798 123 456',
+              dob: userRow?.dob || '1992-01-01',
+              role: 'admin',
+              membershipStatus: 'active',
+              membershipPlan: 'course',
+              membershipExpiresAt: '',
+              subscribedLessonIds: [],
+              subscribedCourses: ['HSK 2'],
+              practiceLessonIds: [],
+              practiceCourses: [],
+              mustChangePassword: 0,
+              passwordSalt: salt,
+              passwordHash: hash,
+              createdAt: userRow?.createdAt || nowIso,
+              updatedAt: nowIso
+            });
           });
           await rebuildAndPersistUsersWorkbookD1(env).catch(() => {});
           userRow = await withD1TableRepair(env.DB, () =>
