@@ -3515,72 +3515,79 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api/auth/login' && method === 'POST') {
-    await ensureD1UsersSeeded(env, url.origin);
-    const body = (await request.json().catch(() => ({}))) as any;
-    const email = String(body.email || '').trim().toLowerCase();
-    const password = String(body.password || '');
-    if (!email || !password) {
-      return fail('Please enter both your email and password.', 400);
-    }
+    return withD1Retry(env.DB, async () => {
+      await ensureD1UsersSeeded(env, url.origin).catch(() => {});
+      const body = (await request.json().catch(() => ({}))) as any;
+      const email = String(body.email || '').trim().toLowerCase();
+      const password = String(body.password || '');
+      if (!email || !password) {
+        return fail('Please enter both your email and password.', 400);
+      }
 
-    let userRow = await oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
-    const storedSalt = String(getRowField(userRow, 'passwordSalt', 'password_salt') || '');
-    const storedHash = String(getRowField(userRow, 'passwordHash', 'password_hash') || '');
-    let ok = userRow ? await verifyPasswordWorker(password, storedSalt, storedHash) : false;
+      let userRow = await withD1TableRepair(env.DB, () =>
+        oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email)
+      ).catch(() => null);
 
-    if (!ok && email === ADMIN_EMAIL.toLowerCase() && password.length >= 6) {
-      const { salt, hash } = await createSaltedHashWorker(password);
-      const nowIso = new Date().toISOString();
-      await withD1TableRepair(env.DB, async () => {
-        if (userRow) {
-          const updateStmt = await prepareUpdateD1UserByUid(env.DB, String(userRow.uid), {
-            passwordSalt: salt,
-            passwordHash: hash,
-            role: 'admin',
-            membershipStatus: 'active',
-            updatedAt: nowIso
-          });
-          await updateStmt.run();
-        } else {
-          const uid = `usr_${randomHexWorker(8)}`;
-          const insertStmt = await prepareInsertD1User(env.DB, {
-            uid,
-            email,
-            username: 'Admin',
-            phoneNumber: '+95 9 798 123 456',
-            dob: '1992-01-01',
-            role: 'admin',
-            membershipStatus: 'active',
-            membershipPlan: 'course',
-            membershipExpiresAt: '',
-            subscribedLessonIds: [],
-            subscribedCourses: ['HSK 2'],
-            practiceLessonIds: [],
-            practiceCourses: [],
-            mustChangePassword: 0,
-            passwordSalt: salt,
-            passwordHash: hash,
-            createdAt: nowIso,
-            updatedAt: nowIso
-          });
-          await insertStmt.run();
-        }
+      const storedSalt = String(getRowField(userRow, 'passwordSalt', 'password_salt') || '');
+      const storedHash = String(getRowField(userRow, 'passwordHash', 'password_hash') || '');
+      let ok = userRow ? await verifyPasswordWorker(password, storedSalt, storedHash) : false;
+
+      if (!ok && email === ADMIN_EMAIL.toLowerCase() && password.length >= 6) {
+        const { salt, hash } = await createSaltedHashWorker(password);
+        const nowIso = new Date().toISOString();
+        await withD1TableRepair(env.DB, async () => {
+          if (userRow) {
+            const updateStmt = await prepareUpdateD1UserByUid(env.DB, String(userRow.uid), {
+              passwordSalt: salt,
+              passwordHash: hash,
+              role: 'admin',
+              membershipStatus: 'active',
+              updatedAt: nowIso
+            });
+            await updateStmt.run();
+          } else {
+            const uid = `usr_${randomHexWorker(8)}`;
+            const insertStmt = await prepareInsertD1User(env.DB, {
+              uid,
+              email,
+              username: 'Admin',
+              phoneNumber: '+95 9 798 123 456',
+              dob: '1992-01-01',
+              role: 'admin',
+              membershipStatus: 'active',
+              membershipPlan: 'course',
+              membershipExpiresAt: '',
+              subscribedLessonIds: [],
+              subscribedCourses: ['HSK 2'],
+              practiceLessonIds: [],
+              practiceCourses: [],
+              mustChangePassword: 0,
+              passwordSalt: salt,
+              passwordHash: hash,
+              createdAt: nowIso,
+              updatedAt: nowIso
+            });
+            await insertStmt.run();
+          }
+        });
+        await rebuildAndPersistUsersWorkbookD1(env).catch(() => {});
+        userRow = await withD1TableRepair(env.DB, () =>
+          oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email)
+        ).catch(() => null);
+        ok = Boolean(userRow);
+      }
+
+      if (!ok || !userRow) {
+        return fail('Invalid email or password. Please check your credentials and try again.', 401, { code: 'invalid-credentials' });
+      }
+
+      const token = await signWorkerToken(env, {
+        uid: String(userRow.uid),
+        email: String(userRow.email),
+        role: String(userRow.role || 'student')
       });
-      await rebuildAndPersistUsersWorkbookD1(env);
-      userRow = await oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email);
-      ok = Boolean(userRow);
-    }
-
-    if (!ok || !userRow) {
-      return fail('Invalid email or password. Please check your credentials and try again.', 401, { code: 'invalid-credentials' });
-    }
-
-    const token = await signWorkerToken(env, {
-      uid: String(userRow.uid),
-      email: String(userRow.email),
-      role: String(userRow.role || 'student')
+      return json(await buildWorkerSessionResponse(env, userRow, token));
     });
-    return json(await buildWorkerSessionResponse(env, userRow, token));
   }
 
   if (path === '/api/auth/reset-password' && method === 'POST') {
