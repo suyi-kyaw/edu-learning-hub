@@ -74,16 +74,20 @@
     return String(phone || '').replace(/[^+\d]/g, '');
   }
 
-  function resolveFooterLogoUrl(url) {
+  function resolveFooterLogoUrl(url, updatedAt) {
     let clean = String(url || '').trim();
     if (!clean) return '';
     if (/^\/?public\/assets\/aistudio\//i.test(clean)) {
       clean = 'assets/images/logo.svg';
     }
-    if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function') {
-      return window.LinguaBackend.assetUrl(clean);
+    let resolved = window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function'
+      ? window.LinguaBackend.assetUrl(clean)
+      : clean;
+    if (!/\?/.test(resolved)) {
+      const v = updatedAt || (window.LinguaAuth && window.LinguaAuth.getSiteConfig && window.LinguaAuth.getSiteConfig().updatedAt) || '';
+      resolved += '?v=' + encodeURIComponent(v || '1');
     }
-    return clean;
+    return resolved;
   }
 
   const DEFAULT_FOOTER_LOGO_HTML = '<img src="assets/images/logo.svg" alt="JiedeEdu" class="footer-brand-logo-img" />';
@@ -104,7 +108,7 @@
         footerLogoEl.innerHTML = '';
         const img = document.createElement('img');
         img.className = 'footer-brand-logo-img';
-        img.src = resolveFooterLogoUrl(rawLogo);
+        img.src = resolveFooterLogoUrl(rawLogo, cfg.updatedAt || cfg.updated_at);
         img.alt = 'JiedeEdu';
         img.decoding = 'async';
         img.onerror = function () {

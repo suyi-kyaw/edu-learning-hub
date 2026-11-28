@@ -499,16 +499,20 @@
     handleHeaderScroll();
   }
 
-  function resolveLogoAssetUrl(url) {
+  function resolveLogoAssetUrl(url, updatedAt) {
     let clean = String(url || '').trim();
     if (!clean) return '';
     if (/^\/?public\/assets\/aistudio\//i.test(clean)) {
       clean = 'assets/images/logo.svg';
     }
-    if (window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function') {
-      return window.LinguaBackend.assetUrl(clean);
+    let resolved = window.LinguaBackend && typeof window.LinguaBackend.assetUrl === 'function'
+      ? window.LinguaBackend.assetUrl(clean)
+      : clean;
+    if (!/\?/.test(resolved)) {
+      const v = updatedAt || (window.LinguaAuth && window.LinguaAuth.getSiteConfig && window.LinguaAuth.getSiteConfig().updatedAt) || '';
+      resolved += '?v=' + encodeURIComponent(v || '1');
     }
-    return clean;
+    return resolved;
   }
 
   const DEFAULT_HEADER_LOGO_HTML = '<img src="assets/images/logo.svg" alt="JiedeEdu" class="site-brand-logo-img" />';
@@ -522,7 +526,7 @@
       logoLink.innerHTML = DEFAULT_HEADER_LOGO_HTML;
       return;
     }
-    const resolved = resolveLogoAssetUrl(rawUrl);
+    const resolved = resolveLogoAssetUrl(rawUrl, cfg.updatedAt || cfg.updated_at);
     logoLink.classList.add('has-custom-logo');
     logoLink.innerHTML = '';
     const img = document.createElement('img');
@@ -540,7 +544,6 @@
   async function resolveAndHydrateHeaderLogo() {
     if (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === 'function') {
       hydrateHeaderLogo(window.LinguaAuth.getSiteConfig());
-      return;
     }
     try {
       const apiPath = '/api/site-config?t=' + Date.now();
@@ -551,6 +554,16 @@
         if (j && j.config) hydrateHeaderLogo(j.config);
       }
     } catch (e) {}
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('lingua-site-config-change', function (e) {
+      if (e && e.detail) {
+        hydrateHeaderLogo(e.detail);
+      } else if (window.LinguaAuth && typeof window.LinguaAuth.getSiteConfig === 'function') {
+        hydrateHeaderLogo(window.LinguaAuth.getSiteConfig());
+      }
+    });
   }
 
   function syncMemberMenuVisibility(stateOverride) {
