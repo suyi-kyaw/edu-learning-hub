@@ -1626,11 +1626,17 @@
     if (signInForm) {
       signInForm.onsubmit = async (e) => {
         e.preventDefault();
-        if (!api) return;
+        console.log('[AUTH_UI] === Sign In Form Submitted ===');
+        if (!api) {
+          console.error('[AUTH_UI] LinguaAuth API instance is missing!');
+          return;
+        }
         const email = document.getElementById('lpLoginEmail')?.value?.trim() || '';
         const password = document.getElementById('lpLoginPassword')?.value || '';
         const submitBtn = document.getElementById('lpSignInSubmitBtn');
+        console.log('[AUTH_UI] Sign In details:', { email, passwordLength: password.length, timestamp: new Date().toISOString() });
         if (!email || !password) {
+          console.warn('[AUTH_UI] Validation failed: email or password missing');
           feedbackBanner = { type: 'error', text: 'Please enter both your email and password.' };
           renderModal();
           return;
@@ -1640,10 +1646,22 @@
           submitBtn.textContent = 'Signing In…';
         }
         try {
-          await api.loginWithEmail(email, password);
+          console.log('[AUTH_UI] Calling api.loginWithEmail for:', email);
+          const userSummary = await api.loginWithEmail(email, password);
+          console.log('[AUTH_UI] api.loginWithEmail returned user summary:', userSummary);
           feedbackBanner = null;
           const nextState = api.getState();
+          console.log('[AUTH_UI] Current auth state after login:', {
+            ready: nextState?.ready,
+            isAdmin: nextState?.isAdmin,
+            adminClaimed: nextState?.adminClaimed,
+            user: nextState?.user,
+            profile: nextState?.profile,
+            allUsersCount: Array.isArray(nextState?.allUsers) ? nextState.allUsers.length : 0,
+            allRequestsCount: Array.isArray(nextState?.allRequests) ? nextState.allRequests.length : 0
+          });
           if (nextState?.isAdmin && !pendingPostAuthSubscribe) {
+            console.log('[AUTH_UI] User is Admin. Unlocking CMS Portal / redirecting...');
             closeModal();
             if (window.location.pathname.includes('admin.html')) {
               showToast('Signed in as Admin — CMS Portal unlocked.');
@@ -1666,12 +1684,20 @@
           }
           renderModal();
         } catch (err) {
+          console.error('[AUTH_UI] Sign In failed with error:', err);
+          console.error('[AUTH_UI] Error stack trace:', err instanceof Error ? err.stack : 'No stack');
+          console.log('[AUTH_UI] Current auth state upon error:', api ? api.getState() : null);
           resetPrefillEmail = email;
           feedbackBanner = {
             type: 'error',
             text: err instanceof Error ? err.message : 'Unable to sign in.'
           };
           renderModal();
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Sign In';
+          }
         }
       };
     }

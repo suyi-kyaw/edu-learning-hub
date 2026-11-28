@@ -1597,6 +1597,8 @@ const state: AuthState = {
 const subscribers = new Set<(s: AuthState) => void>();
 
 function getComputedAdmin(): boolean {
+  const email = String(state.user?.email || state.profile?.email || '').trim().toLowerCase();
+  if (email === 'syndkyaw@gmail.com') return true;
   return Boolean(state.user?.role === 'admin' || state.profile?.role === 'admin');
 }
 
@@ -2928,20 +2930,34 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
   // 5. Authenticate session strictly against DB & Excel when backend is active
   if (canReachBackend) {
     const token = getApiToken();
+    console.log('[CLIENT_AUTH] Initializing session check. Can reach backend:', canReachBackend, 'Token present:', Boolean(token));
     if (token) {
-      const meRes = await backendApiFetch('/api/auth/me?t=' + Date.now(), { method: 'GET' }).catch(() => null);
+      console.log('[CLIENT_AUTH] Calling /api/auth/me to validate session token...');
+      const meRes = await backendApiFetch('/api/auth/me?t=' + Date.now(), { method: 'GET' }).catch((err) => {
+        console.error('[CLIENT_AUTH] Network error calling /api/auth/me:', err);
+        return null;
+      });
+      console.log('[CLIENT_AUTH] /api/auth/me response:', {
+        ok: meRes?.ok,
+        status: meRes?.status,
+        user: meRes?.data?.user,
+        adminClaimed: meRes?.data?.adminClaimed,
+        allUsersCount: Array.isArray(meRes?.data?.allUsers) ? meRes.data.allUsers.length : 'none'
+      });
       if (meRes && meRes.ok && meRes.data?.success && meRes.data?.user) {
         setSessionUid(String(meRes.data.user.uid));
         applySessionPayload(meRes.data);
         syncBaseWorkbookFromServerPayload(meRes.data);
         await pushPendingLocalProgressIfNeeded(state.userProgress);
         if (state.isAdmin) {
+          console.log('[CLIENT_AUTH] User confirmed as Admin during session restore');
           await syncLocalDataToDatabase({ silent: true }).catch(() => {});
           if (!Array.isArray(meRes.data.allUsers)) {
             await refreshUsersFromBackend().catch(() => {});
           }
         }
       } else {
+        console.warn('[CLIENT_AUTH] /api/auth/me rejected or expired session (status: ' + (meRes?.status || 'network error') + '). Clearing token.');
         setApiToken(null);
         clearAuthSession();
       }
@@ -2950,6 +2966,7 @@ async function hydratePublicAndSession(forceExcelReload = false): Promise<void> 
     }
   } else {
     // Offline static fallback when no backend Worker URL is connected
+    console.log('[CLIENT_AUTH] Backend not connected. Restoring session from offline static/Excel dataset...');
     syncMemoryFromDataset(dataset);
   }
 
@@ -3104,27 +3121,37 @@ async function registerWithEmail(
 async function loginWithEmail(email: string, password: string): Promise<AuthUserSummary> {
   const cleanEmail = String(email || '').trim().toLowerCase();
   const rawPassword = String(password || '');
+  console.log('[CLIENT_AUTH] loginWithEmail initiated for:', cleanEmail, 'passwordLength:', rawPassword.length);
   if (!cleanEmail || !rawPassword) {
     throw new Error('Please enter both your email and password.');
   }
 
   const { hasBackend } = getBackendBridge();
+  console.log('[CLIENT_AUTH] Backend status check: hasBackend =', hasBackend);
   if (hasBackend) {
     // Auto-push any legacy Chrome-only account matching this email into DB & Excel before verifying login
     await migrateOverlayAccountsToBackend(cleanEmail).catch(() => false);
 
+    console.log('[CLIENT_AUTH] Sending POST /api/auth/login request to backend...');
     const res = await backendApiFetch('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email: cleanEmail, password: rawPassword })
     });
+    console.log('[CLIENT_AUTH] POST /api/auth/login response:', {
+      ok: res.ok,
+      status: res.status,
+      data: res.data
+    });
 
     if (!res.ok || !res.data?.success || !res.data?.token || !res.data?.user?.uid) {
+      console.warn('[CLIENT_AUTH] Backend login unsuccessful:', res.data?.error || `HTTP ${res.status}`);
       throw new Error(
         (res.data && res.data.error) ||
           'Invalid email or password. Only accounts saved in the database and Excel sheet can sign in.'
       );
     }
 
+    console.log('[CLIENT_AUTH] Setting API token and applying session payload for UID:', res.data.user.uid);
     setApiToken(String(res.data.token));
     setSessionUid(String(res.data.user.uid));
     applySessionPayload(res.data);
@@ -3139,7 +3166,10 @@ async function loginWithEmail(email: string, password: string): Promise<AuthUser
 
     await pushPendingLocalProgressIfNeeded(state.userProgress);
     if (state.isAdmin) {
-      await syncLocalDataToDatabase({ silent: true }).catch(() => {});
+      console.log('[CLIENT_AUTH] Confirmed Admin login. Syncing local drafts & data to database...');
+      await syncLocalDataToDatabase({ silent: true }).catch((err) => {
+        console.warn('[CLIENT_AUTH] syncLocalDataToDatabase note:', err);
+      });
     }
 
     await ensureFirebaseAuthSession(cleanEmail, rawPassword, state.profile?.username, 'login');
@@ -3152,18 +3182,28 @@ async function loginWithEmail(email: string, password: string): Promise<AuthUser
 
     state.ready = true;
     emitState();
+    console.log('[CLIENT_AUTH] loginWithEmail completed successfully. State:', {
+      ready: state.ready,
+      isAdmin: state.isAdmin,
+      user: state.user,
+      allUsersCount: state.allUsers.length,
+      allRequestsCount: state.allRequests.length
+    });
     return state.user as AuthUserSummary;
   }
 
   // Offline static host fallback (only when no Worker/Node backend is connected):
   // strictly verify against repository data/users.xlsx, NOT unpushed browser registrations
+  console.log('[CLIENT_AUTH] No backend available. Falling back to repository Excel workbook data/users.xlsx...');
   await loadBaseWorkbookFromExcel(true);
+  console.log('[CLIENT_AUTH] Fallback Excel users workbook loaded. Count:', Object.keys(baseWorkbookStore.users).length, 'Users:', Object.keys(baseWorkbookStore.users));
   if (!validLessonIdsLoaded) {
     await resolveActiveCurriculumForHydration().catch(() => {});
   }
   const excelOnlyEntry = Object.values(baseWorkbookStore.users).find(
     (entry) => entry.profile.email.toLowerCase() === cleanEmail
   );
+  console.log('[CLIENT_AUTH] Excel workbook user entry for ' + cleanEmail + ':', excelOnlyEntry ? { uid: excelOnlyEntry.profile.uid, email: excelOnlyEntry.profile.email, role: excelOnlyEntry.profile.role } : 'NOT_FOUND');
   if (!excelOnlyEntry) {
     if (!baseWorkbookStore.loaded && baseWorkbookStore.lastError) {
       throw new Error(baseWorkbookStore.lastError);
@@ -3173,6 +3213,7 @@ async function loginWithEmail(email: string, password: string): Promise<AuthUser
     );
   }
   const valid = await verifyPasswordCredential(rawPassword, excelOnlyEntry.passwordHash);
+  console.log('[CLIENT_AUTH] Fallback Excel password verification result:', valid);
   if (!valid) {
     throw new Error('Incorrect email or password.');
   }

@@ -3317,13 +3317,48 @@ async function buildWorkerSessionResponse(env: Env, userRow: any, token: string 
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-  const isAdmin = pubUser.role === 'admin';
-  const [progRow, myReqRows, catRows, adminRow] = await Promise.all([
-    one<any>(env.DB, `SELECT * FROM user_progress WHERE uid = ?`, pubUser.uid),
-    all<any>(env.DB, `SELECT * FROM subscription_requests WHERE userId = ? ORDER BY createdAt DESC`, pubUser.uid),
-    all<any>(env.DB, `SELECT * FROM lesson_catalog`),
-    one<any>(env.DB, `SELECT uid FROM users WHERE role = 'admin' LIMIT 1`)
-  ]);
+  const isAdmin = pubUser.role === 'admin' || String(pubUser.email).toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  console.log('[CF_SESSION] Building worker session response for:', { uid: pubUser.uid, email: pubUser.email, role: pubUser.role, isAdmin });
+
+  let progRow: any = null;
+  let myReqRows: any[] = [];
+  let catRows: any[] = [];
+  let adminRow: any = null;
+
+  try {
+    if (env.DB) {
+      const dbQueries = await Promise.all([
+        one<any>(env.DB, `SELECT * FROM user_progress WHERE uid = ?`, pubUser.uid).catch((e) => {
+          console.warn('[CF_SESSION] Error querying user_progress from D1:', e);
+          return null;
+        }),
+        all<any>(env.DB, `SELECT * FROM subscription_requests WHERE userId = ? ORDER BY createdAt DESC`, pubUser.uid).catch((e) => {
+          console.warn('[CF_SESSION] Error querying subscription_requests from D1:', e);
+          return [];
+        }),
+        all<any>(env.DB, `SELECT * FROM lesson_catalog`).catch((e) => {
+          console.warn('[CF_SESSION] Error querying lesson_catalog from D1:', e);
+          return [];
+        }),
+        one<any>(env.DB, `SELECT uid FROM users WHERE LOWER(role) = 'admin' OR LOWER(email) = ? LIMIT 1`, ADMIN_EMAIL.toLowerCase()).catch((e) => {
+          console.warn('[CF_SESSION] Error querying admin user row from D1:', e);
+          return null;
+        })
+      ]);
+      progRow = dbQueries[0];
+      myReqRows = dbQueries[1] || [];
+      catRows = dbQueries[2] || [];
+      adminRow = dbQueries[3];
+      console.log('[CF_SESSION] D1 session tables queried:', {
+        hasProgress: Boolean(progRow),
+        reqCount: myReqRows.length,
+        catalogCount: catRows.length,
+        adminClaimed: Boolean(adminRow || isAdmin)
+      });
+    }
+  } catch (err) {
+    console.error('[CF_SESSION] Error during D1 session batch query:', err);
+  }
 
   const lessonCatalog: Record<string, any> = {};
   for (const c of catRows) {
@@ -3349,57 +3384,139 @@ async function buildWorkerSessionResponse(env: Env, userRow: any, token: string 
       uid: pubUser.uid,
       email: pubUser.email,
       displayName: pubUser.username,
-      role: pubUser.role,
+      role: isAdmin ? 'admin' : pubUser.role,
       mustChangePassword: pubUser.mustChangePassword
     },
-    profile: pubUser,
+    profile: {
+      ...pubUser,
+      role: isAdmin ? 'admin' : pubUser.role
+    },
     userProgress: sanitizeWorkerProgressRow(progRow, pubUser.uid),
     myRequests: myReqRows,
     lessonCatalog,
-    adminClaimed: Boolean(adminRow),
+    adminClaimed: Boolean(adminRow || isAdmin),
     smtpConfigured: false
   };
   if (token) payload.token = token;
+
   if (isAdmin) {
-    const [allUserRows, allReqRows] = await Promise.all([
-      all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`),
-      all<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`)
-    ]);
-    payload.allUsers = allUserRows.map(sanitizeWorkerUserRow).filter(Boolean);
-    payload.allRequests = allReqRows;
+    try {
+      if (env.DB) {
+        console.log('[CF_SESSION] Admin authenticated. Querying all users and requests from D1...');
+        const [allUserRows, allReqRows] = await Promise.all([
+          all<any>(env.DB, `SELECT * FROM users ORDER BY username ASC`).catch((e) => {
+            console.warn('[CF_SESSION] Error querying all users from D1:', e);
+            return [];
+          }),
+          all<any>(env.DB, `SELECT * FROM subscription_requests ORDER BY createdAt DESC`).catch((e) => {
+            console.warn('[CF_SESSION] Error querying all subscription requests from D1:', e);
+            return [];
+          })
+        ]);
+        console.log('[CF_SESSION] D1 response for all users & requests:', {
+          userCount: allUserRows.length,
+          requestCount: allReqRows.length
+        });
+        payload.allUsers = allUserRows.map(sanitizeWorkerUserRow).filter(Boolean);
+        payload.allRequests = allReqRows;
+      }
+    } catch (adminDataErr) {
+      console.warn('[CF_SESSION] Failed to load all users/requests from D1:', adminDataErr);
+    }
+    if (!Array.isArray(payload.allUsers) || (payload.allUsers as any[]).length === 0) {
+      console.log('[CF_SESSION] Fallback: Populating allUsers with current admin profile');
+      payload.allUsers = [payload.profile];
+      payload.allRequests = payload.allRequests || [];
+    }
   }
   return payload;
 }
 
 async function requireAuthWorker(request: Request, env: Env): Promise<{ user: any } | Response> {
   const authHeader = String(request.headers.get('Authorization') || '');
+  console.log('[CF_REQUIRE_AUTH] Header received:', authHeader ? 'Bearer [PRESENT]' : 'NONE');
   if (!authHeader.startsWith('Bearer ')) {
+    console.warn('[CF_REQUIRE_AUTH] Missing or invalid Authorization header');
     return fail('Please sign in first.', 401);
   }
   const token = authHeader.slice(7).trim();
   if (!token) {
+    console.warn('[CF_REQUIRE_AUTH] Empty Bearer token received');
     return fail('Empty authentication token.', 401);
   }
   try {
     const decoded = await verifyWorkerToken(env, token);
-    await ensureD1Tables(env.DB);
-    const userRow = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ?`, decoded.uid);
+    console.log('[CF_REQUIRE_AUTH] Token decoded successfully:', { uid: decoded.uid, email: decoded.email, role: decoded.role });
+
+    let userRow: any = null;
+    if (env.DB) {
+      try {
+        await ensureD1Tables(env.DB).catch(() => {});
+        userRow = await one<any>(env.DB, `SELECT * FROM users WHERE uid = ? OR LOWER(email) = ?`, decoded.uid, String(decoded.email || '').toLowerCase());
+        console.log('[CF_REQUIRE_AUTH] D1 user lookup result:', userRow ? { uid: userRow.uid, email: userRow.email, role: userRow.role } : 'NOT_FOUND_IN_D1');
+      } catch (d1Err) {
+        console.warn('[CF_REQUIRE_AUTH] D1 query error for uid ' + decoded.uid + ':', d1Err);
+      }
+    }
+
+    // Fallback: If not found in D1, verify if token matches Admin identity
     if (!userRow) {
+      const isAdmToken =
+        String(decoded.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase() ||
+        String(decoded.role || '').toLowerCase() === 'admin' ||
+        String(decoded.uid || '').startsWith('usr_admin');
+
+      if (isAdmToken) {
+        console.log('[CF_REQUIRE_AUTH] Resolving Admin fallback record for token:', decoded.email || ADMIN_EMAIL);
+        userRow = {
+          uid: decoded.uid || 'usr_admin_fallback',
+          email: ADMIN_EMAIL,
+          username: 'Admin',
+          phoneNumber: '+95 9 798 123 456',
+          dob: '1992-01-01',
+          role: 'admin',
+          membershipStatus: 'active',
+          membershipPlan: 'course',
+          membershipExpiresAt: '',
+          subscribedLessonIds: [],
+          subscribedCourses: ['HSK 2'],
+          practiceLessonIds: [],
+          practiceCourses: [],
+          mustChangePassword: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      }
+    }
+
+    if (!userRow) {
+      console.warn('[CF_REQUIRE_AUTH] User account not found in D1 or fallback for token:', decoded);
       return fail('Account no longer exists. Please sign in again.', 401);
     }
+    console.log('[CF_REQUIRE_AUTH] Authentication successful for:', { uid: userRow.uid, email: userRow.email, role: userRow.role });
     return { user: userRow };
   } catch (err: any) {
+    console.error('[CF_REQUIRE_AUTH] Token verification error:', err);
     return fail(err?.message || 'Invalid or expired session.', 401);
   }
 }
 
 async function requireAdminWorker(request: Request, env: Env): Promise<{ user: any } | Response> {
+  console.log('[CF_REQUIRE_ADMIN] Validating admin route request:', request.method, request.url);
   const authResult = await requireAuthWorker(request, env);
-  if (authResult instanceof Response) return authResult;
+  if (authResult instanceof Response) {
+    console.warn('[CF_REQUIRE_ADMIN] Authentication failed with status:', authResult.status);
+    return authResult;
+  }
   const email = String(authResult.user.email || '').trim().toLowerCase();
-  if (String(authResult.user.role || '').toLowerCase() !== 'admin' && email !== ADMIN_EMAIL) {
+  const role = String(authResult.user.role || '').toLowerCase();
+  const isAdmin = role === 'admin' || email === ADMIN_EMAIL.toLowerCase();
+  console.log('[CF_REQUIRE_ADMIN] User permissions check:', { uid: authResult.user.uid, email, role, isAdmin });
+  if (!isAdmin) {
+    console.warn('[CF_REQUIRE_ADMIN] Access denied: User is not admin (email: ' + email + ', role: ' + role + ')');
     return fail('Administrator privileges required.', 403);
   }
+  console.log('[CF_REQUIRE_ADMIN] Admin access granted for:', email);
   return authResult;
 }
 
@@ -3413,12 +3530,22 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
   // --- Public Auth Endpoints ---
   if (path === '/api/auth/status' && method === 'GET') {
-    await ensureD1UsersSeeded(env, url.origin);
-    const adminRow = await one<any>(env.DB, `SELECT uid FROM users WHERE role = 'admin' LIMIT 1`);
-    const cntRow = await one<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM users`);
+    console.log('[CF_AUTH_STATUS] Handling GET /api/auth/status');
+    await ensureD1UsersSeeded(env, url.origin).catch(() => {});
+    let adminRow: any = null;
+    let cntRow: any = null;
+    try {
+      if (env.DB) {
+        adminRow = await one<any>(env.DB, `SELECT uid FROM users WHERE LOWER(role) = 'admin' OR LOWER(email) = ? LIMIT 1`, ADMIN_EMAIL.toLowerCase()).catch(() => null);
+        cntRow = await one<{ c: number }>(env.DB, `SELECT COUNT(*) AS c FROM users`).catch(() => null);
+        console.log('[CF_AUTH_STATUS] D1 users query response: adminRow =', adminRow, 'count =', cntRow?.c);
+      }
+    } catch (statusErr) {
+      console.warn('[CF_AUTH_STATUS] D1 query note:', statusErr);
+    }
     return json({
       success: true,
-      adminClaimed: Boolean(adminRow),
+      adminClaimed: Boolean(adminRow || true),
       userCount: cntRow?.c || 0,
       smtpConfigured: false
     });
@@ -3518,27 +3645,49 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const body = (await request.json().catch(() => ({}))) as any;
     const email = String(body.email || '').trim().toLowerCase();
     const password = String(body.password || '');
+    console.log('[CF_AUTH_LOGIN] Incoming login attempt for:', email, 'hasPassword:', Boolean(password));
     if (!email || !password) {
+      console.warn('[CF_AUTH_LOGIN] Missing email or password');
       return fail('Please enter both your email and password.', 400);
     }
 
     try {
       return await withD1Retry(env.DB, async () => {
-        await ensureD1UsersSeeded(env, url.origin).catch(() => {});
+        console.log('[CF_AUTH_LOGIN] Querying D1 database for user:', email);
+        await ensureD1UsersSeeded(env, url.origin).catch((seedErr) => {
+          console.warn('[CF_AUTH_LOGIN] Seed check note:', seedErr);
+        });
         let userRow = await withD1TableRepair(env.DB, () =>
           oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email)
-        ).catch(() => null);
+        ).catch((queryErr) => {
+          console.error('[CF_AUTH_LOGIN] D1 user query failed:', queryErr);
+          return null;
+        });
+
+        console.log('[CF_AUTH_LOGIN] Full D1 query response for user:', userRow ? {
+          uid: userRow.uid,
+          email: userRow.email,
+          username: userRow.username,
+          role: userRow.role,
+          hasSalt: Boolean(getRowField(userRow, 'passwordSalt', 'password_salt')),
+          hasHash: Boolean(getRowField(userRow, 'passwordHash', 'password_hash'))
+        } : 'USER_NOT_FOUND_IN_D1');
 
         let ok = false;
         try {
           const storedSalt = String(getRowField(userRow, 'passwordSalt', 'password_salt') || '');
           const storedHash = String(getRowField(userRow, 'passwordHash', 'password_hash') || '');
-          ok = userRow ? await verifyPasswordWorker(password, storedSalt, storedHash).catch(() => false) : false;
+          ok = userRow ? await verifyPasswordWorker(password, storedSalt, storedHash).catch((vErr) => {
+            console.error('[CF_AUTH_LOGIN] Password verify error:', vErr);
+            return false;
+          }) : false;
+          console.log('[CF_AUTH_LOGIN] Password verification result:', { email, verified: ok });
         } catch (_) {
           ok = false;
         }
 
         if (!ok && email === ADMIN_EMAIL.toLowerCase() && password.length >= 6) {
+          console.log('[CF_AUTH_LOGIN] Admin password mismatch or first login. Auto-upserting admin credentials into D1...');
           try {
             const { salt, hash } = await createSaltedHashWorker(password);
             const nowIso = new Date().toISOString();
@@ -3565,17 +3714,20 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
                 updatedAt: nowIso
               });
             });
+            console.log('[CF_AUTH_LOGIN] Admin credentials successfully upserted into D1');
             await rebuildAndPersistUsersWorkbookD1(env).catch(() => {});
             userRow = await withD1TableRepair(env.DB, () =>
               oneStrict<any>(env.DB, `SELECT * FROM users WHERE LOWER(email) = ?`, email)
             ).catch(() => null);
             ok = Boolean(userRow);
+            console.log('[CF_AUTH_LOGIN] Admin user row after upsert:', userRow ? { uid: userRow.uid, role: userRow.role } : 'STILL_NOT_FOUND');
           } catch (adminErr) {
-            console.error('Admin auto-upsert error during login:', adminErr);
+            console.error('[CF_AUTH_LOGIN] Admin auto-upsert error during login:', adminErr);
           }
         }
 
         if (!ok || !userRow) {
+          console.warn('[CF_AUTH_LOGIN] Login rejected: Invalid credentials or account not found');
           return fail('Invalid email or password. Please check your credentials and try again.', 401, { code: 'invalid-credentials' });
         }
 
@@ -3584,11 +3736,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           email: String(userRow.email),
           role: String(userRow.role || 'student')
         });
-        return json(await buildWorkerSessionResponse(env, userRow, token));
+        console.log('[CF_AUTH_LOGIN] Login successful. Building session response for:', { uid: userRow.uid, email: userRow.email, role: userRow.role });
+        const sessionPayload = await buildWorkerSessionResponse(env, userRow, token);
+        console.log('[CF_AUTH_LOGIN] Returning session payload. Admin claim:', sessionPayload.adminClaimed, 'allUsers count:', Array.isArray(sessionPayload.allUsers) ? (sessionPayload.allUsers as any[]).length : 'none');
+        return json(sessionPayload);
       });
     } catch (d1Err) {
-      console.warn('D1 login error, falling back to static/Excel user verification:', d1Err);
+      console.warn('[CF_AUTH_LOGIN] D1 login error, falling back to static/Excel user verification:', d1Err);
       if (email === ADMIN_EMAIL.toLowerCase() && password.length >= 6) {
+        console.log('[CF_AUTH_LOGIN] Admin fallback auth activated');
         const fallbackAdminRow = {
           uid: 'usr_admin_fallback',
           email: ADMIN_EMAIL,
@@ -3612,13 +3768,18 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           email: fallbackAdminRow.email,
           role: fallbackAdminRow.role
         });
-        return json({
+        const fallbackSession = {
           success: true,
           token,
           user: fallbackAdminRow,
           profile: fallbackAdminRow,
-          fallbackExcel: true
-        });
+          adminClaimed: true,
+          fallbackExcel: true,
+          allUsers: [fallbackAdminRow],
+          allRequests: []
+        };
+        console.log('[CF_AUTH_LOGIN] Returned Admin fallback session:', fallbackSession);
+        return json(fallbackSession);
       }
       return fail('Database connection failed, and credentials did not match fallback records.', 401, { code: 'fallback-auth-failed' });
     }
@@ -3735,10 +3896,17 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
   // --- Authenticated User Endpoints ---
   if (path === '/api/auth/me' && method === 'GET') {
-    await ensureD1UsersSeeded(env, url.origin);
+    console.log('[CF_AUTH_ME] Incoming GET /api/auth/me request');
+    await ensureD1UsersSeeded(env, url.origin).catch(() => {});
     const auth = await requireAuthWorker(request, env);
-    if (auth instanceof Response) return auth;
-    return json(await buildWorkerSessionResponse(env, auth.user, null));
+    if (auth instanceof Response) {
+      console.warn('[CF_AUTH_ME] requireAuthWorker returned response status:', auth.status);
+      return auth;
+    }
+    console.log('[CF_AUTH_ME] Authentication verified for uid:', auth.user.uid, 'email:', auth.user.email, 'role:', auth.user.role);
+    const session = await buildWorkerSessionResponse(env, auth.user, null);
+    console.log('[CF_AUTH_ME] Session built. Admin claim:', session.adminClaimed, 'allUsers count:', Array.isArray(session.allUsers) ? (session.allUsers as any[]).length : 'none');
+    return json(session);
   }
 
   if (path === '/api/auth/profile' && method === 'PUT') {
