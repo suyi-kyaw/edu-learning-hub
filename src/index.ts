@@ -837,8 +837,7 @@ function buildD1UserColumnMap(fields: Record<string, unknown>): Record<string, s
 
 async function prepareInsertD1User(
   db: D1Database,
-  fields: Record<string, unknown>,
-  options: { ignoreEmailConflict?: boolean } = {}
+  fields: Record<string, unknown>
 ): Promise<D1PreparedStatement> {
   let cols = await getD1TableColumns(db, 'users');
   if (!cols.length) {
@@ -870,8 +869,7 @@ async function prepareInsertD1User(
   if (!colNames.length) {
     throw new Error('No writable columns found on users table.');
   }
-  const conflictClause = options.ignoreEmailConflict ? ' ON CONFLICT(email) DO NOTHING' : '';
-  const sql = `INSERT INTO "users" (${colNames.join(', ')}) VALUES (${placeholders.join(', ')})${conflictClause}`;
+  const sql = `INSERT INTO "users" (${colNames.join(', ')}) VALUES (${placeholders.join(', ')})`;
   return db.prepare(sql).bind(...binds);
 }
 
@@ -2995,32 +2993,30 @@ async function ensureD1UsersSeeded(env: Env, origin: string): Promise<void> {
       const uid = String(u?.uid || '').trim();
       if (!email || !uid) continue;
       const isAdm = String(u.role || '').toLowerCase() === 'admin' || email === ADMIN_EMAIL;
-      stmts.push(
-        await prepareInsertD1User(
-          env.DB,
-          {
-            uid,
-            email,
-            username: bindStr(u.username, email.split('@')[0]),
-            phoneNumber: bindStr(u.phoneNumber),
-            dob: bindStr(u.dob),
-            role: isAdm ? 'admin' : 'student',
-            membershipStatus: bindStr(u.membershipStatus, isAdm ? 'active' : 'free'),
-            membershipPlan: bindStr(u.membershipPlan, isAdm ? 'course' : 'none'),
-            membershipExpiresAt: bindStr(u.membershipExpiresAt),
-            subscribedLessonIds: parseJsonStrArray(u.subscribedLessonIds),
-            subscribedCourses: parseJsonStrArray(u.subscribedCourses),
-            practiceLessonIds: parseJsonStrArray(u.practiceLessonIds),
-            practiceCourses: parseJsonStrArray(u.practiceCourses),
-            mustChangePassword: u.mustChangePassword ? 1 : 0,
-            passwordSalt: bindStr(u.passwordSalt),
-            passwordHash: bindStr(u.passwordHash),
-            createdAt: bindStr(u.createdAt, nowIso),
-            updatedAt: bindStr(u.updatedAt, nowIso)
-          },
-          { ignoreEmailConflict: true }
-        )
-      );
+      try {
+        await upsertD1UserRow(env.DB, {
+          uid,
+          email,
+          username: bindStr(u.username, email.split('@')[0]),
+          phoneNumber: bindStr(u.phoneNumber),
+          dob: bindStr(u.dob),
+          role: isAdm ? 'admin' : 'student',
+          membershipStatus: bindStr(u.membershipStatus, isAdm ? 'active' : 'free'),
+          membershipPlan: bindStr(u.membershipPlan, isAdm ? 'course' : 'none'),
+          membershipExpiresAt: bindStr(u.membershipExpiresAt),
+          subscribedLessonIds: parseJsonStrArray(u.subscribedLessonIds),
+          subscribedCourses: parseJsonStrArray(u.subscribedCourses),
+          practiceLessonIds: parseJsonStrArray(u.practiceLessonIds),
+          practiceCourses: parseJsonStrArray(u.practiceCourses),
+          mustChangePassword: u.mustChangePassword ? 1 : 0,
+          passwordSalt: bindStr(u.passwordSalt),
+          passwordHash: bindStr(u.passwordHash),
+          createdAt: bindStr(u.createdAt, nowIso),
+          updatedAt: bindStr(u.updatedAt, nowIso)
+        });
+      } catch (seedUserErr) {
+        console.warn('[ensureD1UsersSeeded] Warning seeding user:', seedUserErr);
+      }
     }
   }
 
@@ -3644,8 +3640,6 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           const pwHash = String(raw?.passwordHash || '').trim();
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
           if (!/^sha256\$[a-f0-9]+\$[a-f0-9]{64}$/i.test(pwHash)) continue;
-          const existing = await oneStrict<any>(env.DB, `SELECT uid FROM users WHERE LOWER(email) = ?`, email);
-          if (existing) continue;
 
           const uid = String(raw?.uid || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || `usr_${randomHexWorker(8)}`;
           const username = String(raw?.username || email.split('@')[0] || 'Learner').trim().slice(0, 60);
@@ -3653,31 +3647,26 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           const dob = /^\d{4}-\d{2}-\d{2}$/.test(String(raw?.dob || '').trim()) ? String(raw.dob).trim() : '';
           const pwSalt = pwHash.split('$')[1] || '';
 
-          const insertStmt = await prepareInsertD1User(
-            env.DB,
-            {
-              uid,
-              email,
-              username,
-              phoneNumber,
-              dob,
-              role: 'student',
-              membershipStatus: 'free',
-              membershipPlan: 'none',
-              membershipExpiresAt: '',
-              subscribedLessonIds: [],
-              subscribedCourses: [],
-              practiceLessonIds: [],
-              practiceCourses: [],
-              mustChangePassword: 0,
-              passwordSalt: pwSalt,
-              passwordHash: pwHash,
-              createdAt: bindStr(raw?.createdAt, nowIso),
-              updatedAt: bindStr(raw?.updatedAt, nowIso)
-            },
-            { ignoreEmailConflict: true }
-          );
-          await insertStmt.run();
+          await upsertD1UserRow(env.DB, {
+            uid,
+            email,
+            username,
+            phoneNumber,
+            dob,
+            role: 'student',
+            membershipStatus: 'free',
+            membershipPlan: 'none',
+            membershipExpiresAt: '',
+            subscribedLessonIds: [],
+            subscribedCourses: [],
+            practiceLessonIds: [],
+            practiceCourses: [],
+            mustChangePassword: 0,
+            passwordSalt: pwSalt,
+            passwordHash: pwHash,
+            createdAt: bindStr(raw?.createdAt, nowIso),
+            updatedAt: bindStr(raw?.updatedAt, nowIso)
+          });
           await env.DB.prepare(`
             INSERT INTO user_progress (uid, currentStreak, bestStreak, lastCompletedDate, streakDates, completedLessonIds, reminderEnabled, reminderTime, lastNotifiedDate, updatedAt)
             VALUES (?, 0, 0, '', '[]', '[]', 1, '18:00', '', ?)
